@@ -1269,11 +1269,11 @@ st_choose_matching_format_noverify(struct st_context *st,
    if (swapBytes && !_mesa_swap_bytes_in_type_enum(&type))
       return PIPE_FORMAT_NONE;
 
-   mesa_format mesa_format = _mesa_format_from_format_and_type(format, type);
-   if (_mesa_format_is_mesa_array_format(mesa_format))
-      mesa_format = _mesa_format_from_array_format(mesa_format);
-   if (mesa_format != MESA_FORMAT_NONE)
-      return st_mesa_format_to_pipe_format(st, mesa_format);
+   mesa_format mesa_conv_format = _mesa_format_from_format_and_type(format, type);
+   if (_mesa_format_is_mesa_array_format(mesa_conv_format))
+      mesa_conv_format = _mesa_format_from_array_format(mesa_conv_format);
+   if (mesa_conv_format != MESA_FORMAT_NONE)
+      return st_mesa_format_to_pipe_format(st, mesa_conv_format);
 
    return PIPE_FORMAT_NONE;
 }

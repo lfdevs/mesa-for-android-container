@@ -62,8 +62,6 @@ struct vn_instance {
    uint32_t renderer_api_version;
    uint32_t renderer_version;
 
-   bool engine_is_zink;
-
    struct {
       mtx_t mutex;
       bool initialized;

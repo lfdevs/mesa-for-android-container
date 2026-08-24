@@ -405,7 +405,7 @@ d3d12_video_encoder_update_current_frame_pic_params_info_h264(struct d3d12_video
          pH264PicData->QPMapValuesCount, pH264PicData->pRateControlQPMap);
    }
 
-   D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 picParams = {};
+   d3d12_video_encoder_picture_control_codec_data_mutable picParams = {};
    picParams.pH264PicData = pH264PicData;
    picParams.DataSize = sizeof(*pH264PicData);
    pD3D12Enc->m_upDPBManager->begin_frame(picParams, bUsedAsReference, picture);

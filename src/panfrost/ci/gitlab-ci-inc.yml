@@ -36,6 +36,7 @@
         - src/panfrost/ci/$GPU_VERSION-fails.txt
         - src/panfrost/ci/$GPU_VERSION-flakes.txt
         - src/panfrost/ci/$GPU_VERSION-skips.txt
+        - src/panfrost/ci/$GPU_VERSION-single-thread.txt
         - src/panfrost/ci/$GPU_VERSION-gles2-extensions.txt
         - src/panfrost/ci/$DRIVER_NAME-flakes.txt
         - src/panfrost/ci/$DRIVER_NAME-skips.txt
@@ -118,6 +119,9 @@
       when: on_success
     - changes:
         *panfrost_bifrost_file_list
+      when: on_success
+    - changes: &panfrost_kraid_file_list
+        - src/panfrost/compiler/kraid/**/*
       when: on_success
 
 .panfrost-vk-panfrost-rules:
@@ -249,20 +253,6 @@
     RUNNER_TAG: mesa-ci-x86-64-lava-mt8186-corsola-steelix-sku131072
     VK_DRIVER: panfrost
 
-# Status: https://lava.collabora.dev/scheduler/device_type/mt8192-asurada-spherion-r0
-.lava-mt8192-asurada-spherion-r0:arm64:
-  variables:
-    BOOT_METHOD: depthcharge
-    DEVICE_TYPE: mt8192-asurada-spherion-r0
-    DTB: $DEVICE_TYPE
-#   FDO_CI_CONCURRENT: ?
-    FARM: collabora
-    GPU_VERSION: panfrost-g57
-    KERNEL_IMAGE_TYPE: ""
-    RUNNER_TAG: mesa-ci-x86-64-lava-mt8192-asurada-spherion-r0
-    # Force fixed 6.6 kernel, we're not reliably getting a GPU on 6.13
-    KERNEL_TAG: "v6.6.21-mesa-1978"
-
 # Status: https://lava.collabora.dev/scheduler/device_type/mt8195-cherry-tomato-r2
 .lava-mt8195-cherry-tomato-r2:arm64:
   variables:
@@ -329,7 +319,7 @@
     VK_DRIVER: panfrost
     LAVA_FIRMWARE: arm
     # Mainline kernel support for MT8196 is still incomplete
-    KERNEL_TAG: "v6.18-pan-mesa-952e"
+    KERNEL_TAG: "v6.18-pan-mesa-5358"
 
 # Status: https://lava.collabora.dev/scheduler/device_type/sun50i-h6-pine-h64
 .lava-sun50i-h6-pine-h64:arm64:

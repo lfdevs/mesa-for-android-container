@@ -107,7 +107,7 @@ _mesa_problem( const struct gl_context *ctx, const char *fmtString, ... )
       va_end( args );
       fprintf(stderr, "Mesa " PACKAGE_VERSION " implementation error: %s\n",
               str);
-      fprintf(stderr, "Please report at " PACKAGE_BUGREPORT "\n");
+      fprintf(stderr, "Please report at https://gitlab.freedesktop.org/mesa/mesa/-/issues\n");
    }
 }
 

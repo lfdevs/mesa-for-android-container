@@ -1,5 +1,15 @@
+dEQP-VK.api.copy_and_blit.core.use_after_copy.d16_unorm.transfer_dst_optimal.64x64x2_tq_regions_img2img_msaa
+dEQP-VK.api.copy_and_blit.core.use_after_copy.d16_unorm_s8_uint.transfer_dst_optimal.64x64x2_tq_regions_img2img_msaa
 dEQP-VK.pipeline.monolithic.image_view.view_type.cube.format.eac_r11_snorm_block.component_swizzle.a_r_g_b_compute
 dEQP-VK.pipeline.shader_object_unlinked_spirv.image.suballocation.sampling_type.combined.view_type.2d_array.format.a4b4g4r4_unorm_pack16.count_8.size.13x23_array_of_6_compute
+dEQP-VK.pipeline.shader_object_unlinked_spirv.image.suballocation.sampling_type.combined.view_type.3d.format.etc2_r8g8b8a8_srgb_block.count_1.size.17x11x5_compute
 dEQP-VK.pipeline.shader_object_unlinked_spirv.image.suballocation.sampling_type.combined.view_type.cube.format.r8g8b8a8_uint.count_1.size.32x32_compute
-
+dEQP-VK.video.encode.av1.720x480_10le_420.i_15.qindex128_tiling_1x2_rc_disabled_cdef_layered_dpb
 dEQP-VK.video.encode.av1.720x480_10le_420.i_15.qindex128_tiling_1x2_rc_disabled_lf_lr_layered_dpb
+dEQP-VK.video.encode.av1.720x480_10le_420.i_15.rc_disabled_lr_layered_dpb
+
+# Nightly run expectations update
+dEQP-VK.binding_model.descriptorset_random.sets4.constant.ubolimitlow.sbolimitlow.sampledimglow.outimgtexlow.noiub.nouab.task.noia.6
+dEQP-VK.pipeline.monolithic.image.suballocation.sampling_type.combined.view_type.2d_array.format.a4r4g4b4_unorm_pack16.count_1.size.1x1_array_of_3_compute
+dEQP-VK.pipeline.shader_object_unlinked_spirv.image.suballocation.sampling_type.separate.view_type.3d.format.r16g16_snorm.count_1.size.16x16x16_compute
+dEQP-VK.video.encode.av1.720x480_10le_420.i_p_open_15.rc_vbr_layered_dpb

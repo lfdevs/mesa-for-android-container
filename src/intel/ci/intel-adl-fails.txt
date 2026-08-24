@@ -1,10 +1,6 @@
-api@clgetcommandqueueinfo,Fail
 api@clgetdeviceinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
-api@clgetkernelarginfo,Fail
 api@cllinkprogram,Fail
-program@execute@global-offset,Fail
-program@execute@global-offset@3d- input dependent,Fail
 program@execute@vstore@vstore-char-private,Crash
 program@execute@vstore@vstore-short-private,Crash
 program@execute@vstore@vstore-uchar-private,Crash
@@ -15,8 +11,6 @@ program@execute@vstore@vstore_half-float-private,Crash
 program@execute@vector-conversion,Fail
 
 # Piglit CL bug
-api@clsetkernelarg,Fail
-api@clsetkernelarg@Input checks,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float1,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float16,Fail

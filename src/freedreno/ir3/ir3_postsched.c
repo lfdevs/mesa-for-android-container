@@ -55,6 +55,7 @@ struct ir3_postsched_ctx {
 
 struct ir3_postsched_node {
    struct dag_node dag; /* must be first for util_dynarray_foreach */
+   struct list_head false_dep_link;
    struct ir3_instruction *instr;
    bool partially_evaluated_path;
 
@@ -362,6 +363,15 @@ struct ir3_postsched_deps_state {
    unsigned shared_dst_n[2 * SHARED_REG_SIZE];
    struct ir3_postsched_node *nongpr_regs[2 * NONGPR_REG_SIZE];
    unsigned nongpr_dst_n[2 * NONGPR_REG_SIZE];
+
+   /* Track "fake" writes to a0.x. These are used for instructions that cannot
+    * be scheduled inside a mova/(ul) sequence. They do not interfere with each
+    * other, but do interfere with any "real" reads or writes to a0.x. This list
+    * contains the fake writes we've encountered since the last real write. We
+    * need to insert WAR dependencies for all of the fake writes after any
+    * reads of a0.x.
+    */
+   struct list_head false_a0_x_deps;
 };
 
 static void
@@ -414,9 +424,23 @@ add_single_reg_dep(struct ir3_postsched_deps_state *state,
    }
 
    add_dep(state, dep, node, d);
+
+   if (src_n >= 0 && num == REG_A0_X && state->direction == R) {
+      list_for_each_entry (struct ir3_postsched_node, dep,
+                           &state->false_a0_x_deps, false_dep_link) {
+         add_dep(state, dep, node, d);
+      }
+   }
+
    if (src_n < 0) {
-      *dep_ptr = node;
-      *dst_n_ptr = dst_n;
+      if (num == REG_A0_X && node->instr->opc != OPC_MOV) {
+         list_addtail(&node->false_dep_link, &state->false_a0_x_deps);
+      } else {
+         if (num == REG_A0_X)
+            list_inithead(&state->false_a0_x_deps);
+         *dep_ptr = node;
+         *dst_n_ptr = dst_n;
+      }
    }
 }
 
@@ -519,6 +543,7 @@ calculate_forward_deps(struct ir3_postsched_ctx *ctx)
       .direction = F,
       .merged = ctx->v->mergedregs,
    };
+   list_inithead(&state.false_a0_x_deps);
 
    foreach_instr (instr, &ctx->unscheduled_list) {
       calculate_deps(&state, instr->data);
@@ -533,6 +558,7 @@ calculate_reverse_deps(struct ir3_postsched_ctx *ctx)
       .direction = R,
       .merged = ctx->v->mergedregs,
    };
+   list_inithead(&state.false_a0_x_deps);
 
    foreach_instr_rev (instr, &ctx->unscheduled_list) {
       calculate_deps(&state, instr->data);

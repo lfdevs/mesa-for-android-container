@@ -198,6 +198,7 @@ libvulkan_powervr_mesa = shared_library(
     ld_args_bsymbolic,
     ld_args_gc_sections
   ],
+  link_depends : vulkan_icd_link_depends,
   gnu_symbol_visibility : 'hidden',
   install : true,
 )

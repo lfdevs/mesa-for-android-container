@@ -562,10 +562,11 @@ nvc0_prim_gl(unsigned prim)
    }
 }
 
-static void
+static bool
 nvc0_draw_vbo_kick_notify(struct nouveau_context *context)
 {
    _nouveau_fence_update(context->screen, true);
+   return true;
 }
 
 static void

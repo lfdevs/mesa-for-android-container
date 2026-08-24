@@ -32,8 +32,6 @@
 
 enum pipe_video_profile
 ConvertAVEncVProfileToPipeVideoProfile( struct vl_screen *vlScreen, UINT32 profile, D3D12_VIDEO_ENCODER_CODEC codec );
-enum pipe_video_chroma_format
-ConvertAVEncVProfileToPipeVideoChromaFormat( UINT32 profile, D3D12_VIDEO_ENCODER_CODEC codec );
 
 // H264
 enum eAVEncH264PictureType

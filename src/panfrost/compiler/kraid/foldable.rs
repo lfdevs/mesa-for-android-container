@@ -1,5 +1,6 @@
 use std::iter;
 
+use compiler::float16::F16;
 use compiler::smallvec::SmallVec;
 
 use crate::bitview::{BitMutViewable, BitViewable};
@@ -9,6 +10,29 @@ pub trait FoldDataView {
     fn get_src(&self, src: &Src) -> u64;
 
     fn set_dst(&mut self, dst: &Dst, data: u64);
+
+    fn get_op(&self) -> &impl Opcode;
+
+    fn get_f32(&self, src: &Src) -> f32 {
+        let data_type = self.get_op().src_type(src);
+        let raw = self.get_src(src);
+        assert!(data_type.is_float_type());
+        match data_type.bits() {
+            16 => F16::from_bits(raw as u16).into(),
+            32 => f32::from_bits(raw as u32),
+            _ => panic!("Invalid float"),
+        }
+    }
+
+    fn set_f32(&mut self, dst: &Dst, raw: f32) {
+        let data_type = self.get_op().dst_type(dst);
+        assert!(data_type.is_float_type());
+        match data_type.bits() {
+            16 => self.set_dst(dst, F16::from_f32_rtne(raw).to_bits().into()),
+            32 => self.set_dst(dst, raw.to_bits().into()),
+            _ => panic!("Invalid float"),
+        }
+    }
 }
 
 pub struct FoldData<'a, O> {
@@ -28,7 +52,7 @@ impl<'a, O: Opcode> FoldDataView for FoldData<'a, O> {
                 todo!();
             }
             SrcRef::SSA(_) => self.srcs[idx],
-            SrcRef::Reg(_) => todo!(),
+            SrcRef::Reg(_) | SrcRef::Mem(_) => todo!(),
         };
         let src_type = self.op.src_type(src);
 
@@ -65,6 +89,10 @@ impl<'a, O: Opcode> FoldDataView for FoldData<'a, O> {
             _ => unreachable!(),
         }
     }
+
+    fn get_op(&self) -> &impl Opcode {
+        self.op
+    }
 }
 
 pub trait Foldable: Opcode {
@@ -100,17 +128,21 @@ impl<D: FoldDataView, O: Opcode> FoldDataView
         let data = data.get_bit_range_u64(0..bits);
         self.dst[dst_idx].set_bit_range_u64(start..(start + bits), data);
     }
+
+    fn get_op(&self) -> &impl Opcode {
+        self.op
+    }
 }
 
 // Like Foldable, but abstracts the DataType handling and calls the folding method
 // one time for each component.
-pub trait PerCompFoldable: Opcode {
+pub trait PerCompFoldable: Opcode + HasVariants {
     fn fold_comp(&self, model: &dyn Model, f: &mut impl FoldDataView);
 }
 
 impl<T: PerCompFoldable> Foldable for T {
     fn fold(&self, model: &dyn Model, f: &mut impl FoldDataView) {
-        let variant = self.variant().unwrap();
+        let variant = HasVariants::variant(self);
         let mut dst_vec: SmallVec<_> =
             iter::repeat_n(0_u64, self.dsts().len()).collect();
 

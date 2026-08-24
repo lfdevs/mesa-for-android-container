@@ -168,6 +168,7 @@ enum
    DBG_USERQ_NO_SHADOW_REGS,
    DBG_NO_FAST_DISPLAY_LIST,
    DBG_NO_DMA_SHADERS,
+   DBG_IB_CACHES_FLUSH,
 
    /* 3D engine options: */
    DBG_NO_NGG,
@@ -196,10 +197,16 @@ enum
    DBG_FORCE_FAST_CLEAR,
 
    DBG_EXTRA_METADATA,
+   DBG_USERQ_JOB_LOG,
 
    DBG_TMZ,
    DBG_SQTT,
    DBG_EXPORT_MODIFIER,
+
+   /* Meta options disabling more and more performance optimizations. */
+   DBG_SAFE,
+   DBG_SAFER,
+   DBG_SAFEST,
 
    DBG_COUNT
 };
@@ -2107,7 +2114,7 @@ si_set_rasterized_prim(struct si_context *sctx, enum mesa_prim rast_prim,
          sctx->gs_out_prim = V_028A6C_LINESTRIP;
       } else if (is_rect) {
          /* Don't change the clip discard distance for rectangles. */
-         sctx->gs_out_prim = V_028A6C_RECTLIST;
+         sctx->gs_out_prim = sctx->gfx_level >= GFX11 ? V_030998_RECT_2D : V_028A6C_RECTLIST;
       } else {
          si_set_clip_discard_distance(sctx, 0);
          sctx->gs_out_prim = V_028A6C_TRISTRIP;

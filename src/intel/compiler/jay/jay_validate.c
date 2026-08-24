@@ -57,7 +57,7 @@ chirp(struct validate_state *validate, const char *fmt, ...)
    if (validate->I) {
       fprintf(stderr,
               "   invalid instruction in block %d: ", validate->block->index);
-      jay_print_inst(stderr, validate->I);
+      jay_print_inst(stderr, validate->block, validate->I, NULL);
    }
    fprintf(stderr, "   ");
    vfprintf(stderr, fmt, args);
@@ -139,7 +139,7 @@ get_src_words(struct validate_state *validate, jay_inst *I, unsigned s)
                adjust_width_for_type(simd_width, I->type) ||
             I->op == JAY_OPCODE_SEND);
 
-      return 1;
+      return elsize;
    } else if (I->src[s].file == UGPR && jay_num_values(I->src[s]) > elsize) {
       return adjust_width_for_type(simd_width, jay_src_type(I, s));
    } else {
@@ -194,7 +194,7 @@ validate_def(struct validate_state *validate,
       CHECK(!def.num_values_m1);
       CHECK(!def.negate);
       CHECK(!def.abs);
-   } else if (def.file == ACCUM || def.file == UACCUM || def.hi) {
+   } else if (def.file == ACCUM || def.hi) {
       CHECK(validate->post_ra);
    } else {
       CHECK(jay_base_index(def) != JAY_SENTINEL || validate->post_ra);
@@ -208,11 +208,10 @@ validate_def(struct validate_state *validate,
 
    CHECK(jay_num_values(def) == 1 || !jay_is_flag(def));
 
-   /* With some exceptions we cannot access GPRs from SIMD1 instructions */
-   CHECK((jay_is_null(def) ||
-          jay_is_uniform(def) ||
-          def.file == FLAG ||
-          jay_simd_width_logical(validate->func->shader, I) > 1) ||
+   /* With some exceptions we cannot access GPRs from uniform instructions */
+   CHECK(def.file != GPR ||
+         jay_is_null(def) ||
+         jay_simd_width_logical(validate->func->shader, I) > 1 ||
          I->op == JAY_OPCODE_SHUFFLE ||
          I->op == JAY_OPCODE_VECTOR_EXTRACT ||
          I->op == JAY_OPCODE_BROADCAST_IMM);
@@ -253,20 +252,26 @@ validate_inst(struct validate_state *validate, jay_inst *I)
     * required to ensure correctness with the lane masking.
     */
    CHECK(!I->broadcast_flag ||
-         (!jay_is_null(I->cond_flag) &&
-          jay_is_null(I->dst) &&
-          I->cond_flag.file == UFLAG &&
-          (I->op == JAY_OPCODE_CMP || I->op == JAY_OPCODE_MOV)));
+         (!jay_is_null(I->cond_flag) && jay_is_null(I->dst) && I->uniform));
 
    /* We cannot mix uniformness */
-   CHECK(I->cond_flag.file != UFLAG || I->dst.file != GPR);
-   CHECK(I->cond_flag.file != FLAG || I->dst.file != UGPR);
+   CHECK(!(!jay_is_null(I->dst) && I->dst.file == GPR && I->uniform));
+   CHECK(!(!jay_is_null(I->dst) &&
+           I->dst.file == UGPR &&
+           jay_num_values(I->dst) < 8 &&
+           !I->uniform));
+   CHECK(!(I->cond_flag.file == UFLAG && !I->uniform));
 
    /* Standard modifiers only allowed on some instructions */
    CHECK(!I->saturate || opinfo->sat);
    CHECK(!I->conditional_mod ||
          (I->op == JAY_OPCODE_CSEL || I->op == JAY_OPCODE_DEMOTE) ||
          (!jay_is_null(I->cond_flag) && opinfo->cmod));
+
+   /* We should not be clobbering multiple flags in SIMD16 with a mov.u32 */
+   CHECK(!(I->dst.file == FLAG &&
+           jay_type_size_bits(I->type) >
+              jay_type_size_bits(jay_flag_type(validate->func))));
 
    unsigned num_srcs = I->num_srcs;
 
@@ -275,7 +280,8 @@ validate_inst(struct validate_state *validate, jay_inst *I)
 
       if (jay_inst_has_default(I)) {
          jay_def dst = jay_is_null(I->dst) ? I->cond_flag : I->dst;
-         CHECK(jay_inst_get_default(I)->file == dst.file);
+         CHECK(jay_normalize_uflag(jay_inst_get_default(I)->file) ==
+               jay_normalize_uflag(dst.file));
       }
 
       CHECK(jay_is_flag(*jay_inst_get_predicate(I)));
@@ -299,7 +305,8 @@ validate_inst(struct validate_state *validate, jay_inst *I)
          unsigned expected = get_src_words(validate, I, s);
          unsigned words = jay_num_values(I->src[s]);
          if ((I->op != JAY_OPCODE_SEND || s < 2) &&
-             I->op != JAY_OPCODE_VECTOR_EXTRACT) {
+             I->op != JAY_OPCODE_VECTOR_EXTRACT &&
+             I->op != JAY_OPCODE_BROADCAST_IMM) {
             CHECK(expected == words);
          }
 
@@ -308,6 +315,15 @@ validate_inst(struct validate_state *validate, jay_inst *I)
 
       CHECK(!I->src[s].negate || jay_has_src_mods(I, s));
    }
+
+   CHECK(!I->zero_inactive || !jay_is_null(I->cond_flag));
+
+   /* Pure flag operations must be bitwise for our lowering to work */
+   CHECK(I->type != JAY_TYPE_U1 ||
+         (I->op == JAY_OPCODE_PHI_DST || I->op == JAY_OPCODE_UNDEF) ||
+         (I->op == JAY_OPCODE_MOV || I->op == JAY_OPCODE_NOT) ||
+         (I->op >= JAY_OPCODE_AND || I->op == JAY_OPCODE_XOR) ||
+         (I->op == JAY_OPCODE_DEMOTE || I->op == JAY_OPCODE_IS_HELPER));
 
    if (I->op == JAY_OPCODE_DPAS) {
       CHECK(jay_num_values(I->dst) == get_src_words(validate, I, 0));
@@ -326,6 +342,10 @@ validate_inst(struct validate_state *validate, jay_inst *I)
       const unsigned pf = 1 << jay_slice_repack_factor_log2(I);
       CHECK(pf == 1 || pf == 2 || pf == 4);
       CHECK(jay_num_values(I->dst) == (unpack ? pf : 1));
+   } else if (I->op == JAY_OPCODE_BROADCAST_IMM) {
+      CHECK(jay_broadcast_imm_lane(I) <
+               validate->func->shader->dispatch_width &&
+            "jay_nir.c ensures this and codegen relies on it");
    }
 }
 
@@ -343,12 +363,18 @@ jay_validate_function(struct validate_state *validate)
       validate->block = block;
       validate->I = NULL;
 
-      CHECK(block->logical_succs[0] || !block->logical_succs[1]);
       CHECK(block->index < validate->func->num_blocks);
 
-      /* Post-RA we can remove physical jumps though they exist logically */
-      if (block->logical_succs[1] && !validate->post_ra) {
-         CHECK(jay_block_ending_jump(block) != NULL);
+      /* If the block has a fall-through edge, it must be the first block in
+       * the successors list.
+       */
+      jay_block *next_block = jay_next_block(block);
+      for (enum jay_file file = GPR; file <= UGPR; ++file) {
+         bool is_first_successor = true;
+         jay_foreach_successor(block, succ, file) {
+            CHECK(*succ != next_block || is_first_successor);
+            is_first_successor = false;
+         }
       }
 
       /* Loop headers have a single forward edge and a single back edge. There
@@ -387,10 +413,10 @@ jay_validate_function(struct validate_state *validate)
            ++file) {
          if (jay_num_successors(block, file) > 1 && !validate->post_ra) {
             jay_foreach_successor(block, succ, file) {
-               if (jay_num_predecessors(succ, file) > 1) {
+               if (jay_num_predecessors(*succ, file) > 1) {
                   chirp(validate, "%s critical edge (B%u -> B%u)",
                         file == GPR ? "Logical" : "Physical", block->index,
-                        succ->index);
+                        (*succ)->index);
                }
             }
          }

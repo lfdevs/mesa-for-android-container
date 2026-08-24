@@ -10,10 +10,10 @@
 #include "radeon_compiler.h"
 #include "radeon_compiler_util.h"
 #include "radeon_dataflow.h"
-#include "radeon_list.h"
 #include "radeon_variable.h"
 
 #include "util/u_debug.h"
+#include "util/u_dynarray.h"
 
 #define VERBOSE 0
 
@@ -60,7 +60,7 @@ struct schedule_instruction {
    unsigned TexReadCount;
 
    /** For TEX instructions a list of readers */
-   struct rc_list *TexReaders;
+   struct util_dynarray TexReaders;
 };
 
 /**
@@ -129,11 +129,11 @@ struct schedule_state {
    struct schedule_instruction *ReadyAlpha;
    struct schedule_instruction *ReadyTEX;
    /*@}*/
-   struct rc_list *PendingTEX;
+   struct util_dynarray PendingTEX;
 
    void (*CalcScore)(struct schedule_instruction *);
    int PresubNopScore;
-   long max_tex_group;
+   int64_t max_tex_group;
    unsigned PrevBlockHasTex : 1;
    unsigned PrevBlockHasKil : 1;
    /* Number of TEX in the current block */
@@ -452,16 +452,14 @@ commit_update_writes(struct schedule_state *s, struct schedule_instruction *sins
 static void
 notify_sem_wait(struct schedule_state *s)
 {
-   struct rc_list *pend_ptr;
-   for (pend_ptr = s->PendingTEX; pend_ptr; pend_ptr = pend_ptr->Next) {
-      struct rc_list *read_ptr;
-      struct schedule_instruction *pending = pend_ptr->Item;
-      for (read_ptr = pending->TexReaders; read_ptr; read_ptr = read_ptr->Next) {
-         struct schedule_instruction *reader = read_ptr->Item;
+   util_dynarray_foreach(&s->PendingTEX, struct schedule_instruction *, pending_ptr) {
+      struct schedule_instruction *pending = *pending_ptr;
+      util_dynarray_foreach(&pending->TexReaders, struct schedule_instruction *, reader_ptr) {
+         struct schedule_instruction *reader = *reader_ptr;
          reader->TexReadCount--;
       }
    }
-   s->PendingTEX = NULL;
+   util_dynarray_clear(&s->PendingTEX);
 }
 
 static void
@@ -529,7 +527,7 @@ emit_all_tex(struct schedule_state *s, struct rc_instruction *before)
          readytex->Instruction->U.I.TexSemAcquire = 1;
          readytex->Instruction->U.I.TexSemWait = 1;
       }
-      rc_list_add(&s->PendingTEX, rc_list(&s->C->Pool, readytex));
+      util_dynarray_append(&s->PendingTEX, readytex);
       readytex = readytex->NextReady;
    }
 }
@@ -1139,7 +1137,7 @@ add_tex_reader(struct schedule_state *s, struct schedule_instruction *writer,
       return;
    }
    reader->TexReadCount++;
-   rc_list_add(&writer->TexReaders, rc_list(&s->C->Pool, reader));
+   util_dynarray_append(&writer->TexReaders, reader);
 }
 
 static void
@@ -1177,13 +1175,13 @@ scan_read(void *data, struct rc_instruction *inst, rc_register_file file, unsign
 
    DBG("%i: read %i[%i] chan %i\n", s->Current->Instruction->IP, file, index, chan);
 
-   reader = memory_pool_malloc(&s->C->Pool, sizeof(*reader));
+   reader = linear_alloc(s->C->Pool, struct reg_value_reader);
    reader->Reader = s->Current;
    if (!*v) {
       /* In this situation, the instruction reads from a register
        * that hasn't been written to or read from in the current
        * block. */
-      *v = memory_pool_malloc(&s->C->Pool, sizeof(struct reg_value));
+      *v = linear_alloc(s->C->Pool, struct reg_value);
       memset(*v, 0, sizeof(struct reg_value));
       (*v)->Readers = reader;
    } else {
@@ -1218,7 +1216,7 @@ scan_write(void *data, struct rc_instruction *inst, rc_register_file file, unsig
 
    DBG("%i: write %i[%i] chan %i\n", s->Current->Instruction->IP, file, index, chan);
 
-   newv = memory_pool_malloc(&s->C->Pool, sizeof(*newv));
+   newv = linear_alloc(s->C->Pool, struct reg_value);
    memset(newv, 0, sizeof(*newv));
 
    newv->Writer = s->Current;
@@ -1256,8 +1254,9 @@ schedule_block(struct schedule_state *s, struct rc_instruction *begin, struct rc
    /* Scan instructions for data dependencies */
    ip = 0;
    for (struct rc_instruction *inst = begin; inst != end; inst = inst->Next) {
-      s->Current = memory_pool_malloc(&s->C->Pool, sizeof(*s->Current));
+      s->Current = linear_alloc(s->C->Pool, struct schedule_instruction);
       memset(s->Current, 0, sizeof(struct schedule_instruction));
+      util_dynarray_init(&s->Current->TexReaders, s->C->Pool);
 
       if (inst->Type == RC_INSTRUCTION_NORMAL) {
          const struct rc_opcode_info *info = rc_get_opcode_info(inst->U.I.Opcode);
@@ -1328,6 +1327,7 @@ rc_pair_schedule(struct radeon_compiler *cc, void *user)
    memset(&s, 0, sizeof(s));
    s.Opt = *opt;
    s.C = &c->Base;
+   util_dynarray_init(&s.PendingTEX, s.C->Pool);
    if (s.C->is_r500) {
       s.CalcScore = calc_score_readers;
       s.PresubNopScore = PRESUB_NOP_SCORE_R500;
@@ -1379,7 +1379,7 @@ rc_pair_schedule(struct radeon_compiler *cc, void *user)
       memset(s.Temporary, 0, sizeof(s.Temporary));
       s.TEXCount = 0;
       schedule_block(&s, first, inst);
-      if (s.PendingTEX) {
+      if (s.PendingTEX.size != 0) {
          s.PrevBlockHasTex = 1;
       }
    }

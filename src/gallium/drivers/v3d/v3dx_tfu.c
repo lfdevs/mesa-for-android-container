@@ -53,14 +53,17 @@ v3dX(tfu)(struct pipe_context *pctx,
         if (psrc->nr_samples != pdst->nr_samples)
                 return false;
 
-        if (pdst->target != PIPE_TEXTURE_2D || psrc->target != PIPE_TEXTURE_2D)
-                return false;
+        assert(!for_mipmap || pdst->target != PIPE_TEXTURE_3D);
 
 #if V3D_VERSION == 42
         /* Can't write to raster. */
         if (dst_base_slice->tiling == V3D_TILING_RASTER)
                 return false;
 #endif
+
+        /* TFU requires UIF when generating mipmaps */
+        if (for_mipmap && dst_base_slice->tiling == V3D_TILING_RASTER)
+                return false;
 
         /* When using TFU for blit, we are doing exact copies (both input and
          * output format must be the same, no scaling, etc), so there is no

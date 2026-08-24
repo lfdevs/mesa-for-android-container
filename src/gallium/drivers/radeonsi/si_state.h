@@ -469,6 +469,9 @@ void si_ps_key_update_framebuffer(struct si_context *sctx);
 void si_update_ps_iter_samples(struct si_context *sctx);
 void si_save_qbo_state(struct si_context *sctx, struct si_qbo_state *st);
 void si_restore_qbo_state(struct si_context *sctx, struct si_qbo_state *st);
+bool si_is_format_supported(struct pipe_screen *screen, enum pipe_format format,
+                            enum pipe_texture_target target, unsigned sample_count,
+                            unsigned storage_sample_count, unsigned usage);
 
 /* si_state_binning.c */
 void si_emit_dpbb_state(struct si_context *sctx, unsigned index);

@@ -608,11 +608,11 @@ d3d12_video_encoder_update_current_frame_pic_params_info_hevc(struct d3d12_video
                   pHEVCPicData->QPMapValuesCount, pHEVCPicData->pRateControlQPMap);
    }
 
-   D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 picParams1 = {};
-   picParams1.pHEVCPicData = pHEVCPicData;
-   picParams1.DataSize = sizeof(*pHEVCPicData);
-   pD3D12Enc->m_upDPBManager->begin_frame(picParams1, bUsedAsReference, picture);
-   pD3D12Enc->m_upDPBManager->get_current_frame_picture_control_data(picParams1);
+   d3d12_video_encoder_picture_control_codec_data_mutable picParams = {};
+   picParams.pHEVCPicData = pHEVCPicData;
+   picParams.DataSize = sizeof(*pHEVCPicData);
+   pD3D12Enc->m_upDPBManager->begin_frame(picParams, bUsedAsReference, picture);
+   pD3D12Enc->m_upDPBManager->get_current_frame_picture_control_data(picParams);
 
    // Save state snapshot from record time to resolve headers at get_feedback time
    size_t current_metadata_slot = static_cast<size_t>(pD3D12Enc->m_fenceValue % pD3D12Enc->m_MaxMetadataBuffersCount);

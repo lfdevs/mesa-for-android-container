@@ -109,7 +109,7 @@ get_vis_stream_patchpoint_cs(struct tu_cmd_buffer *cmd,
    util_dynarray_foreach (&cmd->vis_stream_cs_bos,
                           struct tu_vis_stream_patchpoint_cs,
                           patchpoint_cs) {
-      uint32_t *fence = (uint32_t *)patchpoint_cs->fence_bo.bo->map;
+      uint32_t *fence = (uint32_t *)tu_suballoc_bo_map(&patchpoint_cs->fence_bo);
       if (*fence == 1) {
          *fence = 0;
          tu_cs_init_suballoc(cs, cmd->device, &patchpoint_cs->cs_bo);

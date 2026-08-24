@@ -277,6 +277,8 @@ fn op_encode_dst(op: &impl Opcode, dst: &Dst) -> v9::EncodedDst {
         ir::DstLanes::B3 => v9::DstLanes::B3,
         ir::DstLanes::H0 => v9::DstLanes::H0,
         ir::DstLanes::H1 => v9::DstLanes::H1,
+        ir::DstLanes::HF0 => v9::DstLanes::Hf0,
+        ir::DstLanes::HF1 => v9::DstLanes::Hf1,
         lanes => panic!("Invalid DstLanes: {lanes}"),
     };
 
@@ -286,37 +288,61 @@ fn op_encode_dst(op: &impl Opcode, dst: &Dst) -> v9::EncodedDst {
     }
 }
 
-fn op_encode_sr_read(op: &impl Opcode, src: &Src) -> v9::SrRead {
+fn op_encode_sr_read_swizz(op: &impl Opcode, src: &Src) -> v9::SrReadSwizzle {
     let SrcRef::Reg(reg) = &src.src_ref else {
         panic!("Staging registers be registers");
     };
 
-    let src_type = op.src_type(src);
-    let swizzle = AsmSwizzleWiden::from_swizzle(src_type, src.swizzle)
-        .expect("Invalid swizzle");
-    let swizzle = swizzle.into();
-
     assert!(src.src_mod == SrcMod::None);
+    let data_type = op.src_type(src);
+    let swizzle = AsmSwizzleWiden::from_swizzle(data_type, src.swizzle)
+        .expect("Invalid swizzle")
+        .into();
 
     let index = reg.idx;
     let count = reg.bytes().div_ceil(4);
 
-    assert_eq!(index % count.next_power_of_two(), 0);
+    assert!(count == 1 || (index % 2) == 0);
 
-    v9::SrRead {
+    v9::SrReadSwizzle {
         index,
         count,
         swizzle,
     }
 }
 
-fn op_encode_sr_write(_op: &impl Opcode, dst: &Dst) -> v9::SrWrite {
+fn op_encode_sr_read(op: &impl Opcode, src: &Src) -> SrRead {
+    let SrcRef::Reg(reg) = &src.src_ref else {
+        panic!("Staging registers be registers");
+    };
+
+    assert!(src.src_mod == SrcMod::None);
+    let data_type = op.src_type(src);
+    let swizzle = AsmSwizzleWiden::from_swizzle(data_type, src.swizzle)
+        .expect("Invalid swizzle");
+    assert_eq!(swizzle, AsmSwizzleWiden::None);
+
+    let index = reg.idx;
+    let count = reg.bytes().div_ceil(4);
+
+    assert!(count == 1 || (index % 2) == 0);
+
+    SrRead {
+        index,
+        count,
+        data_type,
+    }
+}
+
+fn op_encode_sr_write_lanes(_op: &impl Opcode, dst: &Dst) -> v9::SrWriteLanes {
     let DstRef::Reg(reg) = &dst.dst_ref else {
         panic!("Staging registers be registers");
     };
 
     let index = reg.idx;
     let count = reg.bytes().div_ceil(4);
+
+    assert!(count == 1 || (index % 2) == 0);
 
     let lanes = match dst.lanes {
         ir::DstLanes::All => v9::DstLanes::None,
@@ -326,31 +352,41 @@ fn op_encode_sr_write(_op: &impl Opcode, dst: &Dst) -> v9::SrWrite {
         ir::DstLanes::B3 => v9::DstLanes::B3,
         ir::DstLanes::H0 => v9::DstLanes::H0,
         ir::DstLanes::H1 => v9::DstLanes::H1,
+        ir::DstLanes::HF0 => v9::DstLanes::Hf0,
+        ir::DstLanes::HF1 => v9::DstLanes::Hf1,
         lanes => panic!("Invalid DstLanes: {lanes}"),
     };
 
-    v9::SrWrite {
+    v9::SrWriteLanes {
         index,
         count,
         lanes,
     }
 }
 
-fn try_encode_res_table_index(handle: u32) -> Result<u32, &'static str> {
-    let table_idx = handle >> 24;
-    if !(table_idx <= 11 || (table_idx >= 60 && table_idx <= 63)) {
-        return Err("Cannot encode immediate resource table index");
-    }
-    Ok(table_idx & 15)
-}
+fn op_encode_sr_write(op: &impl Opcode, dst: &Dst) -> SrWrite {
+    let DstRef::Reg(reg) = &dst.dst_ref else {
+        panic!("Staging registers be registers");
+    };
 
-fn try_encode_res_index(handle: u32, bits: u8) -> Result<u8, &'static str> {
-    assert!(bits <= 8);
-    let res_idx = handle & 0xffffff;
-    if res_idx >= (1 << bits) {
-        return Err("Cannot encode immediate resource index");
+    let data_type = op.dst_type(dst);
+    if data_type.total_bits() == 16 {
+        assert_eq!(dst.lanes, ir::DstLanes::H0);
+    } else {
+        debug_assert!(data_type.total_bits() >= 32);
+        assert_eq!(dst.lanes, ir::DstLanes::All);
     }
-    Ok(res_idx as u8)
+
+    let index = reg.idx;
+    let count = reg.bytes().div_ceil(4);
+
+    assert!(count == 1 || (index % 2) == 0);
+
+    SrWrite {
+        index,
+        count,
+        data_type,
+    }
 }
 
 fn instr_fau_page(instr: &Instr) -> Option<u8> {
@@ -367,6 +403,9 @@ fn instr_fau_page(instr: &Instr) -> Option<u8> {
 }
 
 fn encode_flow(mut flow: FlowCtrl, arch: u8) -> FlowControlM {
+    // Encoded separately from the flow field.
+    flow.take_msg_slot_idx();
+
     if flow.take_end_shader() {
         assert!(flow == FlowCtrl::NONE);
         return FlowControlM::End;
@@ -671,11 +710,11 @@ impl V9Instr for OpBranch {
             not: self.not.into(),
             src0: op_encode_src(self, &self.cond),
             combine: match self.combine_op {
-                BranchCombineOp::None => BranchCombineM::And,
+                BranchCombineOp::None => BranchCombineM::None,
                 BranchCombineOp::H0 => BranchCombineM::H0,
                 BranchCombineOp::H1 => BranchCombineM::H1,
-                BranchCombineOp::And => BranchCombineM::Lowbits,
-                BranchCombineOp::LowBits => BranchCombineM::None,
+                BranchCombineOp::And => BranchCombineM::And,
+                BranchCombineOp::LowBits => BranchCombineM::Lowbits,
             },
             conservative: false.into(),
             offset: e.get_pc_rel_offset(&self.label),
@@ -837,6 +876,83 @@ impl V9Instr for OpCSel {
     }
 }
 
+impl V9Instr for OpCubeFaceIdx {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            Cubeface2::get_info((), arch),
+            src_map! {
+                src0: coords[0],
+                src1: coords[1],
+                src2: coords[2],
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(Cubeface2 {
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.coords[0]),
+            src1: op_encode_src(self, &self.coords[1]),
+            src2: op_encode_src(self, &self.coords[2]),
+        })
+    }
+}
+
+impl V9Instr for OpCubeFaceMax {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            Cubeface1::get_info((), arch),
+            src_map! {
+                src0: coords[0],
+                src1: coords[1],
+                src2: coords[2],
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(Cubeface1 {
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.coords[0]),
+            src1: op_encode_src(self, &self.coords[1]),
+            src2: op_encode_src(self, &self.coords[2]),
+        })
+    }
+}
+
+impl V9Instr for OpCubeSel {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            match self.coord {
+                CubeSelCoord::S => CubeSsel::get_info((), arch),
+                CubeSelCoord::T => CubeTsel::get_info((), arch),
+            },
+            src_map! {
+                src0: coords[0],
+                src1: coords[1],
+                src2: idx,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        match self.coord {
+            CubeSelCoord::S => e.encode(CubeSsel {
+                dst: op_encode_dst(self, &self.dst),
+                src0: op_encode_src(self, &self.coords[0]),
+                src1: op_encode_src(self, &self.coords[1]),
+                src2: op_encode_src(self, &self.idx),
+            }),
+            CubeSelCoord::T => e.encode(CubeTsel {
+                dst: op_encode_dst(self, &self.dst),
+                src0: op_encode_src(self, &self.coords[0]),
+                src1: op_encode_src(self, &self.coords[1]),
+                src2: op_encode_src(self, &self.idx),
+            }),
+        }
+    }
+}
+
 impl V9Instr for OpF16ToF32 {
     fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
         V9InstrInfo::from_isa(
@@ -889,8 +1005,14 @@ impl V9Instr for OpF32ToF16 {
     }
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        let mut dst = op_encode_dst(self, &self.dst);
+        dst.lanes = match dst.lanes {
+            v9::DstLanes::H0 => v9::DstLanes::Hf0,
+            v9::DstLanes::H1 => v9::DstLanes::Hf1,
+            _ => panic!("Invalid dst.lanes"),
+        };
         e.encode(F32ToF16 {
-            dst: op_encode_dst(self, &self.dst),
+            dst,
             src0: op_encode_src(self, &self.src),
             round: self.round.into(),
             clamp: self.clamp.into(),
@@ -960,8 +1082,10 @@ impl V9Instr for OpFAdd {
     fn src_supports_imm32(&self, src: &Src, arch: u8, _imm: u32) -> bool {
         ptr_eq(src, &self.srcs[1])
             && self.srcs[0].swizzle.is_none()
+            && self.srcs[0].src_mod.is_none()
             && self.round == FRound::NearestEven
             && self.clamp == FClamp::None
+            && !self.dst.lanes.is_f16_narrow()
             && FaddImm::is_supported(self.dst_type, arch)
     }
 
@@ -990,12 +1114,37 @@ impl V9Instr for OpFAdd {
     }
 }
 
+impl V9Instr for OpFAddLScale {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            FaddLscale::get_info(FaddLscaleVariant::F32, arch),
+            src_map! {
+                src0: srcs[0],
+                src1: srcs[1],
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(FaddLscale {
+            variant: FaddLscaleVariant::F32,
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.srcs[0]),
+            src1: op_encode_src(self, &self.srcs[1]),
+            round: self.round.into(),
+            clamp: self.clamp.into(),
+            sticky: false.into(),
+        })
+    }
+}
+
 impl From<CmpResultType> for CmpResultTypeM {
     fn from(value: CmpResultType) -> Self {
         match value {
             CmpResultType::I1 => CmpResultTypeM::I1,
             CmpResultType::F1 => CmpResultTypeM::F1,
             CmpResultType::M1 => CmpResultTypeM::M1,
+            CmpResultType::C => CmpResultTypeM::C,
         }
     }
 }
@@ -1061,6 +1210,105 @@ impl V9Instr for OpFCmp {
     }
 }
 
+impl V9Instr for OpFCosTable {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            FcosTable::get_info(FcosTableVariant::U6, arch),
+            src_map! {
+                src0: src,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(FcosTable {
+            variant: FcosTableVariant::U6,
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.src),
+            offset: self.offset.into(),
+        })
+    }
+}
+
+impl V9Instr for OpFExp16 {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            Fexp::get_info(FexpVariant::F16, arch),
+            src_map! {
+                src1: expf,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(Fexp {
+            variant: FexpVariant::F16,
+            dst: op_encode_dst(self, &self.dst),
+            src0: None,
+            src1: op_encode_src(self, &self.expf),
+        })
+    }
+}
+
+impl V9Instr for OpFExp32 {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            Fexp::get_info(FexpVariant::F32, arch),
+            src_map! {
+                src0: expx,
+                src1: expf,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(Fexp {
+            variant: FexpVariant::F32,
+            dst: op_encode_dst(self, &self.dst),
+            src0: Some(op_encode_src(self, &self.expx)),
+            src1: op_encode_src(self, &self.expf),
+        })
+    }
+}
+
+impl V9Instr for OpFLog16 {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            Flog::get_info(FlogVariant::F16, arch),
+            src_map! {
+                src0: src,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(Flog {
+            variant: FlogVariant::F16,
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.src),
+        })
+    }
+}
+
+impl V9Instr for OpFLogD {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            Flogd::get_info(FlogdVariant::F32, arch),
+            src_map! {
+                src0: src,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(Flogd {
+            variant: FlogdVariant::F32,
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.src),
+        })
+    }
+}
+
 impl From<FlushNanMode> for FlushNanM {
     fn from(value: FlushNanMode) -> Self {
         match value {
@@ -1112,6 +1360,34 @@ impl V9Instr for OpFma {
             src0: op_encode_src(self, &self.srcs[0]),
             src1: op_encode_src(self, &self.srcs[1]),
             src2: op_encode_src(self, &self.srcs[2]),
+            clamp: self.clamp.into(),
+            round: self.round.into(),
+        })
+    }
+}
+
+impl V9Instr for OpFmaRScale {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            FmaRscale::get_info(FmaRscaleVariant::F32, arch),
+            src_map! {
+                src0: srcs[0],
+                src1: srcs[1],
+                src2: srcs[2],
+                src3: scale,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(FmaRscale {
+            variant: FmaRscaleVariant::F32,
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.srcs[0]),
+            src1: op_encode_src(self, &self.srcs[1]),
+            src2: op_encode_src(self, &self.srcs[2]),
+            src3: op_encode_src(self, &self.scale),
+            special: FmaRscaleSpecial32M::None,
             clamp: self.clamp.into(),
             round: self.round.into(),
         })
@@ -1306,6 +1582,26 @@ impl V9Instr for OpFRsq {
     }
 }
 
+impl V9Instr for OpFSinTable {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            FsinTable::get_info(FsinTableVariant::U6, arch),
+            src_map! {
+                src0: src,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(FsinTable {
+            variant: FsinTableVariant::U6,
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.src),
+            offset: self.offset.into(),
+        })
+    }
+}
+
 impl V9Instr for OpIAbs {
     fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
         V9InstrInfo::from_isa(
@@ -1337,6 +1633,7 @@ impl V9Instr for OpIAdd {
     }
 
     fn src_supports_imm32(&self, src: &Src, arch: u8, _imm: u32) -> bool {
+        assert!(self.srcs[0].src_mod.is_none());
         ptr_eq(src, &self.srcs[1])
             && self.srcs[0].swizzle.is_none()
             && !self.saturate
@@ -1425,8 +1722,87 @@ impl V9Instr for OpICmp {
     }
 }
 
+impl V9Instr for OpICmpMulti {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            IcmpMulti::get_info(self.src_type, arch),
+            src_map! {
+                src0: srcs[0],
+                src1: srcs[1],
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(IcmpMulti {
+            variant: self.src_type.try_into().unwrap(),
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.srcs[0]),
+            src1: op_encode_src(self, &self.srcs[1]),
+            src2: op_encode_src(self, &self.accum),
+            cmpf: self.cmp_op.try_into().unwrap(),
+            result_type: self.res_type.into(),
+        })
+    }
+}
+
+impl OpIDpAdd {
+    fn v9_variant(&self) -> IdpaddVariant {
+        match self.dst_type {
+            DataType::S32 => IdpaddVariant::V4S8,
+            DataType::U32 => IdpaddVariant::V4U8,
+            _ => panic!("Invalid OpIDpAdd::dst_type"),
+        }
+    }
+}
+
+impl V9Instr for OpIDpAdd {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            Idpadd::get_info(self.v9_variant(), arch),
+            src_map! {
+                src0: srcs[0],
+                src1: srcs[1],
+                src2: accum,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        let variant = self.v9_variant();
+        let (unsigned0, unsigned1) = match variant {
+            IdpaddVariant::V4S8 => (
+                (self.src_types[0] == DataType::V4U8).into(),
+                (self.src_types[1] == DataType::V4U8).into(),
+            ),
+            IdpaddVariant::V4U8 => {
+                assert!(self.src_types == [DataType::V4U8; 2]);
+                (V4u8M::None, V4u8M::None)
+            }
+        };
+        e.encode(Idpadd {
+            variant,
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.srcs[0]),
+            src1: op_encode_src(self, &self.srcs[1]),
+            src2: op_encode_src(self, &self.accum),
+            saturate: self.saturate.into(),
+            unsigned0,
+            unsigned1,
+        })
+    }
+}
+
 impl V9Instr for OpIMul {
     fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        // For 32-bit and smaller types, we have the usual signless integer
+        // rules where it's fine as long as we don't have source modifiers or
+        // widens.  However, since 64-bit multiplies require a word widen, it
+        // doesn't make any sense to claim to support them.
+        if self.dst_type == DataType::I64 {
+            return None;
+        }
+
         V9InstrInfo::from_isa(
             Imul::get_info(self.dst_type.i_as_u(), arch),
             src_map! {
@@ -1437,8 +1813,9 @@ impl V9Instr for OpIMul {
     }
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        assert_ne!(self.dst_type, DataType::I64);
         e.encode(Imul {
-            variant: self.dst_type.try_into().unwrap(),
+            variant: self.dst_type.i_as_u().try_into().unwrap(),
             dst: op_encode_dst(self, &self.dst),
             src0: op_encode_src(self, &self.srcs[0]),
             src1: op_encode_src(self, &self.srcs[1]),
@@ -1501,6 +1878,45 @@ impl V9Instr for OpIToF32 {
     }
 }
 
+impl V9Instr for OpLdAttr {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            LdAttr::get_info((), arch),
+            src_map! {
+                src0: vertex_index,
+                src1: instance_index,
+                src2: handle,
+            },
+        )
+    }
+
+    fn src_supports_imm32(&self, src: &Src, _arch: u8, imm: u32) -> bool {
+        ptr_eq(src, &self.handle) && ResHandle::from_bits(imm).fits_imm_op(4)
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        if let Ok(attr) = ResHandle::try_from(&self.handle) {
+            assert!(attr.fits_imm_op(4));
+            e.encode(LdAttrImm {
+                message_slot_index: e.get_msg_slot_idx().unwrap(),
+                sr_dst: op_encode_sr_write(self, &self.dst),
+                src0: op_encode_src(self, &self.vertex_index),
+                src1: op_encode_src(self, &self.instance_index),
+                attribute_index: attr.index as u8,
+                attribute_table_index: attr.table,
+            })
+        } else {
+            e.encode(LdAttr {
+                message_slot_index: e.get_msg_slot_idx().unwrap(),
+                sr_dst: op_encode_sr_write(self, &self.dst),
+                src0: op_encode_src(self, &self.vertex_index),
+                src1: op_encode_src(self, &self.instance_index),
+                src2: op_encode_src(self, &self.handle),
+            })
+        }
+    }
+}
+
 impl V9Instr for OpLdCvt {
     fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
         V9InstrInfo::from_isa(
@@ -1514,8 +1930,6 @@ impl V9Instr for OpLdCvt {
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
         e.encode(LdCvt {
-            register_format: self.dst_type.scalar_type().try_into().unwrap(),
-            vecsize: self.dst_type.comps().try_into().unwrap(),
             access: self.access.into(),
             message_slot_index: e.get_msg_slot_idx().unwrap(),
             sr_dst: op_encode_sr_write(self, &self.dst),
@@ -1549,6 +1963,23 @@ impl V9Instr for OpLdExp {
     }
 }
 
+impl V9Instr for OpLdGClk {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(LdGclk::get_info((), arch), src_map! {})
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(LdGclk {
+            message_slot_index: e.get_msg_slot_idx().unwrap(),
+            sr_dst: op_encode_sr_write(self, &self.dst),
+            source: match self.source {
+                GClkSource::CycleCounter => LdGclkSourceM::CycleCounter,
+                GClkSource::SystemTimestamp => LdGclkSourceM::SystemTimestamp,
+            },
+        })
+    }
+}
+
 impl V9Instr for OpLdPka {
     fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
         V9InstrInfo::from_isa(
@@ -1566,7 +1997,7 @@ impl V9Instr for OpLdPka {
             access: self.access.into(),
             extend: SignExtendOrNoneM::None,
             message_slot_index: e.get_msg_slot_idx().unwrap(),
-            sr_dst: op_encode_sr_write(self, &self.dst),
+            sr_dst: op_encode_sr_write_lanes(self, &self.dst),
             src0: op_encode_src(self, &self.offset),
             src1: op_encode_src(self, &self.handle),
         })
@@ -1586,35 +2017,22 @@ impl V9Instr for OpLdTex {
     }
 
     fn src_supports_imm32(&self, src: &Src, _arch: u8, imm: u32) -> bool {
-        ptr_eq(src, &self.handle)
-            && try_encode_res_index(imm, 4).is_ok()
-            && try_encode_res_table_index(imm).is_ok()
+        ptr_eq(src, &self.handle) && ResHandle::from_bits(imm).fits_imm_op(4)
     }
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
-        if let Ok(imm32) = u32::try_from(&self.handle.src_ref) {
+        if let Ok(texture) = ResHandle::try_from(&self.handle) {
+            assert!(texture.fits_imm_op(4));
             e.encode(LdTexImm {
-                register_format: self
-                    .dst_type
-                    .scalar_type()
-                    .try_into()
-                    .unwrap(),
-                vecsize: self.dst_type.comps().try_into().unwrap(),
                 message_slot_index: e.get_msg_slot_idx().unwrap(),
                 sr_dst: op_encode_sr_write(self, &self.dst),
                 src0: op_encode_src(self, &self.coords[0]),
                 src1: op_encode_src(self, &self.coords[1]),
-                texture_index: try_encode_res_index(imm32, 4).unwrap(),
-                texture_table_index: try_encode_res_table_index(imm32).unwrap(),
+                texture_index: texture.index as u8,
+                texture_table_index: texture.table,
             })
         } else {
             e.encode(LdTex {
-                register_format: self
-                    .dst_type
-                    .scalar_type()
-                    .try_into()
-                    .unwrap(),
-                vecsize: self.dst_type.comps().try_into().unwrap(),
                 message_slot_index: e.get_msg_slot_idx().unwrap(),
                 sr_dst: op_encode_sr_write(self, &self.dst),
                 src0: op_encode_src(self, &self.coords[0]),
@@ -1637,19 +2055,18 @@ impl V9Instr for OpLeaBuf {
     }
 
     fn src_supports_imm32(&self, src: &Src, _arch: u8, imm: u32) -> bool {
-        ptr_eq(src, &self.handle)
-            && try_encode_res_index(imm, 8).is_ok()
-            && try_encode_res_table_index(imm).is_ok()
+        ptr_eq(src, &self.handle) && ResHandle::from_bits(imm).fits_imm_op(8)
     }
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
-        if let Ok(imm32) = u32::try_from(&self.handle.src_ref) {
+        if let Ok(buffer) = ResHandle::try_from(&self.handle) {
+            assert!(buffer.fits_imm_op(8));
             e.encode(LeaBufImm {
                 message_slot_index: e.get_msg_slot_idx().unwrap(),
                 sr_dst: op_encode_sr_write(self, &self.dst),
                 src0: op_encode_src(self, &self.index),
-                buffer_index: try_encode_res_index(imm32, 8).unwrap(),
-                buffer_table_index: try_encode_res_table_index(imm32).unwrap(),
+                buffer_index: buffer.index as u8,
+                buffer_table_index: buffer.table,
             })
         } else {
             e.encode(LeaBuf {
@@ -1696,20 +2113,19 @@ impl V9Instr for OpLeaTex {
     }
 
     fn src_supports_imm32(&self, src: &Src, _arch: u8, imm: u32) -> bool {
-        ptr_eq(src, &self.handle)
-            && try_encode_res_index(imm, 4).is_ok()
-            && try_encode_res_table_index(imm).is_ok()
+        ptr_eq(src, &self.handle) && ResHandle::from_bits(imm).fits_imm_op(4)
     }
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
-        if let Ok(imm32) = u32::try_from(&self.handle.src_ref) {
+        if let Ok(texture) = ResHandle::try_from(&self.handle) {
+            assert!(texture.fits_imm_op(4));
             e.encode(LeaTexImm {
                 message_slot_index: e.get_msg_slot_idx().unwrap(),
                 sr_dst: op_encode_sr_write(self, &self.dst),
                 src0: op_encode_src(self, &self.coords[0]),
                 src1: op_encode_src(self, &self.coords[1]),
-                texture_index: try_encode_res_index(imm32, 4).unwrap(),
-                texture_table_index: try_encode_res_table_index(imm32).unwrap(),
+                texture_index: texture.index as u8,
+                texture_table_index: texture.table,
             })
         } else {
             e.encode(LeaTex {
@@ -1739,7 +2155,7 @@ impl V9Instr for OpLoad {
             access: self.access.into(),
             extend: SignExtendOrNoneM::None,
             message_slot_index: e.get_msg_slot_idx().unwrap(),
-            sr_dst: op_encode_sr_write(self, &self.dst),
+            sr_dst: op_encode_sr_write_lanes(self, &self.dst),
             src0: op_encode_src(self, &self.addr),
             offset: self.offset,
         })
@@ -1794,10 +2210,123 @@ impl V9Instr for OpMkVecV2I16 {
     }
 }
 
-impl V9Instr for OpMov {
+impl From<F16SubMat> for SubmatrixSelM {
+    fn from(submat: F16SubMat) -> SubmatrixSelM {
+        match submat {
+            F16SubMat::None => SubmatrixSelM::None,
+            F16SubMat::F0 => SubmatrixSelM::F0,
+            F16SubMat::F1 => SubmatrixSelM::F1,
+        }
+    }
+}
+
+impl V9Instr for OpMMulF16 {
     fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
         V9InstrInfo::from_isa(
-            Mov::get_info(self.dst_type, arch),
+            Mmul::get_info(MmulVariant::F16, arch),
+            src_map! {
+                src0: a,
+                src1: b,
+                src2: c,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        e.encode(Mmul {
+            variant: MmulVariant::F16,
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.a),
+            src1: op_encode_src(self, &self.b),
+            src2: op_encode_src(self, &self.c),
+            saturate: SaturateM::None,
+            unsigned0: V4u8M::None,
+            unsigned1: V4u8M::None,
+            sub0: self.a_submat.try_into().unwrap(),
+            sub1: SubmatrixSelM::None,
+        })
+    }
+}
+
+impl V9Instr for OpMMulF32 {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            Mmul::get_info(self.src_type, arch),
+            src_map! {
+                src0: a,
+                src1: b,
+                src2: c,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        if self.src_type == DataType::F32 {
+            assert_eq!(self.a_submat, F16SubMat::None);
+            assert_eq!(self.b_submat, F16SubMat::None);
+        } else {
+            assert_ne!(self.a_submat, F16SubMat::None);
+            assert_ne!(self.b_submat, F16SubMat::None);
+        }
+        e.encode(Mmul {
+            variant: self.src_type.try_into().unwrap(),
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.a),
+            src1: op_encode_src(self, &self.b),
+            src2: op_encode_src(self, &self.c),
+            saturate: SaturateM::None,
+            unsigned0: V4u8M::None,
+            unsigned1: V4u8M::None,
+            sub0: self.a_submat.try_into().unwrap(),
+            sub1: self.b_submat.try_into().unwrap(),
+        })
+    }
+}
+
+impl V9Instr for OpMMulI32 {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        V9InstrInfo::from_isa(
+            Mmul::get_info(self.mul_type, arch),
+            src_map! {
+                src0: a,
+                src1: b,
+                src2: c,
+            },
+        )
+    }
+
+    fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        let unsigned = |src_type: DataType| match (self.mul_type, src_type) {
+            (DataType::V4S8, DataType::V4S8) => V4u8M::None,
+            (DataType::V4S8, DataType::V4U8) => V4u8M::V4U8,
+            (DataType::V4U8, DataType::V4U8) => V4u8M::None,
+            _ => panic!("Invalid IMMulI32::[ab]_type"),
+        };
+
+        e.encode(Mmul {
+            variant: self.mul_type.try_into().unwrap(),
+            dst: op_encode_dst(self, &self.dst),
+            src0: op_encode_src(self, &self.a),
+            src1: op_encode_src(self, &self.b),
+            src2: op_encode_src(self, &self.c),
+            saturate: self.saturate.into(),
+            unsigned0: unsigned(self.a_type),
+            unsigned1: unsigned(self.b_type),
+            sub0: SubmatrixSelM::None,
+            sub1: SubmatrixSelM::None,
+        })
+    }
+}
+
+impl V9Instr for OpMov {
+    fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
+        // The ISA doesn'thave MOV.v2i16 but we can fake it for the sake of
+        // being able to do 16-bit copies
+        if !matches!(self.dst_type, DataType::V2I16 | DataType::I32) {
+            return None;
+        }
+        V9InstrInfo::from_isa(
+            Mov::get_info(DataType::I32, arch),
             src_map! {
                 src0: src,
             },
@@ -1809,6 +2338,7 @@ impl V9Instr for OpMov {
     }
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        assert!(matches!(self.dst_type, DataType::V2I16 | DataType::I32));
         if let Some(imm1w) = op_src_as_imm1w(self, &self.src) {
             e.encode(MovImm {
                 variant: self.dst_type.try_into().unwrap(),
@@ -1817,7 +2347,7 @@ impl V9Instr for OpMov {
             })
         } else {
             e.encode(Mov {
-                variant: self.dst_type.try_into().unwrap(),
+                variant: MovVariant::I32,
                 dst: op_encode_dst(self, &self.dst),
                 src0: op_encode_src(self, &self.src),
             })
@@ -2030,7 +2560,7 @@ impl V9Instr for OpShiftLop {
             (ShiftOp::None, LogicOp::None) => {
                 let op = OpShiftLop {
                     logic_op: LogicOp::Or,
-                    src2: 0.into(),
+                    src2: 0_u32.into(),
                     ..self.clone()
                 };
                 op.encode(e)
@@ -2076,8 +2606,6 @@ impl V9Instr for OpStCvt {
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
         e.encode(StCvt {
-            register_format: self.src_type.scalar_type().try_into().unwrap(),
-            vecsize: self.src_type.comps().try_into().unwrap(),
             access: self.access.into(),
             message_slot_index: e.get_msg_slot_idx().unwrap(),
             sr_src: op_encode_sr_read(self, &self.data),
@@ -2104,7 +2632,7 @@ impl V9Instr for OpStore {
             variant: self.src_type.try_into().unwrap(),
             access: self.access.into(),
             message_slot_index: e.get_msg_slot_idx().unwrap(),
-            sr_src: op_encode_sr_read(self, &self.data),
+            sr_src: op_encode_sr_read_swizz(self, &self.data),
             src0: op_encode_src(self, &self.addr),
             offset: self.offset,
         })
@@ -2187,11 +2715,11 @@ impl V9Instr for OpTexFetch {
     }
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        assert_eq!(self.dst_type.comps(), self.write_mask.comps());
         e.encode(TexFetch {
             array_enable: self.array_enable.into(),
             dimensionality: self.dim.into(),
             message_slot_index: e.get_msg_slot_idx().unwrap(),
-            register_width: self.dst_type.into(),
             skip: self.skip.into(),
             sr_dst: op_encode_sr_write(self, &self.dst),
             sr_src: op_encode_sr_read(self, &self.data),
@@ -2215,6 +2743,7 @@ impl V9Instr for OpTexGather {
     }
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        assert_eq!(self.dst_type.comps(), self.write_mask.comps());
         e.encode(TexGather {
             array_enable: self.array_enable.into(),
             compare_enable: self.compare_enable.into(),
@@ -2223,7 +2752,6 @@ impl V9Instr for OpTexGather {
             gather_component: self.gather_comp.into(),
             message_slot_index: e.get_msg_slot_idx().unwrap(),
             projection_enable: self.projection_enable.into(),
-            register_width: self.dst_type.into(),
             skip: self.skip.into(),
             sr_dst: op_encode_sr_write(self, &self.dst),
             sr_src: op_encode_sr_read(self, &self.data),
@@ -2249,6 +2777,23 @@ impl From<TexGradientCoordMode> for TexCoordinateOrDerivativeM {
     }
 }
 
+impl From<DataType> for TexGradientWidthM {
+    fn from(dst_type: DataType) -> Self {
+        assert!(dst_type.num_type() == NumericType::Auto);
+        match dst_type.bits() {
+            16 => TexGradientWidthM::Dst16,
+            32 => TexGradientWidthM::Dst32,
+            _ => panic!("Invalid texture dst_type: {dst_type}"),
+        }
+    }
+}
+
+impl From<TexWriteMask> for TexGradientWriteMaskM {
+    fn from(mask: TexWriteMask) -> Self {
+        TexGradientWriteMaskM::try_decode(mask.to_bits(), 9).unwrap()
+    }
+}
+
 impl V9Instr for OpTexGradient {
     fn get_info(&self, arch: u8) -> Option<V9InstrInfo> {
         V9InstrInfo::from_isa(
@@ -2261,6 +2806,7 @@ impl V9Instr for OpTexGradient {
     }
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        assert_eq!(self.dst_type.comps(), self.write_mask.comps());
         e.encode(TexGradient {
             coordinate_or_derivative: self.coord_mode.into(),
             dimensionality: self.dim.into(),
@@ -2268,13 +2814,12 @@ impl V9Instr for OpTexGradient {
             lod_clamp_disable: self.lod_clamp_disable.into(),
             message_slot_index: e.get_msg_slot_idx().unwrap(),
             projection_enable: self.projection_enable.into(),
-            register_width: TexGradientWidthM::Dst32,
             skip: self.skip.into(),
             sr_dst: op_encode_sr_write(self, &self.dst),
             sr_src: op_encode_sr_read(self, &self.data),
             src0: op_encode_src(self, &self.handle),
             wide_indices: self.wide_indices.into(),
-            write_mask: TexGradientWriteMaskM::Rg,
+            write_mask: self.write_mask.into(),
         })
     }
 }
@@ -2291,6 +2836,7 @@ impl V9Instr for OpTexSingle {
     }
 
     fn encode(&self, e: V9Encoder) -> EncodedInstr {
+        assert_eq!(self.dst_type.comps(), self.write_mask.comps());
         e.encode(TexSingle {
             array_enable: self.array_enable.into(),
             compare_enable: self.compare_enable.into(),
@@ -2298,7 +2844,6 @@ impl V9Instr for OpTexSingle {
             lod_mode: self.lod_mode.into(),
             message_slot_index: e.get_msg_slot_idx().unwrap(),
             projection_enable: self.projection_enable.into(),
-            register_width: self.dst_type.into(),
             skip: self.skip.into(),
             sr_dst: op_encode_sr_write(self, &self.dst),
             sr_src: op_encode_sr_read(self, &self.data),
@@ -2341,13 +2886,23 @@ macro_rules! v9_op_match_else {
             Op::Clper($x) => $y,
             Op::Clz($x) => $y,
             Op::CSel($x) => $y,
+            Op::CubeFaceIdx($x) => $y,
+            Op::CubeFaceMax($x) => $y,
+            Op::CubeSel($x) => $y,
             Op::F16ToF32($x) => $y,
             Op::F32ToF16($x) => $y,
             Op::F32ToI32($x) => $y,
             Op::FAdd($x) => $y,
+            Op::FAddLScale($x) => $y,
             Op::FCmp($x) => $y,
+            Op::FCosTable($x) => $y,
+            Op::FExp16($x) => $y,
+            Op::FExp32($x) => $y,
+            Op::FLog16($x) => $y,
+            Op::FLogD($x) => $y,
             Op::Flush($x) => $y,
             Op::Fma($x) => $y,
+            Op::FmaRScale($x) => $y,
             Op::FMax($x) => $y,
             Op::FMin($x) => $y,
             Op::FMul($x) => $y,
@@ -2356,14 +2911,19 @@ macro_rules! v9_op_match_else {
             Op::FrexpM($x) => $y,
             Op::FRound($x) => $y,
             Op::FRsq($x) => $y,
+            Op::FSinTable($x) => $y,
             Op::IAbs($x) => $y,
             Op::IAdd($x) => $y,
             Op::ICmp($x) => $y,
+            Op::ICmpMulti($x) => $y,
+            Op::IDpAdd($x) => $y,
             Op::IMul($x) => $y,
             Op::ISub($x) => $y,
             Op::IToF32($x) => $y,
+            Op::LdAttr($x) => $y,
             Op::LdCvt($x) => $y,
             Op::LdExp($x) => $y,
+            Op::LdGClk($x) => $y,
             Op::LdPka($x) => $y,
             Op::LdTex($x) => $y,
             Op::LeaBuf($x) => $y,
@@ -2372,6 +2932,9 @@ macro_rules! v9_op_match_else {
             Op::Load($x) => $y,
             Op::MkVecV2I8I16($x) => $y,
             Op::MkVecV2I16($x) => $y,
+            Op::MMulF16($x) => $y,
+            Op::MMulF32($x) => $y,
+            Op::MMulI32($x) => $y,
             Op::Mov($x) => $y,
             Op::Mux($x) => $y,
             Op::Nop($x) => $y,
@@ -2391,7 +2954,7 @@ macro_rules! v9_op_match_else {
 
 macro_rules! v9_op_match {
     ($op: expr, |$x: ident| $y: expr) => {
-        v9_op_match_else!($op, |$x| $y, panic!("Unsupported op: {}", $op))
+        v9_op_match_else!($op, |$x| $y, panic!("Unsupported op: {:?}", $op))
     };
 }
 
@@ -2403,6 +2966,10 @@ pub fn v9_op_is_supported(op: &Op, arch: u8) -> bool {
     v9_op_match_else!(op, |op| op.get_info(arch).is_some(), false)
 }
 
+pub fn v9_op_exec_unit(op: &Op, arch: u8) -> Option<ExecUnit> {
+    Some(v9_op_info(op, arch)?.isa_info.exec_unit)
+}
+
 pub fn v9_op_is_message(op: &Op, arch: u8) -> bool {
     v9_op_info(op, arch).is_some_and(|info| info.isa_info.is_message)
 }
@@ -2410,6 +2977,12 @@ pub fn v9_op_is_message(op: &Op, arch: u8) -> bool {
 pub fn v9_op_src_is_staging_reg(op: &Op, src: &Src, arch: u8) -> bool {
     v9_op_info(op, arch)
         .is_some_and(|info| info.src_map[op.src_idx(src)] == V9InstrSrc::SrSrc)
+}
+
+pub fn v9_op_src_is_64bit(op: &Op, src: &Src, arch: u8) -> bool {
+    v9_op_info(op, arch)
+        .and_then(|info| info.src_info(op.src_idx(src)))
+        .is_some_and(|src_info| src_info.is_src64)
 }
 
 pub fn v9_op_src_supports_imm32(
@@ -2483,6 +3056,22 @@ pub fn v9_op_dst_supported_lanes(op: &Op, arch: u8) -> DstLanesSet {
         return Default::default();
     };
 
+    if dst_info.has_vecsize {
+        let dst = &op.dsts()[0];
+        let dst_type = op.dst_type(dst);
+        let lanes = if dst_type.total_bits() == 16 {
+            DstLanesSet::from_array([ir::DstLanes::AnyH, ir::DstLanes::H0])
+        } else {
+            debug_assert!(dst_type.total_bits() >= 32);
+            DstLanesSet::from_array([ir::DstLanes::All])
+        };
+        return lanes;
+    }
+
+    if matches!(op, Op::F32ToF16(_)) {
+        return ir::DstLanes::ALL_H;
+    }
+
     let mut lanes = DstLanesSet::new();
     for l in dst_info.allowed_lanes.iter() {
         match l {
@@ -2513,7 +3102,18 @@ pub fn v9_op_dst_supported_lanes(op: &Op, arch: u8) -> DstLanesSet {
                 lanes.insert(ir::DstLanes::AnyH);
                 lanes.insert(ir::DstLanes::H1);
             }
-            v9::DstLanes::H01 | v9::DstLanes::W0 | v9::DstLanes::D0 => {
+            v9::DstLanes::Hf0 => {
+                lanes.insert(ir::DstLanes::AnyHF);
+                lanes.insert(ir::DstLanes::HF0);
+            }
+            v9::DstLanes::Hf1 => {
+                lanes.insert(ir::DstLanes::AnyHF);
+                lanes.insert(ir::DstLanes::HF1);
+            }
+            v9::DstLanes::H01
+            | v9::DstLanes::Hf01
+            | v9::DstLanes::W0
+            | v9::DstLanes::D0 => {
                 // Not currently supported
             }
         }
@@ -2552,5 +3152,12 @@ pub fn encode_v9(s: &Shader<'_>, arch: u8) -> Vec<u32> {
             ip += INSTR_SIZE;
         }
     }
+
+    if !enc.is_empty() {
+        // Pad to 128 bytes, keeping at least one empty instruction between shaders
+        let new_len = (enc.len() + 1).next_multiple_of(32);
+        enc.resize(new_len, 0);
+    }
+
     enc
 }

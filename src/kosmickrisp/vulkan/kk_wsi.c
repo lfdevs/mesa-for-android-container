@@ -9,6 +9,7 @@
 #include "kk_cmd_buffer.h"
 #include "kk_device.h"
 #include "kk_dispatch_trampolines.h"
+#include "kk_entrypoints.h"
 #include "kk_image.h"
 #include "kk_instance.h"
 #include "wsi_common.h"
@@ -68,11 +69,36 @@ kk_bind_drawable_to_vkimage(VkImage vk_image, void *drawable)
 }
 
 static void
+kk_wsi_cmd_blit_image(VkCommandBuffer vk_cmd, const VkBlitImageInfo2 *blit_info,
+                      bool opaque_alpha)
+{
+   VK_FROM_HANDLE(kk_image, src, blit_info->srcImage);
+
+   /* The blit samples the source through a view the meta path creates for
+    * itself, and that view is where the alpha gets dropped. The value is a
+    * property of the swapchain, so it never changes for a given image. */
+   src->wsi_opaque_alpha = opaque_alpha;
+
+   kk_CmdBlitImage2(vk_cmd, blit_info);
+}
+
+static void
 kk_encode_drawable_present(VkCommandBuffer vk_cmd, void *drawable)
 {
    VK_FROM_HANDLE(kk_cmd_buffer, cmd, vk_cmd);
    mtl_retain(drawable);
    cmd->drawable = drawable;
+}
+
+static void *
+kk_get_mtl4_command_queue(VkDevice device)
+{
+   VK_FROM_HANDLE(kk_device, dev, device);
+   if (dev->has_queue) {
+      return dev->queue.mtl_handle;
+   }
+
+   return NULL;
 }
 
 static struct vk_queue *
@@ -102,6 +128,8 @@ kk_init_wsi(struct kk_physical_device *pdev)
 
    wsi->metal.bind_drawable_to_vkimage = kk_bind_drawable_to_vkimage;
    wsi->metal.encode_drawable_present = kk_encode_drawable_present;
+   wsi->metal.cmd_blit_image = kk_wsi_cmd_blit_image;
+   wsi->metal.get_mtl4_command_queue = kk_get_mtl4_command_queue;
    wsi->get_blit_queue = kk_get_blit_queue;
 
    pdev->vk.wsi_device = wsi;

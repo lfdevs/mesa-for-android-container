@@ -1,0 +1,104 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2020-2026 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<HardwareLayout gpu="Mali-T880" generated="0" source="">
+  <CounterBlock type="GPU Front-end" bank="0" size="64">
+    <Counter name="GPU_ACTIVE" index="6"/>
+    <Counter name="IRQ_ACTIVE" index="7"/>
+    <Counter name="JS0_JOBS" index="8"/>
+    <Counter name="JS0_TASKS" index="9"/>
+    <Counter name="JS0_ACTIVE" index="10"/>
+    <Counter name="JS0_WAIT_READ" index="12"/>
+    <Counter name="JS0_WAIT_ISSUE" index="13"/>
+    <Counter name="JS0_WAIT_DEPEND" index="14"/>
+    <Counter name="JS0_WAIT_FINISH" index="15"/>
+    <Counter name="JS1_JOBS" index="16"/>
+    <Counter name="JS1_TASKS" index="17"/>
+    <Counter name="JS1_ACTIVE" index="18"/>
+    <Counter name="JS1_WAIT_READ" index="20"/>
+    <Counter name="JS1_WAIT_ISSUE" index="21"/>
+    <Counter name="JS1_WAIT_DEPEND" index="22"/>
+    <Counter name="JS1_WAIT_FINISH" index="23"/>
+    <Counter name="JS2_JOBS" index="24"/>
+    <Counter name="JS2_TASKS" index="25"/>
+    <Counter name="JS2_ACTIVE" index="26"/>
+    <Counter name="JS2_WAIT_READ" index="28"/>
+    <Counter name="JS2_WAIT_ISSUE" index="29"/>
+    <Counter name="JS2_WAIT_DEPEND" index="30"/>
+    <Counter name="JS2_WAIT_FINISH" index="31"/>
+  </CounterBlock>
+  <CounterBlock type="Memory System" bank="0" size="64">
+    <Counter name="MMU_HIT" index="4"/>
+    <Counter name="MMU_TABLE_WALK" index="8"/>
+    <Counter name="MMU_REQUESTS" index="9"/>
+    <Counter name="L2_EXT_WRITE_BEATS" index="30"/>
+    <Counter name="L2_EXT_READ_BEATS" index="31"/>
+    <Counter name="L2_ANY_LOOKUP" index="32"/>
+    <Counter name="L2_READ_LOOKUP" index="33"/>
+    <Counter name="L2_WRITE_LOOKUP" index="39"/>
+    <Counter name="L2_EXT_AR_STALL" index="54"/>
+    <Counter name="L2_EXT_W_STALL" index="58"/>
+  </CounterBlock>
+  <CounterBlock type="Shader Core" bank="0" size="64">
+    <Counter name="FRAG_ACTIVE" index="4"/>
+    <Counter name="FRAG_PRIMITIVES" index="5"/>
+    <Counter name="FRAG_FPK_ACTIVE" index="11"/>
+    <Counter name="FRAG_THREADS" index="12"/>
+    <Counter name="FRAG_DUMMY_THREADS" index="13"/>
+    <Counter name="FRAG_QUADS_RAST" index="14"/>
+    <Counter name="FRAG_QUADS_EZS_TEST" index="15"/>
+    <Counter name="FRAG_QUADS_EZS_KILL" index="16"/>
+    <Counter name="FRAG_THREADS_LZS_TEST" index="17"/>
+    <Counter name="FRAG_THREADS_LZS_KILL" index="18"/>
+    <Counter name="FRAG_PTILES" index="20"/>
+    <Counter name="FRAG_TRANS_ELIM" index="21"/>
+    <Counter name="COMPUTE_ACTIVE" index="22"/>
+    <Counter name="COMPUTE_THREADS" index="24"/>
+    <Counter name="TRIPIPE_ACTIVE" index="26"/>
+    <Counter name="ARITH_WORDS" index="27"/>
+    <Counter name="LS_ISSUES" index="32"/>
+    <Counter name="TEX_WORDS" index="38"/>
+    <Counter name="TEX_ISSUES" index="42"/>
+    <Counter name="LSC_READ_HITS" index="48"/>
+    <Counter name="LSC_READ_OP" index="49"/>
+    <Counter name="LSC_WRITE_HITS" index="50"/>
+    <Counter name="LSC_WRITE_OP" index="51"/>
+    <Counter name="LSC_ATOMIC_OP" index="53"/>
+  </CounterBlock>
+  <CounterBlock type="Tiler" bank="0" size="64">
+    <Counter name="TRIANGLES" index="4"/>
+    <Counter name="POINTS" index="7"/>
+    <Counter name="LINES" index="8"/>
+    <Counter name="VCACHE_HIT" index="9"/>
+    <Counter name="VCACHE_MISS" index="10"/>
+    <Counter name="FRONT_FACING" index="11"/>
+    <Counter name="BACK_FACING" index="12"/>
+    <Counter name="PRIM_VISIBLE" index="13"/>
+    <Counter name="PRIM_CULLED" index="14"/>
+    <Counter name="PRIM_CLIPPED" index="15"/>
+    <Counter name="TILER_ACTIVE" index="45"/>
+  </CounterBlock>
+</HardwareLayout>

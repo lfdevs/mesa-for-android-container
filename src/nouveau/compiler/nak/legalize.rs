@@ -46,6 +46,19 @@ pub fn swap_srcs_if_not_reg(
     }
 }
 
+pub fn swap_srcs_if_both_reg(
+    x: &mut Src,
+    y: &mut Src,
+    reg_file: RegFile,
+) -> bool {
+    if src_is_reg(x, reg_file) && src_is_reg(y, reg_file) {
+        std::mem::swap(x, y);
+        true
+    } else {
+        false
+    }
+}
+
 fn src_is_imm(src: &Src) -> bool {
     matches!(src.src_ref, SrcRef::Imm32(_))
 }

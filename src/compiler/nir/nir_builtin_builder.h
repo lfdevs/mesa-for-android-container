@@ -59,6 +59,9 @@ nir_def *
 nir_get_texture_lod(nir_builder *b, nir_tex_instr *tex);
 
 nir_def *
+nir_tanh_emulated(struct nir_builder *nb, nir_def *src);
+
+nir_def *
 nir_get_texture_size(nir_builder *b, nir_tex_instr *tex);
 
 static inline nir_def *

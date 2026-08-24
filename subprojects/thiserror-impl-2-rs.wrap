@@ -1,6 +1,6 @@
 [wrap-file]
 directory = thiserror-impl-2.0.11
-source_url = https://crates.io/api/v1/crates/thiserror-impl/2.0.11/download
+source_url = https://static.crates.io/crates/thiserror-impl/2.0.11/download
 source_filename = thiserror-impl-2.0.11.tar.gz
 source_hash = 26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2
 patch_directory = thiserror-impl-2-rs

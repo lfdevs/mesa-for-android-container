@@ -1548,7 +1548,7 @@ GCRA::cleanup(const bool success)
 Symbol *
 SpillCodeInserter::assignSlot(const Interval &livei, const unsigned int size)
 {
-   int32_t address = align(stackSize + func->tlsBase, size);
+   int32_t address = align(stackSize + func->tlsBase, util_next_power_of_two(size));
 
    Symbol *sym = new_Symbol(func->getProgram(), FILE_MEMORY_LOCAL);
    sym->setAddress(NULL, address);

@@ -17,7 +17,6 @@
 #include "util/os_misc.h"
 #include "util/u_debug_image.h"
 #include "util/u_drm.h"
-#include "util/u_gen_mipmap.h"
 #include "util/u_memory.h"
 #include "util/u_resource.h"
 #include "util/u_surface.h"
@@ -28,6 +27,7 @@
 #include "decode.h"
 #include "pan_afbc.h"
 #include "pan_afrc.h"
+#include "pan_blitter.h"
 #include "pan_bo.h"
 #include "pan_context.h"
 #include "pan_resource.h"
@@ -35,56 +35,6 @@
 #include "pan_tiling.h"
 #include "pan_trace.h"
 #include "pan_util.h"
-
-static void
-panfrost_clear_depth_stencil(struct pipe_context *pipe,
-                             struct pipe_surface *dst, unsigned clear_flags,
-                             double depth, unsigned stencil, unsigned dstx,
-                             unsigned dsty, unsigned width, unsigned height,
-                             bool render_condition_enabled)
-{
-   PAN_TRACE_FUNC(PAN_TRACE_GL_RESOURCE);
-
-   struct panfrost_context *ctx = pan_context(pipe);
-
-   if (render_condition_enabled && !panfrost_render_condition_check(ctx))
-      return;
-
-   /* Legalize here because it could trigger a recursive blit otherwise */
-   struct panfrost_resource *rdst = pan_resource(dst->texture);
-   enum pipe_format dst_view_format = util_format_linear(dst->format);
-   pan_legalize_format(ctx, rdst, dst_view_format, true, false);
-
-   panfrost_blitter_save(
-      ctx, render_condition_enabled ? PAN_RENDER_COND : PAN_RENDER_BASE);
-   util_blitter_clear_depth_stencil(ctx->blitter, dst, clear_flags, depth,
-                                    stencil, dstx, dsty, width, height);
-}
-
-static void
-panfrost_clear_render_target(struct pipe_context *pipe,
-                             struct pipe_surface *dst,
-                             const union pipe_color_union *color, unsigned dstx,
-                             unsigned dsty, unsigned width, unsigned height,
-                             bool render_condition_enabled)
-{
-   PAN_TRACE_FUNC(PAN_TRACE_GL_RESOURCE);
-
-   struct panfrost_context *ctx = pan_context(pipe);
-
-   if (render_condition_enabled && !panfrost_render_condition_check(ctx))
-      return;
-
-   /* Legalize here because it could trigger a recursive blit otherwise */
-   struct panfrost_resource *rdst = pan_resource(dst->texture);
-   enum pipe_format dst_view_format = util_format_linear(dst->format);
-   pan_legalize_format(ctx, rdst, dst_view_format, true, false);
-
-   panfrost_blitter_save(
-      ctx, (render_condition_enabled ? PAN_RENDER_COND : PAN_RENDER_BASE) | PAN_SAVE_FRAGMENT_CONSTANT);
-   util_blitter_clear_render_target(ctx->blitter, dst, color, dstx, dsty, width,
-                                    height);
-}
 
 static uint64_t
 panfrost_max_res_size_b(unsigned arch)
@@ -1363,7 +1313,7 @@ pan_blit_from_staging(struct pipe_context *pctx,
    blit.mask = util_format_get_mask(blit.src.format);
    blit.filter = PIPE_TEX_FILTER_NEAREST;
 
-   panfrost_blit_no_afbc_legalization(pctx, &blit);
+   panfrost_blitter_blit_legalized(pctx, &blit);
 }
 
 static void
@@ -1383,7 +1333,7 @@ pan_blit_to_staging(struct pipe_context *pctx, struct panfrost_transfer *trans)
    blit.mask = util_format_get_mask(blit.dst.format);
    blit.filter = PIPE_TEX_FILTER_NEAREST;
 
-   panfrost_blit_no_afbc_legalization(pctx, &blit);
+   panfrost_blitter_blit_legalized(pctx, &blit);
 }
 
 static void
@@ -1481,7 +1431,7 @@ pan_dump_resource(struct panfrost_context *ctx, struct panfrost_resource *rsc)
       blit.mask = util_format_get_mask(blit.dst.format);
       blit.filter = PIPE_TEX_FILTER_NEAREST;
 
-      panfrost_blit(pctx, &blit);
+      panfrost_blitter_blit(pctx, &blit);
 
       linear = pan_resource(plinear);
    }
@@ -1872,7 +1822,7 @@ pan_resource_modifier_convert(struct panfrost_context *ctx,
             if (drm_is_mtk_tiled(rsrc->modifier))
                screen->vtbl.mtk_detile(ctx, &blit);
             else
-               panfrost_blit_no_afbc_legalization(&ctx->base, &blit);
+               panfrost_blitter_blit_legalized(&ctx->base, &blit);
          }
       }
 
@@ -1921,20 +1871,16 @@ pan_resource_modifier_convert(struct panfrost_context *ctx,
  * or invalid data faults when sampling or rendering to AFBC */
 
 void
-pan_legalize_format(struct panfrost_context *ctx,
-                    struct panfrost_resource *rsrc, enum pipe_format format,
-                    bool write, bool discard)
+pan_resource_modifier_legalize(struct panfrost_context *ctx,
+                               struct panfrost_resource *rsrc,
+                               enum pipe_format format, bool write,
+                               bool discard)
 {
    struct panfrost_device *dev = pan_device(ctx->base.screen);
    enum pipe_format old_format = rsrc->base.format;
    enum pipe_format new_format = format;
    bool compatible = true;
    uint64_t dest_modifier = DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED;
-
-   if (!drm_is_afbc(rsrc->modifier) &&
-       !drm_is_afrc(rsrc->modifier) &&
-       !drm_is_mtk_tiled(rsrc->modifier))
-      return;
 
    if (drm_is_afbc(rsrc->modifier)) {
       compatible = (pan_afbc_format(dev->arch, old_format, 0) ==
@@ -1948,6 +1894,8 @@ pan_legalize_format(struct panfrost_context *ctx,
    } else if (drm_is_mtk_tiled(rsrc->modifier)) {
       compatible = false;
       dest_modifier = DRM_FORMAT_MOD_LINEAR;
+   } else {
+      return;
    }
 
    if (!compatible) {
@@ -2363,8 +2311,9 @@ panfrost_ptr_unmap(struct pipe_context *pctx, struct pipe_transfer *transfer)
          } else {
             bool discard = panfrost_can_discard(&prsrc->base, &transfer->box,
                                                 transfer->usage);
-            pan_legalize_format(ctx, prsrc, prsrc->image.props.format, true,
-                                discard);
+            pan_resource_modifier_legalize(ctx, prsrc,
+                                           prsrc->image.props.format, true,
+                                           discard);
             pan_blit_from_staging(pctx, trans);
             panfrost_flush_batches_accessing_rsrc(
                ctx, pan_resource(trans->staging.rsrc),
@@ -2522,11 +2471,7 @@ panfrost_generate_mipmap(struct pipe_context *pctx, struct pipe_resource *prsrc,
                          unsigned last_level, unsigned first_layer,
                          unsigned last_layer)
 {
-   PAN_TRACE_FUNC(PAN_TRACE_GL_RESOURCE);
-
    struct panfrost_resource *rsrc = pan_resource(prsrc);
-
-   perf_debug(pan_context(pctx), "Unoptimized mipmap generation");
 
    /* Generating a mipmap invalidates the written levels, so make that
     * explicit so we don't try to wallpaper them back and end up with
@@ -2536,13 +2481,9 @@ panfrost_generate_mipmap(struct pipe_context *pctx, struct pipe_resource *prsrc,
    for (unsigned l = base_level + 1; l <= last_level; ++l)
       BITSET_CLEAR(rsrc->valid.data, l);
 
-   /* Beyond that, we just delegate the hard stuff. */
-
-   bool blit_res =
-      util_gen_mipmap(pctx, prsrc, format, base_level, last_level, first_layer,
-                      last_layer, PIPE_TEX_FILTER_LINEAR);
-
-   return blit_res;
+   return panfrost_blitter_generate_mipmap(pctx, prsrc, format, base_level,
+                                           last_level, first_layer,
+                                           last_layer);
 }
 
 static void
@@ -2601,8 +2542,8 @@ panfrost_resource_context_init(struct pipe_context *pctx)
    pctx->buffer_unmap = u_transfer_helper_transfer_unmap;
    pctx->texture_map = u_transfer_helper_transfer_map;
    pctx->texture_unmap = u_transfer_helper_transfer_unmap;
-   pctx->resource_copy_region = util_resource_copy_region;
-   pctx->blit = panfrost_blit;
+   pctx->resource_copy_region = panfrost_blitter_resource_copy_region;
+   pctx->blit = panfrost_blitter_blit;
    pctx->generate_mipmap = panfrost_generate_mipmap;
    pctx->flush_resource = panfrost_flush_resource;
    pctx->invalidate_resource = panfrost_invalidate_resource;
@@ -2610,6 +2551,6 @@ panfrost_resource_context_init(struct pipe_context *pctx)
    pctx->buffer_subdata = u_default_buffer_subdata;
    pctx->texture_subdata = u_default_texture_subdata;
    pctx->clear_buffer = u_default_clear_buffer;
-   pctx->clear_render_target = panfrost_clear_render_target;
-   pctx->clear_depth_stencil = panfrost_clear_depth_stencil;
+   pctx->clear_render_target = panfrost_blitter_clear_render_target;
+   pctx->clear_depth_stencil = panfrost_blitter_clear_depth_stencil;
 }

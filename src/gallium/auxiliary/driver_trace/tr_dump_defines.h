@@ -44,15 +44,6 @@ trace_dump_format(enum pipe_format format)
 }
 
 static inline void
-trace_dump_chroma_format(enum pipe_video_chroma_format chroma_format)
-{
-   if (!trace_dumping_enabled_locked())
-      return;
-
-   trace_dump_enum(util_chroma_format_name(chroma_format));
-}
-
-static inline void
 trace_dump_query_type(unsigned value)
 {
    if (!trace_dumping_enabled_locked())

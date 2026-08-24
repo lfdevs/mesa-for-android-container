@@ -62,6 +62,20 @@ fn widen_op_pre_ra(b: &mut impl SSABuilder, op: &mut Op) {
 }
 
 impl Shader<'_> {
+    /// This pass is expected to run immediately after NIR -> Kraid and widens
+    /// ALU ops out to a full 32 bits.  An `OR.i8 %x, %y`, for instance, will
+    /// get widened to an `OR.v4i8 %x.b0000 %y.b0000`.
+    ///
+    /// The result of a widened instruction is the same scalar bit size as the
+    /// original.  We set `DstLanes::AnyB` to tell the register allocator that
+    /// it can pick any byte for the byte destination because we've already
+    /// ensured (using a swizzle, in this case) that all lanes will generate
+    /// the same data.
+    ///
+    /// This lets us be a bit lazy in NIR -> Kraid and just focus on emitting
+    /// the ops we need.  From the perspective of NIR -> Kraid, widening is a
+    /// detail of register allocation more than anything.  Trying to get it
+    /// right as we translate from NIR is just madness.
     pub fn widen_alu_ops(&mut self) {
         let model = self.model;
         self.map_instrs(|mut instr, ssa_alloc| {

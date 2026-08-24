@@ -529,7 +529,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_UpdateDescriptorSets(
                unsigned plane_count = iview->plane_count;
 
                for (unsigned p = 0; p < plane_count; p++) {
-                  lp_jit_bindless_texture_from_pipe(&desc[p].image.texture, iview->planes[p].sv);
+                  lp_jit_bindless_texture_from_pipe(&desc[p].image.texture, &iview->planes[p].sv);
                   desc[p].image.functions = iview->planes[p].texture_handle->functions;
                }
 
@@ -559,7 +559,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_UpdateDescriptorSets(
                unsigned plane_count = iview->plane_count;
 
                for (unsigned p = 0; p < plane_count; p++) {
-                  lp_jit_bindless_texture_from_pipe(&desc[p].texture, iview->planes[p].sv);
+                  lp_jit_bindless_texture_from_pipe(&desc[p].texture, &iview->planes[p].sv);
                   desc[p].functions = iview->planes[p].texture_handle->functions;
                }
             } else {
@@ -596,7 +596,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_UpdateDescriptorSets(
             struct lp_image_descriptor *desc =
                (struct lp_image_descriptor *)(descs + j * bind_layout->stride);
             if (bview) {
-               lp_jit_bindless_texture_from_pipe(&desc->texture, bview->sv);
+               lp_jit_bindless_texture_from_pipe(&desc->texture, &bview->sv);
                desc->functions = bview->texture_handle->functions;
             } else {
                desc->functions = device->null_texture_handle->functions;
@@ -851,7 +851,7 @@ lvp_descriptor_set_update_with_template(VkDevice _device, VkDescriptorSet descri
 
             if (iview) {
                for (unsigned p = 0; p < iview->plane_count; p++) {
-                  lp_jit_bindless_texture_from_pipe(&desc[p].image.texture, iview->planes[p].sv);
+                  lp_jit_bindless_texture_from_pipe(&desc[p].image.texture, &iview->planes[p].sv);
                   desc[p].image.functions = iview->planes[p].texture_handle->functions;
                }
 
@@ -878,7 +878,7 @@ lvp_descriptor_set_update_with_template(VkDevice _device, VkDescriptorSet descri
 
             if (iview) {
                for (unsigned p = 0; p < iview->plane_count; p++) {
-                  lp_jit_bindless_texture_from_pipe(&image_desc[p].texture, iview->planes[p].sv);
+                  lp_jit_bindless_texture_from_pipe(&image_desc[p].texture, &iview->planes[p].sv);
                   image_desc[p].functions = iview->planes[p].texture_handle->functions;
                }
             } else {
@@ -911,7 +911,7 @@ lvp_descriptor_set_update_with_template(VkDevice _device, VkDescriptorSet descri
                             *(VkBufferView *)pSrc);
             struct lp_image_descriptor *image_desc = (struct lp_image_descriptor *)descs;
             if (bview) {
-               lp_jit_bindless_texture_from_pipe(&image_desc->texture, bview->sv);
+               lp_jit_bindless_texture_from_pipe(&image_desc->texture, &bview->sv);
                image_desc->functions = bview->texture_handle->functions;
             } else {
                image_desc->functions = device->null_texture_handle->functions;
@@ -1073,7 +1073,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetDescriptorEXT(
          unsigned plane_count = iview->plane_count;
 
          for (unsigned p = 0; p < plane_count; p++) {
-            lp_jit_bindless_texture_from_pipe(&image_sampler_desc[p].image.texture, iview->planes[p].sv);
+            lp_jit_bindless_texture_from_pipe(&image_sampler_desc[p].image.texture, &iview->planes[p].sv);
             image_sampler_desc[p].image.functions = iview->planes[p].texture_handle->functions;
 
             if (info->sampler) {
@@ -1103,7 +1103,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetDescriptorEXT(
          unsigned plane_count = iview->plane_count;
 
          for (unsigned p = 0; p < plane_count; p++) {
-            lp_jit_bindless_texture_from_pipe(&image_desc[p].texture, iview->planes[p].sv);
+            lp_jit_bindless_texture_from_pipe(&image_desc[p].texture, &iview->planes[p].sv);
             image_desc[p].functions = iview->planes[p].texture_handle->functions;
          }
       } else {
@@ -1267,7 +1267,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_WriteResourceDescriptorsEXT(
 
             for (unsigned p = 0; p < plane_count; p++) {
                if (pResources[i].type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) {
-                  lp_jit_bindless_texture_from_pipe(&image_desc[p].texture, iview->planes[p].sv);
+                  lp_jit_bindless_texture_from_pipe(&image_desc[p].texture, &iview->planes[p].sv);
                   image_desc[p].functions = iview->planes[p].texture_handle->functions;
                } else {
                   lp_jit_image_from_pipe(&image_desc[p].image, &iview->planes[p].iv);

@@ -100,17 +100,21 @@ v3d_resource_bo_alloc(struct v3d_resource *rsc)
         struct pipe_screen *pscreen = prsc->screen;
         struct v3d_bo *bo;
 
-        /* Buffers may be read using ldunifa, which prefetches the next 4
+        /* UBO and SSBO may be read using ldunifa, which prefetches the next 4
          * bytes after a read. If the buffer's size is exactly a multiple of a
          * page size and the shader reads the last 4 bytes with ldunifa the
          * prefetching would read out of bounds and cause an MMU error, so we
-         * allocate extra space to avoid kernel error spamming. We also need
-         * to add a V3D_TFU_READAHEAD padding to avoid invalid reads done by
-         * the TFU unit after the end of the last page allocated.
+         * need to allocate extra space to avoid kernel error spamming.
+         *
+         * On the other side, the TFU unit has also a 64-bytes readahead so we
+         * need to add a V3D_TFU_READAHEAD padding to avoid invalid reads done
+         * by the TFU after the end of the last allocated memory page.
+         *
+         * As the buffers can be exported and be used in a different way than
+         * created, the most conservative approach is to always add the
+         * V3D_TFU_READAHEAD padding.
          */
-        uint32_t padding =
-                rsc->base.target == PIPE_BUFFER ? 4 : V3D_TFU_READAHEAD_SIZE;
-        bo = v3d_bo_alloc(v3d_screen(pscreen), rsc->size + padding,
+        bo = v3d_bo_alloc(v3d_screen(pscreen), rsc->size + V3D_TFU_READAHEAD_SIZE,
                           "resource");
         if (bo) {
                 v3d_bo_unreference(&rsc->bo);

@@ -22,7 +22,6 @@ max_simd_width(const jay_shader *shader, const jay_inst *I)
        I->op == JAY_OPCODE_EXTRACT_BYTE_PER_8LANES ||
        I->op == JAY_OPCODE_OFFSET_PACKED_PIXEL_COORDS ||
        I->op == JAY_OPCODE_DESWIZZLE_ODD ||
-       I->op == JAY_OPCODE_INIT_HELPERS ||
        I->op == JAY_OPCODE_MUL_32 ||
        I->op == JAY_OPCODE_ZIP_UGPR16 ||
        jay_clobbers_address_reg(I)) {
@@ -33,9 +32,13 @@ max_simd_width(const jay_shader *shader, const jay_inst *I)
       /* If any source/destination is 64-bit strided, we must split to avoid
        * crossing more than 2 GRFs. Note that SENDs don't have this restriction,
        * we don't have to split A64 load/store.
+       *
+       * This also applies for 64-bit UGPR-only instructions for the
+       * I->broadcast_flag case which has similar SIMD splitting rules.
        */
-      if (I->dst.file == GPR &&
-          jay_def_stride(shader, I->dst) == JAY_STRIDE_8) {
+      if ((I->dst.file == GPR &&
+           jay_def_stride(shader, I->dst) == JAY_STRIDE_8) ||
+          jay_type_size_bits(I->type) == 64) {
          return 16;
       }
 
@@ -70,7 +73,8 @@ max_simd_width(const jay_shader *shader, const jay_inst *I)
       return 16;
    }
    jay_foreach_src(I, s) {
-      if (jay_src_type(I, s) == JAY_TYPE_BF16) return 16;
+      if (jay_src_type(I, s) == JAY_TYPE_BF16)
+         return 16;
    }
 
    return 32;

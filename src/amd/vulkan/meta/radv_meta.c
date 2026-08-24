@@ -284,7 +284,7 @@ radv_meta_end_rendering(struct radv_cmd_buffer *cmd_buffer)
 }
 
 VkImageViewType
-radv_meta_get_view_type(const struct radv_image *image)
+radv_meta_get_view_type(const struct radv_image *image, bool use_2d_array_for_3d)
 {
    switch (image->vk.image_type) {
    case VK_IMAGE_TYPE_1D:
@@ -292,7 +292,7 @@ radv_meta_get_view_type(const struct radv_image *image)
    case VK_IMAGE_TYPE_2D:
       return VK_IMAGE_VIEW_TYPE_2D;
    case VK_IMAGE_TYPE_3D:
-      return VK_IMAGE_VIEW_TYPE_3D;
+      return use_2d_array_for_3d ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_3D;
    default:
       UNREACHABLE("bad VkImageViewType");
    }
@@ -397,8 +397,6 @@ radv_device_finish_meta(struct radv_device *device)
       if (device->meta_state.astc_decode)
          vk_texcompress_astc_finish(&device->vk, &device->meta_state.alloc, device->meta_state.astc_decode);
    }
-
-   radv_device_finish_accel_struct_build_state(device);
 
    vk_common_DestroyPipelineCache(radv_device_to_handle(device), device->meta_state.cache, NULL);
    mtx_destroy(&device->meta_state.mtx);

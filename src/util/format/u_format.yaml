@@ -2180,6 +2180,13 @@
   block: {width: 1, height: 1, depth: 1}
   channels: [X4, UN12]
   swizzles: [X, Y, Z, W]
+- name: X6G10_X6B10X6R10_422_UNORM
+  layout: planar2
+  colorspace: RGB
+  subsampling: 422
+  block: {width: 1, height: 1, depth: 1}
+  channels: [X6, UN10]
+  swizzles: [X, Y, Z, W]
 
 # VK_EXT_ycbcr_2plane_444_formats
 - name: G8_B8R8_444_UNORM
@@ -2415,6 +2422,15 @@
   layout: planar2
   colorspace: YUV
   subsampling: 420
+  block: {width: 1, height: 1, depth: 1}
+  channels: []
+  swizzles: [X, Y, Z, W]
+
+- name: X6Y10_X6U10X6V10_422_UNORM
+  alias: P210
+  layout: planar2
+  colorspace: YUV
+  subsampling: 422
   block: {width: 1, height: 1, depth: 1}
   channels: []
   swizzles: [X, Y, Z, W]

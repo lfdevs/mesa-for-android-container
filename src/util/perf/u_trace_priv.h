@@ -74,6 +74,11 @@ struct u_tracepoint {
 
    void (*print)(FILE *out, const void *payload, const void *indirect);
    void (*print_json)(FILE *out, const void *payload, const void *indirect);
+
+   uint32_t (*fuzzy_hash)(const void *key);
+   bool (*fuzzy_equals)(const void *a, const void *b);
+   void (*print_fuzzy_hash_args)(FILE *out, const void *payload);
+
 #ifdef HAVE_PERFETTO
    /**
     * Callback to emit a perfetto event, such as render-stage trace
@@ -85,9 +90,6 @@ struct u_tracepoint {
                     const void *payload,
                     const void *indirect);
 #endif
-   uint32_t (*fuzzy_hash)(const void *key);
-   bool (*fuzzy_equals)(const void *a, const void *b);
-   void (*print_fuzzy_hash_args)(FILE *out, const void *payload);
 };
 
 /**

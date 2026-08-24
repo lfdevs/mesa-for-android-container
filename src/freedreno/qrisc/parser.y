@@ -183,7 +183,7 @@ label(struct qrisc_label_expr label)
 %token <tok> T_OP_CALL
 %token <tok> T_OP_JUMP
 %token <tok> T_OP_JUMPA
-%token <tok> T_OP_SRET
+%token <tok> T_OP_JUMPD
 %token <tok> T_OP_WAITIN
 %token <tok> T_OP_BL
 %token <tok> T_OP_SETSECURE
@@ -350,7 +350,7 @@ other_instr:       T_OP_CALL label_expr { new_instr(OPC_CALL); label($2); }
 |                  T_OP_JUMP label_expr { new_instr(OPC_JUMP); label($2); }
 |                  T_OP_JUMPA label_expr { new_instr(OPC_JUMPA); label($2); }
 |                  T_OP_JUMP reg         { new_instr(OPC_JUMPR); src1($2); }
-|                  T_OP_SRET             { new_instr(OPC_SRET); }
+|                  T_OP_JUMPD reg ',' reg  { new_instr(OPC_JUMPD); src1($2); src2($4); }
 |                  T_OP_WAITIN           { new_instr(OPC_WAITIN); }
 |                  T_OP_NOP              { new_instr(OPC_NOP); }
 |                  T_LITERAL             { new_instr(OPC_RAW_LITERAL); literal($1); }

@@ -526,7 +526,8 @@ tu_calc_subsampled(struct tu_tile_config *tiles,
                    const struct tu_tiling_config *tiling,
                    const struct tu_framebuffer *fb,
                    const struct tu_vsc_config *vsc,
-                   const VkOffset2D *fdm_offsets)
+                   const VkOffset2D *fdm_offsets,
+                   bool custom_resolve_subsampled)
 {
    u_worklist worklist;
    u_worklist_init(&worklist, vsc->tile_count.width * vsc->tile_count.height,
@@ -553,6 +554,7 @@ tu_calc_subsampled(struct tu_tile_config *tiles,
          }
 
          tile->subsampled = true;
+         tile->custom_resolve_subsampled = custom_resolve_subsampled;
          tile->worklist_idx = y * vsc->tile_count.width + x;
 
          u_worklist_push_tail(&worklist, tile, worklist_idx);
@@ -788,11 +790,12 @@ tu_calc_tile_config(struct tu_cmd_buffer *cmd, const struct tu_vsc_config *vsc,
       }
    }
 
-   if (cmd->state.fdm_subsampled &&
+   if (cmd->state.fdm_any_subsampled &&
        vsc->tile_count.width * vsc->tile_count.height <= TU_SUBSAMPLED_MAX_BINS) {
       tu_calc_subsampled(tiles, cmd->device->physical_device,
                          cmd->state.tiling, cmd->state.framebuffer,
-                         vsc, fdm_offsets);
+                         vsc, fdm_offsets,
+                         cmd->state.fdm_custom_resolve_subsampled);
    }
 
    return tiles;

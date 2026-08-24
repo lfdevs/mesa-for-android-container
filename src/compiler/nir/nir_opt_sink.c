@@ -77,6 +77,20 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
          }
          return options & nir_move_copies;
       }
+
+      unsigned inputs = nir_op_infos[alu->op].num_inputs;
+
+      /* Don't sink alu that uses ballot(true), as that can be a local system value
+       * and moving the alu then requires a mov in the old location.
+       */
+      for (unsigned i = 0; i < inputs; i++) {
+         nir_intrinsic_instr *intrin = nir_src_as_intrinsic(alu->src[i].src);
+         if (intrin && intrin->intrinsic == nir_intrinsic_ballot &&
+             nir_src_is_const(intrin->src[0])) {
+            return false;
+         }
+      }
+
       if (nir_alu_instr_is_comparison(alu))
          return options & nir_move_comparisons;
 
@@ -93,7 +107,6 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
        * beneficial to sink ALU instructions where all non constant sources
        * are the same and the source bit size is not larger than the destination.
        */
-      unsigned inputs = nir_op_infos[alu->op].num_inputs;
       int non_const = -1;
 
       for (unsigned i = 0; i < inputs; ++i) {
@@ -106,17 +119,6 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
       }
 
       if (non_const >= 0) {
-         nir_instr *parent = nir_def_instr(alu->src[non_const].src.ssa);
-         if (parent->type == nir_instr_type_intrinsic) {
-            /* Don't sink alu that uses ballot(true), as that can be a local system value
-             * and moving the alu then requires a mov in the old location.
-             */
-            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(parent);
-            if (intrin->intrinsic == nir_intrinsic_ballot &&
-                nir_src_is_const(intrin->src[0]))
-               return false;
-         }
-
          unsigned src_bits = nir_ssa_alu_instr_src_components(alu, non_const) *
                              alu->src[non_const].src.ssa->bit_size;
          unsigned dest_bits = alu->def.num_components * alu->def.bit_size;
@@ -221,7 +223,7 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
       case nir_intrinsic_load_input_vertex:
       case nir_intrinsic_load_per_vertex_input:
       case nir_intrinsic_load_per_primitive_input:
-      case nir_intrinsic_load_attribute_pan:
+      case nir_intrinsic_load_attr_pan:
       case nir_intrinsic_load_var_pan:
       case nir_intrinsic_load_var_buf_pan:
       case nir_intrinsic_load_var_flat_pan:

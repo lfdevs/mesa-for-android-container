@@ -345,9 +345,9 @@ emu_instr(struct emu *emu, struct qrisc_instr *instr)
       emu->branch_target = emu_get_gpr_reg(emu, instr->src1);
       break;
    }
-   case OPC_SRET: {
-      emu->branch_target = emu_get_gpr_reg(emu, REG_LR);
-      /* TODO: read $sp and check for stack overflow? */
+   case OPC_JUMPD: {
+      emu->branch_target = emu_get_gpr_reg(emu, instr->src1);
+      /* TODO: what is src2 used for? */
       break;
    }
    case OPC_SETSECURE: {

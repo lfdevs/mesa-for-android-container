@@ -158,8 +158,8 @@ format_ignores_signed_zero(VkFormat format)
 }
 
 static bool
-radv_pipeline_needs_ps_epilog(const struct vk_graphics_pipeline_state *state,
-                              VkGraphicsPipelineLibraryFlagBitsEXT lib_flags)
+color_outputs_need_ps_epilog(const struct vk_graphics_pipeline_state *state,
+                             VkGraphicsPipelineLibraryFlagBitsEXT lib_flags)
 {
    /* Use a PS epilog when the fragment shader is compiled without the fragment output interface. */
    if ((state->shader_stages & VK_SHADER_STAGE_FRAGMENT_BIT) &&
@@ -171,7 +171,6 @@ radv_pipeline_needs_ps_epilog(const struct vk_graphics_pipeline_state *state,
    if (BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_CB_BLEND_ENABLES) ||
        BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_CB_WRITE_MASKS) ||
        BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_CB_BLEND_EQUATIONS) ||
-       BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE) ||
        BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_ONE_ENABLE))
       return true;
 
@@ -1315,6 +1314,8 @@ radv_graphics_shaders_fill_linked_io_info(struct radv_shader_stage *producer_sta
 static void
 radv_graphics_shaders_link_varyings(struct radv_shader_stage *stages, enum amd_gfx_level gfx_level)
 {
+   bool fs_layer_lowered_to_input = false;
+
    /* Prepare shaders before running nir_opt_varyings. */
    for (int i = 0; i < ARRAY_SIZE(graphics_shader_order); ++i) {
       const mesa_shader_stage s = graphics_shader_order[i];
@@ -1331,6 +1332,14 @@ radv_graphics_shaders_link_varyings(struct radv_shader_stage *stages, enum amd_g
 
       /* Update load/store alignments because inter-stage code motion may move instructions used to deduce this info. */
       NIR_PASS(_, shader, nir_opt_load_store_update_alignments);
+
+      if (s == MESA_SHADER_FRAGMENT) {
+         /* LAYER_ID must be an input to be optimizable by nir_opt_varyings.
+          * PRIMITIVE_ID too, but that's already an input.
+          */
+         NIR_PASS(fs_layer_lowered_to_input, shader, nir_lower_sysvals_to_varyings,
+                  &(nir_lower_sysvals_to_varyings_options){.layer_id = true});
+      }
    }
 
    int highest_changed_producer = -1;
@@ -1396,6 +1405,9 @@ radv_graphics_shaders_link_varyings(struct radv_shader_stage *stages, enum amd_g
          continue;
 
       nir_shader *shader = stages[s].nir;
+
+      if (shader->info.stage == MESA_SHADER_FRAGMENT && fs_layer_lowered_to_input)
+         NIR_PASS(_, shader, nir_lower_system_values);
 
       /* Re-vectorize I/O for stages that use memory for I/O (LDS or VRAM).
        * Don't vectorize FS I/O, doing so just regresses shader stats without any benefit.
@@ -1516,7 +1528,9 @@ radv_generate_ps_epilog_key(const struct radv_compiler_info *compiler_info, cons
       no_signed_zero |= 0x2;
    }
 
-   z_format = ac_get_spi_shader_z_format(state->export_depth, state->export_stencil, state->export_sample_mask,
+   z_format = ac_get_spi_shader_z_format(state->has_depth_output && !state->ignore_depth_output,
+                                         state->has_stencil_output && !state->ignore_stencil_output,
+                                         state->has_sample_mask_output && !state->lower_1bit_sample_mask_to_discard,
                                          state->alpha_to_coverage_via_mrtz);
 
    key.spi_shader_col_format = col_format;
@@ -1526,12 +1540,15 @@ radv_generate_ps_epilog_key(const struct radv_compiler_info *compiler_info, cons
    key.no_signed_zero = no_signed_zero;
    key.colors_written = state->colors_written;
    key.mrt0_is_dual_src = state->mrt0_is_dual_src && key.colors_needed & 0xf;
-   key.export_depth = state->export_depth;
-   key.export_stencil = state->export_stencil;
-   key.export_sample_mask = state->export_sample_mask;
+   key.has_depth_output = state->has_depth_output;
+   key.has_stencil_output = state->has_stencil_output;
+   key.has_sample_mask_output = state->has_sample_mask_output;
    key.alpha_to_coverage_via_mrtz = state->alpha_to_coverage_via_mrtz;
    key.spi_shader_z_format = z_format;
    key.alpha_to_one = state->alpha_to_one;
+   key.ignore_depth_output = state->ignore_depth_output;
+   key.ignore_stencil_output = state->ignore_stencil_output;
+   key.lower_1bit_sample_mask_to_discard = state->lower_1bit_sample_mask_to_discard;
 
    return key;
 }
@@ -1591,6 +1608,21 @@ radv_pipeline_generate_ps_epilog_key(const struct radv_compiler_info *compiler_i
 
    if (state->ms)
       ps_epilog.alpha_to_one = state->ms->alpha_to_one_enable;
+
+   const bool may_have_depth_attachment = !state->rp || state->rp->depth_attachment_format != VK_FORMAT_UNDEFINED;
+   const bool may_have_stencil_attachment = !state->rp || state->rp->stencil_attachment_format != VK_FORMAT_UNDEFINED;
+
+   ps_epilog.ignore_depth_output =
+      !may_have_depth_attachment || (state->ds && !BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE) &&
+                                     !state->ds->depth.test_enable);
+   ps_epilog.ignore_stencil_output =
+      !may_have_stencil_attachment ||
+      (state->ds && !BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_STENCIL_TEST_ENABLE) &&
+       !state->ds->stencil.test_enable);
+
+   ps_epilog.lower_1bit_sample_mask_to_discard =
+      state->ms && !BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) &&
+      state->ms->rasterization_samples == 1;
 
    for (uint32_t i = 0; i < MAX_RTS; i++) {
       ps_epilog.color_attachment_mappings[i] = state->cal ? state->cal->color_map[i] : i;
@@ -1672,17 +1704,25 @@ radv_generate_graphics_state_key(const struct radv_compiler_info *compiler_info,
    if (state->ts)
       key.ts.patch_control_points = state->ts->patch_control_points;
 
-   const bool alpha_to_coverage_unknown =
-      !state->ms || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE);
-   const bool alpha_to_coverage_enabled = alpha_to_coverage_unknown || state->ms->alpha_to_coverage_enable;
-   const bool alpha_to_one_unknown = !state->ms || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_ONE_ENABLE);
-   const bool alpha_to_one_enabled = alpha_to_one_unknown || state->ms->alpha_to_one_enable;
-
-   /* alpha-to-coverage is always exported via MRTZ on GFX11 but it's also using MRTZ when
-    * alpha-to-one is enabled (alpha to MRTZ.a and one to MRT0.a).
+   /* On GFX11+, DB always reads alpha-to-coverage from the first export but also mrtz must be
+    * the first export if it's present. That means alpha-to-coverage comes from mrtz.w if it's
+    * present, else it comes from mrt0.w. That's because the first export (mrtz or mrt0) is always
+    * forwarded to DB, and DB uses it to determine the final coverage.
+    *
+    * Additionally if alpha-to-one is enabled, alpha-to-coverage must be exported via mrtz.w on all
+    * generations because alpha-to-one forces mrt0.w to 1 and there is no other way to export alpha
+    * for coverage. Pre-GFX11 HW can optionally export 2 alpha values for mrt0:
+    * - via mrtz.w, which is only used for alpha-to-coverage (it's the color 0 output alpha value
+    *   if alpha-to-one is enabled)
+    * - via mrt0.w, which is only used by blending or written to color attachment 0 (1 if alpha-to-one
+    *   is enabled)
     */
-   key.ms.alpha_to_coverage_via_mrtz =
-      alpha_to_coverage_enabled && (compiler_info->ac->gfx_level >= GFX11 || alpha_to_one_enabled);
+   bool alpha_to_one_unknown = !state->ms || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_ONE_ENABLE);
+
+   key.ms.alpha_to_coverage_unknown =
+      !state->ms || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE);
+   key.ms.alpha_to_coverage_enable = !key.ms.alpha_to_coverage_unknown && state->ms->alpha_to_coverage_enable;
+   key.ms.alpha_to_one_enable = !alpha_to_one_unknown && state->ms->alpha_to_one_enable;
 
    if (state->ms) {
       key.ms.sample_shading_enable = state->ms->sample_shading_enable;
@@ -1703,9 +1743,18 @@ radv_generate_graphics_state_key(const struct radv_compiler_info *compiler_info,
       key.ia.topology = radv_translate_prim(state->ia->primitive_topology);
    }
 
-   if (!state->vi || !(state->shader_stages & (VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
-                                               VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_MESH_BIT_EXT))) {
-      key.unknown_rast_prim = true;
+   key.rs.polygon_mode_unknown = !state->rs || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE);
+
+   if (!key.rs.polygon_mode_unknown) {
+      switch (state->rs->polygon_mode) {
+      case VK_POLYGON_MODE_FILL:
+      case VK_POLYGON_MODE_LINE:
+      case VK_POLYGON_MODE_POINT:
+         key.rs.polygon_mode = state->rs->polygon_mode;
+         break;
+      default:
+         UNREACHABLE("unexpected polygon mode");
+      }
    }
 
    if (state->rs) {
@@ -1731,23 +1780,26 @@ radv_generate_graphics_state_key(const struct radv_compiler_info *compiler_info,
    if (key.vrs_may_be_enabled && compiler_info->ac->has_vrs_frag_pos_z_bug)
       key.adjust_frag_coord_z = true;
 
-   if (radv_pipeline_needs_ps_epilog(state, lib_flags))
-      key.ps.has_epilog = true;
-
+   key.ps.color_outputs_need_epilog = color_outputs_need_ps_epilog(state, lib_flags);
    key.ps.epilog = radv_pipeline_generate_ps_epilog_key(compiler_info, state);
 
-   /* Alpha to coverage is exported via MRTZ when depth/stencil/samplemask are also exported.
-    * Though, when a PS epilog is needed and the MS state is NULL (with dynamic rendering), it's not
-    * possible to know the info at compile time and MRTZ needs to be exported in the epilog.
+   /* Use the PS epilog if a FS depth/stencil/samplemask output is present and could be eliminated based on dynamic
+    * state.
     */
-   if (key.ps.has_epilog) {
-      if (compiler_info->ac->gfx_level >= GFX11) {
-         key.ps.exports_mrtz_via_epilog = alpha_to_coverage_unknown;
-      } else {
-         key.ps.exports_mrtz_via_epilog =
-            (alpha_to_coverage_unknown && alpha_to_one_enabled) || (alpha_to_one_unknown && alpha_to_coverage_enabled);
-      }
-   }
+   key.ps.depth_output_needs_epilog = !key.ps.epilog.ignore_depth_output &&
+                                      (!state->rp || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE));
+
+   key.ps.stencil_output_needs_epilog =
+      !key.ps.epilog.ignore_stencil_output &&
+      (!state->rp || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_DS_STENCIL_TEST_ENABLE));
+
+   key.ps.sample_mask_output_needs_epilog =
+      !key.ps.epilog.lower_1bit_sample_mask_to_discard &&
+      (!state->ms || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES));
+
+   /* Set whether alpha_to_one makes MRT0 alpha dead. */
+   key.ps.mrt0_alpha_is_dead = !alpha_to_one_unknown && !key.ms.alpha_to_coverage_unknown &&
+                               key.ms.alpha_to_one_enable && !key.ms.alpha_to_coverage_enable;
 
    if (compiler_info->key.use_ngg) {
       VkShaderStageFlags ngg_stage;
@@ -1765,29 +1817,9 @@ radv_generate_graphics_state_key(const struct radv_compiler_info *compiler_info,
          (ngg_stage == VK_SHADER_STAGE_VERTEX_BIT || ngg_stage == VK_SHADER_STAGE_GEOMETRY_BIT);
    }
 
-   if (!BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY) && state->ia &&
-       state->ia->primitive_topology != VK_PRIMITIVE_TOPOLOGY_POINT_LIST &&
-       !BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE) && state->rs &&
-       state->rs->polygon_mode != VK_POLYGON_MODE_POINT) {
-      key.enable_remove_point_size = true;
-   }
-
-   if (compiler_info->smooth_lines) {
-      /* Make the line rasterization mode dynamic for smooth lines to conditionally enable the lowering at draw time.
-       * This is because it's not possible to know if the graphics pipeline will draw lines at this point and it also
-       * simplifies the implementation.
-       */
-      if (BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_LINE_MODE) ||
-          (state->rs && state->rs->line.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH))
-         key.dynamic_line_rast_mode = true;
-
-      /* For GPL, when the fragment shader is compiled without any pre-rasterization information,
-       * ensure the line rasterization mode is considered dynamic because we can't know if it's
-       * going to draw lines or not.
-       */
-      key.dynamic_line_rast_mode |= !!(lib_flags & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT) &&
-                                    !(lib_flags & VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT);
-   }
+   key.smooth_lines_may_be_enabled =
+      compiler_info->smooth_lines && (BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_LINE_MODE) || !state->rs ||
+                                      state->rs->line.mode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH);
 
    key.dcc_decompress_gfx11 =
       compiler_info->ac->gfx_level >= GFX11 && custom_blend_mode == V_028808_CB_DCC_DECOMPRESS_GFX11;
@@ -2283,13 +2315,18 @@ radv_pipeline_load_retained_shaders(const struct radv_device *device, const VkGr
 }
 
 static unsigned
-radv_get_vgt_outprim_type(const struct radv_shader_stage *stages, const struct radv_graphics_state_key *gfx_state)
+radv_get_num_raster_vertices_per_prim(enum amd_gfx_level gfx_level, const struct radv_shader_stage *stages,
+                                      const struct radv_graphics_state_key *gfx_state)
 {
    unsigned vgt_outprim_type;
 
-   if (gfx_state->unknown_rast_prim)
-      return -1;
+   /* If VS or MS is present, it means we have all pre-rasterization shaders. We can't determine
+    * the raster primitive type without them.
+    */
+   if (!stages[MESA_SHADER_VERTEX].nir && !stages[MESA_SHADER_MESH].nir)
+      return 0; /* unknown */
 
+   /* The pre-raster primitive type is determined from enabled shaders and the input topology. */
    if (stages[MESA_SHADER_GEOMETRY].nir) {
       vgt_outprim_type = radv_conv_gl_prim_to_gs_out(stages[MESA_SHADER_GEOMETRY].nir->info.gs.output_primitive);
    } else if (stages[MESA_SHADER_TESS_EVAL].nir) {
@@ -2301,10 +2338,38 @@ radv_get_vgt_outprim_type(const struct radv_shader_stage *stages, const struct r
    } else if (stages[MESA_SHADER_MESH].nir) {
       vgt_outprim_type = radv_conv_gl_prim_to_gs_out(stages[MESA_SHADER_MESH].nir->info.mesh.primitive_type);
    } else {
-      vgt_outprim_type = radv_conv_prim_to_gs_out(gfx_state->ia.topology, false);
+      if (gfx_state->ia.topology == V_008958_DI_PT_NONE)
+         return 0; /* unknown */
+
+      vgt_outprim_type = radv_conv_prim_to_gs_out(gfx_level, gfx_state->ia.topology, false);
    }
 
-   return vgt_outprim_type;
+   /* The rasterized primitive type is determined from the pre-raster primitive type and the polygon mode. */
+   switch (vgt_outprim_type) {
+   case V_028A6C_POINTLIST:
+      return 1;
+
+   case V_028A6C_LINESTRIP:
+      return 2;
+
+   case V_028A6C_TRISTRIP:
+      if (!gfx_state->rs.polygon_mode_unknown) {
+         switch (gfx_state->rs.polygon_mode) {
+         case VK_POLYGON_MODE_POINT:
+            return 1;
+         case VK_POLYGON_MODE_LINE:
+            return 2;
+         default:
+            return 3;
+         }
+      }
+      break;
+
+   default:
+      UNREACHABLE("invalid vgt_outprim_type");
+   }
+
+   return 0;
 }
 
 static bool
@@ -2484,10 +2549,12 @@ radv_graphics_shaders_compile(const struct radv_compiler_info *compiler_info, st
       merge_tess_info(&stages[MESA_SHADER_TESS_EVAL].nir->info, &stages[MESA_SHADER_TESS_CTRL].nir->info);
    }
 
-   if (stages[MESA_SHADER_FRAGMENT].nir) {
-      unsigned vgt_outprim_type = radv_get_vgt_outprim_type(stages, gfx_state);
+   unsigned num_raster_vertices_per_prim =
+      radv_get_num_raster_vertices_per_prim(compiler_info->ac->gfx_level, stages, gfx_state);
 
-      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_lower_fs_barycentric, gfx_state, vgt_outprim_type);
+   if (stages[MESA_SHADER_FRAGMENT].nir) {
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_lower_fs_barycentric, gfx_state,
+               num_raster_vertices_per_prim);
 
       /* frag_depth = gl_FragCoord.z broadcasts to all samples of the fragment shader invocation,
        * so only optimize it away if we know there is only one sample per invocation.
@@ -2498,7 +2565,7 @@ radv_graphics_shaders_compile(const struct radv_compiler_info *compiler_info, st
           !gfx_state->dynamic_rasterization_samples && gfx_state->ms.rasterization_samples == 0)
          NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_fragdepth);
 
-      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_opt_fs_builtins, gfx_state, vgt_outprim_type);
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_opt_fs_builtins, gfx_state, num_raster_vertices_per_prim);
    }
 
    if (stages[MESA_SHADER_VERTEX].nir && !gfx_state->vs.has_prolog)
@@ -2535,13 +2602,24 @@ radv_graphics_shaders_compile(const struct radv_compiler_info *compiler_info, st
    }
 
    if (stages[MESA_SHADER_FRAGMENT].nir) {
-      if (gfx_state->dynamic_line_rast_mode)
+      /* Inter-shader code motion in nir_opt_varyings only works with FS inputs that are loaded only once,
+       * so move all input loads to the entry block, so that CSE can deduplicate them, which increases
+       * the likelihood of there being only one load per FS input component.
+       *
+       * This only moves FS input loads to the end of the entry block.
+       */
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_move_to_top,
+               nir_move_to_entry_block_only | nir_move_to_top_input_loads_simple);
+
+      if ((!num_raster_vertices_per_prim || num_raster_vertices_per_prim == 2) &&
+          gfx_state->smooth_lines_may_be_enabled)
          NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_lower_poly_line_smooth, RADV_NUM_SMOOTH_AA_SAMPLES);
 
-      if (!gfx_state->ps.has_epilog) {
+      if (!gfx_state->ps.color_outputs_need_epilog) {
          NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_remap_color_attachment, gfx_state);
 
-         NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_trim_fs_color_exports, &gfx_state->ps.epilog);
+         NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_trim_fs_exports, &gfx_state->ps.epilog,
+                  gfx_state->ps.mrt0_alpha_is_dead);
 
          NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_copy_prop);
          NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_dce);
@@ -2587,7 +2665,7 @@ radv_graphics_shaders_compile(const struct radv_compiler_info *compiler_info, st
       if (i != MESA_SHADER_MESH && radv_should_export_multiview(&stages[i], gfx_state))
          NIR_PASS(_, stages[i].nir, radv_nir_export_multiview);
 
-      uint64_t remove_as_varying = 0;
+      uint64_t remove_as_varying = VARYING_BIT_PSIZ | VARYING_BIT_LAYER;
       uint64_t remove_as_sysval = 0;
 
       /* Remove all varyings when the fragment shader is a noop. */
@@ -2597,15 +2675,8 @@ radv_graphics_shaders_compile(const struct radv_compiler_info *compiler_info, st
       /* Remove PSIZ from shaders when it's not needed.
        * This is typically produced by translation layers like Zink or d3d9 DXVK.
        */
-      if (gfx_state->enable_remove_point_size && (i != MESA_SHADER_TESS_EVAL || !stages[i].nir->info.tess.point_mode) &&
-          (i != MESA_SHADER_GEOMETRY || stages[i].nir->info.gs.output_primitive != MESA_PRIM_POINTS) &&
-          (i != MESA_SHADER_MESH || stages[i].nir->info.mesh.primitive_type != MESA_PRIM_POINTS)) {
-         remove_as_varying |= VARYING_BIT_PSIZ;
+      if (num_raster_vertices_per_prim > 1)
          remove_as_sysval |= VARYING_BIT_PSIZ;
-      }
-
-      if (!remove_as_varying && !remove_as_sysval)
-         continue;
 
       NIR_PASS(_, stages[i].nir, nir_remove_outputs, MESA_SHADER_FRAGMENT, remove_as_varying, remove_as_sysval);
       break;

@@ -1,0 +1,4 @@
+[[cl_cts]]
+cl_folder = "/opencl-cts"
+profile = "/install/opencl_conformance_tests_mesa.csv"
+timeout = 5000.0

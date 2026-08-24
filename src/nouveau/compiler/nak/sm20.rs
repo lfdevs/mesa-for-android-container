@@ -476,9 +476,10 @@ impl SM20Encoder<'_> {
         self.set_field(26..58, imm_src1);
     }
 
-    fn encode_form_b(
+    fn encode_form_b_explicit_src(
         &mut self,
         unit: SM20Unit,
+        src_unit: SM20Unit,
         opcode: u8,
         dst: &Dst,
         src: &Src,
@@ -492,14 +493,14 @@ impl SM20Encoder<'_> {
                 self.set_reg(26..32, reg);
             }
             AluSrc::Imm(imm32) => {
-                match unit {
+                match src_unit {
                     SM20Unit::Float | SM20Unit::Double => {
                         self.set_src_imm_f20(26..45, 45, imm32);
                     }
                     SM20Unit::Int | SM20Unit::Move | SM20Unit::Tex => {
                         self.set_src_imm_i20(26..45, 45, imm32);
                     }
-                    _ => panic!("Unknown unit for immediate: {unit}"),
+                    _ => panic!("Unknown unit for immediate: {src_unit}"),
                 }
                 self.set_field(46..48, 3_u8);
             }
@@ -512,6 +513,16 @@ impl SM20Encoder<'_> {
                 self.set_field(46..48, 1_u8);
             }
         }
+    }
+
+    fn encode_form_b(
+        &mut self,
+        unit: SM20Unit,
+        opcode: u8,
+        dst: &Dst,
+        src: &Src,
+    ) {
+        self.encode_form_b_explicit_src(unit, unit, opcode, dst, src);
     }
 
     fn encode_form_b_imm32(&mut self, opcode: u8, dst: &Dst, imm_src: u32) {
@@ -1442,7 +1453,13 @@ impl SM20Op for OpF2F {
     }
 
     fn encode(&self, e: &mut SM20Encoder<'_>) {
-        e.encode_form_b(SM20Unit::Move, 0x4, &self.dst, &self.src);
+        e.encode_form_b_explicit_src(
+            SM20Unit::Move,
+            SM20Unit::Float,
+            0x4,
+            &self.dst,
+            &self.src,
+        );
         e.set_bit(5, false); // .sat
         e.set_bit(6, self.src.src_mod.has_fabs());
         e.set_bit(7, self.integer_rnd);
@@ -1462,7 +1479,13 @@ impl SM20Op for OpF2I {
     }
 
     fn encode(&self, e: &mut SM20Encoder<'_>) {
-        e.encode_form_b(SM20Unit::Move, 0x5, &self.dst, &self.src);
+        e.encode_form_b_explicit_src(
+            SM20Unit::Move,
+            SM20Unit::Float,
+            0x5,
+            &self.dst,
+            &self.src,
+        );
         e.set_bit(6, self.src.src_mod.has_fabs());
         e.set_bit(7, self.dst_type.is_signed());
         e.set_bit(8, self.src.src_mod.has_fneg());

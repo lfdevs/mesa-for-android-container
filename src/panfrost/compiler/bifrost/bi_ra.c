@@ -376,6 +376,23 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live,
          }
       }
 
+      /* MMUL must not write its result into a multiply operand, but the
+       * accumulator (src2) may be reused.
+       */
+      if (ins->op == BI_OPCODE_MMUL_F32 ||
+          ins->op == BI_OPCODE_MMUL_V2F16 ||
+          ins->op == BI_OPCODE_MMUL_V4S8 ||
+          ins->op == BI_OPCODE_MMUL_V4U8) {
+         const unsigned dnode = ins->dest[0].value;
+         const unsigned dmask = bi_writemask(ins, 0);
+
+         for (unsigned s = 0; s < 2; ++s) {
+            if (bi_is_ssa(ins->src[s]))
+               lcra_add_node_interference(l, dnode, dmask, ins->src[s].value,
+                                          dmask);
+         }
+      }
+
       /* Valhall needs >= 64-bit reads to be pair-aligned */
       if (aligned_sr) {
          bi_foreach_ssa_src(ins, s) {
@@ -628,6 +645,15 @@ bi_choose_spill_node(bi_context *ctx, struct lcra_state *l)
    unsigned best_benefit = 0;
    signed best_node = -1;
 
+   /* consider spilling the node that we're trying to allocate,
+    * rather the ones interfering with it, if that would be
+    * better
+    */
+   if (!BITSET_TEST(no_spill, l->spill_node)) {
+      best_node = l->spill_node;
+      best_benefit = lcra_count_constraints(l, best_node);
+   }
+
    if (nodearray_is_sparse(&l->linear[l->spill_node])) {
       nodearray_sparse_foreach(&l->linear[l->spill_node], elem) {
          unsigned i = nodearray_sparse_key(elem);
@@ -789,7 +815,6 @@ bi_spill_register(bi_context *ctx, bi_index index, uint32_t offset,
             b.cursor = bi_after_instr(I);
             bi_store_tl(&b, count * 32, src, offset + (extra * 4));
 
-            ctx->spills++;
             /* Don't disable filling if spill_point is before index. */
             fill = found_spill_point;
          }
@@ -803,7 +828,6 @@ bi_spill_register(bi_context *ctx, bi_index index, uint32_t offset,
 
             bi_instr *ld = bi_load_tl(&b, bits, tmp, offset);
             ld->no_spill = true;
-            ctx->fills++;
          }
       }
    }
@@ -1151,18 +1175,9 @@ bi_out_of_ssa(bi_context *ctx)
 }
 
 static bool
-op_is_load_store(enum bi_opcode op)
+op_is_load(enum bi_opcode op)
 {
    switch (op) {
-   case BI_OPCODE_STORE_I8:
-   case BI_OPCODE_STORE_I16:
-   case BI_OPCODE_STORE_I24:
-   case BI_OPCODE_STORE_I32:
-   case BI_OPCODE_STORE_I48:
-   case BI_OPCODE_STORE_I64:
-   case BI_OPCODE_STORE_I96:
-   case BI_OPCODE_STORE_I128:
-      return true;
    case BI_OPCODE_LOAD_I8:
    case BI_OPCODE_LOAD_I16:
    case BI_OPCODE_LOAD_I24:
@@ -1177,7 +1192,25 @@ op_is_load_store(enum bi_opcode op)
    }
 }
 
-static uint64_t
+static bool
+op_is_store(enum bi_opcode op)
+{
+   switch (op) {
+   case BI_OPCODE_STORE_I8:
+   case BI_OPCODE_STORE_I16:
+   case BI_OPCODE_STORE_I24:
+   case BI_OPCODE_STORE_I32:
+   case BI_OPCODE_STORE_I48:
+   case BI_OPCODE_STORE_I64:
+   case BI_OPCODE_STORE_I96:
+   case BI_OPCODE_STORE_I128:
+      return true;
+   default:
+      return false;
+   }
+}
+
+static void
 compute_spill_cost(bi_context *ctx)
 {
    void *mctx = ralloc_context(NULL);
@@ -1202,17 +1235,26 @@ compute_spill_cost(bi_context *ctx)
       }
    }
 
+   unsigned spills = 0, fills = 0;
    uint64_t cost = 0;
    bi_foreach_block(ctx, block) {
+      uint64_t per_spill_cost = 10 * (block_depth[block->index] + 1);
       bi_foreach_instr_in_block(block, I) {
-         if (op_is_load_store(I->op) && I->seg == BI_SEG_TL)
-            cost += 10 * (block_depth[block->index] + 1);
+         if (op_is_load(I->op) && I->seg == BI_SEG_TL) {
+            fills++;
+            cost += per_spill_cost;
+         } else if (op_is_store(I->op) && I->seg == BI_SEG_TL) {
+            spills++;
+            cost += per_spill_cost;
+         }
       }
    }
 
-   ralloc_free(mctx);
+   ctx->spills = spills;
+   ctx->fills = fills;
+   ctx->spill_cost = cost;
 
-   return cost;
+   ralloc_free(mctx);
 }
 
 void
@@ -1312,7 +1354,7 @@ bi_register_allocate(bi_context *ctx)
       }
    }
 
-   ctx->spill_cost = compute_spill_cost(ctx);
+   compute_spill_cost(ctx);
 
    assert(success);
    assert(l != NULL);

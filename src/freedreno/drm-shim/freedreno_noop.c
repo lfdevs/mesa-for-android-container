@@ -205,6 +205,7 @@ static ioctl_fn_t driver_ioctls[] = {
    [DRM_MSM_SUBMITQUEUE_CLOSE] = msm_ioctl_noop,
    [DRM_MSM_SUBMITQUEUE_QUERY] = msm_ioctl_noop,
    [DRM_MSM_VM_BIND] = msm_ioctl_vm_bind,
+   [DRM_MSM_PERFCNTR_CONFIG] = msm_ioctl_noop,
 };
 
 #define CHIPID(maj, min, rev, pat)                                             \
@@ -230,6 +231,11 @@ static const struct msm_device_info device_infos[] = {
    {
       .gpu_id = 220,
       .chip_id = CHIPID(2, 2, 0, 0xff),
+      .gmem_size = 512 * 1024,
+   },
+   {
+      .gpu_id = 225,
+      .chip_id = CHIPID(2, 2, 5, 0xff),
       .gmem_size = 512 * 1024,
    },
    {
@@ -276,6 +282,11 @@ static const struct msm_device_info device_infos[] = {
       .gpu_id = 540,
       .chip_id = CHIPID(5, 4, 0, 2),
       .gmem_size = 1024 * 1024,
+   },
+   {
+      .gpu_id = 610,
+      .chip_id = CHIPID(6, 1, 0, 0),
+      .gmem_size = 128 * 1024 + 4 * 1024,
    },
    {
       .gpu_id = 618,

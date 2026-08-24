@@ -9,6 +9,7 @@
 #define AC_RGP_H
 
 #include <stdint.h>
+#include "amd_family.h"
 #include "compiler/shader_enums.h"
 #include "util/list.h"
 #include "util/simple_mtx.h"
@@ -17,6 +18,21 @@ struct radeon_info;
 struct ac_sqtt_trace;
 struct ac_sqtt;
 struct ac_spm_trace;
+
+/* Below values are from from llvm project
+ * llvm/include/llvm/BinaryFormat/ELF.h
+ */
+enum elf_gfxip_level
+{
+   EF_AMDGPU_MACH_AMDGCN_GFX801 = 0x028,
+   EF_AMDGPU_MACH_AMDGCN_GFX900 = 0x02c,
+   EF_AMDGPU_MACH_AMDGCN_GFX1010 = 0x033,
+   EF_AMDGPU_MACH_AMDGCN_GFX1030 = 0x036,
+   EF_AMDGPU_MACH_AMDGCN_GFX1100 = 0x041,
+   EF_AMDGPU_MACH_AMDGCN_GFX1150 = 0x043,
+   EF_AMDGPU_MACH_AMDGCN_GFX1170 = 0x05d,
+   EF_AMDGPU_MACH_AMDGCN_GFX1200 = 0x04e,
+};
 
 enum rgp_hardware_stages {
    RGP_HW_STAGE_VS = 0,
@@ -194,9 +210,11 @@ int ac_dump_rgp_capture(const struct radeon_info *info, struct ac_sqtt_trace *sq
                         const struct ac_spm_trace *spm_trace,
                         const struct ac_rgp_capture_info *capture_info);
 
-void
-ac_rgp_file_write_elf_object(FILE *output, size_t file_elf_start,
-                             struct rgp_code_object_record *record,
-                             uint32_t *written_size, uint32_t flags);
+
+enum elf_gfxip_level ac_gfx_level_to_elf_gfxip_level(enum amd_gfx_level gfx_level);
+
+void ac_rgp_file_write_elf_object(FILE *output, size_t file_elf_start,
+                                  struct rgp_code_object_record *record,
+                                  uint32_t *written_size, uint32_t flags);
 
 #endif

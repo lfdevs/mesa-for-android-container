@@ -1,0 +1,16 @@
+dEQP-VK.pipeline.fast_linked_library.attachment_feedback_loop_layout.sampler.attachment_feedback_loop_optimal.sampled_image.image_type.2d_array.format.s8_uint_stencil_read_dynamic_bad_static
+dEQP-VK.glsl.shader_clock.compute.clockRealtime2x32EXT
+dEQP-VK.glsl.shader_clock.fragment.clockRealtime2x32EXT
+dEQP-VK.glsl.shader_clock.vertex.clock2x32ARB
+
+#
+# OpenCL-CTS
+#
+
+Device timer
+Device timer@device_and_host_timers
+
+# spurrious CL_OUT_OF_RESOURCES fails (hangcheck?): vstore_local,
+# vstore_private, fp2int, expected
+# deqp-runner does not report these properly
+Basic

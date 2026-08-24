@@ -1,13 +1,12 @@
 /*
  * Copyright © 2024 Collabora Ltd.
  * Copyright © 2024 Arm Ltd.
+ * Copyright © 2026 NXP
  *
  * Derived from tu_cmd_buffer.c which is:
  * Copyright © 2016 Red Hat.
  * Copyright © 2016 Bas Nieuwenhuizen
  * Copyright © 2015 Intel Corporation
- * 
- * Copyright 2026 NXP
  *
  * SPDX-License-Identifier: MIT
  */
@@ -321,9 +320,11 @@ prepare_vs_driver_set(struct panvk_cmd_buffer *cmdbuf, uint32_t repeat_count)
             emit_vs_attrib(cmdbuf, i, vb_offset,
                            (struct mali_attribute_packed *)(&descs[i]));
          } else {
-            /* Write a NullDescriptor and rely on OOB behavior */
-            pan_cast_and_pack(&descs[i], NULL_DESCRIPTOR, cfg)
-               ;
+            /* Write a specialized AttributeDescriptor and rely on OOB behavior */
+            pan_cast_and_pack(&descs[i], ATTRIBUTE, cfg) {
+               cfg.table = 17; /* Invalid table, ensuring OOB access */
+               cfg.format = (MALI_R16F << 12) | MALI_RGB_COMPONENT_ORDER_RGBA;
+            }
          }
       }
 
@@ -2145,7 +2146,8 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
 
    bool msaa = dyns->ms.rasterization_samples > 1;
    enum mesa_prim prim = vk_topology_to_mesa(ia->primitive_topology);
-   if (u_reduced_prim(prim) == MESA_PRIM_LINES &&
+   enum mesa_prim reduced_prim = u_reduced_prim(prim);
+   if (reduced_prim == MESA_PRIM_LINES &&
        rs->line.mode == VK_LINE_RASTERIZATION_MODE_BRESENHAM) {
       /* we need to disable MSAA when rendering bresenham lines.
        *
@@ -2232,14 +2234,7 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
        * Do not let the Mali DCD front/back face cull bits discard point/line
        * primitives before rasterization.
        */
-      const VkPrimitiveTopology topology =
-         cmdbuf->vk.dynamic_graphics_state.ia.primitive_topology;
-      const bool non_polygon =
-         topology == VK_PRIMITIVE_TOPOLOGY_POINT_LIST ||
-         topology == VK_PRIMITIVE_TOPOLOGY_LINE_LIST ||
-         topology == VK_PRIMITIVE_TOPOLOGY_LINE_STRIP ||
-         topology == VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY ||
-         topology == VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY;
+      const bool non_polygon = reduced_prim != MESA_PRIM_TRIANGLES;
 
       cfg.cull_front_face =
          !non_polygon && (rs->cull_mode & VK_CULL_MODE_FRONT_BIT) != 0;
@@ -2719,6 +2714,7 @@ update_prims_generated_query(struct panvk_cmd_buffer *cmdbuf,
       cs_load32_to(b, value, addr, 0);
       cs_add_imm32(b, value, value, prims_generated);
       cs_store32(b, value, addr, 0);
+      cs_flush_stores(b);
    }
 }
 

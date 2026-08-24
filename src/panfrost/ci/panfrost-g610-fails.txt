@@ -88,15 +88,6 @@ spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
-spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
-spec@ext_framebuffer_multisample@accuracy 16 srgb depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy 16 srgb depthstencil linear,Fail
-spec@ext_framebuffer_multisample@accuracy 16 srgb small depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy 16 srgb small depthstencil linear,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil linear,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb small depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb small depthstencil linear,Fail
 spec@ext_framebuffer_multisample@alpha-to-coverage-dual-src-blend 16,Fail
 spec@ext_framebuffer_multisample@alpha-to-coverage-dual-src-blend 6,Fail
 spec@ext_framebuffer_multisample@alpha-to-coverage-dual-src-blend 8,Fail
@@ -165,7 +156,6 @@ spec@ext_transform_feedback@tessellation triangle_strip monochrome,Fail
 spec@ext_transform_feedback@tessellation triangle_strip smooth,Fail
 spec@ext_transform_feedback@tessellation triangle_strip wireframe,Fail
 spec@glsl-1.20@execution@fs-underflow-mul-compare-zero,Fail
-spec@glsl-1.30@execution@clipping@fs-clip-distance-interpolated,Crash
 spec@glsl-1.30@execution@interpolation@interpolation-noperspective-gl_backcolor-flat-distance,Fail
 spec@glsl-1.30@execution@interpolation@interpolation-noperspective-gl_backcolor-flat-fixed,Fail
 spec@glsl-1.30@execution@interpolation@interpolation-noperspective-gl_backcolor-flat-none,Fail
@@ -290,29 +280,44 @@ spec@!opengl 3.1@primitive-restart-xfb written,Fail
 spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object,Fail
 
 # uprev Piglit in Mesa
-afbcp-spec@arb_texture_view@tex-view,Fail
 KHR-GLES31.core.draw_indirect.advanced-twoPass-transformFeedback-arrays,Fail
 spec@!opengl 1.1@large-tex,Fail
-spec@arb_texture_view@tex-view,Fail
-spec@glsl-1.30@execution@glsl-packed-back-color,Fail
+spec@arb_framebuffer_object@framebuffer-blit-oblong tall,Fail
+spec@arb_framebuffer_object@framebuffer-blit-oblong wide,Fail
 
 # OpenCL (rusticl) failures
-api@clgetcommandqueueinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
-api@clgetkernelarginfo,Fail
 api@cllinkprogram,Fail
-api@clsetkernelarg,Fail
-api@clsetkernelarg@Input checks,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float1,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float16,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float2,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float4,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float8,Fail
-program@execute@builtin@builtin-long-hadd-1.0.generated,Crash
-program@execute@builtin@builtin-long-rhadd-1.0.generated,Crash
-program@execute@builtin@builtin-ulong-hadd-1.0.generated,Crash
-program@execute@builtin@builtin-ulong-rhadd-1.0.generated,Crash
-program@execute@global-offset,Fail
-program@execute@global-offset@3d- input dependent,Fail
 program@execute@vector-conversion,Fail
+
+# OpenCL-CTS quick profile
+Images (clCopyImage 1D),Fail
+Images (clCopyImage 1D)@1D,Fail
+Images (clCopyImage 1D)@1Darray,Fail
+Images (clCopyImage 2D),Crash
+Images (clCopyImage 2D)@2D,Fail
+Images (clCopyImage 2D)@2Darrayto2D,Fail
+Images (clCopyImage 2D)@2Darrayto3D,Fail
+Images (clCopyImage 2D)@2Dto2Darray,Fail
+Images (clCopyImage 2D)@2Dto3D,Fail
+Images (clCopyImage 3D),Fail
+Images (clCopyImage 3D)@3Dto2D,Fail
+Images (clCopyImage 3D)@3Dto2Darray,Fail
+
+# Failing after updating SPIR-V LLVM Translator in the test image
+Basic@get_enqueued_local_size,Fail
+Basic@get_global_linear_id,Fail
+Basic@get_local_linear_id,Fail
+
+#
+# OpenCL-CTS uprev
+#
+
+Basic,Fail
+Basic@enqueue_map_image,Fail

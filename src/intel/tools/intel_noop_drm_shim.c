@@ -73,6 +73,8 @@ i915_ioctl_gem_set_tiling(int fd, unsigned long request, void *arg)
    bo->tiling_mode = tiling_arg->tiling_mode;
    bo->stride = tiling_arg->stride;
 
+   drm_shim_bo_put(&bo->base);
+
    return 0;
 }
 
@@ -89,6 +91,8 @@ i915_ioctl_gem_get_tiling(int fd, unsigned long request, void *arg)
    tiling_arg->tiling_mode = bo->tiling_mode;
    tiling_arg->swizzle_mode = I915_BIT_6_SWIZZLE_NONE;
    tiling_arg->phys_swizzle_mode = I915_BIT_6_SWIZZLE_NONE;
+
+   drm_shim_bo_put(&bo->base);
 
    return 0;
 }
@@ -141,6 +145,8 @@ i915_ioctl_gem_mmap(int fd, unsigned long request, void *arg)
 
    mmap_arg->addr_ptr = (uint64_t) (bo->map + mmap_arg->offset);
 
+   drm_shim_bo_put(bo);
+
    return 0;
 }
 
@@ -159,6 +165,8 @@ i915_ioctl_gem_mmap_offset(int fd, unsigned long request, void *arg)
                               drm_shim_bo_get_mmap_offset(shim_fd, bo));
 
    mmap_arg->offset = drm_shim_bo_get_mmap_offset(shim_fd, bo);
+
+   drm_shim_bo_put(bo);
 
    return 0;
 }

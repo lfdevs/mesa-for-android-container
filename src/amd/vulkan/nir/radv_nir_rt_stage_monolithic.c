@@ -11,6 +11,7 @@
 
 #include "aco_nir_call_attribs.h"
 #include "nir_builder.h"
+#include "radv_nir_rt_stage_cps.h"
 #include "radv_nir_rt_stage_functions.h"
 
 struct chit_miss_inlining_params {
@@ -418,6 +419,10 @@ lower_rt_instruction_monolithic(nir_builder *b, nir_intrinsic_instr *intr, void 
       nir_def_replace(&intr->def, nir_load_param(b, RT_ARG_SBT_DESCRIPTORS));
       return true;
    }
+   case nir_intrinsic_load_rt_is_compute_queue_amd: {
+      nir_def_replace(&intr->def, nir_load_param(b, RT_ARG_IS_COMPUTE_QUEUE));
+      return true;
+   }
    case nir_intrinsic_load_scratch: {
       nir_src_rewrite(&intr->src[0], nir_iadd_nuw(b, nir_load_var(b, vars->stack_ptr), intr->src[0].ssa));
       return true;
@@ -460,7 +465,12 @@ radv_nir_lower_rt_abi_monolithic(nir_shader *shader, const struct radv_compiler_
 {
    const bool uses_descriptor_heap = pipeline->base.base.create_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
-   radv_nir_init_rt_function_params(impl->function, MESA_SHADER_RAYGEN, 0, 0, uses_descriptor_heap);
+   if (compiler_info->key.rt_cps) {
+      radv_nir_init_cps_function(impl->function, uses_descriptor_heap);
+      impl->function->driver_attributes &= ~ACO_NIR_FUNCTION_ATTRIB_DIVERGENT_CALL;
+   } else {
+      radv_nir_init_rt_function_params(impl->function, MESA_SHADER_RAYGEN, 0, 0, uses_descriptor_heap);
+   }
 
    nir_builder b = nir_builder_at(nir_before_impl(impl));
 

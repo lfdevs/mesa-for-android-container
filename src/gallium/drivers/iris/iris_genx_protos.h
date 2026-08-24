@@ -19,9 +19,7 @@ void genX(emit_hashing_mode)(struct iris_context *ice,
 void genX(emit_urb_config)(struct iris_batch *batch,
                            bool has_tess_eval,
                            bool has_geometry);
-void genX(emit_depth_state_workarounds)(struct iris_context *ice,
-                                        struct iris_batch *batch,
-                                        const struct isl_surf *surf);
+void genX(batch_disable_hiz_planes)(struct iris_batch *batch);
 void genX(update_pma_fix)(struct iris_context *ice,
                           struct iris_batch *batch,
                           bool enable);

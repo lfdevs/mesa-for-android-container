@@ -302,6 +302,8 @@ format.
 (which may be multiple bytes in length). Logically this is a memset with a
 multi-byte element value starting at offset bytes from resource start, going
 for size bytes. It is guaranteed that size % clear_value_size == 0.
+With ``pipe_caps::hw_clear_buffer_sizes`` drivers can indicate which
+clear_value_size is actually hardware accelerated and not software emulated.
 
 Evaluating Depth Buffers
 ^^^^^^^^^^^^^^^^^^^^^^^^

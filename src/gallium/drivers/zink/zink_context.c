@@ -108,7 +108,6 @@ zink_context_destroy(struct pipe_context *pctx)
 
 #if HAVE_RENDERDOC_INTEGRATION
    if (screen->base.num_contexts == 1 && screen->renderdoc_capturing) {
-      screen->renderdoc_capture_all = false;
       ctx->bs->has_work = true;
       pctx->flush(pctx, NULL, 0);
    }
@@ -1545,6 +1544,8 @@ zink_set_vertex_buffers_internal(struct pipe_context *pctx,
          assert(ctx->vertex_buffers[b].buffer.resource);
 #endif
    }
+   /* avoid potential overdraw conflicts */
+   ctx->can_promote_depth_op = false;
    ctx->vertex_buffers_count = num_buffers;
    ctx->vertex_buffers_dirty = num_buffers > 0;
 }
@@ -3166,8 +3167,11 @@ begin_rendering(struct zink_context *ctx, bool check_attachment_shadow)
             else
                ctx->dynamic_fb.attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
          }
-         if (ctx->dynamic_fb.attachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
+         if (ctx->dynamic_fb.attachments[i].loadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
             attachment_shadow_mask |= BITFIELD_BIT(i);
+            if (res->base.b.nr_samples > 1 && zink_debug & ZINK_DEBUG_PERFINFO)
+               mesa_loge("zink: perf warning: MSAA attachment[COLOR%d] %s uses loadOp=LOAD (use CLEAR or discard)\n", i, util_format_name(res->base.b.format));
+         }
          pformats[i] = ctx->fb_state.cbufs[i].format;
       }
 
@@ -3193,6 +3197,13 @@ begin_rendering(struct zink_context *ctx, bool check_attachment_shadow)
                ctx->dynamic_fb.attachments[PIPE_MAX_COLOR_BUFS].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
             else
                ctx->dynamic_fb.attachments[PIPE_MAX_COLOR_BUFS].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+         }
+
+         if (res->base.b.nr_samples > 1 && zink_debug & ZINK_DEBUG_PERFINFO) {
+            if (ctx->dynamic_fb.attachments[PIPE_MAX_COLOR_BUFS].loadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
+               mesa_loge("zink: perf warning: MSAA attachment[DEPTHSTENCIL] %s uses loadOp=LOAD (use CLEAR or discard)\n", util_format_name(res->base.b.format));
+            if (ctx->dynamic_fb.attachments[PIPE_MAX_COLOR_BUFS].storeOp == VK_ATTACHMENT_STORE_OP_STORE)
+               mesa_loge("zink: perf warning: MSAA attachment[DEPTHSTENCIL] %s uses storeOp=STORE (use discard with resolves)\n", util_format_name(res->base.b.format));
          }
 
          /* maybe TODO but also not handled by legacy rp...
@@ -3532,6 +3543,7 @@ begin_rendering(struct zink_context *ctx, bool check_attachment_shadow)
 
    VKCTX(CmdBeginRendering)(ctx->bs->cmdbuf, &ctx->dynamic_fb.info);
    ctx->in_rp = true;
+   ctx->can_promote_depth_op = ctx->fb_state.zsbuf.texture && ctx->dynamic_fb.attachments[PIPE_MAX_COLOR_BUFS].loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR;
    if (formats_changed) {
       for (unsigned i = 0; i < ctx->fb_state.nr_cbufs; i++)
          ctx->fb_state.cbufs[i].format = pformats[i];
@@ -3634,6 +3646,7 @@ zink_batch_rp(struct zink_context *ctx)
       if (ctx->render_condition.query)
          zink_start_conditional_render(ctx);
       zink_clear_framebuffer(ctx, clear_buffers);
+      zink_update_depth_state(ctx);
    }
    /* unable to previously determine that queries didn't split renderpasses: ensure queries start inside renderpass */
    if (!ctx->queries_disabled && maybe_has_query_ends && !list_is_empty(&ctx->suspended_queries)) {
@@ -4686,11 +4699,14 @@ mem_barrier(struct zink_context *ctx, VkPipelineStageFlags src_stage, VkPipeline
 void
 zink_flush_memory_barrier(struct zink_context *ctx)
 {
-   const VkPipelineStageFlags gfx_flags = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                                          VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT |
-                                          VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |
-                                          VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT |
-                                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+   struct zink_screen *screen = zink_screen(ctx->base.screen);
+   VkPipelineStageFlags gfx_flags = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+   if (screen->info.feats.features.tessellationShader)
+      gfx_flags |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT |
+                   VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
+   if (screen->info.feats.features.geometryShader)
+      gfx_flags |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
    const VkPipelineStageFlags cs_flags = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
    VkPipelineStageFlags src = ctx->last_work_was_compute ? cs_flags : gfx_flags;
    VkPipelineStageFlags dst = cs_flags | gfx_flags;
@@ -4718,14 +4734,18 @@ zink_flush_memory_barrier(struct zink_context *ctx)
                   VK_ACCESS_INDEX_READ_BIT);
    if (ctx->memory_barrier & PIPE_BARRIER_FRAMEBUFFER)
       zink_texture_barrier(&ctx->base, 0);
-   if (ctx->memory_barrier & PIPE_BARRIER_STREAMOUT_BUFFER)
-      mem_barrier(ctx, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                           VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |
-                           VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT,
+   if (ctx->memory_barrier & PIPE_BARRIER_STREAMOUT_BUFFER) {
+      VkPipelineStageFlags so_src = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+      if (screen->info.feats.features.tessellationShader)
+         so_src |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
+      if (screen->info.feats.features.geometryShader)
+         so_src |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
+      mem_barrier(ctx, so_src,
                   VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT,
                   VK_ACCESS_SHADER_READ_BIT,
                   VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT |
                   VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT);
+   }
    ctx->memory_barrier = 0;
 }
 

@@ -85,6 +85,19 @@ panfrost_get_device_vendor(struct pipe_screen *screen)
    return "Arm";
 }
 
+static const char *
+panfrost_get_cl_cts_version(struct pipe_screen *screen)
+{
+   uint32_t gpu_prod_id = panfrost_device_gpu_prod_id(pan_device(screen));
+
+   /* https://www.khronos.org/conformance/adopters/conformant-products/opencl#submission_474 */
+   if (gpu_prod_id == PAN_PROD_ID(10, 8, 7) ||
+       gpu_prod_id == PAN_PROD_ID(10, 12, 4))
+      return "v2026-06-18-00";
+
+   return NULL;
+}
+
 static int
 from_kmod_group_allow_priority_flags(
    enum pan_kmod_group_allow_priority_flags kmod_flags)
@@ -828,6 +841,7 @@ panfrost_init_screen_caps(struct panfrost_screen *screen)
 
    caps->texture_transfer_modes = 0;
 
+   caps->device_type = PIPE_DEVICE_TYPE_INTEGRATED_GPU;
    caps->endianness = PIPE_ENDIAN_NATIVE;
 
    caps->max_texture_gather_components = 4;
@@ -1048,9 +1062,7 @@ panfrost_create_screen(int fd, const struct pipe_screen_config *config,
       return NULL;
    }
 
-   unsigned core_id_range;
-   unsigned core_count =
-      pan_query_core_count(&dev->kmod.dev->props, &core_id_range);
+   unsigned core_count = pan_query_core_count(&dev->kmod.dev->props);
 
    snprintf(screen->renderer_string, sizeof(screen->renderer_string),
             "%s MC%u (Panfrost)", dev->model->name, core_count);
@@ -1108,6 +1120,7 @@ panfrost_create_screen(int fd, const struct pipe_screen_config *config,
    screen->base.get_name = panfrost_get_name;
    screen->base.get_vendor = panfrost_get_vendor;
    screen->base.get_device_vendor = panfrost_get_device_vendor;
+   screen->base.get_cl_cts_version = panfrost_get_cl_cts_version;
    screen->base.get_driver_query_info = panfrost_get_driver_query_info;
    screen->base.get_timestamp = panfrost_get_timestamp;
    screen->base.is_format_supported = panfrost_is_format_supported;
@@ -1143,7 +1156,7 @@ panfrost_create_screen(int fd, const struct pipe_screen_config *config,
 
    for (unsigned i = 0; i <= MESA_SHADER_COMPUTE; i++)
       screen->base.nir_options[i] =
-         pan_get_nir_shader_compiler_options(dev->arch, false);
+         pan_get_nir_shader_compiler_options(dev->arch, i, false);
 
    switch (dev->arch) {
    case 4:

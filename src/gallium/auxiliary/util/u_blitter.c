@@ -1856,7 +1856,8 @@ static void do_blits(struct blitter_context_priv *ctx,
                      const struct pipe_box *srcbox,
                      bool is_zsbuf,
                      bool uses_txf, bool sample0_only,
-                     unsigned dst_sample)
+                     unsigned dst_sample,
+                     unsigned levels_per_draw)
 {
    struct pipe_context *pipe = ctx->base.pipe;
    unsigned src_samples = src->texture->nr_samples;
@@ -1868,7 +1869,6 @@ static void do_blits(struct blitter_context_priv *ctx,
 
    /* Initialize framebuffer state. */
    pipe_surface_size(dst, &fb_state.width, &fb_state.height);
-   fb_state.nr_cbufs = is_zsbuf ? 0 : 1;
 
    blitter_set_dst_dimensions(ctx, fb_state.width, fb_state.height);
 
@@ -1880,7 +1880,9 @@ static void do_blits(struct blitter_context_priv *ctx,
       if (is_zsbuf) {
          memcpy(&fb_state.zsbuf, dst, sizeof(*dst));
       } else {
-         memcpy(&fb_state.cbufs[0], dst, sizeof(*dst));
+         fb_state.nr_cbufs = levels_per_draw;
+         memcpy(fb_state.cbufs, dst, levels_per_draw * sizeof(*dst));
+         fb_state.downscale_cbufs = levels_per_draw > 1;
       }
       pipe->set_framebuffer_state(pipe, &fb_state);
 
@@ -1897,6 +1899,7 @@ static void do_blits(struct blitter_context_priv *ctx,
    } else {
       /* Set framebuffer state. */
       struct pipe_surface *psurf = is_zsbuf ? &fb_state.zsbuf : &fb_state.cbufs[0];
+      fb_state.nr_cbufs = is_zsbuf ? 0 : 1;
       memcpy(psurf, dst, sizeof(*dst));
 
       /* Draw the quad with the generic codepath. */
@@ -1906,6 +1909,7 @@ static void do_blits(struct blitter_context_priv *ctx,
          float depth_center_offset = 0.0;
          int src_depth = abs(srcbox->depth);
          float src_z_step = src_depth / (float)dstbox->depth;
+         psurf->last_layer = psurf->first_layer;
 
          /* Scale Z properly if the blit is scaled.
           *
@@ -1989,7 +1993,6 @@ static void do_blits(struct blitter_context_priv *ctx,
          /* Increment the layer */
          if (dst_z < dstbox->depth-1) {
             psurf->first_layer++;
-            psurf->last_layer++;
          }
       }
    }
@@ -2261,7 +2264,7 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
    ctx->single_triangle_active = ctx->base.use_single_triangle;
    do_blits(ctx, dst, dstbox, src, src_width0, src_height0,
             srcbox, dst_has_depth || dst_has_stencil, use_txf, sample0_only,
-            dst_sample);
+            dst_sample, 1);
    ctx->single_triangle_active = false;
    util_blitter_unset_running_flag(blitter);
 out:
@@ -2319,17 +2322,18 @@ void util_blitter_generate_mipmap(struct blitter_context *blitter,
                                   struct pipe_resource *tex,
                                   enum pipe_format format,
                                   unsigned base_level, unsigned last_level,
-                                  unsigned first_layer, unsigned last_layer)
+                                  unsigned first_layer, unsigned last_layer,
+                                  unsigned levels_per_draw)
 {
    struct blitter_context_priv *ctx = (struct blitter_context_priv*)blitter;
    struct pipe_context *pipe = ctx->base.pipe;
-   struct pipe_surface dst_templ;
+   struct pipe_surface dst_templ[PIPE_MAX_COLOR_BUFS];
    struct pipe_sampler_view src_templ, *src_view;
    bool is_depth;
    void *sampler_state;
    const struct util_format_description *desc =
          util_format_description(format);
-   unsigned src_level;
+   unsigned src_level, cbuf;
    unsigned target = tex->target;
 
    if (ctx->cube_as_2darray &&
@@ -2341,6 +2345,13 @@ void util_blitter_generate_mipmap(struct blitter_context *blitter,
    assert(!util_format_has_stencil(desc) || util_format_has_depth(desc));
 
    is_depth = desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS;
+
+   /* Downscaling is restricted to 2D/RECT color textures. */
+   if ((target != PIPE_TEXTURE_2D && target != PIPE_TEXTURE_RECT) ||
+       util_format_has_depth(desc)) {
+      levels_per_draw = 1;
+   }
+   assert(levels_per_draw <= PIPE_MAX_COLOR_BUFS);
 
    /* Check whether the states are properly saved. */
    util_blitter_set_running_flag(blitter);
@@ -2375,7 +2386,8 @@ void util_blitter_generate_mipmap(struct blitter_context *blitter,
 
    blitter_set_common_draw_rect_state(ctx, false, false);
 
-   for (src_level = base_level; src_level < last_level; src_level++) {
+   for (src_level = base_level; src_level < last_level;
+        src_level += levels_per_draw) {
       struct pipe_box dstbox = {0}, srcbox = {0};
       unsigned dst_level = src_level + 1;
 
@@ -2393,10 +2405,17 @@ void util_blitter_generate_mipmap(struct blitter_context *blitter,
          dstbox.depth = srcbox.depth = last_layer - first_layer + 1;
       }
 
-      /* Initialize the surface. */
-      util_blitter_default_dst_texture(&dst_templ, tex, dst_level,
-                                       first_layer);
-      dst_templ.format = format;
+      /* Initialize the surface. levels_per_draw is clamped to the remaining
+       * number of levels and excludes 1 to 1 downscales in any direction.
+       */
+      levels_per_draw = MIN3(levels_per_draw, last_level - src_level,
+                             util_last_bit(MIN2(dstbox.width, dstbox.height)));
+      assert(levels_per_draw >= 1);
+      for (cbuf = 0; cbuf < levels_per_draw; cbuf++, dst_level++) {
+         util_blitter_default_dst_texture(&dst_templ[cbuf], tex, dst_level,
+                                          first_layer);
+         dst_templ[cbuf].format = format;
+      }
 
       /* Initialize the sampler view. */
       util_blitter_default_src_texture(blitter, &src_templ, tex, src_level);
@@ -2405,8 +2424,8 @@ void util_blitter_generate_mipmap(struct blitter_context *blitter,
 
       pipe->set_sampler_views(pipe, MESA_SHADER_FRAGMENT, 0, 1, 0, &src_view);
 
-      do_blits(ctx, &dst_templ, &dstbox, src_view, tex->width0, tex->height0,
-               &srcbox, is_depth, false, false, 0);
+      do_blits(ctx, dst_templ, &dstbox, src_view, tex->width0, tex->height0,
+               &srcbox, is_depth, false, false, 0, levels_per_draw);
 
       pipe_sampler_view_reference(&src_view, NULL);
    }

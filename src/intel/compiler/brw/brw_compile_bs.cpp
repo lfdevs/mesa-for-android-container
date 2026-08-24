@@ -55,7 +55,8 @@ compile_single_bs(const struct brw_compiler *compiler,
                   nir_shader *shader,
                   bool needs_register_pressure)
 {
-   const bool debug_enabled = brw_should_print_shader(shader, DEBUG_RT, params->base.source_hash);
+   const bool debug_enabled = brw_should_print_shader(
+      shader, DEBUG_RT, prog_data->base.source_hash);
 
    prog_data->max_stack_size = MAX2(prog_data->max_stack_size,
                                     shader->scratch_size);

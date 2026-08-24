@@ -95,6 +95,7 @@ struct tu_cs
    enum tu_cs_mode mode;
    bool writeable;
    uint32_t next_bo_size;
+   VkResult status;
 
    struct tu_cs_entry *entries;
    uint32_t entry_count;
@@ -177,6 +178,8 @@ static inline struct tu_draw_state
 tu_cs_end_draw_state(struct tu_cs *cs, struct tu_cs *sub_cs)
 {
    struct tu_cs_entry entry = tu_cs_end_sub_stream(cs, sub_cs);
+   if (!entry.bo)
+      return (struct tu_draw_state) {};
    return (struct tu_draw_state) {
       .iova = entry.bo->iova + entry.offset,
       .size = entry.size / sizeof(uint32_t),
@@ -187,6 +190,22 @@ tu_cs_end_draw_state(struct tu_cs *cs, struct tu_cs *sub_cs)
 VkResult
 tu_cs_reserve_space(struct tu_cs *cs, uint32_t reserved_size);
 
+/* Write sink for OOM state: tu_cs_emit writes here harmlessly instead of
+ * needing a per-dword status branch that would prevent vectorization.
+ * Sized to the PM4 maximum (14-bit count field + header = 16384 dwords) so
+ * no single tu_cs_reserve call can overflow it.
+ */
+#define TU_CS_FAIL_SINK_SIZE 16384
+extern uint32_t tu_cs_fail_sink[TU_CS_FAIL_SINK_SIZE];
+
+static inline void
+tu_cs_fail(struct tu_cs *cs, VkResult result)
+{
+   cs->status = result;
+   cs->cur = tu_cs_fail_sink;
+   cs->reserved_end = tu_cs_fail_sink + ARRAY_SIZE(tu_cs_fail_sink);
+}
+
 uint64_t
 tu_cs_get_cur_iova(const struct tu_cs *cs);
 
@@ -195,8 +214,13 @@ tu_cs_draw_state(struct tu_cs *sub_cs, struct tu_cs *cs, uint32_t size)
 {
    struct tu_cs_memory memory;
 
-   /* TODO: clean this up */
-   tu_cs_alloc(sub_cs, size, 1, &memory);
+   VkResult result = tu_cs_alloc(sub_cs, size, 1, &memory);
+   if (result != VK_SUCCESS) {
+      /* Freshly declared, nothing owned yet so safe to zero. */
+      memset(cs, 0, sizeof(*cs));
+      tu_cs_fail(cs, result);
+      return (struct tu_draw_state) {};
+   }
    tu_cs_init_external(cs, sub_cs->device, memory.map, memory.map + size,
                        memory.iova, memory.writeable);
    tu_cs_begin(cs);
@@ -311,6 +335,11 @@ tu_cs_get_space(const struct tu_cs *cs)
 static inline void
 tu_cs_reserve(struct tu_cs *cs, uint32_t reserved_size)
 {
+   if (unlikely(cs->status != VK_SUCCESS)) {
+      tu_cs_fail(cs, cs->status);
+      return;
+   }
+
    if (cs->mode != TU_CS_MODE_GROW) {
       assert(tu_cs_get_space(cs) >= reserved_size);
       assert(cs->reserved_end == cs->end);
@@ -323,9 +352,13 @@ tu_cs_reserve(struct tu_cs *cs, uint32_t reserved_size)
       return;
    }
 
-   ASSERTED VkResult result = tu_cs_reserve_space(cs, reserved_size);
-   /* TODO: set this error in tu_cs and use it */
-   assert(result == VK_SUCCESS);
+   tu_cs_reserve_space(cs, reserved_size);
+}
+
+static inline VkResult
+tu_cs_get_status(const struct tu_cs *cs)
+{
+   return cs->status;
 }
 
 /**

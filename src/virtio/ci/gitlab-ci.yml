@@ -59,7 +59,7 @@ android-angle-venus-anv-adl-cts:
     DEVICE_HANGING_TIMEOUT_SEC: 5400  # Android CTS might not print anything for minutes
     # Xe regression in 6.18+
     # https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/7584
-    KERNEL_TAG: "v6.17-mesa-ddf6"
+    KERNEL_TAG: "v6.17-mesa-e9d0"
   timeout: 2h
 
 android-angle-venus-anv-tgl:
@@ -84,7 +84,7 @@ android-angle-venus-anv-adl:
     HWCI_KERNEL_MODULES: "xe,vhost_vsock"
     # Xe regression in 6.18+
     # https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/7584
-    KERNEL_TAG: "v6.17-mesa-ddf6"
+    KERNEL_TAG: "v6.17-mesa-e9d0"
   parallel: 4
 
 android-angle-venus-tu-a618:

@@ -12,7 +12,7 @@
 
 #include "util/disk_cache.h"
 #include "util/hex.h"
-#include "venus-protocol/vn_protocol_driver_device.h"
+#include "vn_protocol_driver_device.h"
 
 #include "vn_android.h"
 #include "vn_instance.h"
@@ -45,9 +45,6 @@ vn_queue_fini(struct vn_queue *queue)
    if (queue->wait_fence != VK_NULL_HANDLE) {
       vn_DestroyFence(dev_handle, queue->wait_fence, NULL);
    }
-   if (queue->sparse_semaphore != VK_NULL_HANDLE) {
-      vn_DestroySemaphore(dev_handle, queue->sparse_semaphore, NULL);
-   }
    vn_cached_storage_fini(&queue->storage);
    vn_queue_base_fini(&queue->base);
 }
@@ -55,6 +52,7 @@ vn_queue_fini(struct vn_queue *queue)
 static VkResult
 vn_queue_init(struct vn_device *dev,
               struct vn_queue *queue,
+              uint32_t array_index,
               const VkDeviceQueueCreateInfo *queue_info,
               uint32_t queue_index,
               struct vn_queue *shared_queue)
@@ -63,6 +61,8 @@ vn_queue_init(struct vn_device *dev,
       vn_queue_base_init(&queue->base, &dev->base, queue_info, queue_index);
    if (result != VK_SUCCESS)
       return result;
+
+   queue->index = array_index;
 
    vn_cached_storage_init(&queue->storage, &dev->base.vk.alloc);
 
@@ -112,6 +112,10 @@ vn_device_init_queues(struct vn_device *dev,
 {
    const VkAllocationCallbacks *alloc = &dev->base.vk.alloc;
 
+   /* allowed in maintenance9 */
+   if (!create_info->queueCreateInfoCount)
+      return VK_SUCCESS;
+
    uint32_t count = 0;
    for (uint32_t i = 0; i < create_info->queueCreateInfoCount; i++)
       count += create_info->pQueueCreateInfos[i].queueCount;
@@ -130,8 +134,8 @@ vn_device_init_queues(struct vn_device *dev,
       const VkDeviceQueueCreateInfo *queue_info =
          &create_info->pQueueCreateInfos[i];
       for (uint32_t j = 0; j < queue_info->queueCount; j++) {
-         result =
-            vn_queue_init(dev, &queues[count], queue_info, j, shared_queue);
+         result = vn_queue_init(dev, &queues[count], count, queue_info, j,
+                                shared_queue);
          if (result != VK_SUCCESS) {
             for (uint32_t k = 0; k < count; k++)
                vn_queue_fini(&queues[k]);
@@ -295,13 +299,6 @@ vn_device_fix_create_info(const struct vn_device *dev,
       }
 
       if (app_exts->ANDROID_native_buffer) {
-         /* see vn_QueueSignalReleaseImageANDROID */
-         if (!app_exts->KHR_external_fence_fd) {
-            assert(physical_dev->renderer_sync_fd.fence_exportable);
-            extra_exts[extra_count++] =
-               VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME;
-         }
-
          block_exts[block_count++] = VK_ANDROID_NATIVE_BUFFER_EXTENSION_NAME;
       }
 
@@ -326,18 +323,22 @@ vn_device_fix_create_info(const struct vn_device *dev,
       }
    }
 
-   /* see vn_queue_submission_count_batch_semaphores */
-   if (!app_exts->KHR_external_semaphore_fd && has_wsi) {
-      assert(physical_dev->renderer_sync_fd.semaphore_importable);
-      extra_exts[extra_count++] = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
-   }
-
    /* see vn_cmd_set_external_acquire_unmodified */
    if (VN_PRESENT_SRC_INTERNAL_LAYOUT != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
        renderer_exts->EXT_external_memory_acquire_unmodified &&
        !app_exts->EXT_external_memory_acquire_unmodified && has_wsi) {
       extra_exts[extra_count++] =
          VK_EXT_EXTERNAL_MEMORY_ACQUIRE_UNMODIFIED_EXTENSION_NAME;
+   }
+
+   if (app_exts->KHR_external_fence_fd) {
+      /* see vn_physical_device_get_native_extensions */
+      block_exts[block_count++] = VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME;
+   }
+
+   if (app_exts->KHR_external_semaphore_fd) {
+      /* see vn_physical_device_get_native_extensions */
+      block_exts[block_count++] = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
    }
 
    if (app_exts->KHR_map_memory2) {
@@ -397,8 +398,7 @@ vn_device_feedback_pool_init(struct vn_device *dev)
    static const uint32_t pool_size = 4096;
    const VkAllocationCallbacks *alloc = &dev->base.vk.alloc;
 
-   if (VN_PERF(NO_EVENT_FEEDBACK) && VN_PERF(NO_FENCE_FEEDBACK) &&
-       VN_PERF(NO_SEMAPHORE_FEEDBACK))
+   if (VN_PERF(NO_EVENT_FEEDBACK) && VN_PERF(NO_SEMAPHORE_FEEDBACK))
       return VK_SUCCESS;
 
    return vn_feedback_pool_init(dev, &dev->feedback_pool, pool_size, alloc);
@@ -407,8 +407,7 @@ vn_device_feedback_pool_init(struct vn_device *dev)
 static inline void
 vn_device_feedback_pool_fini(struct vn_device *dev)
 {
-   if (VN_PERF(NO_EVENT_FEEDBACK) && VN_PERF(NO_FENCE_FEEDBACK) &&
-       VN_PERF(NO_SEMAPHORE_FEEDBACK))
+   if (VN_PERF(NO_EVENT_FEEDBACK) && VN_PERF(NO_SEMAPHORE_FEEDBACK))
       return;
 
    vn_feedback_pool_fini(&dev->feedback_pool);
@@ -546,9 +545,6 @@ vn_device_init(struct vn_device *dev,
     * cache is no longer up to date.
     */
    vn_device_update_shader_cache_id(dev);
-
-   dev->has_sync2 = physical_dev->renderer_version >= VK_API_VERSION_1_3 ||
-                    dev->base.vk.enabled_extensions.KHR_synchronization2;
 
    simple_mtx_init(&dev->mutex, mtx_plain);
    list_inithead(&dev->chains);

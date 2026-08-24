@@ -26,6 +26,7 @@
 #include "vk_object.h"
 #include "util/log.h"
 #include "common/v3d_debug.h"
+#include "vk_debug_utils.h"
 
 #ifdef HAVE_VALGRIND
 #include <valgrind.h>
@@ -52,5 +53,34 @@
 
 #define V3DV_FROM_HANDLE(__v3dv_type, __name, __handle)			\
    VK_FROM_HANDLE(__v3dv_type, __name, __handle)
+
+static inline void
+v3dv_emit_device_memory_report(struct vk_device *device,
+                               VkResult result,
+                               bool is_alloc,
+                               bool is_import,
+                               uint64_t mem_obj_id,
+                               VkDeviceSize size,
+                               VkObjectType obj_type,
+                               uint64_t obj_handle)
+{
+   if (likely(!device->memory_reports))
+      return;
+
+   VkDeviceMemoryReportEventTypeEXT type;
+   if (result != VK_SUCCESS) {
+      type = VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_ALLOCATION_FAILED_EXT;
+   } else if (is_alloc) {
+      type = is_import ? VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_IMPORT_EXT
+                       : VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_ALLOCATE_EXT;
+   } else {
+      type = is_import ? VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_UNIMPORT_EXT
+                       : VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_FREE_EXT;
+   }
+
+   /* heap_index is always zero since broadcom is an iGPU */
+   vk_emit_device_memory_report(device, type, mem_obj_id, size,
+                                obj_type, obj_handle, 0);
+}
 
 #endif /* V3DV_COMMON_H */

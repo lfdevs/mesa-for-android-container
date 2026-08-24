@@ -99,6 +99,8 @@ get_info(nir_intrinsic_op op)
       INFO(nir_var_mem_global, load_global_transpose_amd, true, -1, 0, -1, -1, 1)
       STORE(nir_var_mem_global, global, -1, 1, -1, 0, 1)
       LOAD(nir_var_mem_global, global_constant, -1, 0, -1, 1)
+      LOAD(nir_var_mem_global, global_offset, 0, 1, -1, 1)
+      STORE(nir_var_mem_global, global_offset, 1, 2, -1, 0, 1)
       LOAD(nir_var_mem_task_payload, task_payload, -1, 0, -1, 1)
       STORE(nir_var_mem_task_payload, task_payload, -1, 1, -1, 0, 1)
       ATOMIC(nir_var_mem_ssbo, ssbo, 0, 1, -1, 2, 1)
@@ -176,6 +178,12 @@ struct entry_key {
 struct entry {
    struct list_head head;
    int index;
+
+   struct {
+      nir_variable_mode mode;
+      bool acquire;
+      bool release;
+   } barrier;
 
    struct entry_key *key;
    /* The constant offset is sign-extended to 64 bits. */
@@ -715,9 +723,13 @@ static void
 calc_alignment(struct entry *entry)
 {
    if (entry->intrin->intrinsic == nir_intrinsic_load_buffer_amd ||
-       entry->intrin->intrinsic == nir_intrinsic_store_buffer_amd) {
+       entry->intrin->intrinsic == nir_intrinsic_store_buffer_amd ||
+       entry->intrin->intrinsic == nir_intrinsic_load_global_offset ||
+       entry->intrin->intrinsic == nir_intrinsic_store_global_offset) {
       /* The alignment is the result of the descriptor and several offset/index sources, so just use
        * the original alignment.
+       * For global_offset, the final address is the sum of the 64b base address and the 32b offset
+       * so we cannot calculate the alignment by looking at the offset alone.
        */
       entry->align_mul = nir_intrinsic_align_mul(entry->intrin);
       entry->align_offset = nir_intrinsic_align_offset(entry->intrin);
@@ -742,6 +754,34 @@ calc_alignment(struct entry *entry)
       entry->align_mul = nir_intrinsic_align_mul(entry->intrin);
       entry->align_offset = nir_intrinsic_align_offset(entry->intrin);
    }
+}
+
+static void
+parse_entry_offset(struct vectorize_ctx *ctx, struct entry *entry)
+{
+   entry->offset = 0;
+   entry->total_add32 = 0;
+
+   nir_intrinsic_instr *intrin = entry->intrin;
+   if (entry->info->deref_src >= 0) {
+      entry->deref = nir_src_as_deref(intrin->src[entry->info->deref_src]);
+      nir_deref_path path;
+      nir_deref_path_init(&path, entry->deref, NULL);
+      create_entry_key_from_deref(ctx, entry, &path);
+      nir_deref_path_finish(&path);
+   } else {
+      nir_def *base = entry->info->base_src >= 0 ? intrin->src[entry->info->base_src].ssa : NULL;
+      unsigned offset_scale = get_offset_scale(entry);
+      if (nir_intrinsic_has_base(intrin))
+         entry->offset = nir_intrinsic_base(intrin) * offset_scale;
+      create_entry_key_from_offset(ctx, entry, base, offset_scale);
+
+      if (base)
+         entry->offset = util_mask_sign_extend(entry->offset, base->bit_size);
+   }
+
+   if (entry->info->resource_src >= 0)
+      entry->key->resource = intrin->src[entry->info->resource_src].ssa;
 }
 
 static struct entry *
@@ -769,25 +809,7 @@ create_entry(struct vectorize_ctx *ctx,
       entry->num_components = 1;
    }
 
-   if (entry->info->deref_src >= 0) {
-      entry->deref = nir_src_as_deref(intrin->src[entry->info->deref_src]);
-      nir_deref_path path;
-      nir_deref_path_init(&path, entry->deref, NULL);
-      create_entry_key_from_deref(ctx, entry, &path);
-      nir_deref_path_finish(&path);
-   } else {
-      nir_def *base = entry->info->base_src >= 0 ? intrin->src[entry->info->base_src].ssa : NULL;
-      unsigned offset_scale = get_offset_scale(entry);
-      if (nir_intrinsic_has_base(intrin))
-         entry->offset = nir_intrinsic_base(intrin) * offset_scale;
-      create_entry_key_from_offset(ctx, entry, base, offset_scale);
-
-      if (base)
-         entry->offset = util_mask_sign_extend(entry->offset, base->bit_size);
-   }
-
-   if (entry->info->resource_src >= 0)
-      entry->key->resource = intrin->src[entry->info->resource_src].ssa;
+   parse_entry_offset(ctx, entry);
 
    if (nir_intrinsic_has_access(intrin))
       entry->access = nir_intrinsic_access(intrin);
@@ -1749,7 +1771,7 @@ vectorize_entries(struct vectorize_ctx *ctx, nir_function_impl *impl, struct has
 }
 
 static bool
-handle_barrier(struct vectorize_ctx *ctx, bool *progress, nir_function_impl *impl, nir_instr *instr)
+handle_barrier(struct vectorize_ctx *ctx, nir_instr *instr, unsigned index)
 {
    unsigned modes = 0;
    bool acquire = true;
@@ -1801,22 +1823,17 @@ handle_barrier(struct vectorize_ctx *ctx, bool *progress, nir_function_impl *imp
       return false;
    }
 
-   while (modes) {
-      unsigned mode_index = u_bit_scan(&modes);
-      if ((1 << mode_index) == nir_var_mem_global) {
-         /* Global should be rolled in with SSBO */
-         assert(list_is_empty(&ctx->entries[mode_index]));
-         assert(ctx->loads[mode_index] == NULL);
-         assert(ctx->stores[mode_index] == NULL);
-         continue;
-      }
-
-      if (acquire) {
-         *progress |= vectorize_entries(ctx, impl, ctx->loads[mode_index]);
-         ctx->prev_load_barrier[mode_index] = instr->index;
-      }
-      if (release)
-         *progress |= vectorize_entries(ctx, impl, ctx->stores[mode_index]);
+   /* We create entries for barriers instead of vectorizing entries here because
+    * we can't compare entry keys from before vectorization with those created after.
+    */
+   u_foreach_bit(i, modes) {
+      struct entry *entry = linear_zalloc(ctx->linear_mem_ctx, struct entry);
+      entry->index = index;
+      entry->barrier.mode = 1 << i;
+      entry->barrier.acquire = acquire;
+      entry->barrier.release = release;
+      entry->instr = instr;
+      list_addtail(&entry->head, &ctx->entries[mode_to_index(entry->barrier.mode)]);
    }
 
    return true;
@@ -1891,8 +1908,13 @@ add_entries_from_predecessor(struct vectorize_ctx *ctx, nir_block *block)
       if (entry) {
          /* Ensure that the predecessor entry is always considered as first. */
          entry->index = -1;
+
+         /* We can't compare future keys with ones created from a less vectorized
+          * shader, so recreate the key.
+          */
+         parse_entry_offset(ctx, entry);
+
          list_addtail(&entry->head, &ctx->entries[i]);
-         add_entry_to_hash_table(ctx, entry);
       }
    }
 }
@@ -1915,11 +1937,10 @@ process_block(nir_function_impl *impl, struct vectorize_ctx *ctx, nir_block *blo
 
    /* create entries */
    unsigned next_index = 0;
-
    nir_foreach_instr_safe(instr, block) {
       instr->index = next_index++;
 
-      if (handle_barrier(ctx, &progress, impl, instr))
+      if (handle_barrier(ctx, instr, next_index))
          continue;
 
       /* gather information */
@@ -1945,11 +1966,24 @@ process_block(nir_function_impl *impl, struct vectorize_ctx *ctx, nir_block *blo
       entry->index = next_index;
 
       list_addtail(&entry->head, &ctx->entries[mode_index]);
-      add_entry_to_hash_table(ctx, entry);
    }
 
    /* sort and combine entries */
    for (unsigned i = 0; i < nir_num_variable_modes; i++) {
+      list_for_each_entry_safe(struct entry, entry, &ctx->entries[i], head) {
+         if (entry->barrier.acquire) {
+            progress |= vectorize_entries(ctx, impl, ctx->loads[i]);
+            ctx->prev_load_barrier[i] = entry->instr->index;
+         }
+         if (entry->barrier.release)
+            progress |= vectorize_entries(ctx, impl, ctx->stores[i]);
+
+         if (entry->barrier.mode)
+            list_del(&entry->head); /* We don't want these to be added to a successor. */
+         else
+            add_entry_to_hash_table(ctx, entry);
+      }
+
       progress |= vectorize_entries(ctx, impl, ctx->loads[i]);
       progress |= vectorize_entries(ctx, impl, ctx->stores[i]);
 

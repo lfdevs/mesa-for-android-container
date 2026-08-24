@@ -9,13 +9,16 @@
 #include <sys/resource.h>
 #endif
 
-#include "venus-protocol/vn_protocol_driver_transport.h"
+#include "vn_protocol_driver_transport.h"
 
 #include "vn_cs.h"
 #include "vn_instance.h"
 #include "vn_renderer.h"
 
 #define VN_RING_IDLE_TIMEOUT_NS (1ull * 1000 * 1000)
+
+/* for better recycle of the vn_ring_submit batch */
+#define VN_MIN_SHMEM_COUNT (2)
 
 static_assert(ATOMIC_INT_LOCK_FREE == 2 && sizeof(atomic_uint) == 4,
               "vn_ring_shared requires lock-free 32-bit atomic_uint");
@@ -131,11 +134,11 @@ vn_ring_write_buffer(struct vn_ring *ring, const void *data, uint32_t size)
 
    const uint32_t offset = ring->cur & ring->buffer_mask;
    if (offset + size <= ring->buffer_size) {
-      memcpy(ring->shared.buffer + offset, data, size);
+      memcpy((char *)ring->shared.buffer + offset, data, size);
    } else {
       const uint32_t s = ring->buffer_size - offset;
-      memcpy(ring->shared.buffer + offset, data, s);
-      memcpy(ring->shared.buffer, data + s, size - s);
+      memcpy((char *)ring->shared.buffer + offset, data, s);
+      memcpy(ring->shared.buffer, (const char *)data + s, size - s);
    }
 
    ring->cur += size;
@@ -168,7 +171,12 @@ vn_ring_retire_submits(struct vn_ring *ring, uint32_t seqno)
       for (uint32_t i = 0; i < submit->shmem_count; i++)
          vn_renderer_shmem_unref(renderer, submit->shmems[i]);
 
-      list_move_to(&submit->head, &ring->free_submits);
+      if (submit->shmem_count <= VN_MIN_SHMEM_COUNT) {
+         list_move_to(&submit->head, &ring->free_submits);
+      } else {
+         list_del(&submit->head);
+         free(submit);
+      }
    }
 }
 
@@ -308,11 +316,11 @@ vn_ring_create(struct vn_instance *instance,
    ring->buffer_size = layout->buffer_size;
    ring->buffer_mask = ring->buffer_size - 1;
 
-   ring->shared.head = shared + layout->head_offset;
-   ring->shared.tail = shared + layout->tail_offset;
-   ring->shared.status = shared + layout->status_offset;
-   ring->shared.buffer = shared + layout->buffer_offset;
-   ring->shared.extra = shared + layout->extra_offset;
+   ring->shared.head = (void *)((char *)shared + layout->head_offset);
+   ring->shared.tail = (void *)((char *)shared + layout->tail_offset);
+   ring->shared.status = (void *)((char *)shared + layout->status_offset);
+   ring->shared.buffer = (char *)shared + layout->buffer_offset;
+   ring->shared.extra = (char *)shared + layout->extra_offset;
 
    mtx_init(&ring->mutex, mtx_plain);
 
@@ -418,18 +426,21 @@ vn_ring_get_id(struct vn_ring *ring)
 static struct vn_ring_submit *
 vn_ring_get_submit(struct vn_ring *ring, uint32_t shmem_count)
 {
-   list_for_each_entry_safe(struct vn_ring_submit, submit,
-                            &ring->free_submits, head) {
-      if (submit->shmem_count >= shmem_count) {
-         list_del(&submit->head);
-         return submit;
-      }
+   struct vn_ring_submit *submit;
+
+   if (shmem_count <= VN_MIN_SHMEM_COUNT &&
+       !list_is_empty(&ring->free_submits)) {
+      submit =
+         list_first_entry(&ring->free_submits, struct vn_ring_submit, head);
+      list_del(&submit->head);
+   } else {
+      const size_t submit_size =
+         offsetof(struct vn_ring_submit,
+                  shmems[MAX2(shmem_count, VN_MIN_SHMEM_COUNT)]);
+      submit = malloc(submit_size);
    }
 
-   const uint32_t min_shmem_count = 2;
-   const size_t submit_size = offsetof(
-      struct vn_ring_submit, shmems[MAX2(shmem_count, min_shmem_count)]);
-   return malloc(submit_size);
+   return submit;
 }
 
 static bool
@@ -717,7 +728,8 @@ vn_ring_submit_command(struct vn_ring *ring,
 
    if (submit->reply_size) {
       if (likely(submit->ring_seqno_valid)) {
-         void *reply_ptr = submit->reply_shmem->mmap_ptr + reply_offset;
+         void *reply_ptr =
+            (char *)submit->reply_shmem->mmap_ptr + reply_offset;
          submit->reply =
             VN_CS_DECODER_INITIALIZER(reply_ptr, submit->reply_size);
          vn_ring_wait_seqno(ring, submit->ring_seqno);

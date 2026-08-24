@@ -483,7 +483,7 @@ radv_compute_copy_memory_to_image_indirect(struct radv_cmd_buffer *cmd_buffer,
                                  .pNext = &iview_usage_info,
                                  .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                                  .image = radv_image_to_handle(dst_image),
-                                 .viewType = radv_meta_get_view_type(dst_image),
+                                 .viewType = radv_meta_get_view_type(dst_image, false),
                                  .format = img_bsurf.format,
                                  .subresourceRange =
                                     {

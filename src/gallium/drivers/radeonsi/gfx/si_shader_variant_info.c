@@ -368,6 +368,7 @@ void si_get_shader_variant_info(struct si_shader *shader,
          S_0286CC_PERSP_SAMPLE_ENA(BITSET_TEST(sysvals, SYSTEM_VALUE_BARYCENTRIC_PERSP_SAMPLE)) |
          S_0286CC_PERSP_CENTER_ENA(BITSET_TEST(sysvals, SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL)) |
          S_0286CC_PERSP_CENTROID_ENA(BITSET_TEST(sysvals, SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID)) |
+         S_0286CC_PERSP_PULL_MODEL_ENA(BITSET_TEST(sysvals, SYSTEM_VALUE_BARYCENTRIC_PULL_MODEL)) |
          S_0286CC_LINEAR_SAMPLE_ENA(BITSET_TEST(sysvals, SYSTEM_VALUE_BARYCENTRIC_LINEAR_SAMPLE)) |
          S_0286CC_LINEAR_CENTER_ENA(BITSET_TEST(sysvals, SYSTEM_VALUE_BARYCENTRIC_LINEAR_PIXEL)) |
          S_0286CC_LINEAR_CENTROID_ENA(BITSET_TEST(sysvals, SYSTEM_VALUE_BARYCENTRIC_LINEAR_CENTROID)) |
@@ -584,22 +585,31 @@ void si_set_spi_ps_input_config_for_separate_prolog(struct si_shader *shader)
 
 void si_fixup_spi_ps_input_config(struct si_shader *shader)
 {
-   /* POW_W_FLOAT requires that one of the perspective weights is enabled. */
+   /* POW_W_FLOAT requires that one set of perspective barycentric coordinates is enabled. */
    if (G_0286CC_POS_W_FLOAT_ENA(shader->config.spi_ps_input_ena) &&
-       !(shader->config.spi_ps_input_ena & 0xf)) {
+       !G_0286CC_PERSP_SAMPLE_ENA(shader->config.spi_ps_input_ena) &&
+       !G_0286CC_PERSP_CENTER_ENA(shader->config.spi_ps_input_ena) &&
+       !G_0286CC_PERSP_CENTROID_ENA(shader->config.spi_ps_input_ena) &&
+       !G_0286CC_PERSP_PULL_MODEL_ENA(shader->config.spi_ps_input_ena))
       shader->config.spi_ps_input_ena |= S_0286CC_PERSP_SAMPLE_ENA(1);
-   }
 
-   /* At least one pair of barycentric coordinates or LINE_STIPPLE_TEX_ENA must be enabled.
+   /* At least one set of barycentric coordinates or LINE_STIPPLE_TEX_ENA must be enabled.
     * Since LINE_STIPPLE_TEX_ENA is the only one that loads only 1 VGPR, use it.
-    *
-    * We can't set LINE_STIPPLE_TEX_ENA on GFX12 because it reduces primitive throughput to only
-    * 1 SE. Other gens are fine (tested on Navi10, Navi21, Navi31).
-    * TODO: Test Strix Halo.
     */
-   if (!(shader->config.spi_ps_input_ena & 0x7f) &&
+   if (!G_0286CC_PERSP_SAMPLE_ENA(shader->config.spi_ps_input_ena) &&
+       !G_0286CC_PERSP_CENTER_ENA(shader->config.spi_ps_input_ena) &&
+       !G_0286CC_PERSP_CENTROID_ENA(shader->config.spi_ps_input_ena) &&
+       !G_0286CC_PERSP_PULL_MODEL_ENA(shader->config.spi_ps_input_ena) &&
+       !G_0286CC_LINEAR_SAMPLE_ENA(shader->config.spi_ps_input_ena) &&
+       !G_0286CC_LINEAR_CENTER_ENA(shader->config.spi_ps_input_ena) &&
+       !G_0286CC_LINEAR_CENTROID_ENA(shader->config.spi_ps_input_ena) &&
        !G_0286CC_LINE_STIPPLE_TEX_ENA(shader->config.spi_ps_input_ena)) {
-      /* LLVM sets PERSP_SAMPLE_ENA in this case, so we have to do the same. */
+      /* LLVM sets PERSP_SAMPLE_ENA in this case, so we have to do the same.
+       *
+       * We can't set LINE_STIPPLE_TEX_ENA on GFX12 because it reduces primitive throughput to only
+       * 1 SE. Other gens are fine (tested on Navi10, Navi21, Navi31).
+       * TODO: Test Strix Halo.
+       */
       if (shader->selector->info.base.use_aco_amd &&
           shader->selector->screen->info.gfx_level != GFX12)
          shader->config.spi_ps_input_ena |= S_0286CC_LINE_STIPPLE_TEX_ENA(1);

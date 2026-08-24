@@ -299,12 +299,15 @@ fd2_emit_state(struct fd_context *ctx, const enum fd_dirty_3d_state dirty)
    if (dirty & (FD_DIRTY_SCISSOR | FD_DIRTY_RASTERIZER)) {
       struct pipe_scissor_state *scissor = fd_context_get_scissor(ctx);
 
+      /* the scissor we are handed has an inclusive bottom right, which is
+       * what the later generations take, but this one wants it exclusive
+       */
       OUT_PKT3(ring, CP_SET_CONSTANT, 3);
       OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_WINDOW_SCISSOR_TL));
       OUT_RING(ring, xy2d(scissor->minx, /* PA_SC_WINDOW_SCISSOR_TL */
                           scissor->miny));
-      OUT_RING(ring, xy2d(scissor->maxx, /* PA_SC_WINDOW_SCISSOR_BR */
-                          scissor->maxy));
+      OUT_RING(ring, xy2d(scissor->maxx + 1, /* PA_SC_WINDOW_SCISSOR_BR */
+                          scissor->maxy + 1));
 
       ctx->batch->max_scissor.minx =
          MIN2(ctx->batch->max_scissor.minx, scissor->minx);

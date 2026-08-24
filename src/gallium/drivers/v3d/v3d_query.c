@@ -208,7 +208,6 @@ v3d_submit_timestamp_query(struct pipe_context *pctx, struct v3d_bo *bo,
 {
         struct v3d_context *v3d = v3d_context(pctx);
         struct v3d_screen *screen = v3d->screen;
-        int ret;
 
         /* check for multisync support */
         assert(screen->has_multisync);
@@ -219,14 +218,6 @@ v3d_submit_timestamp_query(struct pipe_context *pctx, struct v3d_bo *bo,
         /* check for a valid syncobj */
         assert(sync);
 
-        struct drm_v3d_timestamp_query timestamp = {0};
-
-        v3d_submit_ext_set(&timestamp.base, NULL, DRM_V3D_EXT_ID_CPU_TIMESTAMP_QUERY, 0);
-
-        timestamp.count = 1;
-        timestamp.offsets = (uintptr_t)(void *)&offset;
-        timestamp.syncs = (uintptr_t)(void *)&sync;
-
         struct v3d_submit_sync_info sync_info = {
            .wait_count = 1,
            .waits = &v3d->out_sync,
@@ -236,20 +227,11 @@ v3d_submit_timestamp_query(struct pipe_context *pctx, struct v3d_bo *bo,
 
         struct v3d_multisync ms = {0};
 
-        if (!multisync_set(v3d, &ms, &sync_info, (void *)&timestamp, V3D_CPU))
+        if (!multisync_set(v3d, &ms, &sync_info, NULL, V3D_CPU))
            return -ENOMEM;
 
-        struct drm_v3d_submit_cpu submit = {0};
-
-        submit.bo_handle_count = 1;
-        submit.bo_handles = (uintptr_t)(void *)&bo->handle;
-        submit.flags |= DRM_V3D_SUBMIT_EXTENSION;
-        submit.extensions = (uintptr_t)(void *)&ms.ext;
-
-        ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_SUBMIT_CPU, &submit);
-        if (ret)
-           mesa_loge("Failed to submit cpu job: %s", strerror(errno));
-
+        int ret = v3d_submit_timestamp_query_ioctl(screen->fd, bo->handle,
+                                                   &offset, &sync, 1, &ms.ext.base);
         v3d_multisync_free(&ms);
         return ret;
 }

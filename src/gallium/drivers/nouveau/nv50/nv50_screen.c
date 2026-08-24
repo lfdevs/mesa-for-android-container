@@ -208,6 +208,9 @@ nv50_init_screen_caps(struct nv50_screen *screen)
    caps->min_map_buffer_alignment = NOUVEAU_MIN_BUFFER_MAP_ALIGN;
    caps->max_viewports = NV50_MAX_VIEWPORTS;
    caps->texture_border_color_quirk = PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50;
+   caps->device_type = dev->info.type == NV_DEVICE_TYPE_DIS
+      ? PIPE_DEVICE_TYPE_DISCRETE_GPU
+      : PIPE_DEVICE_TYPE_INTEGRATED_GPU;
    caps->endianness = PIPE_ENDIAN_LITTLE;
    caps->max_texture_gather_components = (class_3d >= NVA3_3D_CLASS) ? 4 : 0;
    caps->max_window_rectangles = NV50_MAX_WINDOW_RECTANGLES;
@@ -320,6 +323,9 @@ nv50_init_screen_caps(struct nv50_screen *screen)
    caps->max_point_size_aa = 64.0f;
    caps->max_texture_anisotropy = 16.0f;
    caps->max_texture_lod_bias = 15.0f;
+
+   /* Up to 16 bytes are accelerated */
+   caps->hw_clear_buffer_sizes = 1 | 2 | 4 | 8 | 16;
 }
 
 static void
@@ -925,7 +931,7 @@ nv50_screen_tic_alloc(struct nv50_screen *screen, void *entry)
 {
    int i = screen->tic.next;
 
-   while (screen->tic.lock[i / 32] & (1 << (i % 32)))
+   while (screen->tic.lock[i / 32] & (1u << (i % 32)))
       i = (i + 1) & (NV50_TIC_MAX_ENTRIES - 1);
 
    screen->tic.next = (i + 1) & (NV50_TIC_MAX_ENTRIES - 1);
@@ -942,7 +948,7 @@ nv50_screen_tsc_alloc(struct nv50_screen *screen, void *entry)
 {
    int i = screen->tsc.next;
 
-   while (screen->tsc.lock[i / 32] & (1 << (i % 32)))
+   while (screen->tsc.lock[i / 32] & (1u << (i % 32)))
       i = (i + 1) & (NV50_TSC_MAX_ENTRIES - 1);
 
    screen->tsc.next = (i + 1) & (NV50_TSC_MAX_ENTRIES - 1);

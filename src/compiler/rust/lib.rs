@@ -14,4 +14,5 @@ pub mod memstream;
 pub mod nir;
 pub mod nir_instr_printer;
 pub mod smallvec;
+pub mod union_find;
 pub mod vec_pair;

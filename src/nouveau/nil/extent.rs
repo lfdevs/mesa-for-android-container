@@ -138,7 +138,7 @@ impl Extent4D<units::Pixels> {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nil_extent4d_px_to_el(
     extent_px: Extent4D<units::Pixels>,
     format: Format,
@@ -147,7 +147,7 @@ pub extern "C" fn nil_extent4d_px_to_el(
     extent_px.to_el(format, sample_layout)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nil_extent4d_px_to_tl(
     extent_px: Extent4D<units::Pixels>,
     tiling: &Tiling,
@@ -157,7 +157,7 @@ pub extern "C" fn nil_extent4d_px_to_tl(
     extent_px.to_tl(tiling, format, sample_layout)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nil_extent4d_px_to_B(
     extent_px: Extent4D<units::Pixels>,
     format: Format,
@@ -300,7 +300,7 @@ impl Offset4D<units::Pixels> {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nil_offset4d_px_to_el(
     offset: Offset4D<units::Pixels>,
     format: Format,
@@ -309,7 +309,7 @@ pub extern "C" fn nil_offset4d_px_to_el(
     offset.to_el(format, sample_layout)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nil_offset4d_px_to_tl(
     offset: Offset4D<units::Pixels>,
     tiling: &Tiling,
@@ -319,7 +319,7 @@ pub extern "C" fn nil_offset4d_px_to_tl(
     offset.to_tl(tiling, format, sample_layout)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nil_offset4d_px_to_B(
     offset: Offset4D<units::Pixels>,
     format: Format,

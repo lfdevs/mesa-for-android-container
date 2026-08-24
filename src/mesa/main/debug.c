@@ -160,6 +160,10 @@ set_debug_flags(const char *str)
 void
 _mesa_init_debug( struct gl_context *ctx )
 {
-   set_debug_flags(os_get_option("MESA_DEBUG"));
+   const char *mesa_debug = os_get_option("MESA_DEBUG");
+
+   set_debug_flags(mesa_debug);
    set_verbose_flags(os_get_option("MESA_VERBOSE"));
+   ctx->Const.AllowGLTextureLinearTiling =
+      mesa_debug && strstr(mesa_debug, "api-tiling-linear");
 }

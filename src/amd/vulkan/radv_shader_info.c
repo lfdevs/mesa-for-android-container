@@ -179,19 +179,35 @@ static void
 gather_push_constant_info(const nir_shader *nir, const nir_intrinsic_instr *instr, struct radv_shader_info *info)
 {
    uint32_t offset, size;
+   bool src_is_const;
 
-   if (nir_src_is_const(instr->src[0])) {
-      offset = nir_intrinsic_base(instr) + nir_src_as_uint(instr->src[0]);
-      size = instr->num_components * (instr->def.bit_size / 8u);
-   } else {
+   switch (instr->intrinsic) {
+   case nir_intrinsic_load_user_data_amd:
+      offset = 0;
+      size = util_last_bit(nir_def_components_read(&instr->def)) * (instr->def.bit_size / 8u);
+      src_is_const = true;
+      break;
+
+   case nir_intrinsic_load_push_constant:
       offset = nir_intrinsic_base(instr);
       size = nir_intrinsic_range(instr);
+      src_is_const = nir_src_is_const(instr->src[0]);
+
+      if (src_is_const) {
+         offset += nir_src_as_uint(instr->src[0]);
+         size = instr->num_components * (instr->def.bit_size / 8u);
+      }
+
+      break;
+
+   default:
+      UNREACHABLE("unsupported push constant intrinsic");
    }
 
    info->loads_push_constants = true;
    info->push_constant_size = MAX2(info->push_constant_size, offset + size);
 
-   if (nir_src_is_const(instr->src[0])) {
+   if (src_is_const) {
       const uint32_t start_dw = offset / 4;
       const uint32_t size_dw = DIV_ROUND_UP(size + offset % 4, 4);
 
@@ -279,6 +295,7 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
    case nir_intrinsic_load_frag_coord_w_rcp:
       info->ps.reads_frag_coord_mask |= BITFIELD_BIT(3);
       break;
+   case nir_intrinsic_load_user_data_amd:
    case nir_intrinsic_load_push_constant:
       gather_push_constant_info(nir, instr, info);
       break;
@@ -321,6 +338,9 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
    case nir_intrinsic_load_use_sample_mask_in_amd:
       info->ps.selects_sample_mask_in_dynamically = true;
       break;
+   case nir_intrinsic_load_front_face_select_amd:
+      info->ps.selects_front_face_dynamically = true;
+      break;
    default:
       break;
    }
@@ -341,6 +361,9 @@ gather_tex_info(const nir_shader *nir, const nir_tex_instr *instr, struct radv_s
          break;
       }
    }
+
+   if (nir_tex_instr_need_sampler(instr))
+      info->uses_sampler = true;
 }
 
 static void
@@ -803,6 +826,7 @@ gather_shader_info_fs(enum amd_gfx_level gfx_level, const nir_shader *nir,
    info->ps.depth_layout = nir->info.fs.depth_layout;
    info->ps.uses_sample_shading = nir->info.fs.uses_sample_shading;
    info->ps.writes_memory = nir->info.writes_memory;
+   info->ps.uses_fbfetch_output = nir->info.fs.uses_fbfetch_output;
    info->ps.has_pcoord = nir->info.inputs_read & VARYING_BIT_PNTC;
    info->ps.prim_id_input = nir->info.inputs_read & VARYING_BIT_PRIMITIVE_ID;
    info->ps.reads_layer = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_LAYER_ID);
@@ -846,13 +870,21 @@ gather_shader_info_fs(enum amd_gfx_level gfx_level, const nir_shader *nir,
       info->ps.spi_ps_input_addr &= C_02865C_COVERAGE_TO_SHADER_SELECT;
    }
 
-   info->ps.has_epilog = gfx_state->ps.has_epilog && info->ps.colors_written;
+   bool writes_mrt0_alpha = !!(info->ps.color0_written & 0x8);
 
-   const bool export_alpha = !!(info->ps.color0_written & 0x8);
+   /* If the PS epilog is present, it always executes all required exports (mrtz and mrt0-7
+    * if needed).
+    */
+   info->ps.has_epilog =
+      (gfx_state->ps.color_outputs_need_epilog && info->ps.colors_written) ||
+      (gfx_state->ps.depth_output_needs_epilog && info->ps.writes_z) ||
+      (gfx_state->ps.stencil_output_needs_epilog && info->ps.writes_stencil) ||
+      (gfx_state->ps.sample_mask_output_needs_epilog && info->ps.writes_sample_mask) ||
+      (writes_mrt0_alpha && ((gfx_level >= GFX11 && gfx_state->ms.alpha_to_coverage_unknown &&
+                              (info->ps.writes_z || info->ps.writes_stencil || info->ps.writes_sample_mask)) ||
+                             (gfx_state->ms.alpha_to_coverage_unknown && gfx_state->ms.alpha_to_one_enable)));
 
-   if (info->ps.has_epilog) {
-      info->ps.exports_mrtz_via_epilog = gfx_state->ps.exports_mrtz_via_epilog && export_alpha;
-   } else {
+   if (!info->ps.has_epilog) {
       info->ps.mrt0_is_dual_src = gfx_state->ps.epilog.mrt0_is_dual_src;
       info->ps.spi_shader_col_format = gfx_state->ps.epilog.spi_shader_col_format;
 
@@ -861,10 +893,11 @@ gather_shader_info_fs(enum amd_gfx_level gfx_level, const nir_shader *nir,
          info->ps.spi_shader_col_format &= info->ps.colors_written;
 
       info->ps.cb_shader_mask = ac_get_cb_shader_mask(info->ps.spi_shader_col_format);
-   }
 
-   if (!info->ps.exports_mrtz_via_epilog) {
-      info->ps.writes_mrt0_alpha = gfx_state->ms.alpha_to_coverage_via_mrtz && export_alpha;
+      info->ps.writes_mrt0_alpha_to_mrtz =
+         writes_mrt0_alpha && gfx_state->ms.alpha_to_coverage_enable &&
+         ((gfx_level >= GFX11 && (info->ps.writes_z || info->ps.writes_stencil || info->ps.writes_sample_mask)) ||
+          gfx_state->ms.alpha_to_one_enable);
    }
 
    if (gfx_level >= GFX10_3) {
@@ -1346,7 +1379,7 @@ radv_determine_ngg_settings(const struct radv_compiler_info *compiler_info, stru
 
    unsigned num_vertices_per_prim = 0;
    if (ngg_stage->stage == MESA_SHADER_VERTEX) {
-      num_vertices_per_prim = radv_get_num_vertices_per_prim(gfx_state);
+      num_vertices_per_prim = radv_get_num_vertices_per_prim(compiler_info->ac->gfx_level, gfx_state);
    } else if (ngg_stage->stage == MESA_SHADER_TESS_EVAL) {
       num_vertices_per_prim = ngg_stage->nir->info.tess.point_mode                                   ? 1
                               : ngg_stage->nir->info.tess._primitive_mode == TESS_PRIMITIVE_ISOLINES ? 2

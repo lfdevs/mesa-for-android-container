@@ -77,9 +77,11 @@ dEQP-VK.wsi.xlib.surface.query_capabilities2
 
 # Since the weston intermittently crashes on 925, these xfails from VKCTS
 # 1.4.4.2 -> 1.4.5.3 uprev will sometimes flake into being Skips.
-dEQP-VK.wsi.xcb.present_timing.basic.timing_queue
 dEQP-VK.wsi.xcb.present_timing.query.parallel.parallel
 dEQP-VK.wsi.xlib.present_timing.basic.timing_queue
 
 # Various subgroups tests are intermittently failing. Just ignore them for now.
 dEQP-VK.subgroups.*
+
+# See Mesa bug #15880 ("panfrost: incomplete glCopyPixels() with feedback loop")
+spec@!opengl 1.4@copy-pixels

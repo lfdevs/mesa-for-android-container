@@ -598,7 +598,8 @@ ir3_collect_info(struct ir3_shader_variant *v)
       info->max_reg = MAX2(info->max_reg, min_reg_count - 1);
 
    /* TODO this is different for earlier gens, but earlier gens don't use this */
-   info->subgroup_size = v->info.double_threadsize ? 128 : 64;
+   info->subgroup_size = compiler->info->threadsize_base *
+                         (info->double_threadsize ? 2 : 1);
 
    unsigned reg_independent_max_waves =
       ir3_get_reg_independent_max_waves(v, info->double_threadsize);

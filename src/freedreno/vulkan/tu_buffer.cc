@@ -133,8 +133,8 @@ tu_GetDeviceBufferMemoryRequirements(
       .memoryTypeBits = (1 << device->physical_device->memory.non_lazy_type_count) - 1,
    };
 
-   vk_foreach_struct(ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
          VkMemoryDedicatedRequirements *req =
             (VkMemoryDedicatedRequirements *) ext;

@@ -1,6 +1,5 @@
 dEQP-GLES2.functional.fbo.completeness.renderable.texture.color0.rgb_half_float_oes,Fail
 
-dEQP-GLES2.functional.shaders.builtin_variable.frontfacing,Fail
 dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_ivec3_fragment,Fail
 dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_ivec4_fragment,Fail
 dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_ivec4_fragment,Fail
@@ -106,32 +105,6 @@ dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_arr
 
 # This bunch is not reproducible outside of CI
 KHR-GLES2.shaders.aggressive_optimizations.sin_vec3_frag,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.20,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.32,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.35,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.43,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.45,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.46,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.62,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.63,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.64,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.74,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.77,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.8,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.86,Fail
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.88,Fail
-dEQP-GLES2.functional.fragment_ops.random.19,Fail
-dEQP-GLES2.functional.fragment_ops.random.31,Fail
-dEQP-GLES2.functional.fragment_ops.random.34,Fail
-dEQP-GLES2.functional.fragment_ops.random.41,Fail
-dEQP-GLES2.functional.fragment_ops.random.6,Fail
-dEQP-GLES2.functional.fragment_ops.random.61,Fail
-dEQP-GLES2.functional.fragment_ops.random.63,Fail
-dEQP-GLES2.functional.fragment_ops.random.64,Fail
-dEQP-GLES2.functional.fragment_ops.random.66,Fail
-dEQP-GLES2.functional.fragment_ops.random.77,Fail
-dEQP-GLES2.functional.fragment_ops.random.81,Fail
-dEQP-GLES2.functional.fragment_ops.random.9,Fail
 
 # depth texture is sampling as as white instead of red.
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component16,Fail
@@ -486,8 +459,6 @@ glx@glx_arb_sync_control@waitformsc,Fail
 
 shaders@glsl-arb-fragment-coord-conventions,Fail
 shaders@glsl-fwidth,Fail
-shaders@glsl-max-varyings,Fail
-shaders@glsl-max-varyings >max_varying_components,Fail
 shaders@glsl-uniform-interstage-limits@subdivide 5,Fail
 shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges,Fail
 
@@ -902,9 +873,6 @@ spec@glsl-1.10@execution@derivatives@glsl-derivs-sign,Fail
 spec@glsl-1.10@execution@derivatives@glsl-derivs-swizzle,Fail
 spec@glsl-1.10@execution@derivatives@glsl-derivs-varyings,Fail
 spec@glsl-1.10@execution@discard@glsl-fs-discard-04,Fail
-spec@glsl-1.10@execution@fs-frontfacing-ternary-0.0-neg-1.0,Fail
-spec@glsl-1.10@execution@fs-frontfacing-ternary-1-neg-1,Fail
-spec@glsl-1.10@execution@fs-frontfacing-ternary-1.0-neg-1.0,Fail
 spec@glsl-1.10@execution@fs-sign-times-abs,Fail
 spec@glsl-1.10@execution@fs-sign-times-neg,Fail
 spec@glsl-1.10@execution@fs-sign-times-neg-abs,Fail
@@ -975,33 +943,6 @@ spec@glsl-1.10@execution@loops@glsl-fs-loop-300,Fail
 spec@glsl-1.10@execution@loops@glsl-vs-loop-300,Fail
 
 spec@glsl-1.10@execution@variable-indexing@vs-output-array-vec2-index-wr-no-unroll,Fail
-
-spec@glsl-1.10@execution@varying-packing@simple float array,Fail
-spec@glsl-1.10@execution@varying-packing@simple float separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2x3 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2x3 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2x4 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2x4 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3x2 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3x2 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3x4 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3x4 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4x2 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4x2 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4x3 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4x3 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec2 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec2 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec3 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec3 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec4 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec4 separate,Fail
 
 spec@glsl-1.20@execution@built-in-functions@fs-matrixcompmult-mat2x3-mat2x3,Fail
 spec@glsl-1.20@execution@built-in-functions@fs-matrixcompmult-mat2x4-mat2x4,Fail
@@ -1134,7 +1075,6 @@ spec@glsl-1.20@execution@fs-underflow-mul-compare-zero,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-064-elements,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-128-elements,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-256-elements,Fail
-spec@glsl-1.20@execution@glsl-fs-frontfacing,Fail
 spec@glsl-1.20@execution@uniform-initializer@fs-mat3-array,Fail
 spec@glsl-1.20@execution@uniform-initializer@fs-mat4-array,Fail
 spec@glsl-1.20@execution@variable-indexing@fs-temp-array-mat4-index-col-row-wr,Fail
@@ -1184,8 +1124,6 @@ spec@arb_color_buffer_float@gl_rgba16f-render-sanity-fog,Fail
 spec@arb_framebuffer_object@fbo-deriv,Fail
 spec@arb_framebuffer_object@fbo-drawbuffers-none glclear,Fail
 spec@arb_internalformat_query2@minmax check for samples/num_sample_counts,Fail
-spec@arb_texture_compression@texwrap formats bordercolor,Fail
-spec@arb_texture_compression@texwrap formats bordercolor@GL_COMPRESSED_RGB- border color only,Fail
 spec@arb_texture_float@arb_texture_float-get-tex3d,Fail
 spec@arb_texture_float@fbo-alphatest-formats@GL_RGB16F,Fail
 spec@arb_texture_float@fbo-alphatest-formats@GL_RGBA16F,Fail
@@ -1211,12 +1149,9 @@ spec@ext_framebuffer_multisample@interpolation 0 centroid-deriv,Fail
 spec@ext_framebuffer_multisample@interpolation 0 centroid-deriv-disabled,Fail
 spec@ext_framebuffer_multisample@interpolation 0 non-centroid-deriv,Fail
 spec@ext_framebuffer_multisample@interpolation 0 non-centroid-deriv-disabled,Fail
-spec@ext_framebuffer_object@fbo-fragcoord2,Fail
 spec@ext_framebuffer_object@getteximage-formats init-by-clear-and-render,Fail
 spec@ext_framebuffer_object@getteximage-formats init-by-rendering,Fail
 spec@ext_texture_compression_s3tc@s3tc-targeted,Fail
-spec@ext_texture_compression_s3tc@texwrap formats bordercolor,Fail
-spec@ext_texture_compression_s3tc@texwrap formats bordercolor@GL_COMPRESSED_RGB_S3TC_DXT1_EXT- border color only,Fail
 spec@ext_texture_snorm@texwrap formats bordercolor,Fail
 spec@ext_texture_snorm@texwrap formats bordercolor@GL_RGB16_SNORM- border color only,Fail
 spec@ext_texture_snorm@texwrap formats bordercolor@GL_RGBA16_SNORM- border color only,Fail
@@ -1228,4 +1163,3 @@ spec@arb_texture_cube_map@copyteximage cube samples=6,Fail
 spec@arb_texture_rectangle@copyteximage rect samples=2,Fail
 spec@arb_texture_rectangle@copyteximage rect samples=4,Fail
 spec@arb_texture_rectangle@copyteximage rect samples=6,Fail
-

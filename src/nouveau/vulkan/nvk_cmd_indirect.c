@@ -68,14 +68,6 @@ struct process_cmd_in {
     nir_def *root_addr;
 };
 
-static nir_def *
-load_struct_var(nir_builder *b, nir_variable *var, uint32_t field)
-{
-   nir_deref_instr *deref =
-      nir_build_deref_struct(b, nir_build_deref_var(b, var), field);
-   return nir_load_deref(b, deref);
-}
-
 static struct process_cmd_in
 load_process_cmd_in(nir_builder *b)
 {
@@ -95,16 +87,16 @@ load_process_cmd_in(nir_builder *b)
                           false /* row_major */, "push");
    nir_variable *push = nir_variable_create(b->shader, nir_var_mem_push_const,
                                             push_iface_type, "push");
-
+   nir_deref_instr *push_deref = nir_build_deref_var(b, push);
    return (struct process_cmd_in) {
-      .in_addr       = load_struct_var(b, push, 0),
-      .out_addr      = load_struct_var(b, push, 1),
-      .qmd_pool_addr = load_struct_var(b, push, 2),
-      .count_addr    = load_struct_var(b, push, 3),
-      .max_seq_count = load_struct_var(b, push, 4),
-      .ies_stride    = load_struct_var(b, push, 5),
-      .ies_addr      = load_struct_var(b, push, 6),
-      .root_addr     = load_struct_var(b, push, 7),
+      .in_addr       = nir_load_struct_field(b, push_deref, 0),
+      .out_addr      = nir_load_struct_field(b, push_deref, 1),
+      .qmd_pool_addr = nir_load_struct_field(b, push_deref, 2),
+      .count_addr    = nir_load_struct_field(b, push_deref, 3),
+      .max_seq_count = nir_load_struct_field(b, push_deref, 4),
+      .ies_stride    = nir_load_struct_field(b, push_deref, 5),
+      .ies_addr      = nir_load_struct_field(b, push_deref, 6),
+      .root_addr     = nir_load_struct_field(b, push_deref, 7),
    };
 }
 
@@ -429,17 +421,15 @@ build_process_cs_cmd_seq(nir_builder *b, struct nvk_nir_push *p,
             nir_def *local_size =
                nir_imul(b, nir_imul(b, local_x, local_y), local_z);
 
-            nir_def *invoc = nir_imul_2x32_64(b, disp_size_x, disp_size_y);
-            invoc = nir_imul(b, invoc, nir_u2u64(b, disp_size_z));
-            invoc = nir_imul(b, invoc, nir_u2u64(b, local_size));
-
             /* Now emit commands */
             if (pdev->info.cls_compute >= AMPERE_COMPUTE_B)
-               nvk_nir_P_1INC(b, p, NVC7C0, CALL_MME_MACRO(NVK_MME_ADD_CS_INVOCATIONS), 2);
+               nvk_nir_P_1INC(b, p, NVC7C0, CALL_MME_MACRO(NVK_MME_ADD_CS_INVOCATIONS), 4);
             else
-               nvk_nir_P_1INC(b, p, NV9097, CALL_MME_MACRO(NVK_MME_ADD_CS_INVOCATIONS), 2);
-            nvk_nir_push_dw(b, p, nir_unpack_64_2x32_split_y(b, invoc));
-            nvk_nir_push_dw(b, p, nir_unpack_64_2x32_split_x(b, invoc));
+               nvk_nir_P_1INC(b, p, NV9097, CALL_MME_MACRO(NVK_MME_ADD_CS_INVOCATIONS), 4);
+            nvk_nir_push_dw(b, p, disp_size_x);
+            nvk_nir_push_dw(b, p, disp_size_y);
+            nvk_nir_push_dw(b, p, disp_size_z);
+            nvk_nir_push_dw(b, p, local_size);
 
             nvk_nir_P_1INC(b, p, NVA0C0, SEND_PCAS_A, 1);
             nvk_nir_push_dw(b, p, nir_u2u32(b, nir_ushr_imm(b, qmd_addr, 8)));
@@ -682,10 +672,11 @@ build_draw_count(nir_builder *b, struct nvk_nir_push *p, nir_def *token_addr)
    nir_def *stride  = load_global_dw(b, token_addr, 2);
    nir_def *count   = load_global_dw(b, token_addr, 3);
 
-   nvk_nir_P_1INC(b, p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_INDIRECT), 4);
+   nvk_nir_P_1INC(b, p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_INDIRECT), 5);
    nvk_nir_push_dw(b, p, addr_hi);
    nvk_nir_push_dw(b, p, addr_lo);
    nvk_nir_push_dw(b, p, count);
+   nvk_nir_push_dw(b, p, nir_imm_zero(b, 1, 32)); // stride >> 32
    nvk_nir_push_dw(b, p, stride);
 }
 
@@ -698,10 +689,11 @@ build_draw_indexed_count(nir_builder *b, struct nvk_nir_push *p,
    nir_def *stride  = load_global_dw(b, token_addr, 2);
    nir_def *count   = load_global_dw(b, token_addr, 3);
 
-   nvk_nir_P_1INC(b, p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_INDEXED_INDIRECT), 4);
+   nvk_nir_P_1INC(b, p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_INDEXED_INDIRECT), 5);
    nvk_nir_push_dw(b, p, addr_hi);
    nvk_nir_push_dw(b, p, addr_lo);
    nvk_nir_push_dw(b, p, count);
+   nvk_nir_push_dw(b, p, nir_imm_zero(b, 1, 32)); // stride >> 32
    nvk_nir_push_dw(b, p, stride);
 }
 
@@ -726,10 +718,11 @@ build_draw_mesh_tasks_count(nir_builder *b, struct nvk_nir_push *p, nir_def *tok
    nir_def *stride  = load_global_dw(b, token_addr, 2);
    nir_def *count   = load_global_dw(b, token_addr, 3);
 
-   nvk_nir_P_1INC(b, p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_MESH_INDIRECT), 4);
+   nvk_nir_P_1INC(b, p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_MESH_INDIRECT), 5);
    nvk_nir_push_dw(b, p, addr_hi);
    nvk_nir_push_dw(b, p, addr_lo);
    nvk_nir_push_dw(b, p, count);
+   nvk_nir_push_dw(b, p, nir_imm_zero(b, 1, 32)); // stride >> 32
    nvk_nir_push_dw(b, p, stride);
 }
 
@@ -1263,13 +1256,13 @@ build_copy_indierct_shader(void)
                           false /* row_major */, "push");
    nir_variable *push = nir_variable_create(b->shader, nir_var_mem_push_const,
                                             push_iface_type, "push");
-
+   nir_deref_instr *push_deref = nir_build_deref_var(b, push);
    b->shader->info.workgroup_size[0] = 32;
 
-   nvk_copy_indirect(b, load_struct_var(b, push, 0),
-                     load_struct_var(b, push, 1),
-                     load_struct_var(b, push, 2),
-                     load_struct_var(b, push, 3));
+   nvk_copy_indirect(b, nir_load_struct_field(b, push_deref, 0),
+                     nir_load_struct_field(b, push_deref, 1),
+                     nir_load_struct_field(b, push_deref, 2),
+                     nir_load_struct_field(b, push_deref, 3));
 
    return build.shader;
 }

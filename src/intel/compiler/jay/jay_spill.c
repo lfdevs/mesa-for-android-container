@@ -14,6 +14,7 @@
 #include "util/u_qsort.h"
 #include "util/u_worklist.h"
 #include "jay_builder.h"
+#include "jay_builder_opcodes.h"
 #include "jay_ir.h"
 #include "jay_opcodes.h"
 #include "jay_private.h"
@@ -117,8 +118,8 @@ struct spill_block {
 struct spill_ctx {
    jay_function *func;
 
-   /* Register file being spilled */
-   enum jay_file file;
+   /* Register file being spilled and its associated control flow graph */
+   enum jay_file file, cfg;
 
    /* Set of values whose file equals file */
    BITSET_WORD *in_file;
@@ -186,7 +187,10 @@ remap_inst(struct spill_ctx *ctx, struct hash_table_u64 *remap, jay_inst *I)
 static inline jay_def
 jay_def_spilled(struct spill_ctx *ctx, unsigned index)
 {
-   return jay_scalar(ctx->file == UGPR ? GPR : MEM, index + ctx->n);
+   return jay_scalar(ctx->file == FLAG ? UGPR :
+                     ctx->file == UGPR ? GPR :
+                                         MEM,
+                     index + ctx->n);
 }
 
 static bool
@@ -233,7 +237,11 @@ insert_reload(struct spill_ctx *ctx,
       jay_builder_insert(&b, clone);
    } else {
       ensure_spilled(ctx, node);
-      jay_MOV(&b, new_def, jay_def_spilled(ctx, node));
+      jay_inst *I = jay_MOV(&b, new_def, jay_def_spilled(ctx, node));
+
+      if (ctx->file == FLAG) {
+         I->type = jay_flag_type(ctx->func);
+      }
    }
 
    _mesa_hash_table_u64_insert(ctx->blocks[block->index].remap, node,
@@ -327,12 +335,12 @@ limit(struct spill_ctx *ctx, jay_inst *I, unsigned m)
 static ATTRIBUTE_NOINLINE void
 reload_preds(struct spill_ctx *ctx, struct u_sparse_bitset *W, jay_block *succ)
 {
-   jay_foreach_predecessor(succ, pred, ctx->file) {
+   jay_foreach_predecessor(succ, pred, ctx->cfg) {
       U_SPARSE_BITSET_FOREACH_SET(W, v) {
          if (u_sparse_bitset_test(&succ->live_in, v)) {
             if (!u_sparse_bitset_test(&ctx->blocks[(*pred)->index].W_out, v)) {
-               insert_reload(ctx, jay_edge_to_block(*pred, succ, ctx->file),
-                             jay_along_edge(*pred, succ, ctx->file), v);
+               insert_reload(ctx, jay_edge_to_block(*pred, succ, ctx->cfg),
+                             jay_along_edge(*pred, succ, ctx->cfg), v);
             }
          }
       }
@@ -353,8 +361,8 @@ reload_preds(struct spill_ctx *ctx, struct u_sparse_bitset *W, jay_block *succ)
             } else if (!u_sparse_bitset_test(&ctx->blocks[(*pred)->index].W_out,
                                              src_idx)) {
                /* Fill the phi source in the predecessor */
-               insert_reload(ctx, jay_edge_to_block(*pred, succ, ctx->file),
-                             jay_along_edge(*pred, succ, ctx->file), src_idx);
+               insert_reload(ctx, jay_edge_to_block(*pred, succ, ctx->cfg),
+                             jay_along_edge(*pred, succ, ctx->cfg), src_idx);
             }
 
             remap_inst(ctx, ctx->blocks[(*pred)->index].remap, src);
@@ -401,6 +409,13 @@ populate_local_next_use(struct spill_ctx *ctx, jay_block *block)
 
             ctx->next_uses[v] = ip;
             u_sparse_bitset_set(&ctx->N, v);
+         }
+      }
+
+      if (I->cond_flag.file == ctx->file) {
+         jay_foreach_index_rev(I->cond_flag, _, v) {
+            assert(v < ctx->n);
+            util_dynarray_append(&ctx->next_ip, lookup_next_use(ctx, v));
          }
       }
 
@@ -469,11 +484,14 @@ min_algorithm(struct spill_ctx *ctx,
 
       /* Limit W to make space for the operands. */
       limit(ctx, I,
-            ctx->k - (I->dst.file == ctx->file ? jay_num_values(I->dst) : 0));
+            ctx->k -
+               (I->dst.file == ctx->file ? jay_num_values(I->dst) : 0) -
+               (I->cond_flag.file == ctx->file ? jay_num_values(I->cond_flag) :
+                                                 0));
 
       /* Add destinations to the register file */
-      if (I->dst.file == ctx->file) {
-         jay_foreach_index(I->dst, _, index) {
+      jay_foreach_dst_index(I, dst, index) {
+         if (dst.file == ctx->file) {
             assert(next_use_cursor >= 1);
             ctx->next_uses[index] = next_ips[--next_use_cursor];
 
@@ -511,7 +529,7 @@ min_algorithm(struct spill_ctx *ctx,
 
       if (jay_debug & JAY_DBG_PRINTDEMAND) {
          printf("(SP) %u: ", ctx->nW);
-         jay_print_inst(stdout, I);
+         jay_print_inst(stdout, block, I, NULL);
       }
    }
 
@@ -536,7 +554,7 @@ compute_w_entry_loop_header(struct spill_ctx *ctx, jay_block *block)
 
    jay_foreach_phi_dst_in_block(block, I) {
       if (I->dst.file == ctx->file) {
-         ctx->candidates[j++] = (struct next_use) {
+         ctx->candidates[j++] = (struct next_use){
             .index = jay_index(I->dst),
             .dist = ctx->next_uses[jay_index(I->dst)],
          };
@@ -570,10 +588,10 @@ compute_w_entry(struct spill_ctx *ctx, jay_block *block)
    U_SPARSE_BITSET_FOREACH_SET(&ctx->N, i) {
       bool all = true;
 
-      jay_foreach_predecessor(block, P, ctx->file) {
+      jay_foreach_predecessor(block, P, ctx->cfg) {
          all &= u_sparse_bitset_test(&ctx->blocks[(*P)->index].W_out, i);
 
-         /* When spilling UGPRs, consider only values that have never been
+         /* When spilling UGPRs/flags, consider only values that have never been
           * spilled nor remapped and therefore will not insert phi instructions.
           * That ensures correctness despite critical edges in the physical CFG.
           */
@@ -588,7 +606,7 @@ compute_w_entry(struct spill_ctx *ctx, jay_block *block)
 
    jay_foreach_phi_dst_in_block(block, I) {
       if (I->dst.file == ctx->file) {
-         ctx->candidates[j++] = (struct next_use) {
+         ctx->candidates[j++] = (struct next_use){
             .index = jay_index(I->dst),
             .dist = ctx->next_uses[jay_index(I->dst)],
          };
@@ -649,7 +667,7 @@ global_next_use_distances(struct spill_ctx *ctx, void *memctx)
          }
 
          /* Record defs */
-         jay_foreach_index(I->dst, _, index) {
+         jay_foreach_dst_index(I, _, index) {
             u_sparse_bitset_set(&ctx->W, index);
          }
 
@@ -665,7 +683,7 @@ global_next_use_distances(struct spill_ctx *ctx, void *memctx)
       }
 
       /* Propagate successor live-in to pred live-out, joining with min */
-      jay_foreach_predecessor(block, pred, ctx->file) {
+      jay_foreach_predecessor(block, pred, ctx->cfg) {
          if (minimum_next_uses(&ctx->blocks[(*pred)->index].next_use_out,
                                &sb->next_use_in, ctx->next_uses, &ctx->N)) {
             jay_worklist_push_tail(&worklist, *pred);
@@ -696,9 +714,9 @@ global_next_use_distances(struct spill_ctx *ctx, void *memctx)
             u_sparse_bitset_set(&ctx->W, it->index);
          }
 
-         U_SPARSE_BITSET_FOREACH_SET(live, i) {
-            if (BITSET_TEST(ctx->in_file, i)) {
-               assert(u_sparse_bitset_test(&ctx->W, i));
+         U_SPARSE_BITSET_FOREACH_SET(live, it) {
+            if (BITSET_TEST(ctx->in_file, it)) {
+               assert(u_sparse_bitset_test(&ctx->W, it));
             }
          }
       }
@@ -715,7 +733,7 @@ add_phi(struct spill_ctx *ctx,
    int32_t remapped = -1;
    bool trivial = true;
 
-   jay_foreach_predecessor(succ, pred, ctx->file) {
+   jay_foreach_predecessor(succ, pred, ctx->cfg) {
       int32_t v = lookup_remap(ctx->blocks[(*pred)->index].remap, node);
       trivial &= remapped < 0 || remapped == v || (v == 0 && succ->loop_header);
       remapped = MAX2(remapped, v);
@@ -728,7 +746,7 @@ add_phi(struct spill_ctx *ctx,
       jay_PHI_DST(&b, def);
       remapped = jay_index(def);
 
-      jay_foreach_predecessor(succ, pred, ctx->file) {
+      jay_foreach_predecessor(succ, pred, ctx->cfg) {
          b.cursor = jay_after_block_logical(*pred);
 
          uint32_t src = lookup_remap(ctx->blocks[(*pred)->index].remap, node);
@@ -764,9 +782,9 @@ lower_ugpr_spill(jay_function *func)
                jay_def ballot = jay_alloc_def(&b, FLAG, 1);
                jay_def lane = jay_alloc_def(&b, UGPR, 1);
 
-               jay_ZERO_FLAG(&b, 0);
                jay_inst *mov = jay_MOV(&b, jay_null(), 1);
                jay_set_conditional_mod(&b, mov, ballot, GEN_CONDITION_NE);
+               mov->zero_inactive = true;
                jay_FBL(&b, lane, ballot);
 
                active_lane_x4 = jay_SHL_u32(&b, lane, 2);
@@ -792,6 +810,7 @@ jay_spill(jay_function *func, enum jay_file file, unsigned k)
 
    ctx.n = func->ssa_alloc;
    ctx.file = file;
+   ctx.cfg = file == GPR ? GPR : UGPR;
    ctx.in_file = BITSET_LINEAR_ZALLOC(linctx, ctx.n);
    ctx.remat = BITSET_LINEAR_ZALLOC(linctx, ctx.n);
    ctx.defs = linear_zalloc_array(linctx, jay_inst *, ctx.n);
@@ -809,11 +828,10 @@ jay_spill(jay_function *func, enum jay_file file, unsigned k)
          if (can_remat(I)) {
             BITSET_SET(ctx.remat, idx);
          }
-      }
 
-      if (I->dst.file == file) {
-         BITSET_SET_COUNT(ctx.in_file, jay_base_index(I->dst),
-                          jay_num_values(I->dst));
+         if (dst.file == file) {
+            BITSET_SET(ctx.in_file, idx);
+         }
       }
    }
 
@@ -876,7 +894,8 @@ jay_spill(jay_function *func, enum jay_file file, unsigned k)
       min_algorithm(&ctx, block, sb, next_ips, nu_cursor);
 
       /* Handle loop back edges */
-      struct jay_block *loop_head = block->logical_succs[0];
+      struct jay_block *loop_head =
+         *util_dynarray_element(jay_successors(block, GPR), jay_block *, 0);
 
       if ((loop_head && loop_head->loop_header) &&
           loop_head->index < block->index) {
@@ -892,7 +911,7 @@ jay_spill(jay_function *func, enum jay_file file, unsigned k)
          jay_foreach_block_from(func, loop_head, inside) {
             bool is_break_block = true;
             jay_foreach_successor(inside, succ, file) {
-               is_break_block &= succ->index > block->index;
+               is_break_block &= (*succ)->index > block->index;
             }
 
             /* Remap to use our phis inside the loop */

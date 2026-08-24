@@ -47,7 +47,8 @@ panfrost_batch_add_surface(struct panfrost_batch *batch,
 {
    if (surf->texture) {
       struct panfrost_resource *rsrc = pan_resource(surf->texture);
-      pan_legalize_format(batch->ctx, rsrc, surf->format, true, false);
+      pan_resource_modifier_legalize(batch->ctx, rsrc, surf->format, true,
+                                     false);
       panfrost_batch_write_rsrc(batch, rsrc, MESA_SHADER_FRAGMENT);
    }
 }
@@ -483,6 +484,7 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
    fb->force_samples = (batch->line_smoothing == U_TRISTATE_YES) ? 16 : 0;
    fb->rt_count = batch->key.nr_cbufs;
    fb->pls_enabled = batch->key.pls_enabled;
+   fb->downscale_rts = batch->key.downscale_cbufs;
    fb->sprite_coord_origin = (batch->sprite_coord_origin == U_TRISTATE_YES);
    fb->first_provoking_vertex =
       (batch->first_provoking_vertex == U_TRISTATE_YES);
@@ -510,6 +512,11 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
       }
 
       fb->rts[i].discard = !reserve && !(batch->resolve & mask);
+
+      if (fb->downscale_rts) {
+         assert(fb->rt_count == 2);
+         fb->rts[i].discard = false;
+      }
 
       /* Clamp the rendering area to the damage extent. The
        * KHR_partial_update spec states that trying to render outside of

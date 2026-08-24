@@ -35,6 +35,42 @@ jay_dag_init(struct jay_dag *dag, void *memctx, uint32_t node_count)
 }
 
 static inline void
+jay_dag_transpose(struct jay_dag *out, const struct jay_dag *in)
+{
+   jay_dag_init(out, in->edges.mem_ctx, in->node_count);
+
+   /* Initialize the output edge array so we can do random access writes */
+   memset(util_dynarray_grow_bytes(&out->edges, in->edges.size, 1), 0,
+          in->edges.size);
+
+   /* Determine the number of edges for each node after transpose */
+   uint32_t *count = calloc(in->node_count, sizeof(uint32_t));
+   util_dynarray_foreach(&in->edges, uint32_t, edge) {
+      count[*edge]++;
+   }
+
+   /* Prefix sum to get the layout of adjacency[] */
+   unsigned n = 0;
+   for (unsigned i = 0; i < in->node_count; ++i) {
+      n += count[i];
+      out->adjacency[i] = n;
+   }
+
+   /* Now copy the edges into place */
+   for (uint32_t i = 0; i < in->node_count; ++i) {
+      uint32_t first_adj = i > 0 ? in->adjacency[i - 1] : 0;
+
+      for (unsigned j = first_adj; j < in->adjacency[i]; ++j) {
+         uint32_t *node = util_dynarray_element(&in->edges, uint32_t, j);
+         assert(*node && count[*node] > 0 && "exact calculations");
+         count[*node]--;
+         uint32_t idx = out->adjacency[(*node) - 1] + count[*node];
+         *util_dynarray_element(&out->edges, uint32_t, idx) = i;
+      }
+   }
+}
+
+static inline void
 jay_dag_iterator_init(struct jay_dag_iterator *it, const struct jay_dag *dag)
 {
    *it = (struct jay_dag_iterator) {
@@ -128,3 +164,9 @@ jay_dag_print(struct jay_dag *dag)
       }
    }
 }
+
+#define jay_dag_foreach_edge(dag, head, it)                                    \
+   for (uint32_t *it = ((uint32_t *) (dag)->edges.data) +                      \
+                       ((head) > 0 ? (dag)->adjacency[(head) - 1] : 0);        \
+        it < ((uint32_t *) (dag)->edges.data) + ((dag)->adjacency[(head)]);    \
+        ++it)

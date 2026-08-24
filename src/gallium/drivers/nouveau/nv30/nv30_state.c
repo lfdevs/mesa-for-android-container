@@ -175,7 +175,7 @@ nv30_rasterizer_state_create(struct pipe_context *pipe,
    SB_DATA  (so, cso->line_smooth);
    SB_MTHD30(so, LINE_STIPPLE_ENABLE, 2);
    SB_DATA  (so, cso->line_stipple_enable);
-   SB_DATA  (so, (cso->line_stipple_pattern << 16) |
+   SB_DATA  (so, (((uint32_t)cso->line_stipple_pattern) << 16) |
                   cso->line_stipple_factor);
 
    SB_MTHD30(so, VERTEX_TWO_SIDE_ENABLE, 1);

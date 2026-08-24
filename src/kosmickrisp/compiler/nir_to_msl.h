@@ -8,7 +8,11 @@
 
 #include "nir.h"
 
+#define MSL_MAX_SAMPLERS 4096
+
 enum pipe_format;
+struct vk_input_attachment_location_state;
+struct vk_color_attachment_location_state;
 
 struct nir_to_msl_options {
    void *mem_ctx;
@@ -64,12 +68,19 @@ bool msl_nir_vs_remove_point_size_write(nir_builder *b,
                                         nir_intrinsic_instr *intrin,
                                         void *data);
 
-bool msl_nir_fs_remove_depth_write(nir_builder *b, nir_intrinsic_instr *intrin,
-                                   void *data);
+bool msl_nir_fs_remove_depth_write(nir_shader *s);
 
+/* Needs to be called before msl_lower_texture since it will generate texture
+ * loads for depth/stencil and multisample. */
+void msl_nir_lower_input_attachments(
+   nir_shader *nir, const struct vk_input_attachment_location_state *ial,
+   const struct vk_color_attachment_location_state *cal);
 bool msl_lower_textures(nir_shader *s);
 
+bool msl_lower_robustness2_images(nir_shader *s);
+
 bool msl_lower_static_sample_mask(nir_shader *nir, uint32_t sample_mask);
+bool msl_disable_triangle_merge(nir_shader *nir);
 bool msl_ensure_depth_write(nir_shader *nir);
 bool msl_ensure_vertex_position_output(nir_shader *nir);
 bool msl_ensure_vertex_point_size_output(nir_shader *nir);
@@ -80,6 +91,8 @@ bool msl_nir_lower_sample_shading(nir_shader *nir);
 void msl_nir_lower_clip_cull_distance(nir_shader *nir,
                                       unsigned num_cull_distances);
 bool msl_nir_lower_instance_id(nir_shader *nir);
+bool msl_nir_lower_vs_disabled_depth_clamp_clip(nir_shader *nir);
+bool msl_nir_lower_fs_combined_depth_clamp_clip(nir_shader *nir);
 
 bool msl_gather_uses_per_draw_data(nir_shader *nir);
 
@@ -117,5 +130,5 @@ static const nir_shader_compiler_options kk_nir_options = {
    /* Metal does not support double. */
    .lower_doubles_options = (nir_lower_doubles_options)(~0),
    .lower_int64_options = nir_lower_ufind_msb64 | nir_lower_subgroup_shuffle64,
-   .io_options = nir_io_mediump_is_32bit,
+   .io_options = nir_io_mediump_is_32bit | nir_io_non_interpolated_as_uint,
 };

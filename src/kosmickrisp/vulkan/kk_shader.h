@@ -100,6 +100,10 @@ struct kk_shader_info {
       } tess;
 
       struct {
+         bool uses_flat_varyings;
+      } fs;
+
+      struct {
          struct mtl_size local_size;
       } cs;
    };
@@ -119,13 +123,17 @@ struct kk_pipeline_handles {
    };
 };
 
+struct msl_compile_data {
+   char *code;
+   char *entrypoint_name;
+};
+
 struct kk_shader {
    struct vk_shader vk;
 
    struct kk_pipeline_handles pipeline;
    struct kk_shader_info info;
-   char *msl_shaders[MESA_SHADER_STAGES];
-   char *entrypoint_names[MESA_SHADER_STAGES];
+   struct msl_compile_data msl_data[MESA_SHADER_STAGES];
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(kk_shader, vk.base, VkShaderEXT,
@@ -160,6 +168,12 @@ bool kk_nir_lower_textures(nir_shader *nir);
 
 bool kk_nir_lower_vs_multiview(nir_shader *nir, uint32_t view_mask);
 bool kk_nir_lower_fs_multiview(nir_shader *nir, uint32_t view_mask);
+
+/* Indicates that the sampler should be overridden to clamp to 0 instead of 1 */
+#define KK_TEXTURE_FLAG_CLAMP_TO_0 (1 << 0)
+
+bool kk_nir_lower_custom_border(nir_shader *nir);
+bool kk_nir_lower_image_view_min_lod(nir_shader *nir);
 
 VkResult kk_compile_nir_shader(struct kk_device *dev, nir_shader *nir,
                                const VkAllocationCallbacks *alloc,

@@ -972,6 +972,18 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
    if (args->features.atomic_scope_device) {
       c->getTargetOpts().OpenCLExtensionsAsWritten.push_back("+__opencl_c_atomic_scope_device");
    }
+   if (args->features.atomic_fp32_add || args->features.atomic_fp32_minmax) {
+      // TODO: something inside clang unconditionally enables this and min_max?
+      c->getPreprocessorOpts().addMacroDef("cl_ext_float_atomics=1");
+      if (args->features.atomic_fp32_add) {
+         c->getPreprocessorOpts().addMacroDef("__opencl_c_ext_fp32_global_atomic_add=1");
+         c->getPreprocessorOpts().addMacroDef("__opencl_c_ext_fp32_local_atomic_add=1");
+      }
+      if (args->features.atomic_fp32_minmax) {
+         c->getPreprocessorOpts().addMacroDef("__opencl_c_ext_fp32_global_atomic_min_max=1");
+         c->getPreprocessorOpts().addMacroDef("__opencl_c_ext_fp32_local_atomic_min_max=1");
+      }
+   }
    if (args->features.extended_bit_ops) {
       c->getPreprocessorOpts().addMacroDef("cl_khr_extended_bit_ops=1");
    }

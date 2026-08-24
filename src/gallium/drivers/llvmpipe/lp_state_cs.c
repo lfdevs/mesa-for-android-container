@@ -226,12 +226,15 @@ mesh_convert_to_aos(struct gallivm_state *gallivm,
 #if DEBUG_STORE
    lp_build_printf(gallivm, "   # storing begin\n");
 #endif
+   /* The variable list is not sorted, so find the lowest per primitive
+    * driver location.
+    */
    int first_per_prim_attrib = -1;
    nir_foreach_shader_out_variable(var, nir) {
-      if (var->data.per_primitive) {
+      if (var->data.per_primitive &&
+          (first_per_prim_attrib < 0 ||
+           (int)var->data.driver_location < first_per_prim_attrib))
          first_per_prim_attrib = var->data.driver_location;
-         break;
-      }
    }
    nir_foreach_shader_out_variable(var, nir) {
 
@@ -2137,11 +2140,14 @@ llvmpipe_draw_mesh_tasks(struct pipe_context *pipe,
    int prim_out_idx = -1;
    int first_per_prim_idx = -1;
    int cull_prim_idx = -1;
+   /* The variable list is not sorted, so find the lowest per primitive
+    * driver location.
+    */
    nir_foreach_shader_out_variable(var, mhs_shader) {
-      if (var->data.per_primitive) {
+      if (var->data.per_primitive &&
+          (first_per_prim_idx < 0 ||
+           (int)var->data.driver_location < first_per_prim_idx))
          first_per_prim_idx = var->data.driver_location;
-         break;
-      }
    }
    nir_foreach_shader_out_variable(var, mhs_shader) {
       if (var->data.location == VARYING_SLOT_PRIMITIVE_INDICES) {

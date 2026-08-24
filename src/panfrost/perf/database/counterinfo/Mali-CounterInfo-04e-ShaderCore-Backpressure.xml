@@ -1,0 +1,451 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2019-2026 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<CounterInfoList>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngAttrBackpressureCy</MachineName>
+    <SourceName>EXEC_MSG_STALLED_ATTR</SourceName>
+    <StableID>367</StableID>
+    <HumanName>Attribute unit backpressure cycles</HumanName>
+    <GroupName>Shader Core Backpressure Cycles</GroupName>
+    <GroupHumanName>Attribute unit backpressure</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles new work could not be sent to the attribute unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle new work could not be sent
+      to the attribute unit. This indicates that the unit is overloaded and
+      might be a bottleneck.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngAttrBackpressureRate</MachineName>
+    <StableID>392</StableID>
+    <HumanName>Attribute unit backpressure percentage</HumanName>
+    <GroupName>Shader Core Backpressure Rate</GroupName>
+    <GroupHumanName>Attribute unit rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of cycles new work could not be sent to the attribute
+      unit.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of shader core cycles when new
+      work could not be sent to the attribute unit. A high percentage indicates
+      that the unit is overloaded and might be a bottleneck.
+    </LongDescription>
+    <Equation>
+      (MaliEngAttrBackpressureCy / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngBlendBackpressureCy</MachineName>
+    <SourceName>EXEC_MSG_STALLED_BLEND</SourceName>
+    <StableID>376</StableID>
+    <HumanName>Blend unit backpressure cycles</HumanName>
+    <GroupName>Shader Core Backpressure Cycles</GroupName>
+    <GroupHumanName>Blend unit backpressure</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles new work could not be sent to the blend unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle new work could not be sent
+      to the blend unit. This indicates that the unit is overloaded and might
+      be a bottleneck.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngBlendBackpressureRate</MachineName>
+    <StableID>393</StableID>
+    <HumanName>Blend unit backpressure percentage</HumanName>
+    <GroupName>Shader Core Backpressure Rate</GroupName>
+    <GroupHumanName>Blend unit rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of cycles new work could not be sent to the blend unit.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of shader core cycles when new
+      work could not be sent to the blend unit. A high percentage indicates
+      that the unit is overloaded and might be a bottleneck.
+    </LongDescription>
+    <Equation>
+      (MaliEngBlendBackpressureCy / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngLSBackpressureCy</MachineName>
+    <SourceName>EXEC_MSG_STALLED_LSC</SourceName>
+    <StableID>377</StableID>
+    <HumanName>Load/store unit backpressure cycles</HumanName>
+    <GroupName>Shader Core Backpressure Cycles</GroupName>
+    <GroupHumanName>Load/store unit backpressure</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles new work could not be sent to the load/store unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle new work could not be sent
+      to the load/store unit. This indicates that the unit is overloaded and
+      might be a bottleneck.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngLSBackpressureRate</MachineName>
+    <StableID>394</StableID>
+    <HumanName>Load/store unit backpressure percentage</HumanName>
+    <GroupName>Shader Core Backpressure Rate</GroupName>
+    <GroupHumanName>Load/store unit rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of cycles new work could not be sent to the load/store
+      unit.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of shader core cycles when new
+      work could not be sent to the load/store unit. A high percentage
+      indicates that the unit is overloaded and might be a bottleneck.
+    </LongDescription>
+    <Equation>
+      (MaliEngLSBackpressureCy / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngTexBackpressureCy</MachineName>
+    <SourceName>EXEC_MSG_STALLED_TEX</SourceName>
+    <StableID>378</StableID>
+    <HumanName>Texture unit backpressure cycles</HumanName>
+    <GroupName>Shader Core Backpressure Cycles</GroupName>
+    <GroupHumanName>Texture unit backpressure</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles new work could not be sent to the texture unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle new work could not be sent
+      to the texture unit. This indicates that the unit is overloaded and might
+      be a bottleneck.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngTexBackpressureRate</MachineName>
+    <StableID>395</StableID>
+    <HumanName>Texture unit backpressure percentage</HumanName>
+    <GroupName>Shader Core Backpressure Rate</GroupName>
+    <GroupHumanName>Texture unit rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of cycles new work could not be sent to the texture unit.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of shader core cycles when new
+      work could not be sent to the texture unit. A high percentage indicates
+      that the unit is overloaded and might be a bottleneck.
+    </LongDescription>
+    <Equation>
+      (MaliEngTexBackpressureCy / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngVarBackpressureCy</MachineName>
+    <SourceName>EXEC_MSG_STALLED_VARY</SourceName>
+    <StableID>379</StableID>
+    <HumanName>Varying unit backpressure cycles</HumanName>
+    <GroupName>Shader Core Backpressure Cycles</GroupName>
+    <GroupHumanName>Varying unit backpressure</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles new work could not be sent to the varying unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle new work could not be sent
+      to the varying unit. This indicates that the unit is overloaded and might
+      be a bottleneck.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngVarBackpressureRate</MachineName>
+    <StableID>396</StableID>
+    <HumanName>Varying unit backpressure percentage</HumanName>
+    <GroupName>Shader Core Backpressure Rate</GroupName>
+    <GroupHumanName>Varying unit rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of cycles new work could not be sent to the varying unit.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of shader core cycles when new
+      work could not be sent to the varying unit. A high percentage indicates
+      that the unit is overloaded and might be a bottleneck.
+    </LongDescription>
+    <Equation>
+      (MaliEngVarBackpressureCy / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngZSBackpressureCy</MachineName>
+    <SourceName>EXEC_MSG_STALLED_ZS</SourceName>
+    <StableID>380</StableID>
+    <HumanName>ZS unit backpressure cycles</HumanName>
+    <GroupName>Shader Core Backpressure Cycles</GroupName>
+    <GroupHumanName>ZS unit backpressure</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles new work could not be sent to the depth/stencil test
+      unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle new work could not be sent
+      to the depth/stencil test unit. This indicates that the unit is
+      overloaded and might be a bottleneck.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngZSBackpressureRate</MachineName>
+    <StableID>397</StableID>
+    <HumanName>ZS unit backpressure percentage</HumanName>
+    <GroupName>Shader Core Backpressure Rate</GroupName>
+    <GroupHumanName>ZS unit rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of cycles new work could not be sent to the depth/stencil
+      test unit.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of shader core cycles when new
+      work could not be sent to the depth/stencil test unit. A high percentage
+      indicates that the unit is overloaded and might be a bottleneck.
+    </LongDescription>
+    <Equation>
+      (MaliEngZSBackpressureCy / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngRTUBackpressureCy</MachineName>
+    <SourceName>EXEC_MSG_STALLED_RTU</SourceName>
+    <StableID>413</StableID>
+    <HumanName>Ray tracing unit backpressure cycles</HumanName>
+    <GroupName>Shader Core Backpressure Cycles</GroupName>
+    <GroupHumanName>Ray tracing unit backpressure</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles new work could not be sent to the ray tracing unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle new work could not be sent
+      to the ray tracing unit. This indicates that the unit is overloaded and
+      might be a bottleneck.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngRTUBackpressureRate</MachineName>
+    <StableID>414</StableID>
+    <HumanName>Ray tracing unit backpressure percentage</HumanName>
+    <GroupName>Shader Core Backpressure Rate</GroupName>
+    <GroupHumanName>Ray tracing unit rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of cycles new work could not be sent to the ray tracing
+      unit.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of shader core cycles when new
+      work could not be sent to the ray tracing unit. A high percentage
+      indicates that the unit is overloaded and might be a bottleneck.
+    </LongDescription>
+    <Equation>
+      (MaliEngRTUBackpressureCy / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+</CounterInfoList>

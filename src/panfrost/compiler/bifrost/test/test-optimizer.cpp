@@ -41,6 +41,7 @@ class Optimizer : public testing::Test {
    Optimizer()
    {
       mem_ctx = ralloc_context(NULL);
+      arch = 7;
 
       x = bi_register(1);
       y = bi_register(2);
@@ -53,6 +54,7 @@ class Optimizer : public testing::Test {
    }
 
    void *mem_ctx;
+   unsigned arch;
 
    bi_index x;
    bi_index y;
@@ -406,6 +408,94 @@ TEST_F(Optimizer, DoNotFuseSpecialComparisons)
       bi_discard_b32(b, bi_fcmp_f32(b, x, y, BI_CMPF_GTLT, BI_RESULT_TYPE_F1)));
    NEGCASE(bi_discard_b32(
       b, bi_fcmp_f32(b, x, y, BI_CMPF_TOTAL, BI_RESULT_TYPE_F1)));
+}
+
+/* f2f16(fsat(fadd(a, b))) can use a single instr */
+TEST_F(Optimizer, FuseFCvtClampAdd)
+{
+   arch = 9;
+   CASE(
+      {
+         bi_instr *add = bi_fadd_f32_to(b, bi_temp(b->shader), x, y);
+         add->clamp = BI_CLAMP_CLAMP_0_1;
+         bi_fadd_f32_to(b, bi_half(reg, false), add->dest[0], bi_negzero());
+      },
+      {
+         bi_instr *add = bi_fadd_f32_to(b, bi_half(reg, false), x, y);
+         add->clamp = BI_CLAMP_CLAMP_0_1;
+      });
+
+   CASE(
+      {
+         bi_instr *fma = bi_fma_f32_to(b, bi_temp(b->shader), x, y, bi_zero());
+         fma->clamp = BI_CLAMP_CLAMP_0_1;
+         bi_fadd_f32_to(b, bi_half(reg, true), fma->dest[0], bi_negzero());
+      },
+      {
+         bi_instr *fma = bi_fma_f32_to(b, bi_half(reg, true), x, y, bi_zero());
+         fma->clamp = BI_CLAMP_CLAMP_0_1;
+      });
+
+   NEGCASE({
+      bi_instr *add = bi_fadd_f32_to(b, bi_temp(b->shader), x, y);
+      add->clamp = BI_CLAMP_CLAMP_0_1;
+      bi_fadd_f32_to(b, bi_half(reg, false), add->dest[0], y);
+   });
+
+   CASE(
+      {
+         bi_index add = bi_fadd_f32(b, x, y);
+         bi_instr *sat = bi_fclamp_f32_to(b, bi_temp(b->shader), add);
+         sat->clamp = BI_CLAMP_CLAMP_0_1;
+         bi_fadd_f32_to(b, bi_half(reg, false), sat->dest[0], bi_negzero());
+      },
+      {
+         bi_instr *add = bi_fadd_f32_to(b, bi_half(reg, false), x, y);
+         add->clamp = BI_CLAMP_CLAMP_0_1;
+      });
+
+   /* FMIN.f32 cannot convert */
+   CASE(
+      {
+         bi_index min = bi_fmin_f32(b, x, y);
+         bi_instr *sat = bi_fclamp_f32_to(b, bi_temp(b->shader), min);
+         sat->clamp = BI_CLAMP_CLAMP_0_1;
+         bi_fadd_f32_to(b, bi_half(reg, false), sat->dest[0], bi_negzero());
+      },
+      {
+         bi_index min = bi_fmin_f32(b, x, y);
+         bi_instr *sat = bi_fclamp_f32_to(b, bi_half(reg, false), min);
+         sat->clamp = BI_CLAMP_CLAMP_0_1;
+      });
+
+   /* FCLAMP.f32 rounds fp32, the conversion rounds fp16 */
+   CASE(
+      {
+         b->shader->rtz_fp32 = true;
+         bi_index add = bi_fadd_f32(b, x, y);
+         bi_instr *sat = bi_fclamp_f32_to(b, bi_temp(b->shader), add);
+         sat->clamp = BI_CLAMP_CLAMP_0_1;
+         bi_instr *cvt =
+            bi_fadd_f32_to(b, bi_half(reg, false), sat->dest[0], bi_negzero());
+         cvt->round = bi_round_mode(b->shader, 16);
+      },
+      {
+         b->shader->rtz_fp32 = true;
+         bi_temp(b->shader); /* the clamp folded away, realign indices */
+         bi_instr *add = bi_fadd_f32_to(b, bi_temp(b->shader), x, y);
+         add->clamp = BI_CLAMP_CLAMP_0_1;
+         bi_instr *cvt =
+            bi_fadd_f32_to(b, bi_half(reg, false), add->dest[0], bi_negzero());
+         cvt->round = bi_round_mode(b->shader, 16);
+      });
+
+   arch = 7;
+   /* f2f16 folding is only available since Valhall (arch 9) */
+   NEGCASE({
+      bi_instr *add = bi_fadd_f32_to(b, bi_temp(b->shader), x, y);
+      add->clamp = BI_CLAMP_CLAMP_0_1;
+      bi_fadd_f32_to(b, bi_half(reg, false), add->dest[0], bi_negzero());
+   });
 }
 
 TEST_F(Optimizer, FuseResultType)

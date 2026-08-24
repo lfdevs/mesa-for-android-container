@@ -13,7 +13,8 @@ static inline bool
 get_ubo_load_range(nir_shader *nir, nir_intrinsic_instr *instr,
                    uint32_t alignment, struct ir3_ubo_range *r)
 {
-   uint32_t offset = nir_intrinsic_range_base(instr);
+   uint32_t offset =
+      nir_intrinsic_has_range_base(instr) ? nir_intrinsic_range_base(instr) : 0;
    uint32_t size = nir_intrinsic_range(instr);
 
    /* If the offset is constant, the range is trivial (and NIR may not have
@@ -21,7 +22,7 @@ get_ubo_load_range(nir_shader *nir, nir_intrinsic_instr *instr,
     */
    if (nir_src_is_const(instr->src[1])) {
       offset = nir_src_as_uint(instr->src[1]);
-      if (instr->intrinsic == nir_intrinsic_load_global_ir3)
+      if (nir_intrinsic_has_offset_shift(instr))
          offset <<= nir_intrinsic_offset_shift(instr);
       size = nir_intrinsic_dest_components(instr) * 4;
    }
@@ -39,7 +40,7 @@ get_ubo_load_range(nir_shader *nir, nir_intrinsic_instr *instr,
 static bool
 get_ubo_info(nir_intrinsic_instr *instr, struct ir3_ubo_info *ubo)
 {
-   if (instr->intrinsic == nir_intrinsic_load_global_ir3) {
+   if (instr->intrinsic == nir_intrinsic_load_global_offset) {
       ubo->global_base = instr->src[0].ssa;
       ubo->block = 0;
       ubo->bindless_base = 0;
@@ -288,6 +289,10 @@ lower_ubo_load_to_uniform(nir_intrinsic_instr *instr, nir_builder *b,
    nir_def *ubo_offset = instr->src[1].ssa;
    int const_offset = 0;
 
+   if (nir_intrinsic_has_base(instr)) {
+      const_offset = nir_intrinsic_base(instr);
+   }
+
    handle_partial_const(b, &ubo_offset, &const_offset);
 
    nir_def *uniform_offset = ubo_offset;
@@ -299,7 +304,7 @@ lower_ubo_load_to_uniform(nir_intrinsic_instr *instr, nir_builder *b,
     */
    int shift = -2;
 
-   if (instr->intrinsic == nir_intrinsic_load_global_ir3) {
+   if (nir_intrinsic_has_offset_shift(instr)) {
       unsigned offset_shift = nir_intrinsic_offset_shift(instr);
       assert(offset_shift <= 2);
 
@@ -468,16 +473,10 @@ instr_is_load_ubo(nir_instr *instr)
    return op == nir_intrinsic_load_ubo;
 }
 
-static bool
-instr_is_load_const(nir_instr *instr)
+bool
+ir3_nir_can_lower_to_ldg_k(nir_intrinsic_instr *intrin)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-   nir_intrinsic_op op = intrin->intrinsic;
-
-   if (op != nir_intrinsic_load_global_ir3)
+   if (intrin->intrinsic != nir_intrinsic_load_global_offset)
       return false;
 
    /* TODO handle non-aligned accesses */
@@ -487,6 +486,16 @@ instr_is_load_const(nir_instr *instr)
 
    enum gl_access_qualifier access = nir_intrinsic_access(intrin);
    return (access & ACCESS_NON_WRITEABLE) && (access & ACCESS_CAN_SPECULATE);
+}
+
+static bool
+instr_is_load_const(nir_instr *instr)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+   return ir3_nir_can_lower_to_ldg_k(intrin);
 }
 
 /* For now, everything we upload is accessed statically and thus will be

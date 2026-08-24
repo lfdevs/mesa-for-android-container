@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 NXP
  * Copyright (C) 2019-2022 Collabora, Ltd.
  * Copyright (C) 2018-2019 Alyssa Rosenzweig
  * SPDX-License-Identifier: MIT
@@ -82,12 +83,13 @@ pan_image_layout_init(
 
    const bool use_explicit_layout = layout_constraints.wsi_row_pitch_B != 0;
 
-   /* Explicit stride only work with non-mipmap, non-array, single-sample
-    * 2D image without CRC.
+   /* Explicit stride only works with non-mipmap, single-sample 2D image
+    * without CRC. Array images are allowed when an explicit array pitch
+    * is provided.
     */
    if (use_explicit_layout &&
        (props->extent_px.depth > 1 || props->nr_samples > 1 ||
-        props->array_size > 1 || props->dim != MALI_TEXTURE_DIMENSION_2D ||
+        props->dim != MALI_TEXTURE_DIMENSION_2D ||
         props->nr_slices > 1 || props->crc))
       return false;
 
@@ -143,8 +145,23 @@ pan_image_layout_init(
       ALIGN_POT(layout_constraints.offset_B - layout->slices[0].offset_B, 64);
 
    if (use_explicit_layout) {
-      layout->data_size_B =
-         layout_constraints.offset_B - explicit_layout_constraints->offset_B;
+      if (props->array_size > 1) {
+         if (layout_constraints.wsi_array_pitch_B < layout->array_stride_B ||
+             (layout_constraints.wsi_array_pitch_B & 63))
+            return false;
+
+         layout->array_stride_B = layout_constraints.wsi_array_pitch_B;
+      }
+
+      if (props->array_size == 1) {
+         layout->data_size_B =
+            layout_constraints.offset_B -
+            explicit_layout_constraints->offset_B;
+      } else {
+         layout->data_size_B =
+            (uint64_t)layout->array_stride_B *
+            (uint64_t)props->array_size;
+      }
    } else {
       /* Native images start from offset 0, and the planar plane offset has
        * been at least 4K page aligned below. So the base level slice offset

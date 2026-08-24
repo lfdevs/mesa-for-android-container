@@ -108,9 +108,8 @@ vk_attachment_store_op_to_mtl_store_action(enum VkAttachmentStoreOp op)
    case VK_ATTACHMENT_STORE_OP_STORE:
       return MTL_STORE_ACTION_STORE;
    case VK_ATTACHMENT_STORE_OP_DONT_CARE:
-      return MTL_STORE_ACTION_DONT_CARE;
    case VK_ATTACHMENT_STORE_OP_NONE:
-      return MTL_STORE_ACTION_UNKNOWN;
+      return MTL_STORE_ACTION_DONT_CARE;
    default:
       assert(false && "Unsupported VkAttachmentStoreOp");
       return MTL_STORE_ACTION_UNKNOWN;
@@ -150,9 +149,6 @@ vk_border_color_to_mtl_sampler_border_color(enum VkBorderColor color)
    case VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE:
    case VK_BORDER_COLOR_INT_OPAQUE_WHITE:
       return MTL_SAMPLER_BORDER_COLOR_OPAQUE_WHITE;
-   case VK_BORDER_COLOR_FLOAT_CUSTOM_EXT:
-   case VK_BORDER_COLOR_INT_CUSTOM_EXT:
-      return MTL_SAMPLER_BORDER_COLOR_OPAQUE_WHITE;
    default:
       UNREACHABLE("Unsupported address mode");
    }
@@ -181,6 +177,22 @@ vk_sampler_mipmap_mode_to_mtl_sampler_mip_filter(enum VkSamplerMipmapMode mode)
       return MTL_SAMPLER_MIP_FILTER_LINEAR;
    default:
       UNREACHABLE("Unsupported address mode");
+   }
+}
+
+enum mtl_sampler_reduction_mode
+vk_sampler_reduction_mode_to_mtl_sampler_reduction_mode(
+   enum VkSamplerReductionMode mode)
+{
+   switch (mode) {
+   case VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE:
+      return MTL_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE;
+   case VK_SAMPLER_REDUCTION_MODE_MIN:
+      return MTL_SAMPLER_REDUCTION_MODE_MINIMUM;
+   case VK_SAMPLER_REDUCTION_MODE_MAX:
+      return MTL_SAMPLER_REDUCTION_MODE_MAXIMUM;
+   default:
+      UNREACHABLE("Unsupported sampler reduction mode");
    }
 }
 
@@ -277,8 +289,6 @@ mtl_command_queue_error_to_string(enum mtl_command_queue_error error)
       return "MTL_COMMAND_QUEUE_ERROR_NOT_PERMITTED";
    case MTL_COMMAND_QUEUE_ERROR_OUT_OF_MEMORY:
       return "MTL_COMMAND_QUEUE_ERROR_OUT_OF_MEMORY";
-   case MTL_COMMAND_QUEUE_ERROR_DEVICE_REMOVED:
-      return "MTL_COMMAND_QUEUE_ERROR_DEVICE_REMOVED";
    case MTL_COMMAND_QUEUE_ERROR_ACCESS_REVOKED:
       return "MTL_COMMAND_QUEUE_ERROR_ACCESS_REVOKED";
    case MTL_COMMAND_QUEUE_ERROR_INTERNAL:

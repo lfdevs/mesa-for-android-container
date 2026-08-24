@@ -1,13 +1,12 @@
 /*
  * Copyright © 2024 Collabora Ltd.
+ * Copyright © 2026 NXP
  *
  * Derived from tu_cmd_buffer.c which is:
  * Copyright © 2016 Red Hat.
  * Copyright © 2016 Bas Nieuwenhuizen
  * Copyright © 2015 Intel Corporation
  *
- * Copyright 2026 NXP
- * 
  * SPDX-License-Identifier: MIT
  */
 
@@ -613,6 +612,11 @@ panvk_draw_emit_attrib(const struct panvk_draw_data *draw,
    }
 }
 
+/* Don't re-use vertex attributes, always re-emit them.  Descriptors depend on
+ * per-draw parameters (e.g. vertex_count, instancing), which are likely to
+ * change every draw, so don't bother trying to save an attribute[_buffer]
+ * re-emission.
+ */
 static VkResult
 panvk_draw_prepare_vs_attribs(struct panvk_cmd_buffer *cmdbuf,
                               struct panvk_draw_data *draw)
@@ -626,15 +630,6 @@ panvk_draw_prepare_vs_attribs(struct panvk_cmd_buffer *cmdbuf,
    unsigned num_vbs = util_last_bit(vi->bindings_valid);
    unsigned attrib_count =
       num_imgs ? MAX_VS_ATTRIBS + num_imgs : num_vs_attribs;
-   bool dirty =
-      dyn_gfx_state_dirty(cmdbuf, VI) ||
-      dyn_gfx_state_dirty(cmdbuf, VI_BINDINGS_VALID) ||
-      dyn_gfx_state_dirty(cmdbuf, VI_BINDING_STRIDES) ||
-      gfx_state_dirty(cmdbuf, VB) || gfx_state_dirty(cmdbuf, DESC_STATE) ||
-      is_indirect_draw(draw) != cmdbuf->state.gfx.vs.previous_draw_was_indirect;
-
-   if (!dirty)
-      return VK_SUCCESS;
 
    unsigned attrib_buf_count = (num_vbs + num_imgs) * 2;
    struct pan_ptr bufs = panvk_cmd_alloc_desc_array(
@@ -975,14 +970,8 @@ panvk_emit_tiler_dcd(struct panvk_cmd_buffer *cmdbuf,
    const struct vk_rasterization_state *rs =
       &cmdbuf->vk.dynamic_graphics_state.rs;
 
-   const VkPrimitiveTopology topology =
-      cmdbuf->vk.dynamic_graphics_state.ia.primitive_topology;
-   const bool non_polygon =
-      topology == VK_PRIMITIVE_TOPOLOGY_POINT_LIST ||
-      topology == VK_PRIMITIVE_TOPOLOGY_LINE_LIST ||
-      topology == VK_PRIMITIVE_TOPOLOGY_LINE_STRIP ||
-      topology == VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY ||
-      topology == VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY;
+   enum mesa_prim reduced_prim = u_reduced_prim(draw->info.prim);
+   const bool non_polygon = reduced_prim != MESA_PRIM_TRIANGLES;
 
    pan_pack(dcd, DRAW, cfg) {
       cfg.front_face_ccw = rs->front_face == VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -1005,7 +994,7 @@ panvk_emit_tiler_dcd(struct panvk_cmd_buffer *cmdbuf,
        * be set to 0 and the provoking vertex is selected with the
        * PRIMITIVE.first_provoking_vertex field.
        */
-      if (u_reduced_prim(draw->info.prim) == MESA_PRIM_LINES)
+      if (reduced_prim == MESA_PRIM_LINES)
          cfg.flat_shading_vertex = true;
 
       /* In case of indirect draw, the descriptor will be patched at runtime */
@@ -1518,7 +1507,6 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
    }
 
    clear_dirty_after_draw(cmdbuf);
-   cmdbuf->state.gfx.vs.previous_draw_was_indirect = false;
 }
 
 static void
@@ -1748,7 +1736,6 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
    }
 
    clear_dirty_after_draw(cmdbuf);
-   cmdbuf->state.gfx.vs.previous_draw_was_indirect = true;
 }
 
 static unsigned
@@ -1884,7 +1871,13 @@ panvk_per_arch(CmdDrawIndexedIndirect)(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
    VK_FROM_HANDLE(panvk_buffer, buffer, _buffer);
 
-   if (drawCount == 0)
+   /* Because we don't currently advertise nullDescriptor for JM, it is only
+    * valid to draw with a null index buffer if the draw accesses 0 indices.
+    * For direct draws, this is covered by checks on instancedCount and
+    * indexCount. For indirect draws we need to add an additional check, under
+    * the assumption that if the index buffer is null, the draw must be empty.
+    */
+   if (drawCount == 0 || cmdbuf->state.gfx.ib.size == 0)
       return;
 
    /* We cannot support arbitrary draw count on JM */

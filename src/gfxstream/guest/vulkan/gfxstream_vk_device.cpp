@@ -582,80 +582,94 @@ VkResult gfxstream_vk_CreateDevice(VkPhysicalDevice physicalDevice,
         pAllocator ?: &gfxstream_physicalDevice->instance->vk.alloc;
     struct gfxstream_vk_device* gfxstream_device = (struct gfxstream_vk_device*)vk_zalloc(
         pMesaAllocator, sizeof(struct gfxstream_vk_device), GFXSTREAM_DEFAULT_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-    result = gfxstream_device ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
-    if (result == VK_SUCCESS) {
-        // Full local copy of pCreateInfo
-        VkDeviceCreateInfo localCreateInfo = *pCreateInfo;
+    if (!gfxstream_device) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
-        std::vector<const char*> filteredExts = filteredDeviceExtensionNames(
-            gfxstream_physicalDevice, localCreateInfo.enabledExtensionCount,
-            localCreateInfo.ppEnabledExtensionNames);
-        localCreateInfo.enabledExtensionCount = static_cast<uint32_t>(filteredExts.size());
-        localCreateInfo.ppEnabledExtensionNames = filteredExts.data();
+    // Full local copy of pCreateInfo
+    VkDeviceCreateInfo localCreateInfo = *pCreateInfo;
 
-        /* pNext = VkPhysicalDeviceGroupProperties */
-        std::vector<VkPhysicalDevice> initialPhysicalDeviceList;
-        VkPhysicalDeviceGroupProperties* mutablePhysicalDeviceGroupProperties = vk_find_struct(&localCreateInfo, PHYSICAL_DEVICE_GROUP_PROPERTIES);
-        if (mutablePhysicalDeviceGroupProperties) {
-            // Temporarily modify the VkPhysicalDeviceGroupProperties structure to use translated
-            // VkPhysicalDevice references for the encoder call
-            for (uint32_t physDev = 0;
-                 physDev < mutablePhysicalDeviceGroupProperties->physicalDeviceCount; physDev++) {
-                initialPhysicalDeviceList.push_back(
-                    mutablePhysicalDeviceGroupProperties->physicalDevices[physDev]);
-                VK_FROM_HANDLE(gfxstream_vk_physical_device, gfxstream_physicalDevice,
-                               mutablePhysicalDeviceGroupProperties->physicalDevices[physDev]);
-                mutablePhysicalDeviceGroupProperties->physicalDevices[physDev] =
-                    gfxstream_physicalDevice->internal_object;
-            }
-        }
+    std::vector<const char*> filteredExts = filteredDeviceExtensionNames(
+        gfxstream_physicalDevice, localCreateInfo.enabledExtensionCount,
+        localCreateInfo.ppEnabledExtensionNames);
+    localCreateInfo.enabledExtensionCount = static_cast<uint32_t>(filteredExts.size());
+    localCreateInfo.ppEnabledExtensionNames = filteredExts.data();
 
-        auto vkEnc = gfxstream::vk::ResourceTracker::getThreadLocalEncoder();
-        result = vkEnc->vkCreateDevice(gfxstream_physicalDevice->internal_object, &localCreateInfo,
-                                       pAllocator, &gfxstream_device->internal_object,
-                                       true /* do lock */);
-
-        if (mutablePhysicalDeviceGroupProperties) {
-            // Revert the physicalDevice list in VkPhysicalDeviceGroupProperties to the user-set
-            // data
-            for (uint32_t physDev = 0;
-                 physDev < mutablePhysicalDeviceGroupProperties->physicalDeviceCount; physDev++) {
-                initialPhysicalDeviceList.push_back(
-                    mutablePhysicalDeviceGroupProperties->physicalDevices[physDev]);
-                mutablePhysicalDeviceGroupProperties->physicalDevices[physDev] =
-                    initialPhysicalDeviceList[physDev];
-            }
+    /* pNext = VkPhysicalDeviceGroupProperties */
+    std::vector<VkPhysicalDevice> initialPhysicalDeviceList;
+    VkPhysicalDeviceGroupProperties* mutablePhysicalDeviceGroupProperties =
+        vk_find_struct(&localCreateInfo, PHYSICAL_DEVICE_GROUP_PROPERTIES);
+    if (mutablePhysicalDeviceGroupProperties) {
+        // Temporarily modify the VkPhysicalDeviceGroupProperties structure to use translated
+        // VkPhysicalDevice references for the encoder call
+        for (uint32_t physDev = 0;
+             physDev < mutablePhysicalDeviceGroupProperties->physicalDeviceCount; physDev++) {
+            initialPhysicalDeviceList.push_back(
+                mutablePhysicalDeviceGroupProperties->physicalDevices[physDev]);
+            VK_FROM_HANDLE(gfxstream_vk_physical_device, gfxstream_physicalDevice,
+                           mutablePhysicalDeviceGroupProperties->physicalDevices[physDev]);
+            mutablePhysicalDeviceGroupProperties->physicalDevices[physDev] =
+                gfxstream_physicalDevice->internal_object;
         }
     }
-    if (result == VK_SUCCESS) {
-        struct vk_device_dispatch_table dispatch_table;
-        memset(&dispatch_table, 0, sizeof(struct vk_device_dispatch_table));
-        vk_device_dispatch_table_from_entrypoints(&dispatch_table, &gfxstream_vk_device_entrypoints,
-                                                  false);
+
+    auto vkEnc = gfxstream::vk::ResourceTracker::getThreadLocalEncoder();
+    result = vkEnc->vkCreateDevice(gfxstream_physicalDevice->internal_object, &localCreateInfo,
+                                   pAllocator, &gfxstream_device->internal_object,
+                                   true /* do lock */);
+
+    if (mutablePhysicalDeviceGroupProperties) {
+        // Revert the physicalDevice list in VkPhysicalDeviceGroupProperties to the user-set data
+        for (uint32_t physDev = 0;
+             physDev < mutablePhysicalDeviceGroupProperties->physicalDeviceCount; physDev++) {
+            mutablePhysicalDeviceGroupProperties->physicalDevices[physDev] =
+                initialPhysicalDeviceList[physDev];
+        }
+    }
+
+    if (result != VK_SUCCESS) {
+        vk_free(pMesaAllocator, gfxstream_device);
+        return result;
+    }
+
+    struct vk_device_dispatch_table dispatch_table;
+    memset(&dispatch_table, 0, sizeof(struct vk_device_dispatch_table));
+    vk_device_dispatch_table_from_entrypoints(&dispatch_table, &gfxstream_vk_device_entrypoints,
+                                              false);
 #if !DETECT_OS_FUCHSIA
-        vk_device_dispatch_table_from_entrypoints(&dispatch_table, &wsi_device_entrypoints, false);
+    vk_device_dispatch_table_from_entrypoints(&dispatch_table, &wsi_device_entrypoints, false);
 #endif
 
-        result = vk_device_init(&gfxstream_device->vk, &gfxstream_physicalDevice->vk,
-                                &dispatch_table, pCreateInfo, pMesaAllocator);
-    }
-    if (result == VK_SUCCESS) {
-        gfxstream_device->physical_device = gfxstream_physicalDevice;
-        // TODO: Initialize cmd_dispatch for emulated secondary command buffer support?
-        gfxstream_device->vk.command_dispatch_table = &gfxstream_device->cmd_dispatch;
-        *pDevice = gfxstream_vk_device_to_handle(gfxstream_device);
-    } else {
+    result = vk_device_init(&gfxstream_device->vk, &gfxstream_physicalDevice->vk,
+                            &dispatch_table, pCreateInfo, pMesaAllocator);
+    if (result != VK_SUCCESS) {
+        vkEnc->vkDestroyDevice(gfxstream_device->internal_object, pAllocator, true /* do lock */);
         vk_free(pMesaAllocator, gfxstream_device);
+        return result;
     }
 
-    if (result == VK_SUCCESS) {
-        result = gfxstream_vk_device_queue_family_init(gfxstream_device, pCreateInfo);
-    }
-    if (result == VK_SUCCESS) {
-        result = gfxstream_vk_device_init_queues(gfxstream_device, pCreateInfo);
+    gfxstream_device->physical_device = gfxstream_physicalDevice;
+    gfxstream_device->vk.command_dispatch_table = &gfxstream_device->cmd_dispatch;
+
+    result = gfxstream_vk_device_queue_family_init(gfxstream_device, pCreateInfo);
+    if (result != VK_SUCCESS) {
+        vk_device_finish(&gfxstream_device->vk);
+        vkEnc->vkDestroyDevice(gfxstream_device->internal_object, pAllocator, true /* do lock */);
+        vk_free(pMesaAllocator, gfxstream_device);
+        return result;
     }
 
-    return result;
+    result = gfxstream_vk_device_init_queues(gfxstream_device, pCreateInfo);
+    if (result != VK_SUCCESS) {
+        gfxstream_vk_device_queue_family_fini(gfxstream_device);
+        vk_device_finish(&gfxstream_device->vk);
+        vkEnc->vkDestroyDevice(gfxstream_device->internal_object, pAllocator, true /* do lock */);
+        vk_free(pMesaAllocator, gfxstream_device);
+        return result;
+    }
+
+    *pDevice = gfxstream_vk_device_to_handle(gfxstream_device);
+    return VK_SUCCESS;
 }
 
 void gfxstream_vk_DestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) {

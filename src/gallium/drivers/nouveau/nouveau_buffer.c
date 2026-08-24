@@ -111,8 +111,8 @@ nouveau_buffer_reallocate(struct nouveau_screen *screen,
 {
    nouveau_buffer_release_gpu_storage(buf);
 
-   nouveau_fence_ref(NULL, &buf->fence);
-   nouveau_fence_ref(NULL, &buf->fence_wr);
+   nouveau_fence_ref(NULL, &buf->fence, screen);
+   nouveau_fence_ref(NULL, &buf->fence_wr, screen);
 
    buf->status &= NOUVEAU_BUFFER_STATUS_REALLOC_MASK;
 
@@ -135,8 +135,8 @@ nouveau_buffer_destroy(struct pipe_screen *pscreen,
    if (res->data && !(res->status & NOUVEAU_BUFFER_STATUS_USER_MEMORY))
       align_free(res->data);
 
-   nouveau_fence_ref(NULL, &res->fence);
-   nouveau_fence_ref(NULL, &res->fence_wr);
+   nouveau_fence_ref(NULL, &res->fence, nouveau_screen(pscreen));
+   nouveau_fence_ref(NULL, &res->fence_wr, nouveau_screen(pscreen));
 
    util_range_destroy(&res->valid_buffer_range);
 
@@ -229,8 +229,8 @@ nouveau_transfer_write(struct nouveau_context *nv, struct nouveau_transfer *tx,
    else
       nv->push_data(nv, buf->bo, buf->offset + base, buf->domain, size, data);
 
-   nouveau_fence_ref(nv->fence, &buf->fence);
-   nouveau_fence_ref(nv->fence, &buf->fence_wr);
+   nouveau_fence_ref(nv->fence, &buf->fence, nv->screen);
+   nouveau_fence_ref(nv->fence, &buf->fence_wr, nv->screen);
 }
 
 /* Does a CPU wait for the buffer's backing data to become reliably accessible
@@ -255,9 +255,9 @@ nouveau_buffer_sync(struct nouveau_context *nv,
       if (!nouveau_fence_wait(buf->fence, &nv->debug))
          return false;
 
-      nouveau_fence_ref(NULL, &buf->fence);
+      nouveau_fence_ref(NULL, &buf->fence, nv->screen);
    }
-   nouveau_fence_ref(NULL, &buf->fence_wr);
+   nouveau_fence_ref(NULL, &buf->fence_wr, nv->screen);
 
    return true;
 }
@@ -593,11 +593,11 @@ nouveau_copy_buffer(struct nouveau_context *nv,
                     src->bo, src->offset + srcx, src->domain, size);
 
       dst->status |= NOUVEAU_BUFFER_STATUS_GPU_WRITING;
-      nouveau_fence_ref(nv->fence, &dst->fence);
-      nouveau_fence_ref(nv->fence, &dst->fence_wr);
+      nouveau_fence_ref(nv->fence, &dst->fence, nv->screen);
+      nouveau_fence_ref(nv->fence, &dst->fence_wr, nv->screen);
 
       src->status |= NOUVEAU_BUFFER_STATUS_GPU_READING;
-      nouveau_fence_ref(nv->fence, &src->fence);
+      nouveau_fence_ref(nv->fence, &src->fence, nv->screen);
    } else {
       struct pipe_box src_box;
       src_box.x = srcx;

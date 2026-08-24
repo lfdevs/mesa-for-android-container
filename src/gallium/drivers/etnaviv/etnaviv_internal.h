@@ -68,6 +68,7 @@
 #define ETNA_SE_SCISSOR_MARGIN_BOTTOM (0x1111)
 #define ETNA_SE_CLIP_MARGIN_RIGHT (0xffff)
 #define ETNA_SE_CLIP_MARGIN_BOTTOM (0xffff)
+#define ETNA_SE_FIXP_MAX (0x1fffffff)
 
 /* GPU chip 3D specs */
 struct etna_specs {

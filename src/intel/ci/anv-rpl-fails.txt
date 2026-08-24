@@ -1,5 +1,3 @@
-dEQP-VK.video.capabilities.av1_decode_dpb_video_format_support_query,Fail
-dEQP-VK.video.capabilities.av1_decode_dst_video_format_support_query,Fail
 dEQP-VK.video.decode.vp9.basic_10_not_matching_order_layered_dpb_video_layout,Fail
 dEQP-VK.video.decode.vp9.basic_10_not_matching_order_separated_dpb_video_layout,Fail
 dEQP-VK.video.decode.vp9.inter_intra_only_layered_dpb_video_layout,Fail
@@ -7,23 +5,20 @@ dEQP-VK.video.decode.vp9.inter_intra_only_separated_dpb_video_layout,Fail
 
 # VKCTS 1.4.4.2 -> 1.4.5.3 uprev
 dEQP-VK.sparse_resources.buffer.ssbo.read_write.sparse_residency_non_resident_strict,Fail
-dEQP-VK.wsi.display_control.swapchain_counter,Crash
 dEQP-VK.wsi.display.create_display_mode,Fail
 
-# CTS is missing -frounding-math: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6580
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_none.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_none.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_none.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_none.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_none.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_none.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.float_controls,Fail
+# VKCTS 1.4.5.3 -> 1.4.6.1 uprev
+# deqp-vk: ../src/intel/vulkan/anv_cmd_buffer.c:147: anv_create_cmd_buffer: Assertion `pool->queue_family_index < device->physical->queue.family_count' failed.
+dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.fill_buffer_vk_whole_size_device_address,Crash
+
+# VKCTS 1.4.5.3 -> 1.4.6.1 uprev
+dEQP-VK.api.copy_and_blit.core.use_after_copy.d16_unorm.general.32x32x2_img2img_msaa,Fail
+dEQP-VK.api.copy_and_blit.core.use_after_copy.d24_unorm_s8_uint.general.32x32x2,Fail
+dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat.general.32x32x1,Fail
+dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat.general.32x32x1_regions,Fail
+dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat.general.32x32x2,Fail
+dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat.general.32x32x2_regions,Fail
+dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat.general.32x32x2_regions_img2img,Fail
+dEQP-VK.api.copy_and_blit.core.use_after_copy.x8_d24_unorm_pack32.general.32x32x2,Fail
+dEQP-VK.api.copy_and_blit.core.use_after_copy.x8_d24_unorm_pack32.general.32x32x2_img2img,Fail
+dEQP-VK.api.copy_and_blit.core.use_after_copy.x8_d24_unorm_pack32.general.32x32x2_regions,Fail

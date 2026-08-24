@@ -47,12 +47,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bind-wl-display", action="store_true",
                         help="Include EGL_WL_bind_wayland_display")
-    parser.add_argument("target", choices=("header", "source"),
-                        help="Whether to build the source or header file.")
     parser.add_argument("xml_files", nargs="+",
                         help="The XML files with the EGL function lists.")
+    parser.add_argument('--source', action='store',
+                        help='where to write the source file')
+    parser.add_argument('--header', action='store',
+                        help='where to write the header file')
 
     args = parser.parse_args()
+
+    if not (args.source or args.header):
+        parser.error('At least one of --header or --source is required')
 
     xmlFunctions = genCommon.getFunctions(args.xml_files)
     xmlByName = dict((f.name, f) for f in xmlFunctions)
@@ -62,16 +67,17 @@ def main():
             continue
         func = xmlByName[name]
         eglFunc = fixupEglFunc(func, eglFunc)
-        functions.append((func, eglFunc))        
+        functions.append((func, eglFunc))
 
     # Sort the function list by name.
     functions = sorted(functions, key=lambda f: f[0].name)
 
-    if args.target == "header":
-        text = generateHeader(functions)
-    elif args.target == "source":
-        text = generateSource(functions)
-    sys.stdout.write(text)
+    if args.header:
+        with open(args.header, 'w', encoding='utf-8') as f:
+            f.write(generateHeader(functions))
+    if args.source:
+        with open(args.source, 'w', encoding='utf-8') as f:
+            f.write(generateSource(functions))
 
 
 def fixupEglFunc(func, eglFunc):

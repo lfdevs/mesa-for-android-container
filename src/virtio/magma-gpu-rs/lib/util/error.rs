@@ -15,8 +15,8 @@ use thiserror::Error;
 #[sorted]
 #[derive(Error, Debug)]
 pub enum Error {
-    /// An error with the Handle
-    #[error("invalid Mesa handle")]
+    /// An error with the handle
+    #[error("invalid handle")]
     InvalidMagmaHandle,
     /// An input/output error occurred.
     #[error("an input/output error occurred: {0}")]

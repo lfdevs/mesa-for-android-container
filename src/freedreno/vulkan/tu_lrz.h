@@ -124,12 +124,14 @@ void
 tu_lrz_disable_during_renderpass(struct tu_cmd_buffer *cmd,
                                  const char *reason);
 
+template <chip CHIP>
 void
 tu_lrz_flush_valid_at_secondary_rp_boundary(
    struct tu_cmd_buffer *cmd,
    const struct tu_lrz_state &secondary_lrz,
    struct tu_cs *cs);
 
+template <chip CHIP>
 void
 tu_lrz_flush_valid_at_suspending_rp_boundary(struct tu_cmd_buffer *cmd,
                                              struct tu_cs *cs);

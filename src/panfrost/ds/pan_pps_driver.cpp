@@ -29,46 +29,13 @@ PanfrostDriver::~PanfrostDriver()
 uint64_t
 PanfrostDriver::get_min_sampling_period_ns()
 {
-   return 1000000;
+   return perf->get_min_sampling_period_ns();
 }
 
 std::pair<std::vector<CounterGroup>, std::vector<Counter>>
 PanfrostDriver::create_available_counters(const PanfrostPerf &perf)
 {
-   std::pair<std::vector<CounterGroup>, std::vector<Counter>> ret;
-   auto &[groups, counters] = ret;
-
-   size_t cid = 0;
-
-   for (uint32_t gid = 0; gid < perf.perf->cfg->n_categories; ++gid) {
-      const auto &category = perf.perf->cfg->categories[gid];
-      CounterGroup group = {};
-      group.id = gid;
-      group.name = category.name;
-
-      for (size_t id = 0; id < category.n_counters; ++id) {
-         Counter counter = {};
-         counter.id = cid;
-         counter.group = gid;
-
-         counter.name = category.counters[id].name;
-
-         counter.set_getter([=](const Counter &c, const Driver &d) {
-            auto &pan_driver = PanfrostDriver::into(d);
-            struct pan_perf *perf = pan_driver.perf->perf;
-            const auto counter = &perf->cfg->categories[gid].counters[id];
-            return int64_t(pan_perf_counter_read(counter, perf));
-         });
-
-         group.counters.push_back(cid++);
-
-         counters.emplace_back(counter);
-      }
-
-      groups.push_back(group);
-   }
-
-   return ret;
+   return perf.create_available_counters();
 }
 
 bool
@@ -102,9 +69,9 @@ PanfrostDriver::enable_all_counters()
 }
 
 void
-PanfrostDriver::enable_perfcnt(const uint64_t /* sampling_period_ns */)
+PanfrostDriver::enable_perfcnt(const uint64_t sampling_period_ns)
 {
-   auto res = perf->enable();
+   auto res = perf->enable(sampling_period_ns);
    if (!check(res, "Failed to enable performance counters")) {
       if (res == -ENOSYS) {
          PERFETTO_FATAL(
@@ -117,8 +84,6 @@ PanfrostDriver::enable_perfcnt(const uint64_t /* sampling_period_ns */)
 bool
 PanfrostDriver::dump_perfcnt()
 {
-   last_dump_ts = perfetto::base::GetBootTimeNs().count();
-
    // Dump performance counters to buffer
    if (!check(perf->dump(), "Failed to dump performance counters")) {
       PERFETTO_ELOG("Skipping sample");
@@ -131,9 +96,7 @@ PanfrostDriver::dump_perfcnt()
 uint64_t
 PanfrostDriver::next()
 {
-   auto ret = last_dump_ts;
-   last_dump_ts = 0;
-   return ret;
+   return perf->next();
 }
 
 void
@@ -150,20 +113,19 @@ PanfrostDriver::disable_perfcnt()
 uint32_t
 PanfrostDriver::gpu_clock_id() const
 {
-   return perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME;
+   return perf->gpu_clock_id();
 }
 
 uint64_t
 PanfrostDriver::gpu_timestamp() const
 {
-   return perfetto::base::GetBootTimeNs().count();
+   return perf->gpu_timestamp();
 }
 
 bool
-PanfrostDriver::cpu_gpu_timestamp(uint64_t &, uint64_t &) const
+PanfrostDriver::cpu_gpu_timestamp(uint64_t &cpu_timestamp, uint64_t &gpu_timestamp) const
 {
-   /* Not supported */
-   return false;
+   return perf->cpu_gpu_timestamp(cpu_timestamp, gpu_timestamp);
 }
 
 } // namespace pps

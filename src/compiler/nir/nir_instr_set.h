@@ -24,7 +24,7 @@
 #ifndef NIR_INSTR_SET_H
 #define NIR_INSTR_SET_H
 
-#include "nir_defines.h"
+#include "nir.h"
 #include "util/set.h"
 
 /**
@@ -56,6 +56,8 @@ void nir_instr_set_fini(struct set *instr_set);
  */
 nir_instr *
 nir_instr_set_add_or_rewrite(struct set *instr_set, nir_instr *instr,
+                             nir_intrin_filter_cb allow_additional_intrin,
+                             const void *intrin_data,
                              bool (*cond_function)(const nir_instr *a,
                                                    const nir_instr *b));
 

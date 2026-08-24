@@ -143,7 +143,6 @@ tu_insert_dynamic_cmdbufs(struct tu_device *dev,
 
       case SR_AFTER_PRE_CHAIN:
       case SR_IN_CHAIN_AFTER_PRE_CHAIN:
-         cmd_buffer->trace_renderpass_start = u_trace_end_iterator(&cmd_buffer->rp_trace);
          tu_append_pre_chain(cmd_buffer, old_cmds[i]);
 
          const struct VkOffset2D *fdm_offsets =
@@ -180,6 +179,9 @@ tu_insert_dynamic_cmdbufs(struct tu_device *dev,
             .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
          };
          tu_cmd_buffer_begin(cmd_buffer, &begin);
+
+         cmd_buffer->trace_renderpass_start =
+            u_trace_end_iterator(&cmd_buffer->rp_trace);
 
          /* Setup the render pass using the first command buffer involved in
           * the chain, so that it will look like we're inside a render pass

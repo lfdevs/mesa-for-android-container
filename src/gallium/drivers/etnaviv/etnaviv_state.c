@@ -771,8 +771,13 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
             COND(nonconsecutive, VIVS_NFE_GENERIC_ATTRIB_CONFIG1_NONCONSECUTIVE) |
             VIVS_NFE_GENERIC_ATTRIB_CONFIG1_END(end_offset - start_offset);
       }
-      cs->FE_VERTEX_STREAM_CONTROL[buffer_idx] =
-            FE_VERTEX_STREAM_CONTROL_VERTEX_STRIDE(elements[idx].src_stride);
+
+      if (screen->info->halti >= 2)
+         cs->FE_VERTEX_STREAM_CONTROL[buffer_idx] =
+               VIVS_NFE_VERTEX_STREAMS_CONTROL_VERTEX_STRIDE(elements[idx].src_stride);
+      else
+         cs->FE_VERTEX_STREAM_CONTROL[buffer_idx] =
+               FE_VERTEX_STREAM_CONTROL_VERTEX_STRIDE(elements[idx].src_stride);
 
       if (util_format_is_pure_integer(elements[idx].src_format))
          cs->NFE_GENERIC_ATTRIB_SCALE[idx] = 1;
@@ -849,11 +854,25 @@ etna_set_stream_output_targets(struct pipe_context *pctx,
 
    assert(num_targets <= ARRAY_SIZE(so->targets));
 
-   for (unsigned i = 0; i < num_targets; i++)
+   for (unsigned i = 0; i < num_targets; i++) {
       pipe_so_target_reference(&so->targets[i], targets[i]);
 
-   for (unsigned i = num_targets; i < so->num_targets; i++)
+      if (targets[i]) {
+         so->TFB_BUFFER_SIZE[i] = targets[i]->buffer_size;
+         so->TFB_BUFFER_ADDR[i].bo = etna_buffer_resource(targets[i]->buffer)->bo;
+         so->TFB_BUFFER_ADDR[i].offset = targets[i]->buffer_offset;
+         so->TFB_BUFFER_ADDR[i].flags = ETNA_RELOC_WRITE;
+      } else {
+         so->TFB_BUFFER_SIZE[i] = 0;
+         so->TFB_BUFFER_ADDR[i].bo = NULL;
+      }
+   }
+
+   for (unsigned i = num_targets; i < so->num_targets; i++) {
       pipe_so_target_reference(&so->targets[i], NULL);
+      so->TFB_BUFFER_SIZE[i] = 0;
+      so->TFB_BUFFER_ADDR[i].bo = NULL;
+   }
 
    so->num_targets = num_targets;
 
@@ -1086,24 +1105,6 @@ etna_update_zsa(struct etna_context *ctx)
    return true;
 }
 
-static bool
-etna_record_flush_resources(struct etna_context *ctx)
-{
-   struct pipe_framebuffer_state *fb = &ctx->framebuffer_s.base;
-
-   for (unsigned i = 0; i < fb->nr_cbufs; i++) {
-      if (!fb->cbufs[i].texture)
-         continue;
-
-      struct etna_resource *rsc = etna_resource(fb->cbufs[i].texture);
-
-      if (rsc->shared && !rsc->explicit_flush)
-         etna_context_add_flush_resource(ctx, &rsc->base);
-   }
-
-   return true;
-}
-
 static int
 compare_xfb_outputs(const void *a, const void *b) {
    const nir_xfb_output_info *out_a = a;
@@ -1145,36 +1146,23 @@ etna_update_hwxfb(struct etna_context *ctx)
    const struct etna_shader_variant *fs = ctx->shader.fs;
    struct nir_xfb_info *xfb_info = vs->shader->nir->xfb_info;
 
-   if (!xfb_info)
+   for (unsigned buffer = 0; buffer < 4; buffer++) {
+      ctx->streamout.TFB_DESCRIPTOR_COUNT[buffer] = 0;
+      ctx->streamout.TFB_BUFFER_STRIDE[buffer] = 0;
+   }
+
+   if (!xfb_info || ctx->streamout.num_targets == 0)
       return true;
 
    assert(xfb_info->streams_written == 1);
    assert(fs);
 
-   for (unsigned i = 0; i < 4; i++)
-      ctx->streamout.TFB_DESCRIPTOR_COUNT[i] = 0;
-
-   if (ctx->streamout.num_targets == 0) {
-      for (unsigned buffer = 0; buffer < 4; buffer++) {
-         ctx->streamout.TFB_BUFFER_STRIDE[buffer] = 0;
-         ctx->streamout.TFB_BUFFER_ADDR[buffer].bo = NULL;
-      }
-
-      return true;
-   }
-
    u_foreach_bit(buffer, xfb_info->buffers_written) {
-      const struct pipe_stream_output_target *target = ctx->streamout.targets[buffer];
       const nir_xfb_buffer_info *buf_info = &xfb_info->buffers[buffer];
 
       assert(ctx->streamout.targets[buffer]);
 
-      ctx->streamout.TFB_BUFFER_SIZE[buffer] = target->buffer_size;
       ctx->streamout.TFB_BUFFER_STRIDE[buffer] = buf_info->stride;
-
-      ctx->streamout.TFB_BUFFER_ADDR[buffer].bo = etna_buffer_resource(target->buffer)->bo;
-      ctx->streamout.TFB_BUFFER_ADDR[buffer].offset = target->buffer_offset;
-      ctx->streamout.TFB_BUFFER_ADDR[buffer].flags = ETNA_RELOC_WRITE;
    }
 
    /* We need to sort our xfb outputs based on buffer and offset to ensure
@@ -1235,8 +1223,6 @@ static const struct etna_state_updater etna_state_updates[] = {
                        ETNA_DIRTY_FRAMEBUFFER,
    },
    {
-      etna_record_flush_resources, ETNA_DIRTY_FRAMEBUFFER,
-   }, {
       etna_update_hwxfb, ETNA_DIRTY_STREAMOUT,
    }
 };

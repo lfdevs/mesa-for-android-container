@@ -875,9 +875,6 @@ bool
 v3d_qpu_writes_unifa(const struct v3d_device_info *devinfo,
                      const struct v3d_qpu_instr *inst)
 {
-        if (devinfo->ver < 40)
-                return false;
-
         if (inst->type == V3D_QPU_INSTR_TYPE_ALU) {
                 if (inst->alu.add.op != V3D_QPU_A_NOP &&
                     inst->alu.add.magic_write &&

@@ -262,12 +262,10 @@ pvr_get_image_format_features2(struct pvr_physical_device *pdevice,
       vk_format_get_ycbcr_info(vk_format);
 
    if (pvr_format->bind & PVR_BIND_SAMPLER_VIEW) {
-      if (vk_tiling == VK_IMAGE_TILING_OPTIMAL) {
-         const uint32_t first_component_size =
-            vk_format_get_component_bits(vk_format,
-                                         UTIL_FORMAT_COLORSPACE_RGB,
-                                         0);
+      const uint32_t first_component_size =
+         vk_format_get_component_bits(vk_format, UTIL_FORMAT_COLORSPACE_RGB, 0);
 
+      if (vk_tiling == VK_IMAGE_TILING_OPTIMAL) {
          flags |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT |
                   VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT |
                   VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;
@@ -288,6 +286,12 @@ pvr_get_image_format_features2(struct pvr_physical_device *pdevice,
          flags |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT |
                   VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT |
                   VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;
+
+         if (!vk_format_is_int(vk_format) &&
+             !vk_format_is_depth_or_stencil(vk_format) &&
+             first_component_size < 32) {
+            flags |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_2D_BIT_IMG;
+         }
 
          if (ycbcr_info) {
             flags |= VK_FORMAT_FEATURE_2_COSITED_CHROMA_SAMPLES_BIT;
@@ -529,8 +533,8 @@ void pvr_GetPhysicalDeviceFormatProperties2(
       .bufferFeatures = vk_format_features2_to_features(buffer2),
    };
 
-   vk_foreach_struct (ext, pFormatProperties->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct (sType, ext, pFormatProperties->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3: {
          VkFormatProperties3 *pFormatProperties3 = (VkFormatProperties3 *)ext;
          pFormatProperties3->linearTilingFeatures = linear2;
@@ -543,7 +547,7 @@ void pvr_GetPhysicalDeviceFormatProperties2(
          pvr_get_drm_format_modifier_properties_list(pdevice, format, ext);
          break;
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -809,10 +813,10 @@ VkResult pvr_GetPhysicalDeviceImageFormatProperties2(
       return result;
 
    /* Extract input structs */
-   vk_foreach_struct_const (ext, pImageFormatInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const (sType, ext, pImageFormatInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
-         external_info = (const void *)ext;
+         external_info = ext;
          break;
       case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
          break;
@@ -823,25 +827,24 @@ VkResult pvr_GetPhysicalDeviceImageFormatProperties2(
           */
          break;
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
 
    /* Extract output structs */
-   vk_foreach_struct (ext, pImageFormatProperties->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct (sType, ext, pImageFormatProperties->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES:
-         external_props = (void *)ext;
+         external_props = ext;
          break;
       case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES: {
-         VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props =
-            (void *)ext;
+         VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = ext;
          ycbcr_props->combinedImageSamplerDescriptorCount = 1;
          break;
       }
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }

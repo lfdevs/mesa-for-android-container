@@ -124,6 +124,7 @@ void fd_perfcntr_state_free(struct fd_perfcntr_state *perfcntrs);
 
 bool fd_perfcntr_has_reservation(struct fd_perfcntr_state *perfcntrs);
 
+/* A NULL countable reserves a counter which cannot be reused. */
 const struct fd_perfcntr_counter *
 fd_perfcntr_reserve(struct fd_perfcntr_state *perfcntrs,
                     const struct fd_perfcntr_group *group,

@@ -24,6 +24,7 @@ typedef struct {
    bool has_image_load_dcc_bug;
    bool disable_tg4_trunc_coord;
    bool has_desc_resource_level;
+   bool enable_custom_border_on_compute_queue;
 
    const struct radv_shader_args *args;
    const struct radv_shader_info *info;
@@ -98,17 +99,24 @@ load_desc_ptr(nir_builder *b, lower_descriptors_state *state, unsigned set)
    }
 
    assert(state->args->descriptors[set].used);
-   return get_scalar_arg(b, 1, state->args->descriptors[set]);
+   nir_def *res = get_scalar_arg(b, 1, state->args->descriptors[set]);
+   nir_intrinsic_set_arg_num_lsb_zero(nir_def_as_intrinsic(res), 2);
+   return res;
 }
 
 static nir_def *
 load_heap_ptr(nir_builder *b, lower_descriptors_state *state, unsigned heap_idx)
 {
-   if (mesa_shader_stage_is_rt(b->shader->info.stage))
-      return nir_load_param(b, heap_idx == RADV_HEAP_RESOURCE ? RT_ARG_HEAP_RESOURCE : RT_ARG_HEAP_SAMPLER);
+   nir_def *res;
+   if (mesa_shader_stage_is_rt(b->shader->info.stage)) {
+      res = nir_load_param(b, heap_idx == RADV_HEAP_RESOURCE ? RT_ARG_HEAP_RESOURCE : RT_ARG_HEAP_SAMPLER);
+   } else {
+      assert(state->args->descriptors[heap_idx].used);
+      res = get_scalar_arg(b, 1, state->args->descriptors[heap_idx]);
+   }
 
-   assert(state->args->descriptors[heap_idx].used);
-   return get_scalar_arg(b, 1, state->args->descriptors[heap_idx]);
+   nir_intrinsic_set_arg_num_lsb_zero(nir_def_as_intrinsic(res), 2);
+   return res;
 }
 
 static void
@@ -133,49 +141,31 @@ visit_vulkan_resource_index(nir_builder *b, lower_descriptors_state *state, nir_
    nir_def *binding_ptr = nir_imul_imm_nuw(b, intrin->src[0].ssa, stride);
    binding_ptr = nir_iadd_nuw(b, binding_ptr, offset);
 
-   if (layout->binding[binding].type == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
-      assert(stride == 16);
-      nir_def_rewrite_uses(&intrin->def, nir_pack_64_2x32_split(b, set_ptr, binding_ptr));
-   } else {
-      nir_def_rewrite_uses(&intrin->def, nir_vec3(b, set_ptr, binding_ptr, nir_imm_int(b, stride)));
-   }
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, nir_vec3(b, set_ptr, binding_ptr, nir_imm_int(b, stride)));
 }
 
 static void
 visit_vulkan_resource_reindex(nir_builder *b, lower_descriptors_state *state, nir_intrinsic_instr *intrin)
 {
    nir_descriptor_type desc_type = nir_intrinsic_desc_type(intrin);
-   if (desc_type == nir_descriptor_type_acceleration_structure) {
-      nir_def *set_ptr = nir_unpack_64_2x32_split_x(b, intrin->src[0].ssa);
-      nir_def *binding_ptr = nir_unpack_64_2x32_split_y(b, intrin->src[0].ssa);
+   assert(desc_type == nir_descriptor_type_uniform_buffer || desc_type == nir_descriptor_type_storage_buffer ||
+          desc_type == nir_descriptor_type_acceleration_structure);
 
-      nir_def *index = nir_imul_imm_nuw(b, intrin->src[1].ssa, 16);
+   nir_def *binding_ptr = nir_channel(b, intrin->src[0].ssa, 1);
+   nir_def *stride = nir_channel(b, intrin->src[0].ssa, 2);
 
-      binding_ptr = nir_iadd_nuw(b, binding_ptr, index);
+   nir_def *index = nir_imul_nuw(b, intrin->src[1].ssa, stride);
+   binding_ptr = nir_iadd_nuw(b, binding_ptr, index);
 
-      nir_def_rewrite_uses(&intrin->def, nir_pack_64_2x32_split(b, set_ptr, binding_ptr));
-   } else {
-      assert(desc_type == nir_descriptor_type_uniform_buffer || desc_type == nir_descriptor_type_storage_buffer);
-
-      nir_def *binding_ptr = nir_channel(b, intrin->src[0].ssa, 1);
-      nir_def *stride = nir_channel(b, intrin->src[0].ssa, 2);
-
-      nir_def *index = nir_imul_nuw(b, intrin->src[1].ssa, stride);
-      binding_ptr = nir_iadd_nuw(b, binding_ptr, index);
-
-      nir_def_rewrite_uses(&intrin->def, nir_vector_insert_imm(b, intrin->src[0].ssa, binding_ptr, 1));
-   }
-   nir_instr_remove(&intrin->instr);
+   nir_def_replace(&intrin->def, nir_vector_insert_imm(b, intrin->src[0].ssa, binding_ptr, 1));
 }
 
 static void
 visit_load_vulkan_descriptor(nir_builder *b, lower_descriptors_state *state, nir_intrinsic_instr *intrin)
 {
    if (nir_intrinsic_desc_type(intrin) == nir_descriptor_type_acceleration_structure) {
-      nir_def *addr = convert_pointer_to_64_bit(b, state,
-                                                nir_iadd(b, nir_unpack_64_2x32_split_x(b, intrin->src[0].ssa),
-                                                         nir_unpack_64_2x32_split_y(b, intrin->src[0].ssa)));
+      nir_def *addr = convert_pointer_to_64_bit(
+         b, state, nir_iadd(b, nir_channel(b, intrin->src[0].ssa, 0), nir_channel(b, intrin->src[0].ssa, 1)));
       nir_def *desc = nir_load_global(b, 1, 64, addr, .access = ACCESS_NON_WRITEABLE);
 
       nir_def_rewrite_uses(&intrin->def, desc);
@@ -199,6 +189,16 @@ load_inline_buffer_descriptor(nir_builder *b, lower_descriptors_state *state, ni
 static nir_def *
 load_buffer_descriptor(nir_builder *b, lower_descriptors_state *state, nir_def *rsrc, unsigned access)
 {
+   if (access & ACCESS_NON_UNIFORM)
+      return nir_iadd(b, nir_channel(b, rsrc, 0), nir_channel(b, rsrc, 1));
+
+   nir_def *desc_set = convert_pointer_to_64_bit(b, state, nir_channel(b, rsrc, 0));
+   return ac_nir_load_smem(b, 4, desc_set, nir_channel(b, rsrc, 1), 4, 0);
+}
+
+static nir_def *
+load_ubo_descriptor(nir_builder *b, lower_descriptors_state *state, nir_def *rsrc, unsigned access)
+{
    nir_binding binding = nir_chase_binding(nir_src_for_ssa(rsrc));
 
    /* If binding.success=false, then this is a variable pointer, which we don't support with
@@ -212,11 +212,7 @@ load_buffer_descriptor(nir_builder *b, lower_descriptors_state *state, nir_def *
       }
    }
 
-   if (access & ACCESS_NON_UNIFORM)
-      return nir_iadd(b, nir_channel(b, rsrc, 0), nir_channel(b, rsrc, 1));
-
-   nir_def *desc_set = convert_pointer_to_64_bit(b, state, nir_channel(b, rsrc, 0));
-   return ac_nir_load_smem(b, 4, desc_set, nir_channel(b, rsrc, 1), 4, 0);
+   return load_buffer_descriptor(b, state, rsrc, access);
 }
 
 static void
@@ -244,7 +240,6 @@ get_sampler_desc(nir_builder *b, lower_descriptors_state *state, nir_deref_instr
 {
    nir_def *desc_ptr = NULL;
    uint32_t offset = 0;
-   bool indirect = false;
    uint32_t plane_offset;
 
    if (deref) {
@@ -252,15 +247,9 @@ get_sampler_desc(nir_builder *b, lower_descriptors_state *state, nir_deref_instr
       assert(var && !index);
       unsigned desc_set = var->data.descriptor_set;
       unsigned binding_index = var->data.binding;
-      indirect = nir_deref_instr_has_indirect(deref);
 
       struct radv_descriptor_set_layout *layout = state->layout->set[desc_set].layout;
       struct radv_descriptor_set_binding_layout *binding = &layout->binding[binding_index];
-
-      if (desc_type == AC_DESC_SAMPLER) {
-         /* Immutable/embedded samplers are lowered earlier. */
-         assert(!binding->immutable_samplers_offset || indirect);
-      }
 
       while (deref->deref_type != nir_deref_type_var) {
          assert(deref->deref_type == nir_deref_type_array);
@@ -339,6 +328,39 @@ get_sampler_desc(nir_builder *b, lower_descriptors_state *state, nir_deref_instr
        * nir_texop_tg4, even if the sampler uses nearest/point filtering.
        */
       comp[0] = nir_iand_imm(b, comp[0], C_008F30_TRUNC_COORD);
+
+      return nir_vec(b, comp, 4);
+   } else if (!state->enable_custom_border_on_compute_queue && desc_type == AC_DESC_SAMPLER &&
+              (b->shader->info.stage == MESA_SHADER_COMPUTE || b->shader->info.stage == MESA_SHADER_TASK ||
+               mesa_shader_stage_is_rt(b->shader->info.stage))) {
+      nir_def *comp[4];
+      for (unsigned i = 0; i < 4; i++)
+         comp[i] = nir_channel(b, desc, i);
+
+      /* Replace custom border color by transparent black to prevent GPU hangs when task/compute/RT
+       * shaders are executed on the compute queue because the hw is fundamentally broken and it
+       * can't support multiple color palettes.
+       */
+      nir_def *border_color_type = nir_iand_imm(b, comp[3], ~C_008F3C_BORDER_COLOR_TYPE);
+      nir_def *is_custom_border_color =
+         nir_ieq_imm(b, border_color_type, S_008F3C_BORDER_COLOR_TYPE(V_008F3C_SQ_TEX_BORDER_COLOR_REGISTER));
+
+      if (b->shader->info.stage == MESA_SHADER_COMPUTE || mesa_shader_stage_is_rt(b->shader->info.stage)) {
+         nir_def *is_compute_queue;
+         if (b->shader->info.stage == MESA_SHADER_COMPUTE) {
+            is_compute_queue =
+               ac_nir_unpack_arg(b, &state->args->ac, state->args->cs_state, CS_STATE_IS_COMPUTE_QUEUE__SHIFT,
+                                 util_bitcount(CS_STATE_IS_COMPUTE_QUEUE__MASK));
+         } else {
+            is_compute_queue = nir_load_param(b, RT_ARG_IS_COMPUTE_QUEUE);
+         }
+
+         comp[3] = nir_bcsel(b, nir_iand(b, nir_ieq_imm(b, is_compute_queue, 1), is_custom_border_color),
+                             nir_iand_imm(b, comp[3], C_008F3C_BORDER_COLOR_TYPE), comp[3]);
+      } else {
+         assert(b->shader->info.stage == MESA_SHADER_TASK);
+         comp[3] = nir_bcsel(b, is_custom_border_color, nir_iand_imm(b, comp[3], C_008F3C_BORDER_COLOR_TYPE), comp[3]);
+      }
 
       return nir_vec(b, comp, 4);
    }
@@ -426,16 +448,33 @@ can_increase_load_size(nir_intrinsic_instr *intrin, unsigned offset, unsigned ol
 static nir_def *
 load_push_constant(nir_builder *b, lower_descriptors_state *state, nir_intrinsic_instr *intrin)
 {
-   unsigned base = nir_intrinsic_base(intrin);
+   unsigned base = 0;
    unsigned bit_size = intrin->def.bit_size;
    unsigned count = intrin->def.num_components * (bit_size / 32u);
    assert(bit_size >= 32);
 
+   nir_def *src_def = NULL;
    nir_def *addr = NULL;
    nir_def *offset = NULL;
    unsigned const_offset = -1;
-   if (nir_src_is_const(intrin->src[0]))
-      const_offset = (base + nir_src_as_uint(intrin->src[0])) / 4u;
+
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_load_user_data_amd:
+      src_def = nir_imm_int(b, 0);
+      const_offset = 0;
+      break;
+
+   case nir_intrinsic_load_push_constant:
+      base = nir_intrinsic_base(intrin);
+      src_def = intrin->src[0].ssa;
+      if (nir_src_is_const(intrin->src[0]))
+         const_offset = (base + nir_src_as_uint(intrin->src[0])) / 4u;
+
+      break;
+
+   default:
+      UNREACHABLE("unsupported push constant intrinsic");
+   }
 
    const unsigned max_push_constant = sizeof(state->args->ac.inline_push_const_mask) * 8u;
 
@@ -470,10 +509,13 @@ load_push_constant(nir_builder *b, lower_descriptors_state *state, nir_intrinsic
          continue;
       }
 
+      /* user_data is expected to be always inlined into SGPR args */
+      assert(intrin->intrinsic != nir_intrinsic_load_user_data_amd);
+
       if (!offset) {
          addr = get_indirect_push_constants_addr(b, state);
          addr = convert_pointer_to_64_bit(b, state, addr);
-         offset = nir_iadd_imm_nuw(b, intrin->src[0].ssa, base);
+         offset = nir_iadd_imm_nuw(b, src_def, base);
       }
 
       /* Decrease to supported size. */
@@ -484,10 +526,33 @@ load_push_constant(nir_builder *b, lower_descriptors_state *state, nir_intrinsic
       if (size < (count - start) && can_increase_load_size(intrin, start * 4, size, size * 2))
          size *= 2;
 
-      data[num_loads++] = ac_nir_load_smem(b, size, addr, nir_iadd_imm_nuw(b, offset, start * 4), 4, 0);
+      nir_def *load_offset = nir_iadd_imm_nuw(b, offset, start * 4);
+      nir_def *load_addr = nir_iadd(b, addr, nir_u2u64(b, load_offset));
+
+      data[num_loads++] =
+         nir_load_global(b, size, 32, load_addr, .align_mul = 4,
+                         .access = nir_intrinsic_access(intrin) | ACCESS_CAN_REORDER | ACCESS_NON_WRITEABLE);
       start += size;
    }
    return nir_extract_bits(b, data, num_loads, 0, intrin->def.num_components, bit_size);
+}
+
+static bool
+lower_descriptors_early_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void *_state)
+{
+   lower_descriptors_state *state = _state;
+   b->cursor = nir_before_instr(&intrin->instr);
+
+   nir_def *rsrc;
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_load_ubo:
+      rsrc = load_ubo_descriptor(b, state, intrin->src[0].ssa, nir_intrinsic_access(intrin));
+      nir_src_rewrite(&intrin->src[0], rsrc);
+      break;
+   default:
+      return false;
+   }
+   return true;
 }
 
 static bool
@@ -506,7 +571,6 @@ lower_descriptors_intrin(nir_builder *b, lower_descriptors_state *state, nir_int
    case nir_intrinsic_load_vulkan_descriptor:
       visit_load_vulkan_descriptor(b, state, intrin);
       break;
-   case nir_intrinsic_load_ubo:
    case nir_intrinsic_load_ssbo:
    case nir_intrinsic_ssbo_atomic:
    case nir_intrinsic_ssbo_atomic_swap:
@@ -530,6 +594,7 @@ lower_descriptors_intrin(nir_builder *b, lower_descriptors_state *state, nir_int
    case nir_intrinsic_image_deref_descriptor_amd:
       update_image_intrinsic(b, state, intrin);
       break;
+   case nir_intrinsic_load_user_data_amd:
    case nir_intrinsic_load_push_constant: {
       nir_def_replace(&intrin->def, load_push_constant(b, state, intrin));
       break;
@@ -674,6 +739,19 @@ lower_descriptors_tex(nir_builder *b, lower_descriptors_state *state, nir_tex_in
    return true;
 }
 
+static bool
+lower_descriptors_instr(nir_builder *b, nir_instr *instr, void *_state)
+{
+   lower_descriptors_state *state = _state;
+
+   if (instr->type == nir_instr_type_tex)
+      return lower_descriptors_tex(b, state, nir_instr_as_tex(instr));
+   else if (instr->type == nir_instr_type_intrinsic)
+      return lower_descriptors_intrin(b, state, nir_instr_as_intrinsic(instr));
+
+   return false;
+}
+
 bool
 radv_nir_lower_descriptors(nir_shader *shader, const struct radv_compiler_info *compiler_info,
                            const struct radv_shader_stage *stage)
@@ -691,30 +769,18 @@ radv_nir_lower_descriptors(nir_shader *shader, const struct radv_compiler_info *
       .has_image_load_dcc_bug = compiler_info->ac->has_image_load_dcc_bug,
       .disable_tg4_trunc_coord = !compiler_info->ac->conformant_trunc_coord && !compiler_info->key.disable_trunc_coord,
       .has_desc_resource_level = compiler_info->ac->has_desc_resource_level,
+      .enable_custom_border_on_compute_queue = compiler_info->key.enable_custom_border_on_compute_queue,
       .args = &stage->args,
       .info = &stage->info,
       .layout = &stage->layout,
    };
 
-   nir_foreach_function_impl (impl, shader) {
-      bool impl_progress = false;
-      nir_builder b = nir_builder_create(impl);
-
-      /* Iterate in reverse so load_ubo lowering can look at
-       * the vulkan_resource_index to tell if it's an inline
-       * ubo.
-       */
-      nir_foreach_block_reverse (block, impl) {
-         nir_foreach_instr_reverse_safe (instr, block) {
-            if (instr->type == nir_instr_type_tex)
-               impl_progress |= lower_descriptors_tex(&b, &state, nir_instr_as_tex(instr));
-            else if (instr->type == nir_instr_type_intrinsic)
-               impl_progress |= lower_descriptors_intrin(&b, &state, nir_instr_as_intrinsic(instr));
-         }
-      }
-
-      progress |= nir_progress(impl_progress, impl, nir_metadata_control_flow);
-   }
+   /* Do an early pass over intrinsics so load_ubo lowering
+    * can look at the vulkan_resource_index to tell if it's
+    * an inline ubo.
+    */
+   progress |= nir_shader_intrinsics_pass(shader, lower_descriptors_early_intrin, nir_metadata_control_flow, &state);
+   progress |= nir_shader_instructions_pass(shader, lower_descriptors_instr, nir_metadata_control_flow, &state);
 
    return progress;
 }

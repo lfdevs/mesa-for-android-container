@@ -4,9 +4,9 @@
 use crate::api::{GetDebugFlags, DEBUG};
 use crate::ir::*;
 use crate::liveness::{BlockLiveness, Liveness, SimpleLiveness};
-use crate::union_find::UnionFind;
 
 use compiler::bitset::BitSet;
+use compiler::union_find::UnionFind;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use std::cmp::{max, min, Ordering};
 

@@ -759,11 +759,6 @@ d3d12_video_decoder_fence_wait(struct pipe_video_codec *codec, struct pipe_fence
    assert(fenceValueToWaitOn);
 
    bool wait_res = d3d12_fence_finish(fenceValueToWaitOn, timeout);
-   if (wait_res) {
-      // Opportunistically reset batches
-      for (uint32_t i = 0; i < D3D12_VIDEO_DEC_ASYNC_DEPTH; ++i)
-         (void)d3d12_video_decoder_sync_completion(codec, i, 0);
-   }
 
    // Return semantics based on p_video_codec interface
    // ret == 0 -> Decode in progress

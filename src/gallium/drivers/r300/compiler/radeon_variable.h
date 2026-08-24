@@ -8,8 +8,9 @@
 
 #include "radeon_compiler.h"
 
+#include "util/u_dynarray.h"
+
 struct radeon_compiler;
-struct rc_list;
 struct rc_reader_data;
 struct rc_readers;
 
@@ -33,6 +34,18 @@ struct rc_variable {
    struct rc_variable *Friend;
 };
 
+static inline struct rc_variable *
+rc_variable_list_element(struct util_dynarray *variables, unsigned int index)
+{
+   return *util_dynarray_element(variables, struct rc_variable *, index);
+}
+
+static inline struct rc_variable *
+rc_variable_list_first(struct util_dynarray *variables)
+{
+   return rc_variable_list_element(variables, 0);
+}
+
 void rc_variable_change_dst(struct rc_variable *var, unsigned int new_index,
                             unsigned int new_writemask);
 
@@ -44,17 +57,17 @@ struct rc_variable *rc_variable(struct radeon_compiler *c, unsigned int DstFile,
                                 unsigned int DstIndex, unsigned int DstWriteMask,
                                 struct rc_reader_data *reader_data);
 
-struct rc_list *rc_get_variables(struct radeon_compiler *c);
+struct util_dynarray *rc_get_variables(struct radeon_compiler *c);
 
 unsigned int rc_variable_writemask_sum(struct rc_variable *var);
 
-struct rc_list *rc_variable_readers_union(struct rc_variable *var);
+struct util_dynarray *rc_variable_readers_union(struct rc_variable *var);
 
-struct rc_list *rc_variable_list_get_writers(struct rc_list *var_list, unsigned int src_type,
-                                             void *src);
+struct util_dynarray *rc_variable_list_get_writers(struct util_dynarray *var_list,
+                                                   unsigned int src_type, void *src);
 
-struct rc_list *rc_variable_list_get_writers_one_reader(struct rc_list *var_list,
-                                                        unsigned int src_type, void *src);
+struct util_dynarray *rc_variable_list_get_writers_one_reader(struct util_dynarray *var_list,
+                                                              unsigned int src_type, void *src);
 
 void rc_variable_print(struct rc_variable *var);
 

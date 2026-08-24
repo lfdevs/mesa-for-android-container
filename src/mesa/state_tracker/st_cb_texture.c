@@ -249,7 +249,7 @@ copy_to_staging_dest(struct gl_context * ctx, struct pipe_resource *dst,
    struct gl_texture_object *stObj = texImage->TexObject;
    ASSERTED struct pipe_resource *src = stObj->pt;
    enum pipe_format dst_format = dst->format;
-   mesa_format mesa_format;
+   mesa_format dst_mesa_format;
    GLenum gl_target = texImage->TexObject->Target;
    unsigned dims;
    struct pipe_transfer *tex_xfer;
@@ -264,11 +264,11 @@ copy_to_staging_dest(struct gl_context * ctx, struct pipe_resource *dst,
       goto end;
    }
 
-   mesa_format = st_pipe_format_to_mesa_format(dst_format);
+   dst_mesa_format = st_pipe_format_to_mesa_format(dst_format);
    dims = _mesa_get_texture_dimensions(gl_target);
 
    /* copy/pack data into user buffer */
-   if (_mesa_format_matches_format_and_type(mesa_format, format, type,
+   if (_mesa_format_matches_format_and_type(dst_mesa_format, format, type,
                                             ctx->Pack.SwapBytes, NULL)) {
       /* memcpy */
       const uint bytesPerRow = width * util_format_get_blocksize(dst_format);
@@ -1836,6 +1836,7 @@ fail:
                                ST_INVALIDATE_SAMPLE_MASK |
                                ST_INVALIDATE_SAMPLE_SHADING |
                                ST_INVALIDATE_FS_CONSTBUF0 |
+                               ST_INVALIDATE_FS_SAMPLER_VIEWS |
                                ST_INVALIDATE_VS_STATE |
                                ST_INVALIDATE_FS_STATE |
                                ST_INVALIDATE_GS_STATE |
@@ -2124,6 +2125,7 @@ fail:
                                ST_INVALIDATE_SAMPLE_MASK |
                                ST_INVALIDATE_SAMPLE_SHADING |
                                ST_INVALIDATE_FS_CONSTBUF0 |
+                               ST_INVALIDATE_FS_SAMPLER_VIEWS |
                                ST_INVALIDATE_FS_IMAGES |
                                ST_INVALIDATE_VS_STATE |
                                ST_INVALIDATE_FS_STATE |
@@ -2361,19 +2363,19 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
             /* 1D array textures.
              * We need to convert gallium coords to GL coords.
              */
-            void *src = _mesa_image_address2d(unpack, pixels,
+            void *srcpx = _mesa_image_address2d(unpack, pixels,
                                                 width, depth, format,
                                                 type, slice, 0);
-            memcpy(map, src, bytesPerRow);
+            memcpy(map, srcpx, bytesPerRow);
          }
          else {
             uint8_t *slice_map = map;
 
             for (row = 0; row < (unsigned) height; row++) {
-               void *src = _mesa_image_address(dims, unpack, pixels,
+               void *srcpx = _mesa_image_address(dims, unpack, pixels,
                                                  width, height, format,
                                                  type, slice, row, 0);
-               memcpy(slice_map, src, bytesPerRow);
+               memcpy(slice_map, srcpx, bytesPerRow);
                slice_map += transfer->stride;
             }
          }
@@ -3474,6 +3476,10 @@ st_texture_storage(struct gl_context *ctx,
    if (memObj) {
       memObj->TextureTiling = texObj->TextureTiling;
       bindings |= PIPE_BIND_SHARED;
+   } else {
+      if (ctx->Const.AllowGLTextureLinearTiling &&
+          texObj->TextureTiling == GL_LINEAR_TILING_EXT)
+         bindings |= PIPE_BIND_LINEAR;
    }
 
    if (texObj->IsProtected)

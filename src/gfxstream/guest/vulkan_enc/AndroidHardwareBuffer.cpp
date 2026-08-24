@@ -248,7 +248,7 @@ VkResult getAndroidHardwareBufferPropertiesANDROID(
             // transfer, and range. Replace those enums with their corresponding composite enums:
             switch (dataspace) {
                 case GFXSTREAM_AHB_DATASPACE_UNKNOWN: {
-                    dataspace = GFXSTREAM_AHB_DATASPACE_V0_JFIF;
+                    dataspace = GFXSTREAM_AHB_DATASPACE_V0_SRGB;
                     break;
                 }
                 case GFXSTREAM_AHB_DATASPACE_BT601_525: {
@@ -296,8 +296,8 @@ VkResult getAndroidHardwareBufferPropertiesANDROID(
                     break;
                 }
                 default: {
-                    mesa_logw("Unhandled AHB dataspace model: %d. Assuming YCBCR_601", model);
-                    ahbFormatProps->suggestedYcbcrModel = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_601;
+                    mesa_logw("Unhandled AHB dataspace model: %d. Assuming YCBCR_709", model);
+                    ahbFormatProps->suggestedYcbcrModel = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709;
                     break;
                 }
             }

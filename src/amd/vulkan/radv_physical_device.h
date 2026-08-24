@@ -16,6 +16,7 @@
 
 #include "ac_vcn_enc.h"
 #include "radv_constants.h"
+#include "radv_drirc.h"
 #include "radv_instance.h"
 #include "radv_queue.h"
 #include "radv_radeon_winsys.h"
@@ -206,6 +207,8 @@ struct radv_physical_device {
    /* Cached device used to query heap info. */
    simple_mtx_t drm_device_mtx;
    ac_drm_device *drm_device;
+
+   struct radv_drirc drirc;
 };
 
 VK_DEFINE_HANDLE_CASTS(radv_physical_device, vk.base, VkPhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE)
@@ -268,14 +271,12 @@ bool radv_use_bvh8(const struct radv_physical_device *pdev);
 
 bool radv_is_dcc_disabled(const struct radv_physical_device *pdev);
 
-bool radv_are_dcc_stores_disabled(const struct radv_physical_device *pdev);
-
-bool radv_are_dcc_mips_disabled(const struct radv_physical_device *pdev);
-
 VkResult create_drm_physical_device(struct vk_instance *vk_instance, struct _drmDevice *device,
                                     struct vk_physical_device **out);
 
 void radv_physical_device_destroy(struct vk_physical_device *vk_pdev);
+
+bool radv_graphics_queue_enabled(const struct radv_physical_device *pdev);
 
 bool radv_transfer_queue_enabled(const struct radv_physical_device *pdev);
 
@@ -284,6 +285,8 @@ bool radv_compute_queue_enabled(const struct radv_physical_device *pdev);
 bool radv_spm_trace_enabled(const struct radv_physical_device *pdev);
 
 bool radv_tmz_enabled(const struct radv_physical_device *pdev);
+
+bool radv_is_rt_wave64_enabled(const struct radv_physical_device *pdev);
 
 static inline uint32_t
 radv_get_sampled_image_desc_size(const struct radv_physical_device *pdev)

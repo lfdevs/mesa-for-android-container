@@ -103,7 +103,8 @@ static void validate_monotonic(int32_t **blocks)
 
 static void run_test()
 {
-   struct anv_physical_device physical_device = {};
+   struct anv_instance instance = {};
+   struct anv_physical_device physical_device = { .instance = &instance };
    struct anv_device device = {};
    struct anv_block_pool pool;
    const uint32_t _1Gb = 1024 * 1024 * 1024;

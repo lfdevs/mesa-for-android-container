@@ -16,7 +16,9 @@ struct nouveau_context {
    struct nouveau_client *client;
    struct nouveau_pushbuf *pushbuf;
    struct nouveau_fence *fence;
-   void (*kick_notify)(struct nouveau_context *);
+
+   /** Returns false on error */
+   MUST_CHECK bool (*kick_notify)(struct nouveau_context *);
    struct util_debug_callback debug;
 
    bool vbo_dirty;

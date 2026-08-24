@@ -230,7 +230,7 @@ nouveau_ioctl_get_param(int fd, unsigned long request, void *arg)
       gp->value = 510;
       return 0;
    case NOUVEAU_GETPARAM_VRAM_BAR_SIZE:
-      gp->value = 1L << 34;
+      gp->value = 1ULL << 34;
       return 0;
    case NOUVEAU_GETPARAM_VRAM_USED:
       gp->value = 4096;

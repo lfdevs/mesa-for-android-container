@@ -8,87 +8,67 @@
 
 #include <stdint.h>
 
+#include <lib/kmod/pan_kmod.h>
+
+#include "mali_perf.h"
+
+#include "util/timespec.h"
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
-#define PAN_PERF_MAX_CATEGORIES 4
-#define PAN_PERF_MAX_COUNTERS   64
-
-struct pan_kmod_dev;
-struct pan_kmod_dev_props;
-struct pan_model;
-struct pan_perf_category;
-struct pan_perf;
-
-enum pan_perf_counter_units {
-   PAN_PERF_COUNTER_UNITS_CYCLES,
-   PAN_PERF_COUNTER_UNITS_JOBS,
-   PAN_PERF_COUNTER_UNITS_TASKS,
-   PAN_PERF_COUNTER_UNITS_PRIMITIVES,
-   PAN_PERF_COUNTER_UNITS_BEATS,
-   PAN_PERF_COUNTER_UNITS_REQUESTS,
-   PAN_PERF_COUNTER_UNITS_WARPS,
-   PAN_PERF_COUNTER_UNITS_QUADS,
-   PAN_PERF_COUNTER_UNITS_TILES,
-   PAN_PERF_COUNTER_UNITS_INSTRUCTIONS,
-   PAN_PERF_COUNTER_UNITS_TRANSACTIONS,
-   PAN_PERF_COUNTER_UNITS_THREADS,
-   PAN_PERF_COUNTER_UNITS_BYTES,
-   PAN_PERF_COUNTER_UNITS_PIXELS,
-   PAN_PERF_COUNTER_UNITS_ISSUES,
-};
-
-struct pan_perf_counter {
-   const char *name;
-   const char *desc;
-   const char *symbol_name;
-   enum pan_perf_counter_units units;
-   // Offset of this counter's value within the category
-   uint32_t offset;
-   unsigned category_index;
-};
-
-struct pan_perf_category {
-   const char *name;
-
-   struct pan_perf_counter counters[PAN_PERF_MAX_COUNTERS];
-   uint32_t n_counters;
-
-   /* Offset of this category within the counters memory block */
-   unsigned offset;
-};
-
-struct pan_perf_config {
-   const char *name;
-
-   struct pan_perf_category categories[PAN_PERF_MAX_CATEGORIES];
-   uint32_t n_categories;
-};
-
 struct pan_perf {
    struct pan_kmod_dev *dev;
-   unsigned core_id_range;
+   const struct mali_perf_gpu_info *info;
+   struct pan_kmod_perf_session *session;
+   struct mali_perf_constants constants;
+   struct mali_perf_dump_info dump_info;
    const struct pan_perf_config *cfg;
-
-   // Memory where to dump counter values
-   uint32_t *counter_values;
-   uint32_t n_counter_values;
-
-   /* Offsets of categories */
-   unsigned category_offset[PAN_PERF_MAX_CATEGORIES];
+   uint64_t sampling_period_ns;
 };
 
-uint32_t pan_perf_counter_read(const struct pan_perf_counter *counter,
-                               const struct pan_perf *perf);
+int64_t pan_perf_counter_read(const struct pan_perf *perf,
+                              const struct mali_perf_counter *counter,
+                              uint8_t blk_idx);
 
-void pan_perf_init(struct pan_perf *perf, int fd);
+int64_t pan_perf_counter_read_sum(const struct pan_perf *perf,
+                                  const struct mali_perf_counter *counter);
 
-int pan_perf_enable(struct pan_perf *perf);
+struct pan_perf *pan_perf_create(int fd);
+
+void pan_perf_destroy(struct pan_perf *perf);
+
+int pan_perf_enable(struct pan_perf *perf, uint64_t sampling_period_ns);
 
 int pan_perf_disable(struct pan_perf *perf);
 
 int pan_perf_dump(struct pan_perf *perf);
+
+static inline clockid_t
+pan_perf_gpu_clock_id(const struct pan_perf *perf)
+{
+   return CLOCK_MONOTONIC_RAW;
+}
+
+static inline uint64_t
+pan_perf_get_gpu_timestamp(const struct pan_perf *perf)
+{
+   return pan_kmod_timestamp_cycles_to_ns(
+      perf->session->dev, pan_kmod_query_timestamp(perf->session->dev));
+}
+
+static inline uint64_t
+pan_perf_get_dump_timestamp(const struct pan_perf *perf)
+{
+   return perf->dump_info.time_span.end_ns;
+}
+
+static inline uint64_t
+pan_perf_get_min_sampling_period(const struct pan_perf *perf)
+{
+   return perf->session->caps.min_sampling_period_ns;
+}
 
 #if defined(__cplusplus)
 } // extern "C"

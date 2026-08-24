@@ -733,14 +733,12 @@ texstore_rgba(TEXSTORE_PARAMS)
                                                     srcType);
          int bufferSize = imageStride * srcDepth;
          int layer;
-         const uint8_t *src;
-         uint8_t *dst;
 
          tempImage = malloc(bufferSize);
          if (!tempImage)
             return GL_FALSE;
-         src = srcAddr;
-         dst = tempImage;
+         src = (GLubyte *) srcAddr;
+         dst = (GLubyte *) tempImage;
          for (layer = 0; layer < srcDepth; layer++) {
             _mesa_swap_bytes_2d_image(srcFormat, srcType,
                                       srcPacking,
@@ -1211,11 +1209,11 @@ _mesa_compute_compressed_pixelstore(GLuint dims, mesa_format texFormat,
    if (dims > 2 && packing->CompressedBlockDepth &&
        packing->CompressedBlockSize) {
 
-      int bd = packing->CompressedBlockDepth;
+      int cbd = packing->CompressedBlockDepth;
 
       store->SkipBytes += (size_t)packing->SkipImages *
                           store->TotalBytesPerRow *
-                          store->TotalRowsPerSlice / bd;
+                          store->TotalRowsPerSlice / cbd;
    }
 }
 

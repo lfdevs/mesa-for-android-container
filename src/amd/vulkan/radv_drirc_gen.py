@@ -105,9 +105,15 @@ def declare_options():
         B("radv_prefer_2d_swizzle_for_3d_storage", False,
           "Prefer 2D swizzle mode for 3D storage images.",
           c_name="prefer_2d_swizzle_for_3d_storage"),
+        B("radv_enable_transfer_queue", False,
+          "Expose a dedicated SDMA transfer queue so transfer-queue copies run on the async DMA engine.",
+          c_name="enable_transfer_queue"),
         S("radv_gfx12_hiz_wa",
           description="Choose the specific HiZ workaround to apply on GFX12 (RDNA4). Accepted values are: disabled, partial or full",
           c_name="gfx12_hiz_wa"),
+        B("radv_force_exclusive_image", False,
+          description="Force using exclusive images for apps that incorrectly use concurrent for everything.",
+          c_name="force_exclusive_image"),
     ]
 
     features_options = [
@@ -123,6 +129,9 @@ def declare_options():
         B("radv_enable_float16_gfx8", False,
           "Expose float16 on GFX8, where it's supported but usually not beneficial.",
           c_name="enable_float16_gfx8"),
+        B("radv_enable_custom_border_on_compute_queue", False,
+          "Force enable custom border color on compute queue.",
+          c_name="enable_custom_border_on_compute_queue"),
     ]
 
     misc_options = [

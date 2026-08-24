@@ -61,6 +61,11 @@ software, classify the prims, write new index buffers, and emit
 (possibly many) new draw calls to rasterize the new prims in the same
 order.
 
+* Polygon rasterization mode
+
+VC4 doesn't support polygon rasterization mode other than GL_FILL. So any
+attempt to set GL_POINT or GL_LINE will end up using GL_FILL.
+
 Bug Reporting
 -------------
 

@@ -61,8 +61,8 @@ kk_DestroyBuffer(VkDevice device, VkBuffer _buffer,
    if (!buffer)
       return;
 
-   if (buffer->mtl_handle)
-      mtl_release(buffer->mtl_handle);
+   if (buffer->metal.handle)
+      mtl_release(buffer->metal.handle);
 
    vk_buffer_destroy(&dev->vk, pAllocator, &buffer->vk);
 }
@@ -85,16 +85,16 @@ kk_GetDeviceBufferMemoryRequirements(
       .memoryTypeBits = BITFIELD_MASK(pdev->mem_type_count),
    };
 
-   vk_foreach_struct_const(ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
-         VkMemoryDedicatedRequirements *dedicated = (void *)ext;
+         VkMemoryDedicatedRequirements *dedicated = ext;
          dedicated->prefersDedicatedAllocation = false;
          dedicated->requiresDedicatedAllocation = false;
          break;
       }
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -155,20 +155,23 @@ kk_bind_buffer_memory(struct kk_device *dev, const VkBindBufferMemoryInfo *info)
    VK_FROM_HANDLE(kk_device_memory, mem, info->memory);
    VK_FROM_HANDLE(kk_buffer, buffer, info->buffer);
 
-   if (mem->bo->mtl_handle)
-      buffer->mtl_handle = mtl_new_buffer_with_length(
+   if (mem->bo->mtl_handle) {
+      buffer->metal.handle = mtl_new_buffer_with_length(
          mem->bo->mtl_handle, buffer->vk.size, info->memoryOffset);
-   else {
+      buffer->metal.offset = 0u;
+   } else {
       /* If the memory is not heap backed, for example if we imported a host
        * pointer, use the mapped buffer directly and retain a reference */
-      buffer->mtl_handle = mem->bo->map;
-      mtl_retain(buffer->mtl_handle);
+      buffer->metal.handle = mem->bo->map;
+      buffer->metal.offset = info->memoryOffset;
+      mtl_retain(buffer->metal.handle);
    }
 
-   buffer->vk.device_address = mtl_buffer_get_gpu_address(buffer->mtl_handle);
+   buffer->vk.device_address =
+      mtl_buffer_get_gpu_address(buffer->metal.handle) + buffer->metal.offset;
    /* We need Metal to give us a CPU mapping so it correctly captures the
     * data in the GPU debugger... */
-   mtl_get_contents(buffer->mtl_handle);
+   mtl_get_contents(buffer->metal.handle);
 
    return VK_SUCCESS;
 }

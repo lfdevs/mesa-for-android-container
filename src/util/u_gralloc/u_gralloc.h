@@ -1,6 +1,7 @@
 /*
  * Mesa 3-D graphics library
  *
+ * Copyright (C) 2026 NXP
  * Copyright (C) 2022 Roman Stratiienko (r.stratiienko@gmail.com)
  * SPDX-License-Identifier: MIT
  */
@@ -38,6 +39,9 @@ struct u_gralloc_buffer_basic_info {
    int fds[4];
    int offsets[4];
    int strides[4];
+
+   uint64_t alloc_size;
+   uint64_t layer_count;
 };
 
 struct u_gralloc_buffer_color_info {

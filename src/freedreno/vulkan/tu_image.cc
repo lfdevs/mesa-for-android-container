@@ -12,6 +12,7 @@
 #include "drm-uapi/drm_fourcc.h"
 
 #include "util/format/u_format.h"
+#include "util/u_atomic.h"
 #include "util/u_debug.h"
 #include "vk_android.h"
 #include "vk_debug_utils.h"
@@ -521,8 +522,20 @@ template <chip CHIP>
 VkResult
 tu_image_init(struct tu_device *device, struct tu_image *image,
               const VkImageCreateInfo *pCreateInfo, uint64_t modifier,
-              const VkSubresourceLayout *plane_layouts)
+              const VkSubresourceLayout *plane_layouts,
+              enum tu_image_id_mode id_mode)
 {
+   switch (id_mode) {
+   case TU_IMAGE_ID_ASSIGN:
+      image->id = p_atomic_inc_return(&device->next_image_id);
+      break;
+   case TU_IMAGE_ID_INTERNAL:
+      image->id = TU_IMAGE_ID_INTERNAL_ID;
+      break;
+   case TU_IMAGE_ID_NONE:
+      break;
+   }
+
    bool ubwc_enabled = true;
    bool force_linear_tile = false;
    bool is_mutable = false;
@@ -667,6 +680,20 @@ tu_image_init(struct tu_device *device, struct tu_image *image,
       }
    }
 
+   /* VK_EXT_image_compression_control: honor the application's request to
+    * disable compression for this image.
+    */
+   if (image->vk.compr_flags & VK_IMAGE_COMPRESSION_DISABLED_EXT) {
+      if (ubwc_enabled) {
+         perf_debug(device,
+                    "Disabling UBWC on %dx%d %s resource due to "
+                    "VK_IMAGE_COMPRESSION_DISABLED_EXT",
+                    image->vk.extent.width, image->vk.extent.height,
+                    util_format_name(vk_format_to_pipe_format(image->vk.format)));
+      }
+      ubwc_enabled = false;
+   }
+
    if (TU_DEBUG(NOUBWC)) {
       ubwc_enabled = false;
    }
@@ -736,15 +763,19 @@ tu_image_init(struct tu_device *device, struct tu_image *image,
       struct fdl_explicit_layout plane_layout;
 
       if (plane_layouts) {
-         /* only expect simple 2D images for now */
-         if (image->vk.mip_levels != 1 ||
-            image->vk.array_layers != 1 ||
-            image->vk.extent.depth != 1)
+         /* Reject mipmap and 3D images; fdl6_layout_image only accepts
+          * explicit pitch for single-mip 2D images.
+          */
+         if (image->vk.mip_levels != 1 || image->vk.extent.depth != 1)
             return vk_error(device, VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
 
          plane_layout.offset = plane_layouts[i].offset;
          plane_layout.pitch = plane_layouts[i].rowPitch;
-         /* note: use plane_layouts[0].arrayPitch to support array formats */
+         /* arrayPitch is intentionally not consumed here. fdl6_layout_image
+          * deterministically computes layer_size from the imported pitch,
+          * format, and tiling mode. The per-layer stride is not an independent
+          * parameter, it is fully determined by the single-mip slice layout.
+          */
       }
 
       layout->tile_mode = tile_mode;
@@ -878,7 +909,7 @@ tu_android_get_wsi_memory(struct tu_device *dev,
 
    result = TU_CALLX(dev, tu_image_init)(
       dev, img, img->vk.android_deferred_create_info,
-      eci.drmFormatModifier, a_plane_layouts);
+      eci.drmFormatModifier, a_plane_layouts, TU_IMAGE_ID_ASSIGN);
    if (result != VK_SUCCESS)
       return result;
 
@@ -939,16 +970,27 @@ tu_CreateImage(VkDevice _device,
 
       assert(mod_info || drm_explicit_info);
 
+      /* VK_IMAGE_COMPRESSION_DISABLED_EXT means the app wants uncompressed
+       * (non-UBWC) storage. Since there's no way to fall back to linear
+       * tiling with an explicit modifier, the QCOM_COMPRESSED modifier must
+       * never be selected while compression is disabled.
+       */
+      bool compression_disabled =
+         image->vk.compr_flags & VK_IMAGE_COMPRESSION_DISABLED_EXT;
+
       if (mod_info) {
          modifier = DRM_FORMAT_MOD_LINEAR;
          for (unsigned i = 0; i < mod_info->drmFormatModifierCount; i++) {
-            if (mod_info->pDrmFormatModifiers[i] == DRM_FORMAT_MOD_QCOM_COMPRESSED)
+            if (mod_info->pDrmFormatModifiers[i] == DRM_FORMAT_MOD_QCOM_COMPRESSED &&
+                !compression_disabled)
                modifier = DRM_FORMAT_MOD_QCOM_COMPRESSED;
          }
       } else {
          modifier = drm_explicit_info->drmFormatModifier;
          assert(modifier == DRM_FORMAT_MOD_LINEAR ||
                 modifier == DRM_FORMAT_MOD_QCOM_COMPRESSED);
+         assert(modifier != DRM_FORMAT_MOD_QCOM_COMPRESSED ||
+                !compression_disabled);
          plane_layouts = drm_explicit_info->pPlaneLayouts;
       }
    } else {
@@ -972,7 +1014,8 @@ tu_CreateImage(VkDevice _device,
    }
 
    result = TU_CALLX(device, tu_image_init)(device, image, pCreateInfo,
-                                             modifier, plane_layouts);
+                                             modifier, plane_layouts,
+                                             TU_IMAGE_ID_ASSIGN);
    if (result != VK_SUCCESS)
       goto fail;
 
@@ -1170,8 +1213,8 @@ tu_get_image_memory_requirements(struct tu_device *dev, struct tu_image *image,
       .memoryTypeBits = (1 << type_count) - 1,
    };
 
-   vk_foreach_struct(ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
          VkMemoryDedicatedRequirements *req =
             (VkMemoryDedicatedRequirements *) ext;
@@ -1372,7 +1415,7 @@ tu_GetDeviceImageMemoryRequirements(
    struct tu_image image = {0};
 
    vk_image_init(&device->vk, &image.vk, pInfo->pCreateInfo);
-   TU_CALLX(device, tu_image_init)(device, &image, pInfo->pCreateInfo, DRM_FORMAT_MOD_INVALID, NULL);
+   TU_CALLX(device, tu_image_init)(device, &image, pInfo->pCreateInfo, DRM_FORMAT_MOD_INVALID, NULL, TU_IMAGE_ID_NONE);
 
    tu_get_image_memory_requirements(device, &image, pMemoryRequirements);
 }
@@ -1389,7 +1432,7 @@ tu_GetDeviceImageSparseMemoryRequirements(
    struct tu_image image = {0};
 
    vk_image_init(&device->vk, &image.vk, pInfo->pCreateInfo);
-   TU_CALLX(device, tu_image_init)(device, &image, pInfo->pCreateInfo, DRM_FORMAT_MOD_INVALID, NULL);
+   TU_CALLX(device, tu_image_init)(device, &image, pInfo->pCreateInfo, DRM_FORMAT_MOD_INVALID, NULL, TU_IMAGE_ID_NONE);
 
    tu_get_image_sparse_memory_requirements(device, &image,
                                            pSparseMemoryRequirementCount,
@@ -1423,8 +1466,34 @@ tu_get_image_subresource_layout(struct tu_image *image,
       memcpy_size->size = slice->size0;
    }
 
-   if (fdl_ubwc_enabled(layout, pSubresource->imageSubresource.mipLevel)) {
-      /* UBWC starts at offset 0 */
+   VkImageCompressionPropertiesEXT *compression_props =
+      vk_find_struct(pLayout, IMAGE_COMPRESSION_PROPERTIES_EXT);
+   if (compression_props) {
+      compression_props->imageCompressionFixedRateFlags =
+         VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
+      compression_props->imageCompressionFlags =
+         fdl_ubwc_enabled(layout, pSubresource->imageSubresource.mipLevel) ?
+            VK_IMAGE_COMPRESSION_DEFAULT_EXT :
+            VK_IMAGE_COMPRESSION_DISABLED_EXT;
+   }
+
+   /* UBWC layout fixups only apply to DRM modifier images. */
+   if (image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
+       fdl_ubwc_enabled(layout, pSubresource->imageSubresource.mipLevel)) {
+      /* From the Vulkan 1.4.357 spec, vkGetImageSubresourceLayout():
+       *
+       *    "If the image’s tiling is VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT
+       *     and the image is non-linear, then the returned layout has an
+       *     implementation-dependent meaning; the vendor of the image’s DRM
+       *     format modifier may provide documentation that explains how to
+       *     interpret the returned layout."
+       *
+       * In particular, we report that the subresource offset is the
+       * beginning of any data related to the (single) subresource (in this
+       * case, the UBWC contents), since that value may get queried and
+       * passed as an offset within the FD for the image contents -- the
+       * position of the rest of the image data including uncompressed
+       * contents is implied from the format modifier. */
       pLayout->subresourceLayout.offset = 0;
       /* UBWC scanout won't match what the kernel wants if we have levels/layers */
       assert(image->vk.mip_levels == 1 && image->vk.array_layers == 1);
@@ -1452,7 +1521,7 @@ tu_GetDeviceImageSubresourceLayoutKHR(VkDevice _device,
    struct tu_image image = {0};
 
    vk_image_init(&device->vk, &image.vk, pInfo->pCreateInfo);
-   TU_CALLX(device, tu_image_init)(device, &image, pInfo->pCreateInfo, DRM_FORMAT_MOD_INVALID, NULL);
+   TU_CALLX(device, tu_image_init)(device, &image, pInfo->pCreateInfo, DRM_FORMAT_MOD_INVALID, NULL, TU_IMAGE_ID_NONE);
 
    tu_get_image_subresource_layout(&image, pInfo->pSubresource, pLayout);
 }

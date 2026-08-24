@@ -4,66 +4,11 @@ KHR-GL46.shader_subroutine.control_flow_and_returned_subroutine_values_used_as_s
 KHR-GLES3.framebuffer_blit.framebuffer_blit_functionality_multisampled_to_singlesampled_blit,Fail
 KHR-GL46.texture_lod_bias.texture_lod_bias_all,Fail
 
-# New failures with ES CTS 3.2.12.0
-KHR-GLES3.framebuffer_blit.multisampled_to_singlesampled_blit_depth_config_test,Fail
-KHR-GLES31.core.texture_stencil8.multisample,Fail
-KHR-GL46.texture_stencil8.multisample,Fail
-
 # GL tests above, Vulkan tests below
-
-# New fails in 1.4.3.3
-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_16,Fail
-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_244,Fail
-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_508,Fail
-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_244,Fail
-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_508,Fail
-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_16,Fail
-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_244,Fail
-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_508,Fail
-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_16,Fail
-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_244,Fail
-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_508,Fail
-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_counter_offset_16,Fail
-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_counter_offset_244,Fail
-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_counter_offset_508,Fail
-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_16,Fail
-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_244,Fail
-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_508,Fail
-gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
-gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_244,Fail
-nobin-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
-nobin-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_244,Fail
-
-# New failures with VKCTS 1.4.4.0
-dEQP-VK.tessellation.misc_draw.tess_factor_barrier_bug,Crash
-gmem-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_16,Fail
-gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_508,Fail
-gmem-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_244,Fail
-gmem-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_508,Fail
-gmem-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_508,Fail
-nobin-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_16,Fail
-nobin-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_508,Fail
-nobin-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_244,Fail
-nobin-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_508,Fail
-nobin-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_508,Fail
-
 
 # Bad assumptions in piglit about layout of multiplanar formats,
 # it should use separate buffers per plane:
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420,Fail
-
-# OpenCL tests below
-#
-## rusticl-core issues:
-#
-#Unexpected CL error: CL_SUCCESS 0
-#Expected CL error: CL_KERNEL_ARG_INFO_NOT_AVAILABLE -19
-api@clgetkernelarginfo,Fail
-
-# Piglit checks the pre 3.1 behavior
-api@clsetkernelarg,Fail
-api@clsetkernelarg@Input checks,Fail
 
 #Unexpected CL error: CL_SUCCESS 0
 #Expected CL error: CL_INVALID_LINKER_OPTIONS -67
@@ -74,10 +19,6 @@ api@clsetkernelarg@Input checks,Fail
 #Unexpected CL error: CL_SUCCESS 0
 #Expected CL error: CL_LINK_PROGRAM_FAILURE -17
 api@cllinkprogram,Fail
-
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/8408
-program@execute@global-offset,Fail
-program@execute@global-offset@3d- input dependent,Fail
 
 #
 ## freedreno issues:
@@ -97,9 +38,6 @@ api@clgetextensionfunctionaddressforplatform,Fail
 # CL_DEVICE_MAX_READ_IMAGE_ARGS: failed, expected at least 128, got 16
 api@clgetdeviceinfo,Fail
 
-# CL_QUEUE_SIZE Unexpected CL error: CL_INVALID_COMMAND_QUEUE -36
-api@clgetcommandqueueinfo,Fail
-
 # broken piglit test (doesn't account for FTZ)
 program@execute@builtin@builtin-float-nextafter-1.0.generated,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float1,Fail
@@ -114,9 +52,61 @@ program@execute@vector-conversion,Fail
 # Initial ANGLE failures
 angle-dEQP-GLES2.functional.shaders.algorithm.rgb_to_hsl_vertex,Fail
 
-# VKCTS 1.4.4.2 -> 1.4.5.3 uprev
-dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_10,Fail
-dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_16,Fail
-dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_17,Fail
-dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_20,Fail
-dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_24,Fail
+# VKCTS 1.4.5.3 -> 1.4.6.1 uprev
+# No GPU fault and the failures seem consistent.
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_nonsubsampled_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_nonsubsampled_multilayer_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_nonsubsampled_multilayer_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_nonsubsampled_multiview_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_nonsubsampled_multiview_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_nonsubsampled_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_subsampled_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_subsampled_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.monolithic.fdm_nonsubsampled_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.monolithic.fdm_nonsubsampled_multilayer_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.monolithic.fdm_nonsubsampled_multilayer_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.monolithic.fdm_nonsubsampled_multiview_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.monolithic.fdm_nonsubsampled_multiview_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.monolithic.fdm_nonsubsampled_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.monolithic.fdm_subsampled_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.monolithic.fdm_subsampled_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.fast_lib.fdm_nonsubsampled_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.fast_lib.fdm_nonsubsampled_multilayer_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.fast_lib.fdm_nonsubsampled_multilayer_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.fast_lib.fdm_nonsubsampled_multiview_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.fast_lib.fdm_nonsubsampled_multiview_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.fast_lib.fdm_nonsubsampled_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.fast_lib.fdm_subsampled_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.fast_lib.fdm_subsampled_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.monolithic.fdm_nonsubsampled_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.monolithic.fdm_nonsubsampled_multilayer_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.monolithic.fdm_nonsubsampled_multilayer_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.monolithic.fdm_nonsubsampled_multiview_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.monolithic.fdm_nonsubsampled_multiview_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.monolithic.fdm_nonsubsampled_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.monolithic.fdm_subsampled_large_fb_with_offset,Fail
+dEQP-VK.renderpasses.renderpass2.custom_resolve.monolithic.fdm_subsampled_with_offset,Fail
+gmem-dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_subsampled_large_fb_with_offset,Fail
+gmem-dEQP-VK.renderpasses.renderpass2.custom_resolve.fast_lib.fdm_nonsubsampled_with_offset,Fail
+
+#
+# OpenCL-CTS
+#
+
+# Test bug, doesn't check for CL_FP_DENORM:
+SPIRV new,Fail
+SPIRV new@op_neg_half,Fail
+SPIRV new@op_spec_constant_half_simple,Fail
+
+# Test bug, doesn't properly compute wave divergence point with wave128:
+Subgroups,Fail
+Subgroups@subgroup_functions_clustered_reduce,Fail
+Subgroups@subgroup_functions_ballot,Fail
+
+#
+# OpenCL-CTS uprev
+#
+
+# https://github.com/KhronosGroup/OpenCL-CTS/issues/2765
+Basic,Fail
+Basic@bufferreadwriterect,Fail

@@ -18,7 +18,7 @@ section_start fluster "Installing Fluster"
 # setting up the environment variables locally
 ci_tag_build_time_check "FLUSTER_TAG"
 
-FLUSTER_REVISION="3dad9c71f4d5eacbb692be6b328a645822b591d6"
+FLUSTER_REVISION="1864188e358464e77c889390fff259ef3b2c1159"
 
 git clone https://github.com/fluendo/fluster.git --single-branch --no-checkout
 
@@ -34,13 +34,8 @@ if FOUND_ARTIFACT_URL="$(find_s3_project_artifact "${ARTIFACT_PATH}")"; then
     curl-with-retry "${FOUND_ARTIFACT_URL}" | tar --zstd -x -C /
 else
     echo "No cached vectors found, rebuilding..."
-    # Download the necessary vectors: H264, H265 and VP9
-    # When updating FLUSTER_REVISION, make sure to update the vectors if necessary or
-    # fluster-runner will report Missing results.
-    fluster/fluster.py download -j ${FDO_CI_CONCURRENT:-4} \
-	JVT-AVC_V1 JVT-FR-EXT JVT-MVC JVT-Professional_profiles JVT-SVC \
-	JCT-VC-3D-HEVC JCT-VC-HEVC_V1 JCT-VC-MV-HEVC JCT-VC-RExt JCT-VC-SCC JCT-VC-SHVC \
-	VP9-TEST-VECTORS-HIGH VP9-TEST-VECTORS
+    # Download the necessary vectors
+    fluster/fluster.py download -j ${FDO_CI_CONCURRENT:-4} --codec H.264,H.265,VP9
 
     # Build fluster vectors archive and upload it
     tar --zstd -cf "vectors.tar.zst" fluster/resources/

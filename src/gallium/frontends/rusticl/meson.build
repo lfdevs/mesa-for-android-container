@@ -1,6 +1,8 @@
 # Copyright ©
 # SPDX-License-Identifier: MIT
 
+subdir('builtin_kernels')
+
 libmesa_rust_util_files = files(
   'util/lib.rs',
   'util/assert.rs',
@@ -54,6 +56,7 @@ rusticl_files = files(
   'core/format.rs',
   'core/kernel.rs',
   'core/memory.rs',
+  'core/meta.rs',
   'core/platform.rs',
   'core/program.rs',
   'core/queue.rs',
@@ -446,6 +449,7 @@ librusticl = static_library(
     rusticl_llvm_gen,
     rusticl_opencl_gen,
     rusticl_proc_macros,
+    rusticl_kernels_spv,
   ],
 )
 

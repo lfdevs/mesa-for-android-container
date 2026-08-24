@@ -19,13 +19,16 @@ nvk_init_wsi(struct nvk_physical_device *pdev)
 {
    VkResult result;
 
+   int display_fd = -1;
+   if (pdev->vk.instance->enabled_extensions.KHR_display)
+      display_fd = nvkmd_pdev_get_drm_primary_fd(pdev->nvkmd);
    struct wsi_device_options wsi_options = {
       .sw_device = false
    };
    result = wsi_device_init(&pdev->wsi_device,
                             nvk_physical_device_to_handle(pdev),
                             nvk_wsi_proc_addr, &pdev->vk.instance->alloc,
-                            nvkmd_pdev_get_drm_primary_fd(pdev->nvkmd),
+                            display_fd,
                             &nvk_physical_device_instance(pdev)->drirc.options,
                             &wsi_options);
    if (result != VK_SUCCESS)

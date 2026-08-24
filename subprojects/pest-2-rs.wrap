@@ -1,6 +1,6 @@
 [wrap-file]
 directory = pest-2.8.0
-source_url = https://crates.io/api/v1/crates/pest/2.8.0/download
+source_url = https://static.crates.io/crates/pest/2.8.0/download
 source_filename = pest-2.8.0.tar.gz
 source_hash = 198db74531d58c70a361c42201efde7e2591e976d518caf7662a47dc5720e7b6
 patch_directory = pest-2-rs

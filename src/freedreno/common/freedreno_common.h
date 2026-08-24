@@ -12,6 +12,7 @@
 #ifdef __cplusplus
 
 #include <tuple>
+#include <type_traits>
 
 #define __FD_GPU_GENS A6XX, A7XX, A8XX
 

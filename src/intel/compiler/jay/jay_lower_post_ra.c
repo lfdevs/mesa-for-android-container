@@ -93,40 +93,79 @@ lower(jay_builder *b, jay_inst *I)
       return false;
    }
 
-   case JAY_OPCODE_ZERO_FLAG: {
-      jay_MOV(b, jay_bare_reg(FLAG, jay_zero_flag_reg(I)), 0)->type =
-         JAY_TYPE_U32;
-      return true;
-   }
-
    case JAY_OPCODE_LOOP_ONCE:
       jay_BREAK(b);
       jay_WHILE(b);
       return true;
+
+   case JAY_OPCODE_LOOP_ONCE_HALT:
+      jay_HALT(b, false);
+      jay_WHILE(b);
+      return true;
+
+   case JAY_OPCODE_SEL_ACTIVE: {
+      if (I->type == JAY_TYPE_U64) {
+         jay_MOV_IMM64(b, I->dst, jay_sel_active_value(I))->type = JAY_TYPE_U64;
+      } else {
+         jay_MOV(b, I->dst, (uint32_t) jay_sel_active_value(I));
+      }
+
+      jay_inst *mov = jay_MOV(b, I->dst, I->src[0]);
+      mov->uniform = false;
+      mov->type = I->type;
+      return true;
+   }
 
    default:
       return false;
    }
 }
 
-void
-jay_lower_post_ra(jay_shader *s)
+static void
+pass(jay_function *func)
 {
-   jay_foreach_inst_in_shader_safe(s, func, I) {
-      jay_builder b = jay_init_builder(func, jay_before_inst(I));
+   jay_foreach_block(func, block) {
+      BITSET_DECLARE(inactive_are_0, JAY_MAX_FLAGS) = { 0 };
 
-      if (jay_inst_has_default(I)) {
-         if (!jay_regs_equal(I->dst, *jay_inst_get_default(I))) {
-            lower_non_tied_default(&b, I, *jay_inst_get_default(I));
+      jay_foreach_inst_in_block_safe(block, I) {
+         jay_builder b = jay_init_builder(func, jay_before_inst(I));
+
+         if (jay_inst_has_default(I)) {
+            if (!jay_regs_equal(jay_is_null(I->dst) ? I->cond_flag : I->dst,
+                                *jay_inst_get_default(I))) {
+               lower_non_tied_default(&b, I, *jay_inst_get_default(I));
+            }
+
+            /* Now just drop the default source */
+            jay_shrink_sources(I, I->num_srcs - 1);
+            I->predication = JAY_PREDICATED;
          }
 
-         /* Now just drop the default source */
-         jay_shrink_sources(I, I->num_srcs - 1);
-         I->predication = JAY_PREDICATED;
-      }
+         if (I->zero_inactive) {
+            if (!BITSET_TEST(inactive_are_0, I->cond_flag.reg)) {
+               jay_MOV(&b, I->cond_flag, 0)->type = jay_flag_type(func);
+               BITSET_SET(inactive_are_0, I->cond_flag.reg);
+            }
 
-      if (lower(&b, I)) {
-         jay_remove_instruction(I);
+            jay_foreach_src(I, s) {
+               assert(!jay_regs_equal(I->src[s], I->cond_flag));
+            }
+         } else {
+            if (I->dst.file == FLAG) {
+               BITSET_CLEAR(inactive_are_0, I->dst.reg);
+            }
+
+            /* Lane 0 might be inactive */
+            if (!jay_is_null(I->cond_flag) && I->uniform) {
+               BITSET_CLEAR(inactive_are_0, I->cond_flag.reg);
+            }
+
+            if (lower(&b, I)) {
+               jay_remove_instruction(I);
+            }
+         }
       }
    }
 }
+
+JAY_DEFINE_FUNCTION_PASS(jay_lower_post_ra, pass)

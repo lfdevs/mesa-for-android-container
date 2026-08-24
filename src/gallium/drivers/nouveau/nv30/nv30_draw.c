@@ -389,12 +389,6 @@ nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
 
    nv30_render_validate(nv30);
 
-   if (nv30->draw_dirty & NV30_NEW_VIEWPORT)
-      draw_set_viewport_states(draw, 0, 1, &nv30->viewport);
-   if (nv30->draw_dirty & NV30_NEW_RASTERIZER)
-      draw_set_rasterizer_state(draw, &nv30->rast->pipe, NULL);
-   if (nv30->draw_dirty & NV30_NEW_CLIP)
-      draw_set_clip_state(draw, &nv30->clip);
    if (nv30->draw_dirty & NV30_NEW_ARRAYS) {
       draw_set_vertex_buffers(draw, nv30->num_vtxbufs, nv30->vtxbuf);
       draw_set_vertex_elements(draw, nv30->vertex->num_elements, nv30->vertex->pipe);
@@ -407,8 +401,6 @@ nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
    }
    if (nv30->draw_dirty & NV30_NEW_VERTPROG) {
       struct nv30_vertprog *vp = nv30->vertprog.program;
-      if (!vp->draw)
-         vp->draw = draw_create_vertex_shader(draw, &vp->pipe);
       draw_bind_vertex_shader(draw, vp->draw);
    }
    if (nv30->draw_dirty & NV30_NEW_VERTCONST) {
@@ -432,6 +424,12 @@ nv30_render_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info,
       }
       draw_set_mapped_vertex_buffer(draw, i, map, ~0);
    }
+   if (nv30->draw_dirty & NV30_NEW_VIEWPORT)
+       draw_set_viewport_states(draw, 0, 1, &nv30->viewport);
+   if (nv30->draw_dirty & NV30_NEW_RASTERIZER)
+       draw_set_rasterizer_state(draw, &nv30->rast->pipe, NULL);
+   if (nv30->draw_dirty & NV30_NEW_CLIP)
+       draw_set_clip_state(draw, &nv30->clip);
 
    if (info->index_size) {
       const void *map = info->has_user_indices ? info->index.user : NULL;

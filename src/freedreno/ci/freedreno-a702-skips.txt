@@ -1,0 +1,34 @@
+# Don't try allocating too large buffers, it OOMs the poor board
+dEQP-VK.api.buffer.basic\.*
+
+# Another set of OOM, to be verified separately
+dEQP-VK.image.host_image_copy.large_images.image_to_memory_d32_sfloat_4096_4096
+dEQP-VK.image.host_image_copy.large_images.image_to_memory_r10x6_unorm_pack16_4096_4096
+dEQP-VK.image.host_image_copy.large_images.image_to_memory_r16_unorm_4096_4096
+dEQP-VK.image.host_image_copy.large_images.image_to_memory_r32_sfloat_4096_4096
+dEQP-VK.image.host_image_copy.large_images.image_to_memory_r8_unorm_4096_4096
+dEQP-VK.image.host_image_copy.large_images.image_to_memory_r8g8_unorm_4096_4096
+dEQP-VK.image.host_image_copy.large_images.image_to_memory_r8g8b8a8_unorm_4096_4096
+dEQP-VK.image.host_image_copy.large_images.memory_to_image_d32_sfloat_4096_4096
+dEQP-VK.image.host_image_copy.large_images.memory_to_image_r10x6_unorm_pack16_4096_4096
+dEQP-VK.image.host_image_copy.large_images.memory_to_image_r16_unorm_4096_4096
+dEQP-VK.image.host_image_copy.large_images.memory_to_image_r32_sfloat_4096_4096
+dEQP-VK.image.host_image_copy.large_images.memory_to_image_r8_unorm_4096_4096
+dEQP-VK.image.host_image_copy.large_images.memory_to_image_r8g8_unorm_4096_4096
+dEQP-VK.image.host_image_copy.large_images.memory_to_image_r8g8b8a8_unorm_4096_4096
+dEQP-VK.sparse_resources.image_sparse_binding.multiple_bind_sparse_info.cube_array.rgba32ui.256_256_6
+dEQP-VK.sparse_resources.image_sparse_binding.multiple_bind_sparse_info.cube_array.rgba8.128_128_8
+dEQP-VK.rasterization.primitive_size.points.point_size_8192
+dEQP-VK.compute.pipeline.zero_initialize_workgroup_memory.max_workgroup_memory\.*
+
+# tests are broken with Vulkan 1.0: https://gerrit.khronos.org/c/vk-gl-cts/+/19823
+dEQP-VK.wsi.direct_drm.*
+dEQP-VK.wsi.acquire_drm_display.*
+dEQP-VK.api.image_compression_control.swapchain.direct_drm.*
+
+# flake timeout
+program@execute@builtin@builtin-float-sincos-1.0.generated
+
+# OpenCL-CTS Timeouts:
+^Images \(clFillImage\)$
+^Images \(clCopyImage\)$

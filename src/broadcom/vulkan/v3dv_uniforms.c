@@ -63,7 +63,7 @@ push_constants_bo_free(VkDevice _device,
                        VkAllocationCallbacks *alloc)
 {
    V3DV_FROM_HANDLE(v3dv_device, device, _device);
-   v3dv_bo_free(device, (struct v3dv_bo *)(uintptr_t) bo_ptr);
+   v3dv_bo_free(device, (struct v3dv_bo *)(uintptr_t) bo_ptr, 0);
 }
 
 /*
@@ -83,7 +83,9 @@ check_push_constants_ubo(struct v3dv_cmd_buffer *cmd_buffer,
 
    if (cmd_buffer->push_constants_resource.bo == NULL) {
       cmd_buffer->push_constants_resource.bo =
-         v3dv_bo_alloc(cmd_buffer->device, 4096, "push constants", true);
+         v3dv_bo_alloc(cmd_buffer->device, 4096, "push constants", true,
+                       VK_OBJECT_TYPE_COMMAND_BUFFER,
+                       vk_object_to_u64_handle(&cmd_buffer->vk.base));
 
       v3dv_job_add_bo(cmd_buffer->state.job,
                       cmd_buffer->push_constants_resource.bo);

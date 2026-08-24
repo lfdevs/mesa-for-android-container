@@ -12,8 +12,7 @@ vn_renderer_submit_simple_sync(struct vn_renderer *renderer,
 {
    VN_TRACE_FUNC();
    struct vn_renderer_sync *sync;
-   VkResult result =
-      vn_renderer_sync_create(renderer, 0, VN_RENDERER_SYNC_BINARY, &sync);
+   VkResult result = vn_renderer_sync_create(renderer, 0, &sync);
    if (result != VK_SUCCESS)
       return result;
 

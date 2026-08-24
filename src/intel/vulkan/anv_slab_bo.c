@@ -37,7 +37,6 @@ anv_bo_alloc_flags_to_slab_heap(struct anv_device *device,
                                            ANV_BO_ALLOC_FIXED_ADDRESS |
                                            ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS |
                                            ANV_BO_ALLOC_DESCRIPTOR_POOL |
-                                           ANV_BO_ALLOC_LOCAL_MEM_CPU_VISIBLE |
                                            ANV_BO_ALLOC_SCANOUT |
                                            ANV_BO_ALLOC_PROTECTED |
                                            ANV_BO_ALLOC_DYNAMIC_VISIBLE_POOL |
@@ -243,7 +242,7 @@ anv_slab_alloc(void *priv,
       alloc_flags |= ANV_BO_ALLOC_COMPRESSED;
       break;
    case ANV_BO_SLAB_HEAP_LMEM_SMEM:
-      alloc_flags |= ANV_BO_ALLOC_MAPPED |
+      alloc_flags |= ANV_BO_ALLOC_LOCAL_MEM_CPU_VISIBLE |
                      ANV_BO_ALLOC_HOST_COHERENT;
       break;
    case ANV_BO_SLAB_HEAP_LMEM_ONLY:

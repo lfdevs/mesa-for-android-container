@@ -1,5 +1,6 @@
 KHR-GLES2.core.internalformat.copy_tex_image.rgba4
 
+dEQP-GLES2.functional.clipping.triangle_vertex.clip_three.clip_neg_x_and_pos_x_neg_y_pos_z_and_neg_x_pos_y_neg_z
 dEQP-GLES2.functional.fbo.render.repeated_clear.tex2d_rgba
 dEQP-GLES2.functional.fbo.render.shared_depthbuffer.rbo_bgra_depth_component16
 dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.add_constant_color_constant_alpha
@@ -174,6 +175,8 @@ dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_nearest_nearest
 dEQP-GLES2.functional.texture.vertex.2d.wrap.repeat_mirror
 dEQP-GLES2.functional.uniform_api.value.assigned.by_value.render.basic_array.ivec4_vertex
 
+arm32-dEQP-GLES2.functional.clipping.triangle_vertex.clip_three.clip_neg_x_and_pos_x_and_neg_x_neg_y_neg_z
+arm32-dEQP-GLES2.functional.clipping.triangle_vertex.clip_three.clip_pos_x_and_neg_x_neg_y_pos_z_and_neg_x_pos_y_neg_z
 arm32-dEQP-GLES2.functional.fragment_ops.depth_stencil.stencil_ops.decr_wrap_incr_wrap_decr
 arm32-dEQP-GLES2.functional.shaders.random.trigonometric.fragment.25
 arm32-dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.cube_rgba
@@ -239,3 +242,21 @@ spec@glsl-1.10@execution@built-in-functions@vs-op-div-int-ivec3
 spec@glsl-1.10@execution@built-in-functions@vs-op-ne-vec4-vec4-using-if
 spec@glsl-1.10@execution@variable-indexing@fs-varying-array-mat2-col-rd
 spec@glsl-1.10@execution@variable-indexing@vs-varying-mat4-row-rd
+
+spec@arb_vertex_program@vp-write-undefined-to-output
+spec@glsl-1.10@execution@builtins@glsl-fs-neg-dot
+spec@glsl-1.10@execution@variable-indexing@vs-uniform-mat4-col-row-rd
+spec@glsl-1.20@execution@built-in-functions@vs-op-ne-mat2x3-mat2x3
+
+spec@!opengl 1.0@gl-1.0-read-cache-stress-test
+spec@!opengl 1.0@gl-1.0-readpixsanity
+spec@arb_vertex_buffer_object@vbo-subdata-many drawelements
+spec@ext_framebuffer_multisample@accuracy 2 color small depthstencil linear
+spec@glsl-1.10@execution@built-in-constants
+spec@glsl-1.10@execution@built-in-functions@fs-op-assign-sub-vec4-vec4
+spec@glsl-1.10@execution@variable-indexing@fs-temp-mat3-col-row-rd
+spec@glsl-1.10@execution@vs-nested-return-sibling-if2
+spec@glsl-1.20@execution@variable-indexing@vs-varying-array-mat3-col-rd
+spec@glsl-1.20@execution@vs-outerproduct-mat3x4
+
+spec@ext_framebuffer_multisample@accuracy 4 stencil_draw small depthstencil

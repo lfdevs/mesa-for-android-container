@@ -23,42 +23,32 @@
 
 #include "d3d12_suballoc_mediabuffer.h"
 #include <mferror.h>
-#include "frontend/winsys_handle.h"
-#include "pipe/p_context.h"
-#include "pipe/p_screen.h"
-#include "util/u_inlines.h"
-
 #include "wpptrace.h"
 
 #include "d3d12_suballoc_mediabuffer.tmh"
 
-CD3D12BitstreamMFBuffer::CD3D12BitstreamMFBuffer(
-   void *logId, pipe_context *pPipeContext, pipe_resource *pOutputBitRes, DWORD length, DWORD offset )
+CD3D12BitstreamMFBuffer::CD3D12BitstreamMFBuffer( void *logId,
+                                                  CD3D12ResourceHolder *pResourceHolder,
+                                                  DWORD length,
+                                                  DWORD offset )
    : m_logId( logId ),
+     m_spResourceHolder( pResourceHolder ),
      m_cRef( 1 ),
      m_dwLength( length ),
      m_dwOffset( offset ),
-     m_pMappedData( nullptr ),
-     m_pScreen( pPipeContext->screen ),
-     m_pOutputBitRes( nullptr )
+     m_pMappedData( nullptr )
 {
-   debug_printf( "[dx12 hmft 0x%p] CD3D12BitstreamMFBuffer created for length %u, offset %u\n", m_logId, length, offset );
-   pipe_resource_reference( &m_pOutputBitRes, pOutputBitRes );
-
-   struct winsys_handle whandle = { .type = WINSYS_HANDLE_TYPE_D3D12_RES };
-   if( pPipeContext->screen->resource_get_handle( pPipeContext->screen, nullptr, pOutputBitRes, &whandle, 0u ) )
-   {
-      m_spResource = static_cast<ID3D12Resource *>( whandle.com_obj );
-   }
+   assert( pResourceHolder != nullptr && pResourceHolder->GetResource() != nullptr );
+   m_spResource = m_spResourceHolder->GetResource();
+   debug_printf( "[dx12 hmft 0x%p] CD3D12BitstreamMFBuffer created for length %u, offset %u, m_spResource 0x%p\n",
+                 m_logId,
+                 length,
+                 offset,
+                 m_spResource.Get() );
 }
 
 CD3D12BitstreamMFBuffer::~CD3D12BitstreamMFBuffer()
 {
-   // Decrement reference count on the pipe_resource (will destroy if reference count reaches 0)
-   if( m_pOutputBitRes )
-   {
-      pipe_resource_reference( &m_pOutputBitRes, nullptr );
-   }
 }
 
 STDMETHODIMP

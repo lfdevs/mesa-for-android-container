@@ -30,6 +30,15 @@ protected:
          r[i] = vgrf(a, b, type);
       return r;
    }
+
+   static brw_reg
+   vaddr(brw_builder &a, brw_builder &b, brw_reg_type type, unsigned subnr)
+   {
+      brw_reg reg_a = a.vaddr(type, subnr);
+      brw_reg reg_b = b.vaddr(type, subnr);
+      assert(brw_regs_equal(&reg_a, &reg_b));
+      return reg_a;
+   }
 };
 
 brw_inst *
@@ -321,6 +330,106 @@ TEST_F(scoreboard_test, WAR_outoforder_inorder)
    emit_SEND(exp, g[1], g[2],    x)->sched = SWSB("$0");
    exp.MUL(       g[4], g[5], g[6]);
    exp.AND(          x, g[7], g[8])->sched = SWSB("$0.src");
+
+   EXPECT_SHADERS_MATCH(bld, exp);
+}
+
+TEST_F(scoreboard_test, WAR_send_address_register_descriptor_same_vaddr)
+{
+   brw_builder bld = make_shader();
+   brw_builder exp = make_shader();
+
+   brw_reg *g = vgrf_array(bld, exp, BRW_TYPE_UD, 6);
+   brw_reg desc_addr = vaddr(bld, exp, BRW_TYPE_UD,
+                             BRW_ADDRESS_SUBREG_INDIRECT_DESC);
+   brw_reg zero = brw_imm_ud(0);
+
+   {
+      bld.uniform().MOV(desc_addr, g[1]);
+      auto *send = emit_SEND(bld, g[2], zero, g[3]);
+      send->src[SEND_SRC_DESC] = component(desc_addr, 0);
+      bld.uniform().MOV(desc_addr, g[4]);
+   }
+
+   EXPECT_PROGRESS(brw_lower_scoreboard, bld);
+
+   {
+      exp.uniform().MOV(desc_addr, g[1]);
+      SYNC_NOP(exp)->sched = SWSB("@1");
+      auto *send = emit_SEND(exp, g[2], zero, g[3]);
+      send->src[SEND_SRC_DESC] = component(desc_addr, 0);
+      send->sched = SWSB("$0");
+      exp.uniform().MOV(desc_addr, g[4])->sched = SWSB("$0.src");
+   }
+
+   EXPECT_SHADERS_MATCH(bld, exp);
+}
+
+TEST_F(scoreboard_test, WAR_send_address_register_ex_desc_different_vaddr)
+{
+   brw_builder bld = make_shader();
+   brw_builder exp = make_shader();
+
+   brw_reg *g = vgrf_array(bld, exp, BRW_TYPE_UD, 6);
+   brw_reg ex_desc_addr = vaddr(bld, exp, BRW_TYPE_UD,
+                                BRW_ADDRESS_SUBREG_INDIRECT_EX_DESC);
+   brw_reg zero = brw_imm_ud(0);
+   /* Different virtual address registers and subregisters still alias the
+    * same concrete address register after register allocation.
+    */
+   brw_reg other_addr = vaddr(bld, exp, BRW_TYPE_UD, 8);
+
+   {
+      bld.uniform().MOV(ex_desc_addr, g[1]);
+      auto *send = emit_SEND(bld, g[2], zero, g[3]);
+      send->src[SEND_SRC_EX_DESC] = component(ex_desc_addr, 0);
+      bld.uniform().MOV(other_addr, g[4]);
+   }
+
+   EXPECT_PROGRESS(brw_lower_scoreboard, bld);
+
+   {
+      exp.uniform().MOV(ex_desc_addr, g[1]);
+      SYNC_NOP(exp)->sched = SWSB("@1");
+      auto *send = emit_SEND(exp, g[2], zero, g[3]);
+      send->src[SEND_SRC_EX_DESC] = component(ex_desc_addr, 0);
+      send->sched = SWSB("$0");
+      exp.uniform().MOV(other_addr, g[4])->sched = SWSB("$0.src");
+   }
+
+   EXPECT_SHADERS_MATCH(bld, exp);
+}
+
+TEST_F(scoreboard_test, WAR_send_address_register_descriptor_implicit_clobber)
+{
+   brw_builder bld = make_shader();
+   brw_builder exp = make_shader();
+
+   brw_reg *g = vgrf_array(bld, exp, BRW_TYPE_UD, 16);
+   brw_reg ex_desc_addr = vaddr(bld, exp, BRW_TYPE_UD,
+                                BRW_ADDRESS_SUBREG_INDIRECT_EX_DESC);
+   brw_reg other_addr = vaddr(bld, exp, BRW_TYPE_UD, 8);
+   brw_reg zero = brw_imm_ud(0);
+
+   {
+      bld.uniform().MOV(ex_desc_addr, g[1]);
+      auto *send = emit_SEND(bld, g[2], zero, g[3]);
+      send->src[SEND_SRC_EX_DESC] = component(ex_desc_addr, 0);
+      bld.emit(SHADER_OPCODE_SHUFFLE, g[10], g[11], g[12]);
+      bld.uniform().MOV(other_addr, g[4]);
+   }
+
+   EXPECT_PROGRESS(brw_lower_scoreboard, bld);
+
+   {
+      exp.uniform().MOV(ex_desc_addr, g[1]);
+      SYNC_NOP(exp)->sched = SWSB("@1");
+      auto *send = emit_SEND(exp, g[2], zero, g[3]);
+      send->src[SEND_SRC_EX_DESC] = component(ex_desc_addr, 0);
+      send->sched = SWSB("$0");
+      exp.emit(SHADER_OPCODE_SHUFFLE, g[10], g[11], g[12])->sched = SWSB("$0.src");
+      exp.uniform().MOV(other_addr, g[4]);
+   }
 
    EXPECT_SHADERS_MATCH(bld, exp);
 }

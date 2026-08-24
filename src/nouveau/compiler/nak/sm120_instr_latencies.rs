@@ -163,6 +163,7 @@ fn op_reg_latency(op: &Op, reader: bool, op_reg_idx: usize) -> RegLatencySM100 {
         Op::LdTram(_) => DecoupledAgu,
         Op::Shfl(_) => DecoupledAgu,
         Op::Ldsm(_) => DecoupledAgu,
+        Op::Nanosleep(_) => Decoupled,
         x => {
             panic!("Illegal instuction in reg category {}", x);
         }
@@ -253,6 +254,7 @@ fn op_ureg_latency(
         Op::ALd(_)
         | Op::ASt(_)
         | Op::Ld(_)
+        | Op::Ldcg(_)
         | Op::Ldsm(_)
         | Op::St(_)
         | Op::Atom(_) => decoupled,
@@ -353,8 +355,15 @@ fn op_upred_latency(op: &Op) -> UpredLatencySM100 {
         | Op::Lop3(_)
         | Op::Mov(_) => Udp,
         Op::Bra(_) => BraJmp,
-        Op::Ldc(_) => UldcMma,
+        Op::Ldc(_) | Op::Ldcg(_) => UldcMma,
         Op::PLop3(_) => {
+            if uniform_op {
+                Udp
+            } else {
+                Coupled
+            }
+        }
+        Op::FSetP(_) => {
             if uniform_op {
                 Udp
             } else {

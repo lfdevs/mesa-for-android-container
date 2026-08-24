@@ -759,7 +759,7 @@ max_work_registers(const compiler_context *ctx)
    if (ctx->inputs->is_blend)
       return 8;
 
-   unsigned rmu_vec4 = ctx->info->push.count / 4;
+   unsigned rmu_vec4 = ctx->info->fau.count / 4;
    unsigned max_work_registers = (rmu_vec4 >= 8) ? (24 - rmu_vec4) : 16;
 
    if (needs_contiguous_workgroup(ctx)) {
@@ -1418,7 +1418,7 @@ mir_spill_register(compiler_context *ctx, unsigned spill_node,
 static void
 mir_demote_uniforms(compiler_context *ctx, unsigned new_cutoff)
 {
-   unsigned uniforms = ctx->info->push.count / 4;
+   unsigned uniforms = ctx->info->fau.count / 4;
    unsigned old_work_count = 16 - MAX2(uniforms - 8, 0);
    unsigned work_count = 16 - MAX2((new_cutoff - 8), 0);
 
@@ -1436,9 +1436,11 @@ mir_demote_uniforms(compiler_context *ctx, unsigned new_cutoff)
 
             unsigned temp = make_compiler_temp(ctx);
             unsigned idx = (23 - SSA_REG_FROM_FIXED(ins->src[i])) * 4;
-            assert(idx < ctx->info->push.count);
+            assert(idx < ctx->info->fau.count);
+            assert(!BITSET_TEST(ctx->info->fau.is_const, idx));
 
-            ctx->ubo_mask |= BITSET_BIT(ctx->info->push.words[idx].ubo);
+            ctx->ubo_mask |=
+               BITSET_BIT(ctx->info->fau.words[idx].relocation.ubo);
 
             midgard_instruction ld = {
                .type = TAG_LOAD_STORE_4,
@@ -1452,11 +1454,11 @@ mir_demote_uniforms(compiler_context *ctx, unsigned new_cutoff)
                   {
                      .index_reg = REGISTER_LDST_ZERO,
                   },
-               .constants.u32[0] = ctx->info->push.words[idx].offset,
+               .constants.u32[0] = ctx->info->fau.words[idx].relocation.offset,
             };
 
             midgard_pack_ubo_index_imm(&ld.load_store,
-                                       ctx->info->push.words[idx].ubo);
+                                       ctx->info->fau.words[idx].relocation.ubo);
 
             mir_insert_instruction_before_scheduled(ctx, block, before, &ld);
 
@@ -1465,7 +1467,9 @@ mir_demote_uniforms(compiler_context *ctx, unsigned new_cutoff)
       }
    }
 
-   ctx->info->push.count = MIN2(ctx->info->push.count, new_cutoff * 4);
+   ctx->info->fau.count =
+      MIN2(ctx->info->fau.count,
+           ctx->info->fau.reserved + new_cutoff * 4);
 }
 
 /* Run register allocation in a loop, spilling until we succeed */
@@ -1485,7 +1489,7 @@ mir_ra(compiler_context *ctx)
    do {
       if (spilled) {
          signed spill_node = mir_choose_spill_node(ctx, l);
-         unsigned uniforms = ctx->info->push.count / 4;
+         unsigned uniforms = ctx->info->fau.count / 4;
 
          /* It's a lot cheaper to demote uniforms to get more
           * work registers than to spill to TLS. */

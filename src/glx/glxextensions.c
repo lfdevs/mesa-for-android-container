@@ -383,6 +383,25 @@ __glXEnableDirectExtension(struct glx_screen * psc, const char *name)
                      name, strlen(name), GL_TRUE, psc->direct_support);
 }
 
+/**
+ * \brief Unconditionally advertise a GLX extension, regardless of whether
+ * the screen is direct-rendering capable or the server advertises it.
+ *
+ * Used by back ends that implement an extension entirely client-side.
+ *
+ * \param psc   Pointer to GLX per-screen record.
+ * \param name  Name of the extension.
+ */
+void
+__glXForceEnableExtension(struct glx_screen * psc, const char *name)
+{
+   __glXExtensionsCtr();
+   __glXExtensionsCtrScreen(psc);
+
+   set_glx_extension(known_glx_extensions,
+                     name, strlen(name), GL_TRUE, psc->glx_force_enabled);
+}
+
 static void
 __ParseExtensionOverride(struct glx_screen *psc,
                          const struct extension_info *ext_list,

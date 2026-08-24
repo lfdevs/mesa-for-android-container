@@ -124,16 +124,19 @@ struct tu_shader_key {
    unsigned multiview_mask;
    uint16_t read_only_input_attachments;
    uint8_t max_fdm_layers;
-   bool force_sample_interp; /* Set when VkPipelineMultisampleStateCreateInfo->sampleShadingEnable */
-   bool fragment_density_map;
-   bool fdm_per_layer;
-   bool dynamic_renderpass;
    uint8_t unscaled_input_fragcoord;
-   bool robust_storage_access2;
-   bool robust_uniform_access2;
-   bool lower_view_index_to_device_index;
-   bool custom_resolve;
-   bool emulate_alpha_to_coverage;
+
+   bool force_sample_interp : 1; /* Set when VkPipelineMultisampleStateCreateInfo->sampleShadingEnable */
+   bool fragment_density_map : 1;
+   bool fdm_per_layer : 1;
+   bool dynamic_renderpass : 1;
+   bool robust_storage_access2 : 1;
+   bool robust_uniform_access2 : 1;
+   bool lower_view_index_to_device_index : 1;
+   bool custom_resolve : 1;
+   bool emulate_alpha_to_coverage : 1;
+   uint32_t padding : 23;
+
    enum ir3_wavesize_option api_wavesize, real_wavesize;
 
    /* Shader version to force recompilation when TU_BUILD_ID_OVERRIDE is used. */

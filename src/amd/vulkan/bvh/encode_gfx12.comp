@@ -221,7 +221,9 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
          if (type == vk_ir_node_internal) {
             encoded_type = 5;
             REF(vk_ir_box_node) child_node = REF(vk_ir_box_node) OFFSET(args.intermediate_bvh, offset);
-            cull_flags = DEREF(child_node).flags & 0x3;
+            uint32_t inv_cull_mask_and_flags = DEREF(child_node).flags;
+            cull_flags = inv_cull_mask_and_flags & 0x3;
+            cull_mask = ~(inv_cull_mask_and_flags >> VK_BVH_BOX_FLAGS_INV_CULL_MASK_SHIFT);
 
             REF(radv_gfx12_box_node) child_box = REF(radv_gfx12_box_node)(dst_child_addr);
             DEREF(child_box).parent_id = node_id;
@@ -331,7 +333,6 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
             min(uint32_t(floor((child_aabb.min.x - origin.x) / extent.x * float(0x1000))), 0xfff) |
             (min(uint32_t(floor((child_aabb.min.y - origin.y) / extent.y * float(0x1000))), 0xfff) << 12) |
             cull_flags << 24;
-         /* TODO: subtree mask culling */
          box_child.dword1 =
             min(uint32_t(floor((child_aabb.min.z - origin.z) / extent.z * float(0x1000))), 0xfff) |
             (min(uint32_t(ceil((child_aabb.max.x - origin.x) / extent.x * float(0x1000))) - 1, 0xfff) << 12) |
@@ -365,27 +366,14 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
       REF(radv_accel_struct_header) header = REF(radv_accel_struct_header)(args.output_base);
       DEREF(header).aabb = aabb;
       DEREF(header).bvh_offset = args.output_bvh_offset;
+      DEREF(header).root_flags = src.flags;
    }
 }
 
 void
 main()
 {
-   uint32_t ir_leaf_node_size;
-   switch (args.geometry_type) {
-   case VK_GEOMETRY_TYPE_TRIANGLES_KHR: {
-      ir_leaf_node_size = SIZEOF(vk_ir_triangle_node);
-      break;
-   }
-   case VK_GEOMETRY_TYPE_AABBS_KHR: {
-      ir_leaf_node_size = SIZEOF(vk_ir_aabb_node);
-      break;
-   }
-   default:
-      /* instances */
-      ir_leaf_node_size = SIZEOF(vk_ir_instance_node);
-      break;
-   }
+   uint32_t ir_leaf_node_size = vk_ir_node_size(args.geometry_type);
 
    uint32_t intermediate_leaf_nodes_size = args.leaf_node_count * ir_leaf_node_size;
    REF(vk_ir_box_node) intermediate_internal_nodes =

@@ -1,21 +1,26 @@
 dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qppq_fragment
+dEQP-GLES3.functional.shaders.matrix.mul.uniform.lowp_mat2x4_mat2_fragment
+dEQP-GLES3.functional.shaders.precision.float.mediump_sub_fragment
+dEQP-GLES3.functional.transform_feedback.array_element.interleaved.lines.highp_vec2
 dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_10x8_rgba.rgba_astc_10x8_khr_srgb8_alpha8_astc_10x8_khr.texture2d_to_cubemap
+dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_5x4_rgba.srgb8_alpha8_astc_5x4_khr_rgba_astc_5x4_khr.texture3d_to_cubemap
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_rgba_astc_12x12_khr.cubemap_to_texture2d
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_srgb8_alpha8_astc_10x5_khr.cubemap_to_texture3d
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32i_srgb8_alpha8_astc_8x5_khr.texture2d_array_to_texture2d_array
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_10x5_khr_rgba32i.cubemap_to_texture2d_array
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_12x12_khr_rgba32i.texture2d_to_texture2d_array
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_8x6_khr_rgba32i.texture2d_to_texture3d
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_12x10_khr_rgba32f.texture2d_array_to_texture3d
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_5x4_khr_rgba32i.cubemap_to_texture2d_array
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_5x5_khr_rgba32i.texture3d_to_texture2d
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_5x5_khr_rgba32ui.texture3d_to_texture2d
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x6_khr_rgba32ui.cubemap_to_texture3d
 dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x8_khr_rgba32ui.texture2d_array_to_texture3d
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.rgb10_a2_rg16ui.texture2d_to_texture3d
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_64_bits.rg32i_rg32ui.texture2d_array_to_texture2d
 dEQP-GLES31.functional.texture.filtering.cube_array.formats.rgb565_nearest
 dEQP-GLES31.functional.texture.filtering.cube_array.formats.srgb8_alpha8_linear_mipmap_nearest
-dEQP-GLES3.functional.shaders.precision.float.mediump_sub_fragment
-dEQP-GLES3.functional.transform_feedback.array_element.interleaved.lines.highp_vec2
-glx@glx-multithread-texture
+
 KHR-GL46.direct_state_access.framebuffers_texture_layer_attachment
 KHR-GL46.gpu_shader_fp64.builtin.abs_dvec4
 KHR-GL46.gpu_shader_fp64.builtin.dot_dvec2
@@ -35,23 +40,42 @@ KHR-GL46.gpu_shader_fp64.builtin.trunc_dvec3
 KHR-GL46.packed_pixels.varied_rectangle.compressed_red_format_red
 KHR-GL46.packed_pixels.varied_rectangle.compressed_rgba_format_green
 KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_red_rgtc1_format_rg
+KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_rg_rgtc2_format_rg
 KHR-GL46.packed_pixels.varied_rectangle.compressed_srgb_format_rgba
 KHR-GL46.packed_pixels.varied_rectangle.r16_format_red
 KHR-GL46.packed_pixels.varied_rectangle.rg16ui_format_bgra_integer
 KHR-GL46.packed_pixels.varied_rectangle.rg8_snorm_format_bgr
+KHR-GL46.packed_pixels.varied_rectangle.rg_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.rgb10_a2ui_format_rgb_integer
 KHR-GL46.packed_pixels.varied_rectangle.rgb10_format_bgra
 KHR-GL46.packed_pixels.varied_rectangle.rgb12_format_bgra
 KHR-GL46.packed_pixels.varied_rectangle.rgb16_snorm_format_rgb
 KHR-GL46.packed_pixels.varied_rectangle.rgb8ui_format_bgr_integer
 KHR-GL46.packed_pixels.varied_rectangle.rgba16_format_rgba
 KHR-GL46.packed_pixels.varied_rectangle.rgba2_format_rg
+KHR-GL46.packed_pixels.varied_rectangle.rgba4_format_rgba
 KHR-GL46.packed_pixels.varied_rectangle.rgba8i_format_rgba_integer
-KHR-GL46.packed_pixels.varied_rectangle.rg_format_rgba
 KHR-GL46.packed_pixels.varied_rectangle.srgb8_format_rgba
 KHR-GL46.texture_border_clamp.Texture3DRGBA32FLinear
 KHR-GL46.texture_lod_bias.texture_lod_bias_all
+
+glx@glx-make-current
+glx@glx-multithread-texture
+
+spec@!opengl 1.0@gl-1.0-read-cache-stress-test
+spec@!opengl 1.0@rasterpos
+spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked
+spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked
+spec@!opengl 1.1@copypixels-sync
+spec@!opengl 1.1@draw-pixels
+spec@!opengl 1.1@draw-sync
+spec@!opengl 1.1@teximage-colors gl_r8
+spec@!opengl 1.2@texture-packed-formats
+spec@!opengl 1.4@gl-1.4-polygon-offset
+spec@!opengl 2.0@tex3d-npot
 spec@amd_pinned_memory@map-buffer offset=0
 spec@amd_pinned_memory@offset=0
+spec@amd_shader_trinary_minmax@execution@built-in-functions@cs-min3-uvec4-uvec4-uvec4
 spec@amd_shader_trinary_minmax@execution@built-in-functions@vs-max3-ivec2-ivec2-ivec2
 spec@arb_color_buffer_float@gl_rgba8-render
 spec@arb_color_buffer_float@gl_rgba8-render-sanity
@@ -60,6 +84,7 @@ spec@arb_compute_variable_group_size@local-size
 spec@arb_copy_image@arb_copy_image-formats
 spec@arb_direct_state_access@gettextureimage-formats
 spec@arb_fragment_shader_interlock@arb_fragment_shader_interlock-image-load-store
+spec@arb_gpu_shader_int64@execution@built-in-functions@cs-op-lshift-int64_t-uint64_t
 spec@arb_pixel_buffer_object@texsubimage-unpack pbo
 spec@arb_shading_language_packing@execution@built-in-functions@fs-packsnorm2x16
 spec@arb_tessellation_shader@arb_tessellation_shader-tes-gs-max-output -small -scan 1 50
@@ -73,9 +98,13 @@ spec@ext_texture_array@fbo-depth-array depth-layered-clear
 spec@ext_texture_array@fbo-depth-array fs-writes-depth
 spec@ext_texture_array@fbo-depth-array fs-writes-stencil
 spec@ext_texture_array@fbo-depth-array stencil-draw
+spec@ext_texture_lod_bias@lodbias
+spec@ext_texture_snorm@fbo-fast-clear
+spec@ext_texture_snorm@multisample-fast-clear gl_ext_texture_snorm
 spec@ext_transform_feedback@max-varyings
 spec@ext_transform_feedback@max-varyings@max-varying-arrays-of-arrays
 spec@ext_transform_feedback@max-varyings@max-varying-single-dimension-array
+spec@glsl-1.30@execution@tex-miplevel-selection texturegradoffset 2dshadow
 spec@glsl-1.30@execution@texelfetch fs sampler1d 1-513
 spec@glsl-1.30@execution@texelfetch fs sampler1darray 1x281-501x281
 spec@glsl-1.30@execution@texelfetch fs sampler2d 1x281-501x281
@@ -86,14 +115,3 @@ spec@glsl-1.50@execution@geometry@point-size-out
 spec@glsl-1.50@execution@redeclare-pervertex-out-subset-gs
 spec@glsl-es-3.00@execution@built-in-functions@fs-packhalf2x16
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb
-spec@!opengl 1.0@gl-1.0-read-cache-stress-test
-spec@!opengl 1.0@rasterpos
-spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked
-spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked
-spec@!opengl 1.1@copypixels-sync
-spec@!opengl 1.1@draw-pixels
-spec@!opengl 1.1@draw-sync
-spec@!opengl 1.1@teximage-colors gl_r8
-spec@!opengl 1.2@texture-packed-formats
-spec@!opengl 1.4@gl-1.4-polygon-offset
-spec@!opengl 2.0@tex3d-npot

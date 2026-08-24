@@ -89,10 +89,36 @@ in_thrsw_delay_slots(struct v3d_qpu_validate_state *state)
 }
 
 static bool
+v3d42_magic_waddr_is_reserved(enum v3d_qpu_waddr waddr)
+{
+        /* Reserved ranges of the magic waddr space on V3D 4.2:
+         * 10, 14..15, 25..31, 47..54, 56..63.
+         */
+        return waddr == 10 ||
+               (waddr >= 14 && waddr <= 15) ||
+               (waddr >= 25 && waddr <= 31) ||
+               (waddr >= 47 && waddr <= 54) ||
+               (waddr >= 56 && waddr <= 63);
+}
+
+static bool
+v3d71_magic_waddr_is_reserved(enum v3d_qpu_waddr waddr)
+{
+        /* Reserved ranges of the magic waddr space on V3D 7.x:
+         * 0..4, 10, 14..15, 19..31, 47..54, 55..63.
+         */
+        return waddr <= 4 || waddr == 10 ||
+               (waddr >= 14 && waddr <= 15) ||
+               (waddr >= 19 && waddr <= 31) ||
+               (waddr >= 47 && waddr <= 54) ||
+               (waddr >= 55 && waddr <= 63);
+}
+
+static bool
 qpu_magic_waddr_matches(const struct v3d_qpu_instr *inst,
                         bool (*predicate)(enum v3d_qpu_waddr waddr))
 {
-        if (inst->type == V3D_QPU_INSTR_TYPE_ALU)
+        if (inst->type != V3D_QPU_INSTR_TYPE_ALU)
                 return false;
 
         if (inst->alu.add.op != V3D_QPU_A_NOP &&
@@ -280,7 +306,12 @@ qpu_validate_inst(struct v3d_qpu_validate_state *state, struct qinst *qinst)
                 }
         }
 
-        (void)qpu_magic_waddr_matches; /* XXX */
+        if (qpu_magic_waddr_matches(inst,
+                                    devinfo->ver < 71 ?
+                                    v3d42_magic_waddr_is_reserved :
+                                    v3d71_magic_waddr_is_reserved)) {
+                fail_instr(state, "write to a reserved magic waddr");
+        }
 
         /* SFU r4 results come back two instructions later.  No doing
          * r4 read/writes or other SFU lookups until it's done.
@@ -340,7 +371,7 @@ qpu_validate_inst(struct v3d_qpu_validate_state *state, struct qinst *qinst)
         }
 
         if (state->thrend_found &&
-            state->last_thrsw_ip - state->ip <= 2 &&
+            state->ip - state->last_thrsw_ip <= 2 &&
             inst->type == V3D_QPU_INSTR_TYPE_ALU) {
                 if ((inst->alu.add.op != V3D_QPU_A_NOP &&
                      !inst->alu.add.magic_write)) {
@@ -389,7 +420,8 @@ qpu_validate_inst(struct v3d_qpu_validate_state *state, struct qinst *qinst)
                 }
 
                 /* GFXH-1625: No TMUWT in the last instruction */
-                if (state->last_thrsw_ip - state->ip == 2 &&
+                if (devinfo->ver == 42 &&
+                    state->ip - state->last_thrsw_ip == 2 &&
                     inst->alu.add.op == V3D_QPU_A_TMUWT)
                         fail_instr(state, "TMUWT in last instruction");
         }

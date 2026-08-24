@@ -12,6 +12,7 @@
 #include "vulkan/vulkan_core.h"
 
 #include <inttypes.h>
+#include <stdbool.h>
 
 struct kk_device;
 struct vk_object_base;
@@ -37,5 +38,9 @@ VkResult kk_alloc_bo(struct kk_device *dev, struct vk_object_base *log_obj,
                      uint64_t size_B, uint64_t align_B, struct kk_bo **bo_out);
 
 void kk_destroy_bo(struct kk_device *dev, struct kk_bo *bo);
+
+VkResult kk_bo_map_placed(struct kk_device *dev, struct kk_bo *bo, void **addr);
+VkResult kk_bo_unmap(struct kk_device *dev, struct kk_bo *bo, void *addr,
+                     bool reserved);
 
 #endif /* KK_BO_H */

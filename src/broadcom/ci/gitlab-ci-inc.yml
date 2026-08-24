@@ -207,8 +207,8 @@
   extends:
     - .ci-tron-b2c-diskless-v1
   variables:
-    RPI_DOWNSTREAM_PACKAGE_VERSION: '1.20260609'
-    RPI_DOWNSTREAM_KERNEL_VERSION: '6.18.34\+rpt-rpi'
+    RPI_DOWNSTREAM_PACKAGE_VERSION: '1.20260729'
+    RPI_DOWNSTREAM_KERNEL_VERSION: '6.18.39\+rpt-rpi'
     # An uprev should only change the two variables above, and technically the
     # kernel version could instead be set to `.*` in the regex below, but
     # having it here documents this information well.
@@ -343,41 +343,3 @@
   variables:
     BM_BOOTFS: /boot/raspberrypi_arm64
 
-.broadcom-test-full:arm64-gl:
-  extends:
-    - .broadcom-test:arm64-gl
-  variables:
-    BM_BOOTFS: /boot/raspberrypi_arm64_full
-
-.broadcom-test-full:arm64-vk:
-  extends:
-    - .broadcom-test:arm64-vk
-  variables:
-    BM_BOOTFS: /boot/raspberrypi_arm64_full
-
-.broadcom-asan-test:arm64-gl:
-  extends:
-    - .broadcom-test:arm64-gl
-    - .baremetal-arm64-asan-test-gl
-
-.broadcom-asan-test:arm64-vk:
-  extends:
-    - .broadcom-test:arm64-vk
-    - .baremetal-arm64-asan-test-vk
-
-.broadcom-ubsan-test:arm64-gl:
-  extends:
-    - .broadcom-test:arm64-gl
-    - .baremetal-arm64-ubsan-test-gl
-
-.broadcom-ubsan-test:arm64-vk:
-  extends:
-    - .broadcom-test:arm64-vk
-    - .baremetal-arm64-ubsan-test-vk
-
-.broadcom-test:arm32-gl:
-  extends:
-    - .broadcom-test
-    - .baremetal-test-arm32-gl
-  variables:
-    BM_BOOTFS: /boot/raspberrypi_arm32

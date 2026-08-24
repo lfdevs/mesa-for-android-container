@@ -267,7 +267,7 @@ struct radeon_winsys {
 
    bool (*ctx_wait_idle)(struct radeon_winsys_ctx *ctx, enum amd_ip_type amd_ip_type, int ring_index);
 
-   int (*ctx_set_pstate)(struct radeon_winsys_ctx *ctx, uint32_t pstate);
+   int (*ctx_set_pstate)(struct radeon_winsys_ctx *ctx, uint32_t pstate, uint64_t timeout);
 
    enum radeon_bo_domain (*cs_domain)(const struct radeon_winsys *ws);
 

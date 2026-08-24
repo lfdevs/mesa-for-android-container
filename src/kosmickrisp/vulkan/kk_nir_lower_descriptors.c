@@ -445,6 +445,34 @@ try_lower_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
    case nir_intrinsic_load_clip_z_coeff:
       return lower_sysval_to_root_table(b, intrin, draw.clip_z_coeff);
 
+   case nir_intrinsic_load_is_depth_clamp_emulated_kk: {
+      unsigned offset = kk_root_descriptor_offset(draw.emulate_depth_clamp);
+      b->cursor = nir_instr_remove(&intrin->instr);
+      nir_def *val = load_root(b, 1, 8, nir_imm_int(b, offset), 1);
+      nir_def_rewrite_uses(&intrin->def, nir_ieq_imm(b, val, 1));
+      return true;
+   }
+
+   case nir_intrinsic_load_is_viewport_z_transform_emulated_kk: {
+      unsigned offset = kk_root_descriptor_offset(draw.emulate_viewport_z);
+      b->cursor = nir_instr_remove(&intrin->instr);
+      nir_def *val = load_root(b, 1, 8, nir_imm_int(b, offset), 1);
+      nir_def_rewrite_uses(&intrin->def, nir_ieq_imm(b, val, 1));
+      return true;
+   }
+
+   case nir_intrinsic_load_viewport_z_range_kk: {
+      unsigned offset = kk_root_descriptor_offset(draw.viewport_z_range);
+      assert((offset & 3) == 0 && "aligned");
+      b->cursor = nir_instr_remove(&intrin->instr);
+      nir_def *vp_offset =
+         nir_imul_imm(b, intrin->src[0].ssa, sizeof(float) * 2u);
+      nir_def *root_offset = nir_iadd_imm(b, vp_offset, offset);
+      nir_def *val = load_root(b, 2, 32, root_offset, 4);
+      nir_def_rewrite_uses(&intrin->def, val);
+      return true;
+   }
+
    case nir_intrinsic_load_push_constant:
       return lower_load_push_constant(b, intrin, ctx);
 
@@ -459,6 +487,7 @@ try_lower_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
    case nir_intrinsic_image_deref_size:
    case nir_intrinsic_image_deref_samples:
    case nir_intrinsic_image_deref_store_block_agx:
+   case nir_intrinsic_image_deref_levels:
       return lower_image_intrin(b, intrin, ctx);
 
    default:
@@ -491,7 +520,7 @@ lower_tex(nir_builder *b, nir_tex_instr *tex,
     */
    if (tex->op == nir_texop_lod_bias) {
       unsigned offs =
-         offsetof(struct kk_sampled_image_descriptor, lod_bias_fp16);
+         offsetof(struct kk_sampled_image_descriptor, sampler_lod_bias_fp16);
 
       nir_def *bias = load_resource_deref_desc(
          b, 1, 16, nir_src_as_deref(nir_src_for_ssa(sampler)),
@@ -501,34 +530,35 @@ lower_tex(nir_builder *b, nir_tex_instr *tex,
       return true;
    }
 
-   // if (tex->op == nir_texop_image_min_lod_agx) {
-   //    assert(tex->dest_type == nir_type_float16 ||
-   //           tex->dest_type == nir_type_uint16);
+   if (tex->op == nir_texop_image_min_lod_agx) {
+      assert(tex->dest_type == nir_type_float16 ||
+             tex->dest_type == nir_type_uint16);
 
-   //    unsigned offs =
-   //       tex->dest_type == nir_type_float16
-   //          ? offsetof(struct kk_sampled_image_descriptor, min_lod_fp16)
-   //          : offsetof(struct kk_sampled_image_descriptor, min_lod_uint16);
+      unsigned offs =
+         tex->dest_type == nir_type_float16
+            ? offsetof(struct kk_sampled_image_descriptor, image_min_lod_fp16)
+            : offsetof(struct kk_sampled_image_descriptor,
+                       image_min_lod_uint16);
 
-   //    nir_def *min = load_resource_deref_desc(
-   //       b, 1, 16, nir_src_as_deref(nir_src_for_ssa(texture)),
-   //       plane_offset_B + offs, ctx);
+      nir_def *min = load_resource_deref_desc(
+         b, 1, 16, nir_src_as_deref(nir_src_for_ssa(texture)),
+         plane_offset_B + offs, ctx);
 
-   //    nir_def_replace(&tex->def, min);
-   //    return true;
-   // }
+      nir_def_replace(&tex->def, min);
+      return true;
+   }
 
-   // if (tex->op == nir_texop_has_custom_border_color_agx) {
-   //    unsigned offs = offsetof(struct kk_sampled_image_descriptor,
-   //                             clamp_0_sampler_index_or_negative);
+   if (tex->op == nir_texop_has_custom_border_color_agx) {
+      unsigned offs = offsetof(struct kk_sampled_image_descriptor,
+                               clamp_0_sampler_index_or_negative);
 
-   //    nir_def *res = load_resource_deref_desc(
-   //       b, 1, 16, nir_src_as_deref(nir_src_for_ssa(sampler)),
-   //       plane_offset_B + offs, ctx);
+      nir_def *res = load_resource_deref_desc(
+         b, 1, 16, nir_src_as_deref(nir_src_for_ssa(sampler)),
+         plane_offset_B + offs, ctx);
 
-   //    nir_def_replace(&tex->def, nir_ige_imm(b, res, 0));
-   //    return true;
-   // }
+      nir_def_replace(&tex->def, nir_ige_imm(b, res, 0));
+      return true;
+   }
 
    if (tex->op == nir_texop_custom_border_color_agx) {
       unsigned offs = offsetof(struct kk_sampled_image_descriptor, border);
@@ -569,6 +599,11 @@ lower_tex(nir_builder *b, nir_tex_instr *tex,
       unsigned offs =
          offsetof(struct kk_sampled_image_descriptor, sampler_index);
 
+      bool clamp_to_0 = tex->backend_flags & KK_TEXTURE_FLAG_CLAMP_TO_0;
+      if (clamp_to_0)
+         offs = offsetof(struct kk_sampled_image_descriptor,
+                         clamp_0_sampler_index_or_negative);
+
       nir_def *index = load_resource_deref_desc(
          b, 1, 16, nir_src_as_deref(nir_src_for_ssa(sampler)),
          plane_offset_B + offs, ctx);
@@ -581,14 +616,14 @@ lower_tex(nir_builder *b, nir_tex_instr *tex,
       nir_def *lod_min = nir_f2f32(
          b, load_resource_deref_desc(
                b, 1, 16, nir_src_as_deref(nir_src_for_ssa(sampler)),
-               plane_offset_B +
-                  offsetof(struct kk_sampled_image_descriptor, lod_min_fp16),
+               plane_offset_B + offsetof(struct kk_sampled_image_descriptor,
+                                         sampler_lod_min_fp16),
                ctx));
       nir_def *lod_max = nir_f2f32(
          b, load_resource_deref_desc(
                b, 1, 16, nir_src_as_deref(nir_src_for_ssa(sampler)),
-               plane_offset_B +
-                  offsetof(struct kk_sampled_image_descriptor, lod_max_fp16),
+               plane_offset_B + offsetof(struct kk_sampled_image_descriptor,
+                                         sampler_lod_max_fp16),
                ctx));
 
       nir_tex_instr_add_src(tex, nir_tex_src_min_lod, lod_min);

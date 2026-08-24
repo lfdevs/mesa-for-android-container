@@ -37,7 +37,7 @@ anv_device_finish_shader_dump(struct anv_device *device)
    if (!ANV_DEBUG(SHADER_DUMP) && !INTEL_DEBUG(DEBUG_SHADERS_LINENO))
       return;
 
-   debug_archiver_finish_file(device->shader_dump.archive);
+   debug_archiver_close(device->shader_dump.archive);
 
    simple_mtx_destroy(&device->shader_dump.mutex);
 }
@@ -186,7 +186,7 @@ anv_shader_deserialize(struct vk_device *vk_device,
    blob_copy_bytes(blob, data.bind_map.surface_blake3, sizeof(data.bind_map.surface_blake3));
    blob_copy_bytes(blob, data.bind_map.sampler_blake3, sizeof(data.bind_map.sampler_blake3));
    blob_copy_bytes(blob, data.bind_map.push_blake3, sizeof(data.bind_map.push_blake3));
-   data.bind_map.layout_type = blob_read_uint16(blob);
+   data.bind_map.binding_mode = blob_read_uint16(blob);
    data.bind_map.binding_mask = blob_read_uint16(blob);
    data.bind_map.surface_count = blob_read_uint8(blob);
    data.bind_map.sampler_count = blob_read_uint8(blob);
@@ -271,7 +271,7 @@ anv_shader_serialize(struct vk_device *device,
                     sizeof(shader->bind_map.sampler_blake3));
    blob_write_bytes(blob, shader->bind_map.push_blake3,
                     sizeof(shader->bind_map.push_blake3));
-   blob_write_uint16(blob, shader->bind_map.layout_type);
+   blob_write_uint16(blob, shader->bind_map.binding_mode);
    blob_write_uint16(blob, shader->bind_map.binding_mask);
    blob_write_uint8(blob, shader->bind_map.surface_count);
    blob_write_uint8(blob, shader->bind_map.sampler_count);
@@ -597,7 +597,7 @@ anv_shader_set_relocs(struct anv_device *device,
    };
    reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
       .id = BRW_SHADER_RELOC_PUSH_DESCRIPTORS_BUFFER_ADDR_HIGH,
-      .value = anv_physical_device_get_indirect_descriptor_pool_va(device->physical)->addr >> 32,
+      .value = anv_physical_device_get_internal_surface_state_pool_va(device->physical)->addr >> 32,
    };
    assert((anv_physical_device_get_indirect_descriptor_pool_va(device->physical)->addr & 0xffffffff) == 0);
    assert((anv_physical_device_get_internal_surface_state_pool_va(device->physical)->addr & 0xffffffff) == 0);
@@ -904,22 +904,53 @@ anv_shader_create(struct anv_device *device,
    if (result != VK_SUCCESS)
       goto error_state;
 
+
+   /* Apply workarounds associated with this shader hash */
+   struct anv_physical_device *pdevice = device->physical;
+   if (pdevice->shader_workarounds != NULL) {
+      struct anv_shader_workaround *workaround =
+         _mesa_hash_table_u64_search(pdevice->shader_workarounds,
+                                     shader->prog_data->source_hash);
+      if (workaround != NULL)
+         shader->workaround = *workaround;
+   }
+
+   switch (shader->vk.stage) {
+   case MESA_SHADER_FRAGMENT:
+      if (brw_fs_prog_data_const(shader->prog_data)->prefer_simd32 !=
+          shader->workaround.prefer_simd32_fs) {
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Fragment shader 0x%016"PRIx64" for disk cache not "
+                       "matching SIMD preference, recompile needed",
+                       shader->prog_data->source_hash);
+         result = VK_ERROR_UNKNOWN;
+         goto error_state;
+      }
+      break;
+
+   case MESA_SHADER_COMPUTE:
+      if (device->info->ver >= 20 &&
+          brw_cs_prog_data_const(shader->prog_data)->force_simd32 !=
+          shader->workaround.force_xe2_simd32_cs) {
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Compute shader 0x%016"PRIx64" for disk cache not "
+                       "matching SIMD preference, recompile needed",
+                       shader->prog_data->source_hash);
+         result = VK_ERROR_UNKNOWN;
+         goto error_state;
+      }
+      break;
+
+   default:
+      break;
+   }
+
    struct anv_batch batch = {};
    anv_batch_set_storage(&batch, ANV_NULL_ADDRESS,
                          cmd_data, 4 * cmd_data_dwords);
    batch.relocs = &shader->relocs;
    shader->cmd_data = cmd_data;
    anv_genX(device->info, shader_emit)(&batch, device, shader);
-
-   /* Apply workarounds associated with this shader hash */
-   struct anv_instance *instance = device->physical->instance;
-   if (instance->shader_workarounds != NULL) {
-      struct anv_shader_workaround *workaround =
-         _mesa_hash_table_u64_search(instance->shader_workarounds,
-                                     shader->prog_data->source_hash);
-      if (workaround != NULL)
-         shader->workaround = *workaround;
-   }
 
    *shader_out = &shader->vk;
 

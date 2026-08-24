@@ -13,9 +13,11 @@ IncludeBlocks: Regroup
 IncludeCategories:
   - Regex:           '^"vn_common.h"$'
     Priority:        0
+  - Regex:           '^"vn_protocol_'
+    Priority:        2
   - Regex:           '^"vn_'
     Priority:        3
-  - Regex:           '^"(venus-protocol/|virtio-gpu/|vtest/)'
+  - Regex:           '^"(virtio-gpu/|vtest/)'
     Priority:        2
   - Regex:           '^"(c11/|util/|drm-uapi/|vk_|wsi_|git_)'
     Priority:        2

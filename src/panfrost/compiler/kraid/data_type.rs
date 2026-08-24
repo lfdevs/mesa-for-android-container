@@ -68,6 +68,7 @@ pub enum PartialDataType {
     U16,
     U32,
     U64,
+    X32,
     V2A16,
     V2F16,
     V2IN,

@@ -121,7 +121,7 @@ static uint32_t r300_depth_clear_cb_value(enum pipe_format format,
         return util_cpu_to_le32(uc.ui[0]);
     }
 
-    return uc.us | (uc.us << 16);
+    return uc.us | ((uint32_t)(uc.us) << 16);
 }
 
 static bool r300_cbzb_clear_allowed(struct r300_context *r300,

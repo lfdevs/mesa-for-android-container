@@ -49,6 +49,7 @@ fn run_nvdisasm(s: &Shader) -> String {
 
 fn disassemble_instrs(instrs: Vec<Instr>, sm: u8) -> Vec<String> {
     let mut label_alloc = LabelAllocator::new();
+    let num_instrs = instrs.len();
     let block = BasicBlock {
         label: label_alloc.alloc(),
         uniform: true,
@@ -94,7 +95,7 @@ fn disassemble_instrs(instrs: Vec<Instr>, sm: u8) -> Vec<String> {
         functions: vec![f],
     };
     let out = run_nvdisasm(&s);
-    let out: Vec<String> = out
+    let mut out: Vec<String> = out
         .lines()
         .map(|line| {
             let mut line: String = line
@@ -108,9 +109,20 @@ fn disassemble_instrs(instrs: Vec<Instr>, sm: u8) -> Vec<String> {
                 .trim()
                 .into();
             line.make_ascii_lowercase();
+
+            // Remove possible scheduling infos present as seen on CUDA 12.8.xx
+            if let Some(pos) = line.find('?') {
+                line = line[0..pos].trim().into();
+                line.push_str(" ;");
+            }
             line
         })
         .collect();
+
+    // Drop padding instructions from the output
+    if out.len() > 0 {
+        out.drain(num_instrs..out.len());
+    }
 
     out
 }
@@ -172,7 +184,7 @@ fn sm_list() -> &'static [u8] {
         let stdout = std::str::from_utf8(&out.stdout).unwrap();
 
         if stdout.contains("cuda_12") {
-            &[70, 75, 80, 86, 89, 90, 100, 120]
+            &[50, 52, 53, 60, 61, 62, 70, 75, 80, 86, 89, 90, 100, 120]
         } else if stdout.contains("cuda_13") {
             &[75, 80, 86, 89, 90, 100, 120]
         } else {
@@ -327,8 +339,13 @@ pub fn test_ld_st_atom() {
     for &sm in sm_list() {
         let mut c = DisasmCheck::new();
         for space in spaces {
-            for (addr_offset, addr_offset_str) in [(0x12, "0x12"), (-1, "-0x1")]
+            for (addr_offset, addr_offset_str) in
+                [(0x12, "0x12"), (-1, "-0x1"), (0x4, "0x4")]
             {
+                if addr_offset % 4 != 0 && sm < 70 {
+                    continue;
+                }
+
                 for addr_stride in [OffsetStride::X1, OffsetStride::X8] {
                     let cta = if sm >= 80 { "sm" } else { "cta" };
                     let r4_64_str =
@@ -382,9 +399,14 @@ pub fn test_ld_st_atom() {
                                 "ldg.e.ef.strong.{cta} r0, [{r4_64_str}{uniform_addr}+{addr_offset_str}], p4;"
                             )
                         }
+                        MemSpace::Global(_) if sm >= 70 => {
+                            format!(
+                                "ldg.e.ef.strong.{cta} r0, [{r4_64_str}+{addr_offset_str}];"
+                            )
+                        }
                         MemSpace::Global(_) => {
                             format!(
-                                "ldg.e.ef.strong.{cta} r0, [r1+{addr_offset_str}];"
+                                "ldg.e r0, [{r4_64_str}+{addr_offset_str}];"
                             )
                         }
                         MemSpace::Shared => {
@@ -409,9 +431,14 @@ pub fn test_ld_st_atom() {
                         stride: addr_stride,
                     };
                     let expected = match space {
-                        MemSpace::Global(_) => {
+                        MemSpace::Global(_) if sm >= 70 => {
                             format!(
                                 "stg.e.ef.strong.{cta} [{r4_64_str}{uniform_addr}+{addr_offset_str}], r2;"
+                            )
+                        }
+                        MemSpace::Global(_) => {
+                            format!(
+                                "stg.e [{r4_64_str}{uniform_addr}+{addr_offset_str}], r2;"
                             )
                         }
                         MemSpace::Shared => {
@@ -427,7 +454,20 @@ pub fn test_ld_st_atom() {
                     };
                     c.push(instr, expected);
 
-                    for (atom_type, atom_type_str) in atom_types {
+                    for (atom_type, mut atom_type_str) in atom_types {
+                        if sm < 70 {
+                            if matches!(
+                                atom_type,
+                                AtomType::F16v2 | AtomType::F64
+                            ) {
+                                continue;
+                            }
+
+                            if matches!(atom_type, AtomType::U64) {
+                                atom_type_str = ".u64";
+                            }
+                        }
+
                         let active_atom_ops = if atom_type.is_float() {
                             &atom_ops[0..3]
                         } else {
@@ -463,19 +503,28 @@ pub fn test_ld_st_atom() {
 
                                 let expected = match space {
                                     MemSpace::Global(_) => {
-                                        let op = if use_dst {
+                                        let op = if use_dst && sm >= 70 {
                                             "atomg"
+                                        } else if use_dst {
+                                            "atom"
                                         } else if sm >= 90 {
                                             "redg"
                                         } else {
                                             "red"
                                         };
-                                        let dst = if use_dst {
+                                        let dst = if use_dst && sm >= 70 {
                                             "pt, r0, "
+                                        } else if use_dst {
+                                            "r0, "
                                         } else {
                                             ""
                                         };
-                                        format!("{op}.e{atom_op}.ef{atom_type_str}.strong.{cta} {dst}[{r4_64_str}{uniform_addr}+{addr_offset_str}], r2;")
+
+                                        if sm >= 70 {
+                                            format!("{op}.e{atom_op}.ef{atom_type_str}.strong.{cta} {dst}[{r4_64_str}{uniform_addr}+{addr_offset_str}], r2;")
+                                        } else {
+                                            format!("{op}.e{atom_op}{atom_type_str} {dst}[{r4_64_str}{uniform_addr}+{addr_offset_str}], r2;")
+                                        }
                                     }
                                     MemSpace::Shared => {
                                         if atom_type.is_float() {
@@ -532,6 +581,11 @@ pub fn test_texture() {
     ];
 
     for &sm in sm_list() {
+        // TODO: For pre-Volta we need to test without dst1 and adapt the text disassembly
+        if sm < 70 {
+            continue;
+        }
+
         let mut c = DisasmCheck::new();
         for scalar in [false, true] {
             let scr = if scalar { ".scr" } else { "" };
@@ -696,6 +750,11 @@ pub fn test_lea() {
     ];
 
     for &sm in sm_list() {
+        // TODO: Maxwell and Pascal have LEA, support it
+        if sm < 70 {
+            continue;
+        }
+
         let mut c = DisasmCheck::new();
 
         for (intermediate_mod, b_mod) in src_mods {
@@ -762,6 +821,11 @@ pub fn test_hfma2() {
     let src_mods = [SrcMod::None, SrcMod::FAbs, SrcMod::FNeg, SrcMod::FNegAbs];
 
     for &sm in sm_list() {
+        // TODO: SM53+ have HFMA2, support it
+        if sm < 70 {
+            continue;
+        }
+
         let mut c = DisasmCheck::new();
 
         for a_mod in src_mods {
@@ -836,6 +900,10 @@ pub fn test_match() {
     let p1 = RegRef::new(RegFile::Pred, 1, 1);
 
     for &sm in sm_list() {
+        if sm < 70 {
+            continue;
+        }
+
         let mut c = DisasmCheck::new();
 
         for (op, pred, pred_str) in [
@@ -868,6 +936,10 @@ pub fn test_sgxt() {
     let r2 = RegRef::new(RegFile::GPR, 2, 1);
 
     for &sm in sm_list() {
+        if sm < 70 {
+            continue;
+        }
+
         let mut c = DisasmCheck::new();
         for signed in [false, true] {
             let instr = OpSgxt {
@@ -899,6 +971,10 @@ pub fn test_plop3() {
     let src_mods = [SrcMod::None, SrcMod::BNot];
 
     for &sm in sm_list() {
+        if sm < 70 {
+            continue;
+        }
+
         let mut c = DisasmCheck::new();
         for a_mod in src_mods {
             for b_mod in src_mods {
@@ -964,6 +1040,10 @@ pub fn test_isberd() {
 
         let mut c = DisasmCheck::new();
         for (output, output_str) in output_type {
+            if output && sm < 70 {
+                continue;
+            }
+
             for (access_type, access_type_str) in access_type_list {
                 if access_type != IsbeAccessType::Map && sm < 75 {
                     continue;
@@ -1080,6 +1160,9 @@ pub fn test_mufu() {
             for (op_type, op_type_str) in op_types {
                 match (op, op_type) {
                     (Rcp64H | Rsq64H, FloatType::F16) => continue,
+                    (Tanh, _) if sm < 75 => continue,
+                    (Sqrt, _) if sm < 52 => continue,
+                    (_, FloatType::F16) if sm < 75 => continue,
                     _ => (),
                 }
                 let instr = OpMuFu {
@@ -1095,6 +1178,655 @@ pub fn test_mufu() {
                 };
                 let disasm = format!("mufu{op_str}{op_type_str} r2, r3;");
                 c.push(instr, disasm);
+            }
+        }
+
+        c.check(sm);
+    }
+}
+
+#[test]
+pub fn test_nanosleep() {
+    let r3 = RegRef::new(RegFile::GPR, 3, 1);
+    let ur2_4 = RegRef::new(RegFile::UGPR, 2, 2);
+
+    for &sm in sm_list() {
+        if sm < 70 {
+            continue;
+        }
+
+        let mut c = DisasmCheck::new();
+
+        let mut srcs = vec![
+            (0.into(), "rz"),
+            (0x87654321.into(), "0x87654321"),
+            (SrcRef::Reg(r3).into(), "r3"),
+        ];
+
+        if sm < 100 {
+            srcs.push((
+                CBufRef {
+                    buf: CBuf::Binding(5),
+                    offset: 0x100,
+                }
+                .into(),
+                "c[0x5][0x100]",
+            ));
+            if sm >= 75 {
+                srcs.push((
+                    CBufRef {
+                        buf: CBuf::BindlessUGPR(ur2_4),
+                        offset: 0x100,
+                    }
+                    .into(),
+                    "cx[ur2][0x100]",
+                ));
+            }
+        }
+
+        for (src, src_str) in srcs {
+            let mut instr: Instr = OpNanosleep { time: src }.into();
+
+            // Delay can't be the default value otherwise nvdisasm is unhappy
+            instr.deps.delay = 1;
+
+            let disasm = format!("nanosleep {src_str} ;");
+            c.push(instr, disasm);
+        }
+
+        c.check(sm);
+    }
+}
+
+#[test]
+pub fn test_uldc_global() {
+    let ur2_4 = RegRef::new(RegFile::UGPR, 2, 2);
+    let ur4_6 = RegRef::new(RegFile::UGPR, 4, 2);
+    let up1 = RegRef::new(RegFile::UPred, 1, 1);
+
+    for &sm in sm_list() {
+        if sm < 75 {
+            continue;
+        }
+
+        let mut c = DisasmCheck::new();
+
+        let mut mem_types = vec![
+            (MemType::U8, ".u8"),
+            (MemType::I8, ".s8"),
+            (MemType::U16, ".u16"),
+            (MemType::I16, ".s16"),
+            (MemType::B32, ""),
+            (MemType::B64, ".64"),
+        ];
+
+        let uldc_str = if sm < 100 { "uldc" } else { "ldcu" };
+        if sm >= 100 {
+            mem_types.push((MemType::B128, ".128"));
+        }
+
+        for (mt, mt_str) in mem_types {
+            let instr = OpLdcg {
+                dst: ur2_4.into(),
+                addr: ur4_6.into(),
+                mem_type: mt,
+                pred: up1.into(),
+                offset: 0x100,
+            };
+            let disasm = format!("{uldc_str}{mt_str} ur2, [ur4+0x100], up1;");
+            c.push(instr, disasm);
+        }
+
+        c.check(sm);
+    }
+}
+
+#[test]
+pub fn test_f2fp() {
+    let r1 = RegRef::new(RegFile::GPR, 1, 1);
+    let r2 = RegRef::new(RegFile::GPR, 2, 1);
+    let r3 = RegRef::new(RegFile::GPR, 3, 1);
+    let ur1 = RegRef::new(RegFile::UGPR, 1, 1);
+    let ur2 = RegRef::new(RegFile::UGPR, 2, 1);
+    let ur3 = RegRef::new(RegFile::UGPR, 3, 1);
+
+    let rnd_modes = [(FRndMode::NearestEven, ""), (FRndMode::Zero, ".rz")];
+
+    for &sm in sm_list() {
+        if sm < 80 {
+            continue;
+        }
+
+        let mut c = DisasmCheck::new();
+
+        let conv_type_str = if sm >= 89 { ".f16.f32" } else { "" };
+        let conv_type_uniform_str = if sm >= 120 { ".f16.f32" } else { "" };
+        for (rnd_mode, rnd_mode_str) in rnd_modes {
+            let instr = OpF2FP {
+                dst: r1.into(),
+                srcs: [r2.into(), r3.into()],
+                rnd_mode,
+            };
+            let disasm = format!(
+                "f2fp{conv_type_str}.pack_ab{rnd_mode_str} r1, r2, r3;"
+            );
+            c.push(instr, disasm);
+
+            if sm >= 86 {
+                let instr = OpF2FP {
+                    dst: ur1.into(),
+                    srcs: [ur2.into(), ur3.into()],
+                    rnd_mode,
+                };
+                let disasm = format!(
+                    "uf2fp{conv_type_uniform_str}.pack_ab{rnd_mode_str} ur1, ur2, ur3;"
+                );
+                c.push(instr, disasm);
+            }
+        }
+
+        c.check(sm);
+    }
+}
+
+#[test]
+pub fn test_iabs() {
+    let r1 = RegRef::new(RegFile::GPR, 1, 1);
+    let r2 = RegRef::new(RegFile::GPR, 2, 1);
+    let ur1 = RegRef::new(RegFile::UGPR, 1, 1);
+    let ur2 = RegRef::new(RegFile::UGPR, 2, 1);
+
+    for &sm in sm_list() {
+        if sm < 70 {
+            continue;
+        }
+
+        let mut c = DisasmCheck::new();
+        let instr = OpIAbs {
+            dst: r1.into(),
+            src: r2.into(),
+        };
+        let disasm = format!("iabs r1, r2;");
+        c.push(instr, disasm);
+
+        if sm >= 120 {
+            let instr = OpIAbs {
+                dst: ur1.into(),
+                src: ur2.into(),
+            };
+            let disasm = format!("uiabs ur1, ur2;");
+            c.push(instr, disasm);
+        }
+
+        c.check(sm);
+    }
+}
+
+#[test]
+pub fn test_imnmx() {
+    let r1 = RegRef::new(RegFile::GPR, 1, 1);
+    let r2 = RegRef::new(RegFile::GPR, 2, 1);
+    let r3 = RegRef::new(RegFile::GPR, 3, 1);
+    let p4 = RegRef::new(RegFile::Pred, 4, 1);
+    let ur1 = RegRef::new(RegFile::UGPR, 1, 1);
+    let ur2 = RegRef::new(RegFile::UGPR, 2, 1);
+    let ur3 = RegRef::new(RegFile::UGPR, 3, 1);
+    let up4 = RegRef::new(RegFile::UPred, 4, 1);
+
+    for &sm in sm_list() {
+        // IMNMX does not exist on Volta.
+        if sm == 70 {
+            continue;
+        }
+
+        let mut c = DisasmCheck::new();
+
+        for (cmp_type, cmp_type_str) in
+            [(IntCmpType::U32, ".u32"), (IntCmpType::I32, "")]
+        {
+            let instr = OpIMnMx {
+                dst: r1.into(),
+                cmp_type,
+                srcs: [r2.into(), r3.into()],
+                min: p4.into(),
+            };
+            let disasm = if sm >= 120 {
+                format!("imnmx{cmp_type_str} pt, pt, r1, r2, r3, p4, !pt;")
+            } else {
+                format!("imnmx{cmp_type_str} r1, r2, r3, p4;")
+            };
+            c.push(instr, disasm);
+
+            if sm >= 120 {
+                let instr = OpIMnMx {
+                    dst: ur1.into(),
+                    cmp_type,
+                    srcs: [ur2.into(), ur3.into()],
+                    min: up4.into(),
+                };
+                let disasm = format!(
+                    "uimnmx{cmp_type_str} upt, upt, ur1, ur2, ur3, up4, !upt;"
+                );
+                c.push(instr, disasm);
+            }
+        }
+
+        c.check(sm);
+    }
+}
+
+#[test]
+pub fn test_float_ops() {
+    let r1 = RegRef::new(RegFile::GPR, 1, 1);
+    let r2 = RegRef::new(RegFile::GPR, 2, 1);
+    let r3 = RegRef::new(RegFile::GPR, 3, 1);
+    let r4 = RegRef::new(RegFile::GPR, 4, 1);
+    let p1 = RegRef::new(RegFile::Pred, 1, 1);
+    let p2 = RegRef::new(RegFile::Pred, 2, 1);
+    let p4 = RegRef::new(RegFile::Pred, 4, 1);
+    let ur1 = RegRef::new(RegFile::UGPR, 1, 1);
+    let ur2 = RegRef::new(RegFile::UGPR, 2, 1);
+    let ur3 = RegRef::new(RegFile::UGPR, 3, 1);
+    let ur4 = RegRef::new(RegFile::UGPR, 4, 1);
+    let up1 = RegRef::new(RegFile::UPred, 1, 1);
+    let up2 = RegRef::new(RegFile::UPred, 2, 1);
+    let up4 = RegRef::new(RegFile::UPred, 4, 1);
+
+    let test_two_src_cases = [
+        (Dst::Reg(r1), ([Src::from(r2), Src::from(r3)], "r2, r3")),
+        (
+            Dst::Reg(r1),
+            ([Src::from(r2), Src::from(2.0f32.to_bits())], "r2, 2"),
+        ),
+    ];
+
+    let test_uniform_two_src_cases = [
+        (
+            Dst::Reg(ur1),
+            ([Src::from(ur2), Src::from(ur3)], "ur2, ur3"),
+        ),
+        (
+            Dst::Reg(ur1),
+            ([Src::from(ur2), Src::from(2.0f32.to_bits())], "ur2, 2"),
+        ),
+    ];
+
+    let test_three_src_cases = [
+        (
+            Dst::Reg(r1),
+            ([Src::from(r2), Src::from(r3), Src::from(r4)], "r2, r3, r4"),
+        ),
+        (
+            Dst::Reg(r1),
+            (
+                [Src::from(r2), Src::from(2.0f32.to_bits()), Src::from(r4)],
+                "r2, 2, r4",
+            ),
+        ),
+    ];
+
+    let test_uniform_three_src_cases = [
+        (
+            Dst::Reg(ur1),
+            (
+                [Src::from(ur2), Src::from(ur3), Src::from(ur4)],
+                "ur2, ur3, ur4",
+            ),
+        ),
+        (
+            Dst::Reg(ur1),
+            (
+                [Src::from(ur2), Src::from(2.0f32.to_bits()), Src::from(ur4)],
+                "ur2, 2, ur4",
+            ),
+        ),
+    ];
+
+    let pred_set_ops = [PredSetOp::And, PredSetOp::Or, PredSetOp::Xor];
+
+    let float_cmp_ops = [
+        FloatCmpOp::OrdEq,
+        FloatCmpOp::OrdNe,
+        FloatCmpOp::OrdLt,
+        FloatCmpOp::OrdLe,
+        FloatCmpOp::OrdGt,
+        FloatCmpOp::OrdGe,
+        FloatCmpOp::UnordEq,
+        FloatCmpOp::UnordNe,
+        FloatCmpOp::UnordLt,
+        FloatCmpOp::UnordLe,
+        FloatCmpOp::UnordGt,
+        FloatCmpOp::UnordGe,
+        FloatCmpOp::IsNum,
+        FloatCmpOp::IsNan,
+    ];
+
+    for &sm in sm_list() {
+        let mut c = DisasmCheck::new();
+
+        for (ftz, ftz_str) in [(false, ""), (true, ".ftz")] {
+            for (dst, (srcs, srcs_str)) in &test_two_src_cases {
+                let instr = OpFMnMx {
+                    dst: dst.clone(),
+                    srcs: srcs.clone(),
+                    min: p4.into(),
+                    ftz,
+                };
+                let disasm = format!("fmnmx{ftz_str} {dst}, {srcs_str}, p4;");
+                c.push(instr, disasm);
+
+                for cmp_op in &float_cmp_ops {
+                    let instr = OpFSet {
+                        dst: dst.clone(),
+                        cmp_op: *cmp_op,
+                        srcs: srcs.clone(),
+                        ftz,
+                    };
+                    let disasm = format!(
+                        "fset.bf{cmp_op}{ftz_str}.and {dst}, {srcs_str}, pt;"
+                    );
+                    c.push(instr, disasm);
+
+                    for set_op in &pred_set_ops {
+                        let instr = OpFSetP {
+                            dst: p2.into(),
+                            set_op: *set_op,
+                            cmp_op: *cmp_op,
+                            srcs: srcs.clone(),
+                            accum: p1.into(),
+                            ftz,
+                        };
+                        let disasm = format!(
+                            "fsetp{cmp_op}{ftz_str}{set_op} p2, pt, {srcs_str}, p1;"
+                        );
+                        c.push(instr, disasm);
+                    }
+                }
+            }
+
+            if sm >= 120 {
+                for (dst, (srcs, srcs_str)) in &test_uniform_two_src_cases {
+                    let instr = OpFMnMx {
+                        dst: dst.clone(),
+                        srcs: srcs.clone(),
+                        min: up4.into(),
+                        ftz,
+                    };
+                    let disasm =
+                        format!("ufmnmx{ftz_str} {dst}, {srcs_str}, up4;");
+                    c.push(instr, disasm);
+
+                    for cmp_op in &float_cmp_ops {
+                        let instr = OpFSet {
+                            dst: dst.clone(),
+                            cmp_op: *cmp_op,
+                            srcs: srcs.clone(),
+                            ftz,
+                        };
+                        let disasm = format!("ufset.bf{cmp_op}{ftz_str}.and {dst}, {srcs_str}, upt;");
+                        c.push(instr, disasm);
+
+                        for set_op in &pred_set_ops {
+                            let instr = OpFSetP {
+                                dst: up2.into(),
+                                set_op: *set_op,
+                                cmp_op: *cmp_op,
+                                srcs: srcs.clone(),
+                                accum: up1.into(),
+                                ftz,
+                            };
+                            let disasm = format!(
+                                "ufsetp{cmp_op}{ftz_str}{set_op} up2, upt, {srcs_str}, up1;"
+                            );
+                            c.push(instr, disasm);
+                        }
+                    }
+                }
+            }
+
+            for (rnd_mode, rnd_mode_str, int_rnd_mode_str) in [
+                (FRndMode::NearestEven, "", ""),
+                (FRndMode::Zero, ".rz", ".trunc"),
+            ] {
+                let instr = OpF2F {
+                    dst: r1.into(),
+                    src: r2.into(),
+                    src_type: FloatType::F64,
+                    dst_type: FloatType::F32,
+                    rnd_mode,
+                    ftz,
+                    integer_rnd: false,
+                };
+                let disasm =
+                    format!("f2f{ftz_str}.f32.f64{rnd_mode_str} r1, r2;");
+                c.push(instr, disasm);
+
+                let instr = OpF2F {
+                    dst: r1.into(),
+                    src: r2.into(),
+                    src_type: FloatType::F16,
+                    dst_type: FloatType::F32,
+                    rnd_mode,
+                    ftz,
+                    integer_rnd: false,
+                };
+                let disasm =
+                    format!("f2f{ftz_str}.f32.f16{rnd_mode_str} r1, r2;");
+                c.push(instr, disasm);
+
+                let instr = OpF2I {
+                    dst: r1.into(),
+                    src: r2.into(),
+                    src_type: FloatType::F64,
+                    dst_type: IntType::U32,
+                    rnd_mode,
+                    ftz,
+                };
+                let disasm =
+                    format!("f2i{ftz_str}.u32.f64{int_rnd_mode_str} r1, r2;");
+                c.push(instr, disasm);
+
+                let instr = OpF2I {
+                    dst: r1.into(),
+                    src: r2.into(),
+                    src_type: FloatType::F16,
+                    dst_type: IntType::U32,
+                    rnd_mode,
+                    ftz,
+                };
+                let disasm =
+                    format!("f2i{ftz_str}.u32.f16{int_rnd_mode_str} r1, r2;");
+                c.push(instr, disasm);
+
+                if sm >= 70 {
+                    let instr = OpFRnd {
+                        dst: r2.into(),
+                        src: r2.into(),
+                        src_type: FloatType::F64,
+                        dst_type: FloatType::F64,
+                        rnd_mode,
+                        ftz,
+                    };
+                    let disasm =
+                        format!("frnd{ftz_str}.f64{int_rnd_mode_str} r2, r2;");
+                    c.push(instr, disasm);
+
+                    let instr = OpFRnd {
+                        dst: r1.into(),
+                        src: r2.into(),
+                        src_type: FloatType::F32,
+                        dst_type: FloatType::F32,
+                        rnd_mode,
+                        ftz,
+                    };
+                    let disasm =
+                        format!("frnd{ftz_str}{int_rnd_mode_str} r1, r2;");
+                    c.push(instr, disasm);
+                }
+
+                let instr = OpI2F {
+                    dst: r1.into(),
+                    src: r2.into(),
+                    src_type: IntType::U32,
+                    dst_type: FloatType::F64,
+                    rnd_mode,
+                };
+                let disasm = format!("i2f.f64.u32{rnd_mode_str} r1, r2;");
+                c.push(instr, disasm);
+
+                let instr = OpI2F {
+                    dst: r1.into(),
+                    src: r2.into(),
+                    src_type: IntType::U32,
+                    dst_type: FloatType::F16,
+                    rnd_mode,
+                };
+                let disasm = format!("i2f.f16.u32{rnd_mode_str} r1, r2;");
+                c.push(instr, disasm);
+
+                if sm >= 120 {
+                    let instr = OpF2F {
+                        dst: ur1.into(),
+                        src: ur2.into(),
+                        src_type: FloatType::F16,
+                        dst_type: FloatType::F32,
+                        rnd_mode,
+                        ftz,
+                        integer_rnd: false,
+                    };
+                    let disasm = format!(
+                        "uf2f{ftz_str}.f32.f16{rnd_mode_str} ur1, ur2;"
+                    );
+                    c.push(instr, disasm);
+
+                    let instr = OpF2I {
+                        dst: ur1.into(),
+                        src: ur2.into(),
+                        src_type: FloatType::F16,
+                        dst_type: IntType::U32,
+                        rnd_mode,
+                        ftz,
+                    };
+                    let disasm = format!(
+                        "uf2i{ftz_str}.u32.f16{int_rnd_mode_str} ur1, ur2;"
+                    );
+                    c.push(instr, disasm);
+
+                    let instr = OpI2F {
+                        dst: ur1.into(),
+                        src: ur2.into(),
+                        src_type: IntType::U32,
+                        dst_type: FloatType::F16,
+                        rnd_mode,
+                    };
+                    let disasm =
+                        format!("ui2f.f16.u32{rnd_mode_str} ur1, ur2;");
+                    c.push(instr, disasm);
+
+                    let instr = OpFRnd {
+                        dst: ur1.into(),
+                        src: ur2.into(),
+                        src_type: FloatType::F32,
+                        dst_type: FloatType::F32,
+                        rnd_mode,
+                        ftz,
+                    };
+                    let disasm =
+                        format!("ufrnd{ftz_str}{int_rnd_mode_str} ur1, ur2;");
+                    c.push(instr, disasm);
+                }
+
+                for (saturate, saturate_str) in [(false, ""), (true, ".sat")] {
+                    for (dst, (srcs, srcs_str)) in &test_two_src_cases {
+                        let instr = OpFAdd {
+                            dst: dst.clone(),
+                            srcs: srcs.clone(),
+                            saturate,
+                            rnd_mode,
+                            ftz,
+                        };
+                        let disasm = format!(
+                            "fadd{ftz_str}{rnd_mode_str}{saturate_str} {dst}, {srcs_str};"
+                        );
+                        c.push(instr, disasm);
+
+                        let instr = OpFMul {
+                            dst: dst.clone(),
+                            srcs: srcs.clone(),
+                            saturate,
+                            rnd_mode,
+                            ftz,
+                            dnz: false,
+                        };
+                        let disasm = format!(
+                            "fmul{ftz_str}{rnd_mode_str}{saturate_str} {dst}, {srcs_str};"
+                        );
+                        c.push(instr, disasm);
+                    }
+
+                    for (dst, (srcs, srcs_str)) in &test_three_src_cases {
+                        let instr = OpFFma {
+                            dst: dst.clone(),
+                            srcs: srcs.clone(),
+                            saturate,
+                            rnd_mode,
+                            ftz,
+                            dnz: false,
+                        };
+                        let disasm = format!(
+                            "ffma{ftz_str}{rnd_mode_str}{saturate_str} {dst}, {srcs_str};"
+                        );
+                        c.push(instr, disasm);
+                    }
+
+                    if sm >= 120 {
+                        for (dst, (srcs, srcs_str)) in
+                            &test_uniform_two_src_cases
+                        {
+                            let instr = OpFAdd {
+                                dst: dst.clone(),
+                                srcs: srcs.clone(),
+                                saturate,
+                                rnd_mode,
+                                ftz,
+                            };
+                            let disasm = format!(
+                            "ufadd{ftz_str}{rnd_mode_str}{saturate_str} {dst}, {srcs_str};"
+                            );
+                            c.push(instr, disasm);
+
+                            let instr = OpFMul {
+                                dst: dst.clone(),
+                                srcs: srcs.clone(),
+                                saturate,
+                                rnd_mode,
+                                ftz,
+                                dnz: false,
+                            };
+                            let disasm = format!(
+                            "ufmul{ftz_str}{rnd_mode_str}{saturate_str} {dst}, {srcs_str};"
+                            );
+                            c.push(instr, disasm);
+                        }
+
+                        for (dst, (srcs, srcs_str)) in
+                            &test_uniform_three_src_cases
+                        {
+                            let instr = OpFFma {
+                                dst: dst.clone(),
+                                srcs: srcs.clone(),
+                                saturate,
+                                rnd_mode,
+                                ftz,
+                                dnz: false,
+                            };
+                            let disasm = format!(
+                            "uffma{ftz_str}{rnd_mode_str}{saturate_str} {dst}, {srcs_str};"
+                            );
+                            c.push(instr, disasm);
+                        }
+                    }
+                }
             }
         }
 

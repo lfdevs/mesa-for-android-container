@@ -269,7 +269,7 @@ etna_init_screen_caps(struct etna_screen *screen)
    caps->max_stream_output_separate_components = 64;
    caps->max_stream_output_interleaved_components = 64;
 
-   caps->max_vertex_attrib_stride = 128;
+   caps->max_vertex_attrib_stride = screen->info->halti >= 2 ? 2048 : 128;
    caps->max_vertex_element_src_offset = 255;
    caps->max_vertex_buffers = screen->info->gpu.stream_count;
    caps->vs_instanceid =
@@ -372,6 +372,8 @@ etna_init_screen_caps(struct etna_screen *screen)
 
    caps->max_texture_anisotropy = 16.0f;
    caps->max_texture_lod_bias = util_last_bit(screen->specs.max_texture_size);
+
+   caps->device_type = PIPE_DEVICE_TYPE_INTEGRATED_GPU;
 }
 
 static bool

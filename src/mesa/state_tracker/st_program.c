@@ -1080,7 +1080,8 @@ st_create_fp_variant(struct st_context *st,
 
    if (fp->ati_fs) {
       if (key->fog) {
-         NIR_PASS(_, state.ir.nir, st_nir_lower_fog, key->fog, fp->Parameters,
+         NIR_PASS(_, state.ir.nir, st_nir_lower_fog, key->fog,
+                  key->fog_coord_abs, fp->Parameters,
                   st->ctx->Const.PackedDriverUniformStorage);
       }
 

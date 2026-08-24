@@ -5,6 +5,7 @@ use crate::api::icd::*;
 use crate::api::types::DeleteContextCB;
 use crate::api::util::bit_check;
 use crate::core::device::*;
+use crate::core::event::EventSig;
 use crate::core::format::*;
 use crate::core::gl::*;
 use crate::core::memory::*;
@@ -502,26 +503,41 @@ impl Context {
 
     pub fn clear_svm<const T: usize>(
         &self,
-        ctx: &QueueContext,
+        dev: &Device,
         svm_ptr: usize,
         size: usize,
         pattern: [u8; T],
-    ) -> CLResult<()> {
+    ) -> CLResult<EventSig> {
         let svm = self.svm.lock().unwrap();
 
-        if let Some((base, alloc)) = svm.svm_ptrs.find_alloc(svm_ptr) {
-            let res = alloc.alloc.get_res_for_access(ctx, RWFlags::WR)?;
-            let offset = svm_ptr - base;
-            ctx.clear_buffer(res, &pattern, offset as u32, size as u32);
+        if svm.svm_ptrs.find_alloc(svm_ptr).is_some() {
+            match dev.optimize_buffer_fill(&pattern, svm_ptr, size) {
+                DeviceFillBuffer::Meta(pattern) => {
+                    Platform::get()
+                        .meta
+                        .clear_svm(dev, svm_ptr, pattern.to_vec(), size)
+                }
+                DeviceFillBuffer::Clear(pattern) => Ok(Box::new(move |cl_ctx, ctx| {
+                    let svm = cl_ctx.svm.lock().unwrap();
+                    if let Some((base, alloc)) = svm.svm_ptrs.find_alloc(svm_ptr) {
+                        let res = alloc.alloc.get_res_for_access(ctx, RWFlags::WR)?;
+                        let offset = svm_ptr - base;
+                        ctx.clear_buffer(res, &pattern, offset as u32, size as u32);
+                    }
+                    Ok(())
+                })),
+            }
         } else {
-            let slice = unsafe {
-                slice::from_raw_parts_mut(svm_ptr as *mut _, size / size_of_val(&pattern))
-            };
+            Ok(Box::new(move |_, _| {
+                let slice = unsafe {
+                    slice::from_raw_parts_mut(svm_ptr as *mut _, size / size_of_val(&pattern))
+                };
 
-            slice.fill(pattern);
+                slice.fill(pattern);
+
+                Ok(())
+            }))
         }
-
-        Ok(())
     }
 
     pub fn migrate_svm(

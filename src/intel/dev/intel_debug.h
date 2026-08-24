@@ -111,11 +111,6 @@ enum intel_debug_flag {
    DEBUG_MESH,
    DEBUG_CS,
    DEBUG_RT,
-   DEBUG_NO8,
-
-   DEBUG_NO16,
-   DEBUG_NO32,
-   DEBUG_DO32,
 
    /* Must be the last entry */
    INTEL_DEBUG_MAX,
@@ -141,6 +136,7 @@ extern BITSET_WORD intel_debug[BITSET_WORDS(INTEL_DEBUG_MAX)];
                                       INTEL_DEBUG(DEBUG_BVH_PCREL_MAP)))
 
 extern uint64_t intel_simd;
+extern uint32_t intel_simd_overridden; /**< bit per stage if overridden */
 extern uint32_t intel_debug_bkp_before_draw_count;
 extern uint32_t intel_debug_bkp_after_draw_count;
 extern uint32_t intel_debug_bkp_before_dispatch_count;
@@ -174,6 +170,49 @@ extern uint64_t intel_shader_dump_filter;
 #define DEBUG_RT_SIMD8    (1ull << 15)
 #define DEBUG_RT_SIMD16   (1ull << 16)
 #define DEBUG_RT_SIMD32   (1ull << 17)
+
+#define DEBUG_FS_SIMD  (DEBUG_FS_SIMD8   | DEBUG_FS_SIMD16  | DEBUG_FS_SIMD32 |\
+                        DEBUG_FS_SIMD2X8 | DEBUG_FS_SIMD4X8 | DEBUG_FS_SIMD2X16)
+#define DEBUG_CS_SIMD  (DEBUG_CS_SIMD8  | DEBUG_CS_SIMD16  | DEBUG_CS_SIMD32)
+#define DEBUG_TS_SIMD  (DEBUG_TS_SIMD8  | DEBUG_TS_SIMD16  | DEBUG_TS_SIMD32)
+#define DEBUG_MS_SIMD  (DEBUG_MS_SIMD8  | DEBUG_MS_SIMD16  | DEBUG_MS_SIMD32)
+#define DEBUG_RT_SIMD  (DEBUG_RT_SIMD8  | DEBUG_RT_SIMD16  | DEBUG_RT_SIMD32)
+
+/**
+ * Returns the INTEL_SIMD_DEBUG modes for a given stage as a bitmask.
+ */
+static inline unsigned
+intel_simd_debug_allowed_modes(mesa_shader_stage stage)
+{
+   switch (stage) {
+   case MESA_SHADER_COMPUTE:
+      return (intel_simd & DEBUG_CS_SIMD) >> (ffsll(DEBUG_CS_SIMD8) - 1);
+   case MESA_SHADER_TASK:
+      return (intel_simd & DEBUG_TS_SIMD) >> (ffsll(DEBUG_TS_SIMD8) - 1);
+   case MESA_SHADER_MESH:
+      return (intel_simd & DEBUG_MS_SIMD) >> (ffsll(DEBUG_MS_SIMD8) - 1);
+   case MESA_SHADER_RAYGEN:
+   case MESA_SHADER_ANY_HIT:
+   case MESA_SHADER_CLOSEST_HIT:
+   case MESA_SHADER_MISS:
+   case MESA_SHADER_INTERSECTION:
+   case MESA_SHADER_CALLABLE:
+      return (intel_simd & DEBUG_RT_SIMD) >> (ffsll(DEBUG_RT_SIMD8) - 1);
+   case MESA_SHADER_FRAGMENT:
+      return (intel_simd & DEBUG_FS_SIMD) >> (ffsll(DEBUG_FS_SIMD8) - 1);
+   default:
+      return 0;
+   }
+}
+
+/**
+ * Return true if INTEL_SIMD_DEBUG force-enables the given SIMD mode.
+ */
+static inline bool
+intel_simd_debug_forced(mesa_shader_stage stage)
+{
+   return intel_simd_overridden & (1 << stage);
+}
 
 #define SIMD_DISK_CACHE_MASK ((1ull << 18) - 1)
 

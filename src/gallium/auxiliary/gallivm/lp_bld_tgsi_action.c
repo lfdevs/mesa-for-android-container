@@ -232,52 +232,6 @@ static struct lp_build_tgsi_action dp4_action = {
    dp4_emit	 /* emit */
 };
 
-/* TGSI_OPCODE_DST */
-static void
-dst_fetch_args(
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   /* src0.y */
-   emit_data->args[0] = lp_build_emit_fetch(bld_base, emit_data->inst,
-                                            0, TGSI_CHAN_Y);
-   /* src0.z */
-   emit_data->args[1] = lp_build_emit_fetch(bld_base, emit_data->inst,
-                                            0, TGSI_CHAN_Z);
-   /* src1.y */
-   emit_data->args[2] = lp_build_emit_fetch(bld_base, emit_data->inst,
-                                            1, TGSI_CHAN_Y);
-   /* src1.w */
-   emit_data->args[3] = lp_build_emit_fetch(bld_base, emit_data->inst,
-                                            1, TGSI_CHAN_W);
-}
-
-static void
-dst_emit(
-   const struct lp_build_tgsi_action * action,
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   /* dst.x */
-   emit_data->output[TGSI_CHAN_X] = bld_base->base.one;
-
-   /* dst.y */
-   emit_data->output[TGSI_CHAN_Y] = lp_build_emit_llvm_binary(bld_base,
-                                          TGSI_OPCODE_MUL,
-                                          emit_data->args[0] /* src0.y */,
-                                          emit_data->args[2] /* src1.y */);
-   /* dst.z */
-   emit_data->output[TGSI_CHAN_Z] = emit_data->args[1]; /* src0.z */
-
-   /* dst.w */
-   emit_data->output[TGSI_CHAN_W] = emit_data->args[3]; /* src1.w */
-}
-
-static struct lp_build_tgsi_action dst_action = {
-   dst_fetch_args,	 /* fetch_args */
-   dst_emit	 /* emit */
-};
-
 /* TGSI_OPCODE_END */
 static void
 end_emit(
@@ -287,40 +241,6 @@ end_emit(
 {
    bld_base->pc = -1;
 }
-
-/* TGSI_OPCODE_EXP */
-
-static void
-exp_emit(
-   const struct lp_build_tgsi_action * action,
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   LLVMValueRef floor_x;
-
-   /* floor( src0.x ) */
-   floor_x = lp_build_emit_llvm_unary(bld_base, TGSI_OPCODE_FLR,
-                                      emit_data->args[0]);
-
-   /* 2 ^ floor( src0.x ) */
-   emit_data->output[TGSI_CHAN_X] = lp_build_emit_llvm_unary(bld_base,
-                                       TGSI_OPCODE_EX2, floor_x);
-
-   /* src0.x - floor( src0.x ) */
-   emit_data->output[TGSI_CHAN_Y] =
-      lp_build_sub(&bld_base->base, emit_data->args[0] /* src0.x */, floor_x);
-
-   /* 2 ^ src0.x */
-   emit_data->output[TGSI_CHAN_Z] = lp_build_emit_llvm_unary(bld_base,
-                             TGSI_OPCODE_EX2, emit_data->args[0] /* src0.x */);
-
-   emit_data->output[TGSI_CHAN_W] = bld_base->base.one;
-}
-
-const struct lp_build_tgsi_action exp_action = {
-   scalar_unary_fetch_args,	 /* fetch_args */
-   exp_emit	 /* emit */
-};
 
 /* TGSI_OPCODE_FRC */
 
@@ -369,106 +289,6 @@ kilp_fetch_args(
 {
    emit_data->dst_type = LLVMVoidTypeInContext(bld_base->base.gallivm->context);
 }
-
-/* TGSI_OPCODE_LIT */
-
-static void
-lit_fetch_args(
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   /* src0.x */
-   emit_data->args[0] = lp_build_emit_fetch(bld_base, emit_data->inst, 0, TGSI_CHAN_X);
-   /* src0.y */
-   emit_data->args[1] = lp_build_emit_fetch(bld_base, emit_data->inst, 0, TGSI_CHAN_Y);
-   /* src0.w */
-   emit_data->args[2] = lp_build_emit_fetch(bld_base, emit_data->inst, 0, TGSI_CHAN_W);
-   emit_data->arg_count = 3;
-}
-
-static void
-lit_emit(
-   const struct lp_build_tgsi_action * action,
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   LLVMValueRef tmp0, tmp1, tmp2;
-
-   /* dst.x */
-   emit_data->output[TGSI_CHAN_X] = bld_base->base.one;
-
-   /* dst. y */
-   emit_data->output[TGSI_CHAN_Y] = lp_build_emit_llvm_binary(bld_base,
-                                               TGSI_OPCODE_MAX,
-                                               emit_data->args[0] /* src0.x */,
-                                               bld_base->base.zero);
-
-   /* dst.z */
-   /* XMM[1] = SrcReg[0].yyyy */
-   tmp1 = emit_data->args[1];
-   /* XMM[1] = max(XMM[1], 0) */
-   tmp1 = lp_build_emit_llvm_binary(bld_base, TGSI_OPCODE_MAX,
-                                    tmp1, bld_base->base.zero);
-   /* XMM[2] = SrcReg[0].wwww */
-   tmp2 = emit_data->args[2];
-   tmp1 = lp_build_emit_llvm_binary(bld_base, TGSI_OPCODE_POW,
-                                    tmp1, tmp2);
-   tmp0 = emit_data->args[0];
-   emit_data->output[TGSI_CHAN_Z] = lp_build_emit_llvm_ternary(bld_base,
-                                             TGSI_OPCODE_CMP,
-                                             tmp0, bld_base->base.zero, tmp1);
-   /* dst.w */
-   emit_data->output[TGSI_CHAN_W] = bld_base->base.one;
-}
-
-static struct lp_build_tgsi_action lit_action = {
-   lit_fetch_args,	 /* fetch_args */
-   lit_emit	 /* emit */
-};
-
-/* TGSI_OPCODE_LOG */
-
-static void
-log_emit(
-   const struct lp_build_tgsi_action * action,
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-
-   LLVMValueRef abs_x, log_abs_x, flr_log_abs_x, ex2_flr_log_abs_x;
-
-   /* abs( src0.x) */
-   abs_x = lp_build_abs(&bld_base->base, emit_data->args[0] /* src0.x */);
-
-   /* log( abs( src0.x ) ) */
-   log_abs_x = lp_build_emit_llvm_unary(bld_base, TGSI_OPCODE_LG2,
-                                        abs_x);
-
-   /* floor( log( abs( src0.x ) ) ) */
-   flr_log_abs_x = lp_build_emit_llvm_unary(bld_base, TGSI_OPCODE_FLR,
-                                            log_abs_x);
-   /* dst.x */
-   emit_data->output[TGSI_CHAN_X] = flr_log_abs_x;
-
-   /* dst.y */
-   ex2_flr_log_abs_x = lp_build_emit_llvm_unary(bld_base, TGSI_OPCODE_EX2,
-                                                flr_log_abs_x);
-
-   /* abs( src0.x ) / 2^( floor( lg2( abs( src0.x ) ) ) ) */
-   emit_data->output[TGSI_CHAN_Y] = lp_build_emit_llvm_binary(bld_base,
-                                    TGSI_OPCODE_DIV, abs_x, ex2_flr_log_abs_x);
-
-   /* dst.x */
-   emit_data->output[TGSI_CHAN_Z] = log_abs_x;
-
-   /* dst.w */
-   emit_data->output[TGSI_CHAN_W] = bld_base->base.one;
-}
-
-static struct lp_build_tgsi_action log_action = {
-   scalar_unary_fetch_args,	 /* fetch_args */
-   log_emit	 /* emit */
-};
 
 /* TGSI_OPCODE_PK2H */
 
@@ -1160,10 +980,6 @@ lp_set_default_actions(struct lp_build_tgsi_context * bld_base)
    bld_base->op_actions[TGSI_OPCODE_DP2] = dp2_action;
    bld_base->op_actions[TGSI_OPCODE_DP3] = dp3_action;
    bld_base->op_actions[TGSI_OPCODE_DP4] = dp4_action;
-   bld_base->op_actions[TGSI_OPCODE_DST] = dst_action;
-   bld_base->op_actions[TGSI_OPCODE_EXP] = exp_action;
-   bld_base->op_actions[TGSI_OPCODE_LIT] = lit_action;
-   bld_base->op_actions[TGSI_OPCODE_LOG] = log_action;
    bld_base->op_actions[TGSI_OPCODE_PK2H] = pk2h_action;
    bld_base->op_actions[TGSI_OPCODE_RSQ] = rsq_action;
    bld_base->op_actions[TGSI_OPCODE_SQRT] = sqrt_action;
@@ -1612,32 +1428,6 @@ lg2_emit_cpu(
 {
    emit_data->output[emit_data->chan] = lp_build_log2_safe(&bld_base->base,
                                                            emit_data->args[0]);
-}
-
-/* TGSI_OPCODE_LOG (CPU Only) */
-static void
-log_emit_cpu(
-   const struct lp_build_tgsi_action * action,
-   struct lp_build_tgsi_context * bld_base,
-   struct lp_build_emit_data * emit_data)
-{
-   LLVMValueRef p_floor_log2;
-   LLVMValueRef p_exp;
-   LLVMValueRef p_log2;
-   LLVMValueRef src0 = emit_data->args[0];
-
-   lp_build_log2_approx(&bld_base->base, src0,
-                        &p_exp, &p_floor_log2, &p_log2, false);
-
-   emit_data->output[TGSI_CHAN_X] = p_floor_log2;
-
-   emit_data->output[TGSI_CHAN_Y] = lp_build_emit_llvm_binary(bld_base,
-                                             TGSI_OPCODE_DIV,
-                                             src0, p_exp);
-   emit_data->output[TGSI_CHAN_Z] = p_log2;
-
-   emit_data->output[TGSI_CHAN_W] = bld_base->base.one;
-
 }
 
 /* TGSI_OPCODE_MAD (CPU Only) */
@@ -2560,7 +2350,6 @@ lp_set_default_actions_cpu(
    bld_base->op_actions[TGSI_OPCODE_UMUL_HI].emit = umul_hi_emit_cpu;
 
    bld_base->op_actions[TGSI_OPCODE_LG2].emit = lg2_emit_cpu;
-   bld_base->op_actions[TGSI_OPCODE_LOG].emit = log_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_MAD].emit = mad_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_MAX].emit = max_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_MIN].emit = min_emit_cpu;

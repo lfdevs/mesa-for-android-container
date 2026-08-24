@@ -218,6 +218,14 @@ os_get_available_system_memory(uint64_t *size);
 bool
 os_get_page_size(uint64_t *size);
 
+/*
+ * Whether this process is permitted to create JIT (writable and executable)
+ * mappings.  Always true except on macOS, where a hardened process without the
+ * com.apple.security.cs.allow-jit entitlement is denied them.
+ */
+bool
+os_jit_allowed(void);
+
 
 #ifdef __cplusplus
 }

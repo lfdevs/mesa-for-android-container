@@ -75,6 +75,7 @@ spec:
 # | fork pipeline        | fork      | pipeline running in a user fork                             |
 # | scheduled pipeline   | mesa/mesa | nightly pipelines, running every morning at 4am UTC         |
 # | direct-push pipeline | mesa/mesa | when commits are pushed directly to mesa/mesa, bypassing Marge and its gating pipeline |
+# | downstream pipeline  | mesa/mesa | when a project Mesa CI uses is running Mesa CI on a modified version of that project   |
 #
 # Note that the release branches maintained by the release manager fall under
 # the "direct push" category.
@@ -92,6 +93,7 @@ spec:
 # test jobs (typically "full" variants of pre-merge jobs that only run 1/X
 # test cases), but not a repeat of the merge pipeline jobs.
 # Direct-push pipelines contain the same jobs as merge pipelines.
+# Downstream pipelines contains all the HW jobs of the wanted drivers, and their dependencies
 
 workflow:
   rules:
@@ -135,6 +137,14 @@ workflow:
         # short timeout allowed in other pipelines.
         # Note: 0 = infinity = gitlab's job `timeout:` applies, which is 1h
         BUILD_JOB_TIMEOUT_OVERRIDE: 0
+    # Pipeline was created as a downstream pipeline in another project (linux, linux-firmware, ...)
+    - if: &is-downstream-pipeline $CI_PIPELINE_SOURCE == "pipeline"
+      variables:
+        FDO_RUNNER_JOB_PRIORITY_TAG_X86_64: priority:low
+        FDO_RUNNER_JOB_PRIORITY_TAG_X86_64_KVM: priority:low-kvm
+        FDO_RUNNER_JOB_PRIORITY_TAG_AARCH64: priority:low-aarch64
+        CI_TRON_JOB_PRIORITY: low
+        JOB_PRIORITY: 45
     # Pipeline for direct pushes to the default branch that bypassed the CI
     - if: &is-push-to-upstream-default-branch $CI_PROJECT_NAMESPACE == "mesa" && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
       variables:
@@ -195,9 +205,13 @@ variables:
   CI_TRON_JOB_PRIORITY: default
   JOB_PRIORITY: 50
   DATA_STORAGE_PATH: data_storage
-  KERNEL_IMAGE_BASE: "https://$S3_HOST/$S3_KERNEL_BUCKET/$KERNEL_REPO/$KERNEL_TAG"
   # Mesa-specific variables that shouldn't be forwarded to DUTs and crosvm
   CI_EXCLUDE_ENV_VAR_REGEX: 'SCRIPTS_DIR|RESULTS_DIR'
+
+  # WARNING: These variables are part of the downstream pipeline ABI, do not rename!
+  KERNEL_IMAGE_BASE: "https://$S3_HOST/$S3_KERNEL_BUCKET/$KERNEL_REPO/$KERNEL_TAG"
+  # FIXME: mimic the same logic for firmware files, requires changes in linux-firmware
+
 
   CI_TRON_JOB_TEMPLATE_PROJECT: &ci-tron-template-project gfx-ci/ci-tron
   CI_TRON_JOB_TEMPLATE_COMMIT: &ci-tron-template-commit d649a2829517b078a3cb8f3c2e6c8775a5992abb
@@ -293,6 +307,8 @@ include:
   rules:
     - if: *is-push-to-fork
       when: manual
+    - if: *is-downstream-pipeline
+      when: on_success
 
 .never-post-merge-rules:
   rules:
@@ -304,6 +320,9 @@ include:
 # `.build-only-delayed-rules` below.
 .container-rules:
   rules:
+    # Downstream pipelines re-use already-built containers
+    - if: *is-downstream-pipeline
+      when: never
     - !reference [.common-rules, rules]
     # Run when re-enabling a disabled farm, but not when disabling it
     - !reference [.disable-farm-rules, rules]
@@ -365,6 +384,7 @@ include:
     - if: *is-merge-attempt
       changes: &all_paths
         - VERSION
+        - .gitattributes
         - bin/git_sha1_gen.py
         - bin/install_megadrivers.py
         - bin/symbols-check.py
@@ -402,7 +422,14 @@ include:
     - if: *is-push-to-upstream-staging-branch
       when: on_success
     # Build everything in scheduled pipelines
+    # FIXME: Try to turn the mesa install artifact key in S3 to the commit sha
+    # rather than the pipeline id so that we may skip building altogether
     - if: *is-scheduled-pipeline
+      when: on_success
+    # Build everything for downstream pipelines
+    # FIXME: Try to turn the mesa install artifact key in S3 to the commit sha
+    # rather than the pipeline id so that we may skip building altogether
+    - if: *is-downstream-pipeline
       when: on_success
     # Allow building everything in fork pipelines, but build nothing unless
     # manually triggered
@@ -414,6 +441,9 @@ include:
 # `.container+build-rules` above.
 .build-only-delayed-rules:
   rules:
+    # Skip everything for downstream pipelines since we only care about hardware jobs
+    - if: *is-downstream-pipeline
+      when: never
     - !reference [.common-rules, rules]
     # Run when re-enabling a disabled farm, but not when disabling it
     - !reference [.disable-farm-rules, rules]

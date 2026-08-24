@@ -245,7 +245,7 @@ impl BlockLinearModifier {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nil_drm_format_mods_for_format(
     dev: &nil_rs_bindings::nv_device_info,
     format: Format,
@@ -393,7 +393,7 @@ pub fn select_best_drm_format_mod(
     best
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nil_select_best_drm_format_mod(
     dev: &nil_rs_bindings::nv_device_info,
     format: Format,

@@ -734,8 +734,10 @@ brw_lsc_op_to_legacy_atomic(unsigned _op)
       UNREACHABLE("no corresponding legacy atomic operation");
    case LSC_OP_LOAD:
    case LSC_OP_LOAD_CMASK:
+   case LSC_OP_LOAD_2D_BLOCK:
    case LSC_OP_STORE:
    case LSC_OP_STORE_CMASK:
+   case LSC_OP_STORE_2D_BLOCK:
    case LSC_OP_FENCE:
    case LSC_OP_LOAD_CMASK_MSRT:
    case LSC_OP_STORE_CMASK_MSRT:

@@ -334,6 +334,7 @@ v3d_init_screen_caps(struct v3d_screen *screen)
         caps->fbfetch_coherent = true;
         caps->max_dual_source_render_targets = 1;
 
+        caps->device_type = PIPE_DEVICE_TYPE_INTEGRATED_GPU;
         caps->vendor_id = 0x14E4;
 
         caps->video_memory =
@@ -791,6 +792,7 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
         screen->ro = ro;
 
         list_inithead(&screen->bo_cache.time_list);
+        (void)mtx_init(&screen->bo_cache.lock, mtx_plain);
         (void)mtx_init(&screen->bo_handles_mutex, mtx_plain);
         screen->bo_handles = util_hash_table_create_ptr_keys();
 

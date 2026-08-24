@@ -40,4 +40,10 @@ v3d_multisync_init(struct v3d_multisync *ms,
                    const uint32_t *out_handles, uint32_t out_count,
                    struct drm_v3d_extension *next);
 
+int v3d_submit_timestamp_query_ioctl(int fd, uint32_t bo_handle,
+                                     const uint32_t *offsets,
+                                     const uint32_t *syncs,
+                                     uint32_t count,
+                                     struct drm_v3d_extension *multisync_ext);
+
 #endif /* V3D_MULTISYNC_H */

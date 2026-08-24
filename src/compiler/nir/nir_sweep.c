@@ -203,6 +203,7 @@ nir_sweep(nir_shader *nir)
    ralloc_steal(nir, (char *)nir->info.name);
    if (nir->info.label)
       ralloc_steal(nir, (char *)nir->info.label);
+   ralloc_steal(nir, (char *)nir->info.spec);
 
    /* Variables are not dead.  Steal them back. */
    sweep_var_list(nir, &nir->variables);

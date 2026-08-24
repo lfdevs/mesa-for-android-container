@@ -96,6 +96,8 @@ _mesa_hash_table_init_u32_keys(struct hash_table *ht, void *mem_ctx);
 
 bool _mesa_hash_table_copy(struct hash_table *dst, struct hash_table *src,
                       void *dst_mem_ctx);
+bool _mesa_hash_table_clone_into(struct hash_table *dst,
+                                 struct hash_table *src);
 
 struct hash_table *
 _mesa_hash_table_clone(struct hash_table *src, void *dst_mem_ctx);

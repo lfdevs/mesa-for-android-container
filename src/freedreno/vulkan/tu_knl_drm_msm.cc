@@ -1436,10 +1436,10 @@ msm_queue_submit(struct tu_queue *queue, void *_submit,
    } else {
       uint32_t flags = MSM_PIPE_3D0;
 
-      if (wait_count)
+      if (wait_count || extra_wait_count)
          flags |= MSM_SUBMIT_SYNCOBJ_IN;
 
-      if (signal_count)
+      if (signal_count || extra_signal_count)
          flags |= MSM_SUBMIT_SYNCOBJ_OUT;
 
       if (has_vm_bind) {

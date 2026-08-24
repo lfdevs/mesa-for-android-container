@@ -265,6 +265,14 @@ struct st_fp_variant_key
    /** needed for ATI_fragment_shader */
    GLuint fog:2;
 
+   /**
+    * ATI_fragment_shader fog: the fog coordinate is fed by the fixed-function
+    * vertex program as signed eye-space Z and must have abs() applied per
+    * fragment (GL_EYE_PLANE_ABSOLUTE_NV distance mode).  See mesa #15407 and
+    * _mesa_fog_coord_needs_deferred_abs().
+    */
+   GLuint fog_coord_abs:1;
+
    /** for OpenGL 1.0 on modern hardware */
    GLuint lower_two_sided_color:1;
 

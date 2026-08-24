@@ -1,0 +1,1091 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2021-2026 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<CounterInfoList>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUTri</MachineName>
+    <SourceName>RT_RAY_TRI</SourceName>
+    <StableID>210</StableID>
+    <HumanName>Ray tracing triangle node tests</HumanName>
+    <GroupName>Ray Tracing Unit Triangle Workload</GroupName>
+    <GroupHumanName>Triangle node tests</GroupHumanName>
+    <Units>nodes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of triangle nodes tested.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every triangle node tested. If this value is
+      high then the ray tracing unit spent a lot of time testing for
+      intersection with triangles, and can be caused by high triangle counts,
+      acceleration structure inefficiency, and ray divergence across a warp.
+
+      Nodes have a variable duration that depends on the number of triangles
+      they contain, and the number of active rays in each warp.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUBox</MachineName>
+    <SourceName>RT_RAY_BOX</SourceName>
+    <StableID>246</StableID>
+    <HumanName>Ray tracing box tests</HumanName>
+    <GroupName>Ray Tracing Unit Box Workload</GroupName>
+    <GroupHumanName>Box tests</GroupHumanName>
+    <Units>boxes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of acceleration structure bounding boxes tested.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every acceleration structure bounding box
+      node tested. If this value is high then the ray tracing unit spent a lot
+      of time traversing the acceleration structure. High node counts,
+      acceleration structure inefficiency, and ray divergence across a warp can
+      all cause the counter value to be high.
+
+      Nodes have a variable duration that depends on the number of bounding
+      boxes they contain, and the number of active rays in each warp.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUTriBin1</MachineName>
+    <SourceName>RT_RAY_TRI_BIN_1_4</SourceName>
+    <StableID>265</StableID>
+    <HumanName>Ray tracing triangle nodes with 1-4 rays</HumanName>
+    <GroupName>Ray Tracing Unit Triangle Tests</GroupName>
+    <GroupHumanName>Nodes with 1-4 rays</GroupHumanName>
+    <Units>nodes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of triangle nodes with 1 to 4 active rays in the warp.
+    </ShortDescription>
+    <LongDescription>
+      This count increments for every triangle node tested when there are
+      between 1 and 4 active rays in the warp. A high percentage of tests with
+      low warp occupancy can indicate an issue with ray coherency. Try to group
+      rays with similar origin, direction, and range together.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUTriBin5</MachineName>
+    <SourceName>RT_RAY_TRI_BIN_5_8</SourceName>
+    <StableID>266</StableID>
+    <HumanName>Ray tracing triangle nodes with 5-8 rays</HumanName>
+    <GroupName>Ray Tracing Unit Triangle Tests</GroupName>
+    <GroupHumanName>Nodes with 5-8 rays</GroupHumanName>
+    <Units>nodes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of triangle nodes with 5 to 8 active rays in the warp.
+    </ShortDescription>
+    <LongDescription>
+      This count increments for every triangle node tested when there are
+      between 5 and 8 active rays in the warp. A high percentage of tests with
+      low warp occupancy can indicate an issue with ray coherency. Try to group
+      rays with similar origin, direction, and range together.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUTriBin9</MachineName>
+    <SourceName>RT_RAY_TRI_BIN_9_12</SourceName>
+    <StableID>269</StableID>
+    <HumanName>Ray tracing triangle nodes with 9-12 rays</HumanName>
+    <GroupName>Ray Tracing Unit Triangle Tests</GroupName>
+    <GroupHumanName>Nodes with 9-12 rays</GroupHumanName>
+    <Units>nodes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of triangle nodes with 9 to 12 active rays in the warp.
+    </ShortDescription>
+    <LongDescription>
+      This count increments for every triangle node tested when there are
+      between 9 and 12 active rays in the warp. A high percentage of tests with
+      low warp occupancy can indicate an issue with ray coherency. Try to group
+      rays with similar origin, direction, and range together.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUTriBin13</MachineName>
+    <SourceName>RT_RAY_TRI_BIN_13_16</SourceName>
+    <StableID>303</StableID>
+    <HumanName>Ray tracing triangle nodes with 13-16 rays</HumanName>
+    <GroupName>Ray Tracing Unit Triangle Tests</GroupName>
+    <GroupHumanName>Nodes with 13-16 rays</GroupHumanName>
+    <Units>nodes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of triangle nodes with 13 to 16 active rays in the warp.
+    </ShortDescription>
+    <LongDescription>
+      This count increments for every triangle node tested when there are
+      between 13 and 16 active rays in the warp.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUBoxBin1</MachineName>
+    <SourceName>RT_RAY_BOX_BIN_1_4</SourceName>
+    <StableID>304</StableID>
+    <HumanName>Ray tracing box nodes with 1-4 rays</HumanName>
+    <GroupName>Ray Tracing Unit Box Tests</GroupName>
+    <GroupHumanName>Nodes with 1-4 rays</GroupHumanName>
+    <Units>nodes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of acceleration structure box nodes with 1 to 4 active rays in
+      the warp.
+    </ShortDescription>
+    <LongDescription>
+      This count increments for every acceleration structure box node tested
+      when there are between 1 and 4 active rays in the warp. A high percentage
+      of tests with low warp occupancy can indicate an issue with ray
+      coherency. Try to group rays with similar origin, direction, and range
+      together.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUBoxBin5</MachineName>
+    <SourceName>RT_RAY_BOX_BIN_5_8</SourceName>
+    <StableID>305</StableID>
+    <HumanName>Ray tracing box nodes with 5-8 rays</HumanName>
+    <GroupName>Ray Tracing Unit Box Tests</GroupName>
+    <GroupHumanName>Nodes with 5-8 rays</GroupHumanName>
+    <Units>nodes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of acceleration structure box nodes with 5 to 8 active rays in
+      the warp.
+    </ShortDescription>
+    <LongDescription>
+      This count increments for every acceleration structure box node tested
+      when there are between 5 and 8 active rays in the warp. A high percentage
+      of tests with low warp occupancy can indicate an issue with ray
+      coherency. Try to group rays with similar origin, direction, and range
+      together.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUBoxBin9</MachineName>
+    <SourceName>RT_RAY_BOX_BIN_9_12</SourceName>
+    <StableID>306</StableID>
+    <HumanName>Ray tracing box nodes with 9-12 rays</HumanName>
+    <GroupName>Ray Tracing Unit Box Tests</GroupName>
+    <GroupHumanName>Nodes with 9-12 rays</GroupHumanName>
+    <Units>nodes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of acceleration structure box nodes with 9 to 12 active rays
+      in the warp.
+    </ShortDescription>
+    <LongDescription>
+      This count increments for every acceleration structure box node tested
+      when there are between 9 and 12 active rays in the warp. A high
+      percentage of tests with low warp occupancy can indicate an issue with
+      ray coherency. Try to group rays with similar origin, direction, and
+      range together.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUBoxBin13</MachineName>
+    <SourceName>RT_RAY_BOX_BIN_13_16</SourceName>
+    <StableID>307</StableID>
+    <HumanName>Ray tracing box nodes with 13-16 rays</HumanName>
+    <GroupName>Ray Tracing Unit Box Tests</GroupName>
+    <GroupHumanName>Nodes with 13-16 rays</GroupHumanName>
+    <Units>nodes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of acceleration structure box nodes with 13 to 16 active rays
+      in the warp.
+    </ShortDescription>
+    <LongDescription>
+      This count increments for every acceleration structure box node tested
+      when there are between 13 and 16 active rays in the warp.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUOpaqueHit</MachineName>
+    <SourceName>RT_OPAQUE_HIT</SourceName>
+    <StableID>308</StableID>
+    <HumanName>Ray tracing opaque triangle hits</HumanName>
+    <GroupName>Ray Tracing Unit Triangle Workload</GroupName>
+    <GroupHumanName>Opaque triangle hits</GroupHumanName>
+    <Units>tests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of opaque triangle hits.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every ray intersection with an opaque
+      triangle.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUNonOpaqueHit</MachineName>
+    <SourceName>RT_NON_OPAQUE_HIT</SourceName>
+    <StableID>309</StableID>
+    <HumanName>Ray tracing non-opaque triangle hits</HumanName>
+    <GroupName>Ray Tracing Unit Triangle Workload</GroupName>
+    <GroupHumanName>Non-opaque triangle hits</GroupHumanName>
+    <Units>tests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of non-opaque triangle hits.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every ray intersection with a non-opaque
+      triangle.
+
+      Non-opaque triangles are more expensive to process than opaque triangles,
+      so Arm recommends using opaque triangles in acceleration structures.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUFirstHitTerm</MachineName>
+    <SourceName>RT_TERM_FIRST_HIT</SourceName>
+    <StableID>310</StableID>
+    <HumanName>Ray tracing first hit terminations</HumanName>
+    <GroupName>Ray Tracing Unit Rays</GroupName>
+    <GroupHumanName>First hit terminated rays</GroupHumanName>
+    <Units>rays</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of rays that terminate on their first hit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every ray that terminates on its first
+      triangle hit. Rays that terminate on first hit are more efficient to
+      process, as they do not need to keep testing to find the closest hit.
+
+      First-hit tests are well suited to techniques that determine occlusion,
+      such as shadow mapping. In these use cases you don't need to know which
+      object is hit, just that an object was hit between the ray source and
+      destination.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUMiss</MachineName>
+    <SourceName>RT_MISS</SourceName>
+    <StableID>311</StableID>
+    <HumanName>Ray tracing triangle test misses</HumanName>
+    <GroupName>Ray Tracing Unit Rays</GroupName>
+    <GroupHumanName>Triangle misses</GroupHumanName>
+    <Units>rays</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of triangle intersection tests that do not intersect.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every ray-triangle intersection test that
+      does not intersect the triangle.
+
+      Most triangles that a ray misses are expected to be culled by box tests
+      during acceleration structure traversal, so if rays are triggering a high
+      number of triangle intersection tests, try improving the acceleration
+      structure quality.
+
+      A high number for this counter might also indicate a programming error,
+      such as using opaque triangles and requesting that opaque hits be culled.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTURay</MachineName>
+    <SourceName>RT_RAYS_STARTED</SourceName>
+    <StableID>312</StableID>
+    <HumanName>Ray tracing started rays</HumanName>
+    <GroupName>Ray Tracing Unit Rays</GroupName>
+    <GroupHumanName>Started rays</GroupHumanName>
+    <Units>rays</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of rays started.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every ray that is started and tested against
+      the root node in the acceleration structure.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUBoxIssueCy</MachineName>
+    <SourceName>RT_RAY_BOX_ISSUED</SourceName>
+    <SourceAlias>RT_BOX_ISSUE_CYCLES</SourceAlias>
+    <StableID>313</StableID>
+    <HumanName>Ray tracing box tester issue cycles</HumanName>
+    <GroupName>Ray Tracing Unit Cycles</GroupName>
+    <GroupHumanName>Box tester issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of active issue cycles for the ray tracing box test unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle the ray tracing unit issues
+      a box intersection operation. If this counter is a high percentage of
+      shader core active, then shader performance might be limited by
+      acceleration structure traversal.
+
+      The main workload for ray tracing is traversing the acceleration
+      structure so this counter is expected to be high. If the counter is not
+      high, and a significant number of rays are being used, it indicates that
+      a bottleneck exists elsewhere.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUBoxIssue</MachineName>
+    <SourceName>RT_BOX_ISSUE_COUNT</SourceName>
+    <StableID>430</StableID>
+    <HumanName>Ray tracing box tests</HumanName>
+    <GroupName>Ray Tracing Unit Box Workload</GroupName>
+    <GroupHumanName>Box tests</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of boxes issued to the ray tracing unit box test data path.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every bounding box tested by the ray tracing
+      unit box intersection operation.
+
+      The main workload for ray tracing is traversing the acceleration
+      structure so this counter is expected to be high. If the counter is not
+      high, and a significant number of rays are being used, it indicates that
+      a bottleneck exists elsewhere.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUTLASBoxIssue</MachineName>
+    <SourceName>RT_RAY_BOX_TLAS</SourceName>
+    <StableID>434</StableID>
+    <HumanName>Ray tracing TLAS box tests</HumanName>
+    <GroupName>Ray Tracing Unit Box Workload</GroupName>
+    <GroupHumanName>TLAS box tests</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of boxes from the TLAS issued to the ray tracing unit box test
+      data path.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every top level acceleration structure
+      bounding box tested by the ray tracing unit box intersection operation.
+
+      The main workload for ray tracing is traversing the acceleration
+      structure so this counter is expected to be high. If the counter is not
+      high, and a significant number of rays are being used, it indicates that
+      a bottleneck exists elsewhere.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUBLASIssue</MachineName>
+    <SourceName>RT_RAY_INSTANCE</SourceName>
+    <StableID>435</StableID>
+    <HumanName>Ray tracing BLAS instances</HumanName>
+    <GroupName>Ray Tracing Unit Instance Workload</GroupName>
+    <GroupHumanName>BLAS instances</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of BLAS instances processed by the ray tracing unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter defines the number of BLAS instances processed by the ray
+      tracing unit. Some instances might be culled without traversing the BLAS
+      itself
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUBLASCull</MachineName>
+    <SourceName>RT_RAY_INSTANCE_CULL</SourceName>
+    <StableID>436</StableID>
+    <HumanName>Ray tracing culled BLAS instances</HumanName>
+    <GroupName>Ray Tracing Unit Instance Workload</GroupName>
+    <GroupHumanName>Culled BLAS instances</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of BLAS instances culled by by the ray tracing unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter defines the number of BLAS instances culled by the ray
+      tracing unit due to no intersection.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUTriIssueCy</MachineName>
+    <SourceName>RT_RAY_TRI_ISSUED</SourceName>
+    <SourceAlias>RT_TRI_ISSUE_CYCLES</SourceAlias>
+    <StableID>314</StableID>
+    <HumanName>Ray tracing triangle tester issue cycles</HumanName>
+    <GroupName>Ray Tracing Unit Cycles</GroupName>
+    <GroupHumanName>Triangle tester issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of active issue cycles for the ray tracing triangle test unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle the ray tracing unit issues
+      a triangle intersection test. If this counter is a high percentage of
+      shader core active, then shader performance might be limited by triangle
+      testing.
+
+      A good acceleration structure culls most triangles using box tests higher
+      up the tree, so that rays do not need to be tested against them. If this
+      counter is high it might indicate an issue with either geometry
+      complexity or acceleration structure efficiency.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUPrimCull</MachineName>
+    <SourceName>RT_RAY_TRI_CULL</SourceName>
+    <SourceAlias>RT_PRIMITIVE_CULL</SourceAlias>
+    <StableID>437</StableID>
+    <HumanName>Ray tracing culled primitives</HumanName>
+    <GroupName>Ray Tracing Unit Workload</GroupName>
+    <GroupHumanName>Culled primitives</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of primitives culled by the ray tracing unit testers.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every triangle and bounding box culled by the
+      ray tracing unit test units.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUTriCull</MachineName>
+    <SourceName>RT_TRI_ISSUE_COUNT</SourceName>
+    <StableID>433</StableID>
+    <HumanName>Ray tracing triangle primitive tests</HumanName>
+    <GroupName>Ray Tracing Unit Triangle Workload</GroupName>
+    <GroupHumanName>Triangle tests</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of triangles issued to the ray tracing unit triangle test data
+      path.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every triangle tested by the ray tracing unit
+      triangle intersection operation.
+
+      A good acceleration structure culls most triangles using box tests higher
+      up the tree, so that rays do not need to be tested against them. If this
+      counter is high it might indicate an issue with either geometry
+      complexity or acceleration structure efficiency.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUActiveCy</MachineName>
+    <SourceName>RT_ACTIVE</SourceName>
+    <StableID>553</StableID>
+    <HumanName>Ray tracing unit active cycles</HumanName>
+    <GroupName>Ray Tracing Unit Cycles</GroupName>
+    <GroupHumanName>Ray tracing unit active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The total number of ray tracing unit active cycles.
+    </ShortDescription>
+    <LongDescription>
+      This counter defines the total number of cycles when the ray tracing unit
+      is active with at least one operation.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUIssueCy</MachineName>
+    <StableID>429</StableID>
+    <HumanName>Ray tracing unit issue cycles</HumanName>
+    <GroupName>Ray Tracing Unit Cycles</GroupName>
+    <GroupHumanName>Ray tracing issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles the ray tracing unit was issuing work.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the total number of cycles when the ray tracing
+      unit was issuing work to a functional unit.
+    </LongDescription>
+    <Equation>
+      max(MaliRTUBoxIssueCy, MaliRTUTriIssueCy)
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUUtil</MachineName>
+    <StableID>321</StableID>
+    <HumanName>Ray tracing unit utilization</HumanName>
+    <GroupName>Shader Core Unit Utilization</GroupName>
+    <GroupHumanName>Ray tracing unit utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage utilization of the ray tracing unit.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the ray tracing
+      unit.
+
+      The most effective technique for reducing ray tracing load is reducing
+      the amount of geometry in the acceleration structure, and ensuring that
+      rays issued in each warp are spatially coherent.
+    </LongDescription>
+    <Equation>
+      (MaliRTUIssueCy / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUCacheHit</MachineName>
+    <SourceName>RT_CACHE_READ_HIT</SourceName>
+    <StableID>431</StableID>
+    <HumanName>Ray tracing unit cache hits</HumanName>
+    <GroupName>Ray Tracing Unit Cache</GroupName>
+    <GroupHumanName>Cache hits</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of hits in the ray tracing unit cache.
+    </ShortDescription>
+    <LongDescription>
+      This counter defines the number of triangle and box data lookups that hit
+      in the ray tracing unit cache.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUCacheMiss</MachineName>
+    <SourceName>RT_CACHE_READ_MISS</SourceName>
+    <StableID>432</StableID>
+    <HumanName>Ray tracing unit cache misses</HumanName>
+    <GroupName>Ray Tracing Unit Cache</GroupName>
+    <GroupHumanName>Cache misses</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of misses in the ray tracing unit cache.
+    </ShortDescription>
+    <LongDescription>
+      This counter defines the number of triangle and box data lookups that
+      miss in the ray tracing unit cache.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUCacheHitRate</MachineName>
+    <StableID>407</StableID>
+    <HumanName>Ray tracing unit cache hit rate</HumanName>
+    <GroupName>Ray Tracing Unit Cache Hit Rate</GroupName>
+    <GroupHumanName>Cache hit rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage hit rate of the ray tracing unit cache.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage hit rate of the ray tracing unit
+      acceleration structure cache.
+    </LongDescription>
+    <Equation>
+      (MaliRTUCacheHit / (MaliRTUCacheHit + MaliRTUCacheMiss)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUNewTraceInstr</MachineName>
+    <SourceName>RT_TRACE_MSG_NEW</SourceName>
+    <StableID>438</StableID>
+    <HumanName>Ray tracing new trace messages</HumanName>
+    <GroupName>Ray Tracing Unit Workload</GroupName>
+    <GroupHumanName>New ray trace messages</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of ray tracing messages starting new rays.
+    </ShortDescription>
+    <LongDescription>
+      This counter defines the number of ray tracing messages starting new
+      rays.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUResumeTraceInstr</MachineName>
+    <SourceName>RT_TRACE_MSG_RESUME</SourceName>
+    <StableID>439</StableID>
+    <HumanName>Ray tracing resume trace messages</HumanName>
+    <GroupName>Ray Tracing Unit Workload</GroupName>
+    <GroupHumanName>Resumed ray trace messages</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of ray tracing messages resuming existing rays.
+    </ShortDescription>
+    <LongDescription>
+      This counter defines the number of ray tracing messages resuming tracing
+      of existing rays.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUResumeTraceRays</MachineName>
+    <SourceName>RT_TRACE_RESUME</SourceName>
+    <StableID>440</StableID>
+    <HumanName>Ray tracing resumed rays</HumanName>
+    <GroupName>Ray Tracing Unit Rays</GroupName>
+    <GroupHumanName>Resumed rays</GroupHumanName>
+    <Units>rays</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of rays that are resumed after an initial hit or intersection
+      shader.
+    </ShortDescription>
+    <LongDescription>
+      This counter defines the number of rays that are resumed after an initial
+      hit or intersection shader.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliRTUStackOverflows</MachineName>
+    <SourceName>RT_TRAVERSAL_STACK_OVERFLOW</SourceName>
+    <StableID>441</StableID>
+    <HumanName>Ray tracing deep traversals</HumanName>
+    <GroupName>Ray Tracing Unit Rays</GroupName>
+    <GroupHumanName>Deep traversal rays</GroupHumanName>
+    <Units>rays</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of rays that are using a deep traversal stack.
+    </ShortDescription>
+    <LongDescription>
+      This counter defines the number of rays that use a deep traversal stack.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+        <GroupName>Ray tracing</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+</CounterInfoList>

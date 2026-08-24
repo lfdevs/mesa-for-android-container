@@ -10,3 +10,6 @@ program@execute@builtin@builtin-float-tgamma-1.0.generated
 program@execute@builtin@builtin-float-lgamma-1.0.generated
 program@execute@builtin@builtin-float-lgamma_r-1.0.generated
 program@execute@builtin@builtin-float-sincos-1.0.generated
+
+# Nightly run expectations update
+program@execute@pyrit-wpa-psk

@@ -5,6 +5,7 @@
 #include "compiler/brw/brw_compiler.h"
 #include "compiler/brw/brw_nir.h"
 #include "compiler/intel_nir.h"
+#include "compiler/intel_prim.h"
 #include "jay_private.h"
 #include "nir.h"
 
@@ -65,6 +66,7 @@ gather_fs_info(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    case nir_intrinsic_load_barycentric_at_offset:
       ctx->offset_interp_modes |=
          BITFIELD_BIT(brw_barycentric_mode(ctx->prog_data, intr));
+      prog_data->uses_src_xy = true;
       break;
 
    case nir_intrinsic_load_frag_coord_z:
@@ -81,6 +83,10 @@ gather_fs_info(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 
    case nir_intrinsic_load_pixel_coord:
       prog_data->uses_src_xy = true;
+      break;
+
+   case nir_intrinsic_load_sample_pos_from_id:
+      prog_data->uses_sample_offsets = true;
       break;
 
    default:
@@ -398,7 +404,7 @@ populate_fs_prog_data(nir_shader *shader,
          ctx.offset_interp_modes & INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS;
       prog_data->uses_pc_bary_coefficients =
          ctx.offset_interp_modes & ~INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS;
-      prog_data->uses_sample_offsets =
+      prog_data->uses_sample_offsets |=
          ctx.offset_interp_modes &
          ((1 << INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE) |
           (1 << INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE));
@@ -485,27 +491,9 @@ static void
 populate_vs_prog_data(nir_shader *nir,
                       const struct intel_device_info *devinfo,
                       const struct brw_vs_prog_key *key,
-                      struct brw_vs_prog_data *prog_data,
-                      unsigned nr_packed_regs)
+                      struct brw_vs_prog_data *prog_data)
 {
-   unsigned nr_attribute_slots = util_bitcount64(prog_data->inputs_read);
    BITSET_WORD *sysvals = nir->info.system_values_read;
-
-   /* gl_VertexID and gl_InstanceID are system values, but arrive via an
-    * incoming vertex attribute.  So, add an extra slot.
-    */
-   if (BITSET_TEST(sysvals, SYSTEM_VALUE_FIRST_VERTEX) ||
-       BITSET_TEST(sysvals, SYSTEM_VALUE_BASE_INSTANCE) ||
-       BITSET_TEST(sysvals, SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) ||
-       BITSET_TEST(sysvals, SYSTEM_VALUE_INSTANCE_ID)) {
-      nr_attribute_slots++;
-   }
-
-   /* gl_DrawID and IsIndexedDraw share its very own vec4 */
-   if (BITSET_TEST(sysvals, SYSTEM_VALUE_DRAW_ID) ||
-       BITSET_TEST(sysvals, SYSTEM_VALUE_IS_INDEXED_DRAW)) {
-      nr_attribute_slots++;
-   }
 
    const struct {
       bool *data;
@@ -523,22 +511,6 @@ populate_vs_prog_data(nir_shader *nir,
       *bool_sysvals[i].data = BITSET_TEST(sysvals, bool_sysvals[i].val);
    }
 
-   unsigned nr_attribute_regs;
-   if (key->vf_component_packing) {
-      prog_data->base.urb_read_length = DIV_ROUND_UP(nr_packed_regs, 8);
-      nr_attribute_regs = nr_packed_regs;
-   } else {
-      prog_data->base.urb_read_length = DIV_ROUND_UP(nr_attribute_slots, 2);
-      nr_attribute_regs = 4 * nr_attribute_slots;
-   }
-
-   /* Since vertex shaders reuse the same VUE entry for inputs and outputs
-    * (overwriting the original contents), we need to make sure the size is
-    * the larger of the two.
-    */
-   const unsigned vue_entries = MAX2(DIV_ROUND_UP(nr_attribute_regs, 4),
-                                     prog_data->base.vue_map.num_slots);
-   prog_data->base.urb_entry_size = DIV_ROUND_UP(vue_entries, 4);
    prog_data->base.dispatch_mode = INTEL_DISPATCH_MODE_SIMD8;
 }
 
@@ -561,24 +533,86 @@ populate_tcs_prog_data(nir_shader *nir,
    prog_data->base.urb_read_length = 0;
 }
 
+/* TODO: this is copied in two places right now. probably dedup it? */
+static const uint32_t
+   gl_prim_to_hw_prim[MESA_PRIM_TRIANGLE_STRIP_ADJACENCY + 1] = {
+      [MESA_PRIM_POINTS] = _3DPRIM_POINTLIST,
+      [MESA_PRIM_LINES] = _3DPRIM_LINELIST,
+      [MESA_PRIM_LINE_LOOP] = _3DPRIM_LINELOOP,
+      [MESA_PRIM_LINE_STRIP] = _3DPRIM_LINESTRIP,
+      [MESA_PRIM_TRIANGLES] = _3DPRIM_TRILIST,
+      [MESA_PRIM_TRIANGLE_STRIP] = _3DPRIM_TRISTRIP,
+      [MESA_PRIM_TRIANGLE_FAN] = _3DPRIM_TRIFAN,
+      [MESA_PRIM_QUADS] = _3DPRIM_QUADLIST,
+      [MESA_PRIM_QUAD_STRIP] = _3DPRIM_QUADSTRIP,
+      [MESA_PRIM_POLYGON] = _3DPRIM_POLYGON,
+      [MESA_PRIM_LINES_ADJACENCY] = _3DPRIM_LINELIST_ADJ,
+      [MESA_PRIM_LINE_STRIP_ADJACENCY] = _3DPRIM_LINESTRIP_ADJ,
+      [MESA_PRIM_TRIANGLES_ADJACENCY] = _3DPRIM_TRILIST_ADJ,
+      [MESA_PRIM_TRIANGLE_STRIP_ADJACENCY] = _3DPRIM_TRISTRIP_ADJ,
+   };
+
+static void
+populate_gs_prog_data(nir_shader *nir,
+                      const struct brw_gs_prog_key *key,
+                      struct brw_gs_prog_data *prog_data)
+{
+   unsigned output_vertex_size_bytes = prog_data->base.vue_map.num_slots * 16;
+   assert(output_vertex_size_bytes <= GFX7_MAX_GS_OUTPUT_VERTEX_SIZE_BYTES);
+
+   prog_data->output_vertex_size_hwords =
+      align(output_vertex_size_bytes, 32) / 32;
+
+   prog_data->include_primitive_id =
+      BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID);
+   prog_data->invocations = nir->info.gs.invocations;
+
+   uint32_t control_data_bits_per_vertex;
+
+   if (nir->info.gs.output_primitive == MESA_PRIM_POINTS) {
+      prog_data->control_data_format = GFX7_GS_CONTROL_DATA_FORMAT_GSCTL_SID;
+
+      if (nir->info.gs.active_stream_mask != (1 << 0)) {
+         control_data_bits_per_vertex = 2;
+      } else {
+         control_data_bits_per_vertex = 0;
+      }
+   } else {
+      prog_data->control_data_format = GFX7_GS_CONTROL_DATA_FORMAT_GSCTL_CUT;
+      control_data_bits_per_vertex = nir->info.gs.uses_end_primitive ? 1 : 0;
+   }
+
+   uint32_t control_data_header_size_bits =
+      nir->info.gs.vertices_out * control_data_bits_per_vertex;
+
+   prog_data->control_data_header_size_hwords =
+      align(control_data_header_size_bits, 256) / 256;
+
+   prog_data->output_topology =
+      gl_prim_to_hw_prim[nir->info.gs.output_primitive];
+
+   prog_data->vertices_in = nir->info.gs.vertices_in;
+}
+
 void
 jay_populate_prog_data(const struct intel_device_info *devinfo,
                        nir_shader *nir,
                        union brw_any_prog_data *prog_data,
                        union brw_any_prog_key *key,
-                       unsigned nr_packed_regs)
+                       struct jay_fs_perprim_data *fs_perprim)
 {
    if (nir->info.stage == MESA_SHADER_VERTEX) {
-      populate_vs_prog_data(nir, devinfo, &key->vs, &prog_data->vs,
-                            nr_packed_regs);
+      populate_vs_prog_data(nir, devinfo, &key->vs, &prog_data->vs);
    } else if (nir->info.stage == MESA_SHADER_TESS_CTRL) {
       populate_tcs_prog_data(nir, &key->tcs, &prog_data->tcs);
    } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-      int per_primitive_offsets[VARYING_SLOT_MAX];
-      memset(per_primitive_offsets, -1, sizeof(per_primitive_offsets));
+      int32_t *per_primitive_offsets = fs_perprim->per_primitive_offsets;
+      memset(per_primitive_offsets, -1, VARYING_SLOT_MAX * sizeof(int));
 
       populate_fs_prog_data(nir, devinfo, &key->fs, &prog_data->fs,
-                            NULL /* TODO: mue_map */, per_primitive_offsets);
+                            fs_perprim->mue, per_primitive_offsets);
+   } else if (nir->info.stage == MESA_SHADER_GEOMETRY) {
+      populate_gs_prog_data(nir, &key->gs, &prog_data->gs);
    }
 
    if (nir->info.stage == MESA_SHADER_VERTEX ||

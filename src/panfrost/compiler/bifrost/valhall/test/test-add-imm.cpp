@@ -26,6 +26,7 @@ class AddImm : public testing::Test {
    AddImm()
    {
       mem_ctx = ralloc_context(NULL);
+      arch = 9;
    }
 
    ~AddImm()
@@ -34,6 +35,7 @@ class AddImm : public testing::Test {
    }
 
    void *mem_ctx;
+   unsigned arch;
 };
 
 TEST_F(AddImm, Basic)

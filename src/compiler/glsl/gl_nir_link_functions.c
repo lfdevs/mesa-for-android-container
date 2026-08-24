@@ -332,9 +332,6 @@ resolve_calls_and_remove_unreachable(struct gl_shader_program *prog,
                                      struct hash_table *func_lookup)
 {
    nir_shader *shader = linked_sh->Program->nir;
-   nir_function_impl *entry = nir_shader_get_entrypoint(shader);
-   if (!entry)
-      return true;
 
    /* use nir_function::pass_flags to check function reachability */
    nir_foreach_function(func, shader)
@@ -342,7 +339,24 @@ resolve_calls_and_remove_unreachable(struct gl_shader_program *prog,
 
    struct util_dynarray stack;
    util_dynarray_init(&stack, NULL);
-   util_dynarray_append(&stack, entry);
+
+   /* The entrypoint is not the only live root. The temp globals wrapper
+    * functions hold global initialiser instructions, and calls to them are
+    * only inserted into main after this pass has run (see
+    * gl_nir_link_shaders()). Traverse them as roots too so that calls in
+    * global initialisers are resolved and their callees are not removed as
+    * unreachable.
+    */
+   nir_foreach_function_impl(impl, shader) {
+      if (impl->function->is_entrypoint ||
+          impl->function->is_tmp_globals_wrapper)
+         util_dynarray_append(&stack, impl);
+   }
+
+   if (util_dynarray_num_elements(&stack, nir_function_impl *) == 0) {
+      util_dynarray_fini(&stack);
+      return true;
+   }
 
    bool success = true;
 
@@ -391,8 +405,7 @@ resolve_calls_and_remove_unreachable(struct gl_shader_program *prog,
 done:
    util_dynarray_fini(&stack);
    nir_foreach_function_safe(func, shader) {
-      if (func->impl && func->pass_flags == 0
-          && strstr(func->name, "gl_mesa_tmp") == NULL)
+      if (func->impl && func->pass_flags == 0)
          exec_node_remove(&func->node);
    }
 

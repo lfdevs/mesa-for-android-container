@@ -17,3 +17,12 @@ glx.*
 # Flake introduced in Linux 6.16
 # Results in an OOM
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-wrong-type-setter
+
+# HW issue fixed in Xe3, due to use of GPL/ESO.
+dEQP-GLES3.functional.occlusion_query.conservative_depth_clear_stencil_write_stencil_clear
+dEQP-GLES3.functional.occlusion_query.conservative_depth_clear_stencil_clear
+dEQP-GLES3.functional.occlusion_query.conservative_depth_write
+dEQP-GLES3.functional.occlusion_query.scissor_depth_write_stencil_write_stencil_clear
+spec@!opengl 2.0@occlusion-query-discard
+spec@arb_occlusion_query@occlusion_query_meta_fragments
+spec@arb_occlusion_query@occlusion_query_meta_save

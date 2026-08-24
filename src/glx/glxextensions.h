@@ -271,6 +271,9 @@ extern GLboolean __glExtensionBitIsEnabled(struct glx_context *gc,
 extern void
 __glXEnableDirectExtension(struct glx_screen *psc, const char *name);
 
+extern void
+__glXForceEnableExtension(struct glx_screen *psc, const char *name);
+
 
 /* GLX_ALIAS should be used for functions with a non-void return type.
    GLX_ALIAS_VOID is for functions with a void return type. */

@@ -596,6 +596,8 @@ static inline bool instr_has_side_effects(pco_instr *instr)
 
    case PCO_OP_OP_ATOMIC_OFFSET:
 
+   case PCO_OP_FLUSH_DMA:
+
       return true;
 
    default:

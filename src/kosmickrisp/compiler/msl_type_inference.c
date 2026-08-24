@@ -405,6 +405,7 @@ infer_types_from_intrinsic(struct hash_table *types, nir_intrinsic_instr *instr)
    case nir_intrinsic_load_point_coord:
    case nir_intrinsic_load_sample_pos:
    case nir_intrinsic_load_frag_coord:
+   case nir_intrinsic_load_barycentric_coord_pixel:
       set_type(types, &instr->def, TYPE_FLOAT);
       break;
    case nir_intrinsic_load_front_face:
@@ -424,6 +425,9 @@ infer_types_from_intrinsic(struct hash_table *types, nir_intrinsic_instr *instr)
                ti_type_from_nir(nir_intrinsic_dest_type(instr)));
       set_type(types, &instr->src[1], TYPE_UINT); // coords
       set_type(types, &instr->src[3], TYPE_UINT); // level
+      break;
+   case nir_intrinsic_bindless_image_levels:
+      set_type(types, &instr->def, TYPE_UINT);
       break;
    case nir_intrinsic_bindless_image_store:
       set_type(types, &instr->src[1], TYPE_UINT); // coords

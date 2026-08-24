@@ -4,6 +4,7 @@
  */
 
 #include "ethosu_device.h"
+#include "ethosu_encode.h"
 #include "ethosu_ml.h"
 #include "ethosu_public.h"
 
@@ -34,6 +35,7 @@ ethosu_destroy_screen(struct pipe_screen *pscreen)
 {
    struct ethosu_screen *screen = ethosu_screen(pscreen);
 
+   ethosu_weight_cache_destroy(&screen->ml_device);
    ralloc_free(screen);
 }
 
@@ -253,6 +255,7 @@ set_device_arch(struct ethosu_ml_device *device, bool is_u65)
 static void
 ethosu_ml_device_destroy(struct pipe_ml_device *pdev)
 {
+   ethosu_weight_cache_destroy(ethosu_ml_device(pdev));
    ralloc_free(pdev);
 }
 

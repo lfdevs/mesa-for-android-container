@@ -6,6 +6,7 @@
 
 #include "bi_builder.h"
 #include "compiler.h"
+#include "valhall.h"
 
 /*
  * Due to a Bifrost encoding restriction, some instructions cannot have an abs
@@ -256,15 +257,58 @@ bi_is_fclamp(enum bi_opcode op, enum bi_size size)
 }
 
 static bool
-bi_optimizer_clamp(bi_instr *I, bi_instr *use)
+bi_takes_f2f16_dest(unsigned arch, bi_instr *I, enum bi_round round)
+{
+   return arch >= 9 && va_op_dest_modifier_does_convert(I->op) &&
+          I->round == round;
+}
+
+static bool
+bi_optimizer_clamp(unsigned arch, bi_instr *I, bi_instr *use)
 {
    if (!bi_is_fclamp(use->op, bi_get_opcode_props(I)->size))
       return false;
    if (!bi_takes_clamp(I))
       return false;
 
+   /* swizzle != H01 converts in valhall, check if it's available */
+   if (use->dest[0].swizzle != BI_SWIZZLE_H01 &&
+       !bi_takes_f2f16_dest(arch, I, use->round))
+      return false;
+
    /* Clamps are bitfields (clamp_m1_1/clamp_0_inf) so composition is OR */
    I->clamp |= use->clamp;
+   I->dest[0] = use->dest[0];
+   return true;
+}
+
+static bool
+bi_is_f2f16(bi_instr *I)
+{
+   return I->op == BI_OPCODE_FADD_F32 &&
+          bi_is_value_equiv(I->src[1], bi_negzero()) &&
+          !I->src[0].abs && !I->src[0].neg &&
+          I->src[0].swizzle == BI_SWIZZLE_NONE &&
+          I->clamp == BI_CLAMP_NONE &&
+          (I->dest->swizzle == BI_SWIZZLE_H0 ||
+           I->dest->swizzle == BI_SWIZZLE_H1);
+}
+
+static bool
+bi_takes_f2f16(bi_instr *I)
+{
+   return va_op_dest_modifier_does_convert(I->op) &&
+          I->dest->swizzle == BI_SWIZZLE_H01;
+}
+
+static bool
+bi_optimizer_f2f16(unsigned arch, bi_instr *I, bi_instr *use)
+{
+   /* Only available since Valhall */
+   if (arch < 9 || !bi_is_f2f16(use) || !bi_takes_f2f16(I))
+      return false;
+   if (I->round != use->round)
+      return false;
    I->dest[0] = use->dest[0];
    return true;
 }
@@ -326,13 +370,15 @@ bi_optimizer_result_type(bi_instr *I, bi_instr *mux)
    if (bi_get_opcode_props(I)->size != bi_get_opcode_props(mux)->size)
       return false;
 
+   enum bi_result_type result_type;
+
    if (bi_is_fixed_mux(mux, 32, bi_imm_f32(1.0)) ||
        bi_is_fixed_mux(mux, 16, bi_imm_f16(1.0))) {
 
       if (!bi_takes_float_result_type(I->op))
          return false;
 
-      I->result_type = BI_RESULT_TYPE_F1;
+      result_type = BI_RESULT_TYPE_F1;
    } else if (bi_is_fixed_mux(mux, 32, bi_imm_u32(1)) ||
               bi_is_fixed_mux(mux, 16, bi_imm_u16(1)) ||
               bi_is_fixed_mux(mux, 8, bi_imm_u8(1))) {
@@ -340,12 +386,29 @@ bi_optimizer_result_type(bi_instr *I, bi_instr *mux)
       if (!bi_takes_int_result_type(I->op))
          return false;
 
-      I->result_type = BI_RESULT_TYPE_I1;
+      result_type = BI_RESULT_TYPE_I1;
    } else {
       return false;
    }
 
+   /* The MUX condition may have a non-identity swizzle (e.g. H10 = swap).
+    * Compose that swizzle into the CMP sources so the fused CMP.f1/i1 compares
+    * the right lane pairs.
+    */
+   enum bi_swizzle swizzle = mux->src[2].swizzle;
+   if (swizzle != BI_SWIZZLE_H01) {
+      if (bi_get_opcode_props(I)->size != BI_SIZE_16)
+         return false;
+      /* Check if swizzles are composable */
+      if (swizzle > BI_SWIZZLE_H11)
+         return false;
+
+      I->src[0].swizzle = bi_compose_swizzle_16(swizzle, I->src[0].swizzle);
+      I->src[1].swizzle = bi_compose_swizzle_16(swizzle, I->src[1].swizzle);
+   }
+   I->result_type = result_type;
    I->dest[0] = mux->dest[0];
+
    return true;
 }
 
@@ -430,7 +493,9 @@ bi_opt_mod_prop_backward(bi_context *ctx)
 
          /* Destination has a single use, try to propagate */
          bool propagated =
-            bi_optimizer_clamp(I, use) || bi_optimizer_result_type(I, use);
+            bi_optimizer_clamp(ctx->arch, I, use) ||
+            bi_optimizer_f2f16(ctx->arch, I, use) ||
+            bi_optimizer_result_type(I, use);
 
          if (!propagated && I->op == BI_OPCODE_LD_VAR_IMM &&
              use->op == BI_OPCODE_SPLIT_I32) {
@@ -471,6 +536,7 @@ bi_lower_opt_instruction_helper(bi_builder *b, bi_instr *I)
    case BI_OPCODE_FCLAMP_F32:
       repl = bi_fadd_f32_to(b, I->dest[0], I->src[0], bi_negzero());
       repl->clamp = I->clamp;
+      repl->round = I->round;
       return true;
 
    case BI_OPCODE_FABSNEG_V2F16:

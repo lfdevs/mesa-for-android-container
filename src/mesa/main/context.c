@@ -1567,8 +1567,17 @@ _mesa_share_state(struct gl_context *ctx, struct gl_context *ctxToShare)
       /* save ref to old state to prevent it from being deleted immediately */
       _mesa_reference_shared_state(ctx, &oldShared, ctx->Shared);
 
+      /* Keep SharedLink consistent with ctx->Shared */
+      simple_mtx_lock(&oldShared->Mutex);
+      list_del(&ctx->SharedLink);
+      simple_mtx_unlock(&oldShared->Mutex);
+
       /* update ctx's Shared pointer */
       _mesa_reference_shared_state(ctx, &ctx->Shared, ctxToShare->Shared);
+
+      simple_mtx_lock(&ctx->Shared->Mutex);
+      list_addtail(&ctx->SharedLink, &ctx->Shared->Contexts);
+      simple_mtx_unlock(&ctx->Shared->Mutex);
 
       update_default_objects(ctx);
 

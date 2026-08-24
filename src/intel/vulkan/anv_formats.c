@@ -541,7 +541,7 @@ anv_get_format(const struct anv_physical_device *device, VkFormat vk_format)
     * disabled.
     */
    if ((format->flags & ANV_FORMAT_FLAG_NO_CBCWF) &&
-       device->instance->drirc.debug.custom_border_colors_without_format)
+       device->drirc.debug.custom_border_colors_without_format)
       return NULL;
 
    return format;
@@ -931,7 +931,7 @@ anv_get_color_format_features(const struct anv_physical_device *physical_device,
     */
    if ((anv_format->flags & ANV_FORMAT_FLAG_STORAGE_FORMAT_EMULATED) == 0) {
       if (isl_format_supports_typed_reads(devinfo, base_isl_format) ||
-          (physical_device->instance->drirc.debug.read_without_format_emu &&
+          (physical_device->drirc.debug.read_without_format_emu &&
            isl_is_storage_image_format(devinfo, plane_format.isl_format)))
          flags |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT;
       if (isl_format_supports_typed_writes(devinfo, base_isl_format))
@@ -1277,7 +1277,7 @@ get_drm_format_modifier_properties_list(const struct anv_physical_device *physic
          continue;
 
       if (physical_device->info.ver >= 20 &&
-          physical_device->instance->drirc.debug.disable_xe2_ccs_modifiers &&
+          physical_device->drirc.debug.disable_xe2_ccs_modifiers &&
           isl_mod_info->supports_render_compression)
          continue;
 
@@ -1363,17 +1363,17 @@ void anv_GetPhysicalDeviceFormatProperties2(
       .bufferFeatures = vk_format_features2_to_features(buffer2),
    };
 
-   vk_foreach_struct(ext, pFormatProperties->pNext) {
+   vk_foreach_struct(sType, ext, pFormatProperties->pNext) {
       /* Use unsigned since some cases are not in the VkStructureType enum. */
-      switch ((unsigned)ext->sType) {
+      switch ((unsigned)sType) {
       case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT:
          get_drm_format_modifier_properties_list(physical_device, vk_format,
-                                                 (void *)ext);
+                                                 ext);
          break;
 
       case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT:
          get_drm_format_modifier_properties_list_2(physical_device, vk_format,
-                                                   (void *)ext);
+                                                   ext);
          break;
 
       case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3: {
@@ -1387,7 +1387,7 @@ void anv_GetPhysicalDeviceFormatProperties2(
          /* don't have any thing to use this for yet */
          break;
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -1666,59 +1666,59 @@ anv_get_image_format_properties(
    VkTextureLODGatherFormatPropertiesAMD *texture_lod_gather_props = NULL;
    VkImageCompressionPropertiesEXT *comp_props = NULL;
    VkHostImageCopyDevicePerformanceQueryEXT *host_props = NULL;
-   bool from_wsi = false;
+   const struct wsi_image_create_info *wsi_info = NULL;
    const bool is_sparse = info->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
 
    /* Extract input structs */
-   vk_foreach_struct_const(s, info->pNext) {
-      switch ((unsigned)s->sType) {
+   vk_foreach_struct_const(sType, s, info->pNext) {
+      switch ((unsigned)sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
-         external_info = (const void *) s;
+         external_info = s;
          break;
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT:
-         modifier_info = (const void *)s;
+         modifier_info = s;
          break;
       case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
-         format_list_info = (const void *)s;
+         format_list_info = s;
          break;
       case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
          /* Ignore but don't warn */
          break;
       case VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA:
-         from_wsi = true;
+         wsi_info = s;
          break;
       case VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR:
          /* Ignore but don't warn */
          break;
       case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT:
-         comp_info = (const void *)s;
+         comp_info = s;
          break;
       default:
-         vk_debug_ignored_stype(s->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
 
    /* Extract output structs */
-   vk_foreach_struct(s, props->pNext) {
-      switch (s->sType) {
+   vk_foreach_struct(sType, s, props->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES:
-         external_props = (void *) s;
+         external_props = s;
          break;
       case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES:
-         ycbcr_props = (void *) s;
+         ycbcr_props = s;
          break;
       case VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD:
-         texture_lod_gather_props = (void *) s;
+         texture_lod_gather_props = s;
          break;
       case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT:
-         comp_props = (void *) s;
+         comp_props = s;
          break;
       case VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY_EXT:
-         host_props = (void *) s;
+         host_props = s;
          break;
       default:
-         vk_debug_ignored_stype(s->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -1731,10 +1731,13 @@ anv_get_image_format_properties(
        (info->usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT))
       goto unsupported;
 
+   bool ccs_mod = false;
    if (info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
       isl_mod_info = isl_drm_modifier_get_info(modifier_info->drmFormatModifier);
       if (isl_mod_info == NULL)
          goto unsupported;
+
+      ccs_mod = isl_drm_modifier_has_aux(isl_mod_info->modifier);
 
       /* only allow Y-tiling/Tile4 for video decode. */
       if (info->usage & VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR) {
@@ -1875,7 +1878,7 @@ anv_get_image_format_properties(
          goto unsupported;
       }
 
-      if (isl_drm_modifier_has_aux(isl_mod_info->modifier) &&
+      if (ccs_mod &&
           !anv_formats_ccs_e_compatible(physical_device, info->flags, info->format,
                                         info->tiling, format_list_info)) {
          goto unsupported;
@@ -1939,32 +1942,11 @@ anv_get_image_format_properties(
           goto unsupported;
       }
 
-      if (info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
-          isl_drm_modifier_has_aux(isl_mod_info->modifier)) {
+      if (ccs_mod) {
          /* Rejection DISJOINT for consistency with the GL driver. In
           * eglCreateImage, we require that the dma_buf for the primary surface
           * and the dma_buf for its aux surface refer to the same bo.
           */
-         goto unsupported;
-      }
-   }
-
-   if ((info->flags & VK_IMAGE_CREATE_ALIAS_BIT) && !from_wsi) {
-      /* Reject aliasing of images with non-linear DRM format modifiers because:
-       *
-       * 1. For modifiers with compression, we store aux tracking state in
-       *    ANV_IMAGE_MEMORY_BINDING_PRIVATE, which is not aliasable because it's
-       *    not client-bound.
-       *
-       * 2. For tiled modifiers without compression, we may attempt to compress
-       *    them behind the scenes, in which case both the aux tracking state
-       *    and the CCS data are bound to ANV_IMAGE_MEMORY_BINDING_PRIVATE.
-       *
-       * 3. For WSI we should ignore ALIAS_BIT because we have the ability to
-       *    bind the ANV_MEMORY_BINDING_PRIVATE from the other WSI image.
-       */
-      if (info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
-          isl_mod_info->modifier != DRM_FORMAT_MOD_LINEAR) {
          goto unsupported;
       }
    }
@@ -2078,6 +2060,11 @@ anv_get_image_format_properties(
                 * interchangeable here.
                 */
                external_props->externalMemoryProperties = opaque_fd_dma_buf_props;
+               /* CCS modifiers require dedicated allocation. */
+               if (ccs_mod) {
+                  external_props->externalMemoryProperties.externalMemoryFeatures |=
+                     VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT;
+               }
             } else {
                /* With an implicit memory layout, we must rely on deviceUUID
                 * and driverUUID to determine the layout. Therefore DMA_BUF is
@@ -2098,8 +2085,14 @@ anv_get_image_format_properties(
           * the image belongs too. Both OPAQUE_FD and DMA_BUF are
           * interchangeable here.
           */
-         if (external_props)
+         if (external_props) {
             external_props->externalMemoryProperties = opaque_fd_dma_buf_props;
+            /* CCS modifiers require dedicated allocation. */
+            if (ccs_mod) {
+               external_props->externalMemoryProperties.externalMemoryFeatures |=
+                  VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT;
+            }
+         }
          break;
       case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT:
          /* This memory handle has no restrictions on driverUUID nor deviceUUID,
@@ -2137,6 +2130,15 @@ anv_get_image_format_properties(
           */
          goto unsupported;
       }
+   }
+
+   /* Ensure applications query the requirement of the dedicated allocation
+    * for scanout images from WSI without a modifier. Refer to the places of
+    * 'vk.wsi_legacy_scanout' flag.
+    */
+   if (wsi_info && wsi_info->scanout && external_props) {
+      external_props->externalMemoryProperties.externalMemoryFeatures |=
+         VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT;
    }
 
    const bool aux_supported =
@@ -2227,8 +2229,8 @@ void anv_GetPhysicalDeviceSparseImageFormatProperties2(
       return;
    }
 
-   vk_foreach_struct_const(ext, pFormatInfo->pNext)
-      vk_debug_ignored_stype(ext->sType);
+   vk_foreach_struct_const(sType, ext, pFormatInfo->pNext)
+      vk_debug_ignored_stype(sType);
 
    /* Check if the image is supported at all (regardless of being Sparse). */
    const VkPhysicalDeviceImageFormatInfo2 img_info = {

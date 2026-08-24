@@ -8,14 +8,14 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- state.xml     (  30672 bytes, from 2026-06-11 21:02:17)
-- common.xml    (  35664 bytes, from 2026-06-11 21:02:17)
-- common_3d.xml (  15069 bytes, from 2026-06-11 21:02:17)
-- state_hi.xml  (  35909 bytes, from 2026-06-11 21:02:17)
+- state.xml     (  30841 bytes, from 2026-08-06 20:34:59)
+- common.xml    (  35664 bytes, from 2026-07-29 06:39:05)
+- common_3d.xml (  15069 bytes, from 2026-07-29 06:39:05)
+- state_hi.xml  (  35909 bytes, from 2026-07-29 06:39:05)
 - copyright.xml (   1597 bytes, from 2026-03-02 22:49:28)
 - state_2d.xml  (  52271 bytes, from 2026-03-02 22:49:28)
-- state_3d.xml  (  92258 bytes, from 2026-06-11 21:02:17)
-- state_blt.xml (  15754 bytes, from 2026-06-11 21:02:17)
+- state_3d.xml  (  92765 bytes, from 2026-08-06 20:37:58)
+- state_blt.xml (  15932 bytes, from 2026-08-06 20:34:59)
 - state_vg.xml  (   5975 bytes, from 2026-03-02 22:49:28)
 
 Copyright (C) 2012-2026 by the following authors:
@@ -227,6 +227,7 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_BLT_CONFIG_INPLACE_TS_MODE__SHIFT			10
 #define VIVS_BLT_CONFIG_INPLACE_TS_MODE(x)			(((x) << VIVS_BLT_CONFIG_INPLACE_TS_MODE__SHIFT) & VIVS_BLT_CONFIG_INPLACE_TS_MODE__MASK)
 #define VIVS_BLT_CONFIG_INPLACE_BOTH				0x00000800
+#define VIVS_BLT_CONFIG_DOWNSAMPLE_ONE_SAMPLE			0x00001000
 #define VIVS_BLT_CONFIG_INPLACE_BPP__MASK			0x00038000
 #define VIVS_BLT_CONFIG_INPLACE_BPP__SHIFT			15
 #define VIVS_BLT_CONFIG_INPLACE_BPP_1				0x00000000

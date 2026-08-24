@@ -41,8 +41,20 @@ static const uint32_t leaf_spv[] = {
 #include "bvh/leaf.spv.h"
 };
 
-static const uint32_t morton_spv[] = {
-#include "bvh/morton.spv.h"
+static const uint32_t morton64_spv[] = {
+#include "bvh/morton_sort_64.spv.h"
+};
+
+static const uint32_t morton32_spv[] = {
+#include "bvh/morton_sort_32.spv.h"
+};
+
+static const uint32_t pair_triangles_spv[] = {
+#include "bvh/pair_triangles.spv.h"
+};
+
+static const uint32_t id_prefix_sum_spv[] = {
+#include "bvh/id_prefix_sum.spv.h"
 };
 
 static const uint32_t lbvh_main_spv[] = {
@@ -60,6 +72,75 @@ static const uint32_t ploc_spv[] = {
 static const uint32_t hploc_spv[] = {
 #include "bvh/hploc_internal.spv.h"
 };
+
+void
+vk_bvh_build_barrier_compute_to_compute(VkCommandBuffer commandBuffer, bool indirect_dst)
+{
+  VK_FROM_HANDLE(vk_command_buffer, cmd_buffer, commandBuffer);
+  const struct vk_device_dispatch_table *disp =
+    &cmd_buffer->base.device->dispatch_table;
+
+  VkMemoryBarrier2 barrier = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+      .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+      .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+   };
+   if (indirect_dst) {
+      barrier.dstStageMask |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+      barrier.dstAccessMask |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT_KHR;
+   }
+
+   VkDependencyInfo dep = {
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .memoryBarrierCount = 1,
+      .pMemoryBarriers = &barrier,
+   };
+   disp->CmdPipelineBarrier2(commandBuffer, &dep);
+}
+
+void
+vk_bvh_build_barrier_transfer_to_compute(VkCommandBuffer commandBuffer)
+{
+  VK_FROM_HANDLE(vk_command_buffer, cmd_buffer, commandBuffer);
+  const struct vk_device_dispatch_table *disp =
+    &cmd_buffer->base.device->dispatch_table;
+
+   VkDependencyInfo dep = {
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .memoryBarrierCount = 1,
+      .pMemoryBarriers = &(VkMemoryBarrier2){
+         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+         .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT,
+         .srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
+         .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+         .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+      },
+   };
+   disp->CmdPipelineBarrier2(commandBuffer, &dep);
+}
+
+void
+vk_bvh_build_barrier_compute_to_host(VkCommandBuffer commandBuffer)
+{
+  VK_FROM_HANDLE(vk_command_buffer, cmd_buffer, commandBuffer);
+  const struct vk_device_dispatch_table *disp =
+    &cmd_buffer->base.device->dispatch_table;
+
+   VkDependencyInfo dep = {
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .memoryBarrierCount = 1,
+      .pMemoryBarriers = &(VkMemoryBarrier2){
+         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+         .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+         .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+         .dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT,
+         .dstAccessMask = VK_ACCESS_2_HOST_READ_BIT | VK_ACCESS_2_HOST_WRITE_BIT,
+      },
+   };
+   disp->CmdPipelineBarrier2(commandBuffer, &dep);
+}
 
 VKAPI_ATTR VkResult VKAPI_CALL
 vk_common_CreateAccelerationStructureKHR(VkDevice _device,
@@ -170,40 +251,35 @@ vk_acceleration_structure_build_state_init(struct vk_acceleration_structure_buil
       state->config.build_flags |= VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS;
    if (state->config.u64_keys)
       state->config.build_flags |= VK_BUILD_FLAG_64BIT_KEYS;
+   if (state->config.late_pair_compression)
+      state->config.build_flags |= VK_BUILD_FLAG_HAS_QUADS;
 
-   radix_sort_vk_memory_requirements_t requirements = {
-      0,
-   };
-   radix_sort_vk_get_memory_requirements(state->config.u64_keys ? args->radix_sort_96 : args->radix_sort_64, leaf_count,
-                                         &requirements);
+   uint32_t keyval_size = state->config.u64_keys ? sizeof(struct key64_id_pair) : sizeof(struct key32_id_pair);
+   uint32_t morton_keyvals_per_workgroup = args->morton_sort_workgroup_size * args->morton_sort_kvs_per_thread;
+   state->morton_sort_dispatch_size = DIV_ROUND_UP(leaf_count, morton_keyvals_per_workgroup);
+   state->morton_sort_passes = util_logbase2_ceil(state->morton_sort_dispatch_size) + 1;
+   uint32_t morton_sort_internal_size = state->morton_sort_passes * sizeof(struct morton_ready_count);
 
-   uint32_t ir_leaf_size;
-   switch (vk_get_as_geometry_type(build_info)) {
-   case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
-      ir_leaf_size = sizeof(struct vk_ir_triangle_node);
-      break;
-   case VK_GEOMETRY_TYPE_AABBS_KHR:
-      ir_leaf_size = sizeof(struct vk_ir_aabb_node);
-      break;
-   case VK_GEOMETRY_TYPE_INSTANCES_KHR:
-      ir_leaf_size = sizeof(struct vk_ir_instance_node);
-      break;
-   default:
-      UNREACHABLE("Unknown VkGeometryTypeKHR");
-   }
+   uint32_t ir_leaf_size = vk_ir_node_size(vk_get_as_geometry_type(build_info), state->config.build_flags);
 
    uint32_t offset = 0;
 
    uint32_t ploc_scratch_space = 0;
    uint32_t hploc_scratch_space = 0;
    uint32_t lbvh_node_space = 0;
+   uint32_t late_pair_compression_scratch_space = 0;
 
    if (state->config.internal_type == VK_INTERNAL_BUILD_TYPE_PLOC)
-      ploc_scratch_space = DIV_ROUND_UP(leaf_count, PLOC_WORKGROUP_SIZE) * sizeof(struct ploc_prefix_scan_partition);
+      ploc_scratch_space = DIV_ROUND_UP(leaf_count, PLOC_WORKGROUP_SIZE) * sizeof(struct vk_prefix_scan_partition);
    else if (state->config.internal_type == VK_INTERNAL_BUILD_TYPE_HPLOC)
       hploc_scratch_space = sizeof(uint32_t) * state->internal_node_count;
    else
       lbvh_node_space = sizeof(struct lbvh_node_info) * state->internal_node_count;
+
+   if (state->config.late_pair_compression) {
+      late_pair_compression_scratch_space =
+         DIV_ROUND_UP(leaf_count, PAIR_TRIANGLES_WORKGROUP_SIZE) * sizeof(struct vk_prefix_scan_partition);
+   }
 
    uint32_t encode_scratch_size = 0;
    if (device->as_build_ops->get_encode_scratch_size)
@@ -216,17 +292,17 @@ vk_acceleration_structure_build_state_init(struct vk_acceleration_structure_buil
    uint32_t encode_scratch_end = offset + encode_scratch_size;
 
    state->scratch.sort_buffer_offset[0] = offset;
-   offset += requirements.keyvals_size;
+   offset += leaf_count * keyval_size;
 
    state->scratch.sort_buffer_offset[1] = offset;
-   offset += requirements.keyvals_size;
+   offset += leaf_count * keyval_size;
 
    state->scratch.sort_internal_offset = offset;
    /* Internal sorting data is not needed when PLOC/LBVH are invoked,
     * save space by aliasing them */
-   state->scratch.ploc_prefix_sum_partition_offset = offset;
+   state->scratch.prefix_sum_partition_offset = offset;
    state->scratch.lbvh_node_offset = offset;
-   offset += MAX3(requirements.internal_size, ploc_scratch_space, lbvh_node_space);
+   offset += MAX4(morton_sort_internal_size, ploc_scratch_space, lbvh_node_space, late_pair_compression_scratch_space);
 
    state->scratch.hploc_ranges_offset = offset;
    offset += hploc_scratch_space;
@@ -252,6 +328,7 @@ vk_acceleration_structure_build_state_init(struct vk_acceleration_structure_buil
 struct bvh_batch_state {
    bool any_updateable;
    bool any_non_updateable;
+   bool any_late_pair_compression;
    bool any_ploc;
    bool any_hploc;
    bool any_lbvh;
@@ -318,7 +395,7 @@ vk_get_bvh_build_pipeline_spv(struct vk_device *device, struct vk_meta_device *m
       .pCode = spv,
    };
 
-   VkSpecializationMapEntry spec_map[4] = {
+   VkSpecializationMapEntry spec_map[6] = {
       {
          .constantID = SUBGROUP_SIZE_ID,
          .offset = 0,
@@ -336,17 +413,30 @@ vk_get_bvh_build_pipeline_spv(struct vk_device *device, struct vk_meta_device *m
       },
       {
          .constantID = ROOT_FLAGS_OFFSET_ID,
-         .offset = sizeof(args->subgroup_size) +
-                   sizeof(args->bvh_bounds_offset),
+         .offset = sizeof(args->subgroup_size) + sizeof(args->bvh_bounds_offset) + sizeof(flags),
          .size = sizeof(args->root_flags_offset),
+      },
+      {
+         .constantID = MORTON_SORT_WORKGROUP_SIZE_ID,
+         .offset = sizeof(args->subgroup_size) + sizeof(args->bvh_bounds_offset) +
+                   sizeof(flags) + sizeof(args->root_flags_offset),
+         .size = sizeof(args->morton_sort_workgroup_size),
+      },
+      {
+         .constantID = MORTON_SORT_KVS_PER_THREAD_ID,
+         .offset = sizeof(args->subgroup_size) + sizeof(args->bvh_bounds_offset) +
+                   sizeof(flags) + sizeof(args->root_flags_offset) + sizeof(args->morton_sort_workgroup_size),
+         .size = sizeof(args->morton_sort_kvs_per_thread),
       }
    };
 
-   uint32_t spec_constants[4] = {
+   uint32_t spec_constants[6] = {
       args->subgroup_size,
       args->bvh_bounds_offset,
       flags,
       args->root_flags_offset,
+      args->morton_sort_workgroup_size,
+      args->morton_sort_kvs_per_thread,
    };
 
    VkSpecializationInfo spec_info = {
@@ -493,9 +583,6 @@ vk_accel_struct_cmd_begin_debug_marker(VkCommandBuffer commandBuffer,
    case VK_ACCELERATION_STRUCTURE_BUILD_STEP_BUILD_LEAVES:
       snprintf(name, sizeof(name), "build_leaves");
       break;
-   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_MORTON_GENERATE:
-      snprintf(name, sizeof(name), "morton_generate");
-      break;
    case VK_ACCELERATION_STRUCTURE_BUILD_STEP_MORTON_SORT:
       snprintf(name, sizeof(name), "morton_sort");
       break;
@@ -630,21 +717,31 @@ morton_generate(VkCommandBuffer commandBuffer, struct vk_device *device,
    VkPipeline pipeline;
    VkPipelineLayout layout;
 
-   VkResult result = vk_get_bvh_build_pipeline_spv(device, meta, VK_META_OBJECT_KEY_MORTON,
-                                                   morton_spv, sizeof(morton_spv),
-                                                   sizeof(struct morton_args), args,
-                                                   build_flags, &pipeline,
-                                                   true /* unaligned_dispatch */);
+   VkResult result;
+   if (build_flags & VK_BUILD_FLAG_64BIT_KEYS) {
+      result = vk_get_bvh_build_pipeline_spv(device, meta, VK_META_OBJECT_KEY_MORTON,
+                                             morton64_spv, sizeof(morton64_spv),
+                                             sizeof(struct morton_sort_args), args,
+                                             build_flags, &pipeline,
+                                             false /* unaligned_dispatch */);
+   } else {
+      result = vk_get_bvh_build_pipeline_spv(device, meta, VK_META_OBJECT_KEY_MORTON,
+                                             morton32_spv, sizeof(morton32_spv),
+                                             sizeof(struct morton_sort_args), args,
+                                             build_flags, &pipeline,
+                                             false /* unaligned_dispatch */);
+   }
+
    if (result != VK_SUCCESS)
       return result;
 
-   result = vk_get_bvh_build_pipeline_layout(device, meta, sizeof(struct morton_args), &layout);
+   result = vk_get_bvh_build_pipeline_layout(device, meta, sizeof(struct morton_sort_args), &layout);
    if (result != VK_SUCCESS)
       return result;
 
    if (args->emit_markers) {
       struct vk_acceleration_structure_build_marker marker = {
-         .step = VK_ACCELERATION_STRUCTURE_BUILD_STEP_MORTON_GENERATE,
+         .step = VK_ACCELERATION_STRUCTURE_BUILD_STEP_MORTON_SORT,
       };
       device->as_build_ops->begin_debug_marker(commandBuffer, &marker);
    }
@@ -660,20 +757,25 @@ morton_generate(VkCommandBuffer commandBuffer, struct vk_device *device,
          continue;
 
       uint64_t scratch_addr = states[i].build_info->scratchData.deviceAddress;
-      const struct morton_args consts = {
+      const struct morton_sort_args consts = {
          .bvh = scratch_addr + states[i].scratch.ir_offset,
          .header = scratch_addr + states[i].scratch.header_offset,
-         .ids = scratch_addr + states[i].scratch.sort_buffer_offset[0],
+         .ids_even = scratch_addr + states[i].scratch.sort_buffer_offset[0],
+         .ids_odd = scratch_addr + states[i].scratch.sort_buffer_offset[1],
+         .counts = scratch_addr + states[i].scratch.sort_internal_offset,
+         .leaf_count = states[i].leaf_node_count,
       };
 
       disp->CmdPushConstants(commandBuffer, layout,
                              VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(consts), &consts);
-      device->cmd_dispatch_unaligned(commandBuffer, states[i].leaf_node_count, 1, 1);
+      disp->CmdDispatch(commandBuffer, states[i].morton_sort_dispatch_size, 1, 1);
+
+      states[i].scratch_offset = states[i].scratch.sort_buffer_offset[states[i].morton_sort_passes & 0x1];
    }
 
    if (args->emit_markers) {
       struct vk_acceleration_structure_build_marker marker = {
-         .step = VK_ACCELERATION_STRUCTURE_BUILD_STEP_MORTON_GENERATE,
+         .step = VK_ACCELERATION_STRUCTURE_BUILD_STEP_MORTON_SORT,
       };
       device->as_build_ops->end_debug_marker(commandBuffer, &marker);
    }
@@ -681,262 +783,141 @@ morton_generate(VkCommandBuffer commandBuffer, struct vk_device *device,
    return VK_SUCCESS;
 }
 
-#define VK_MORTON_SORT_BUILD_FLAGS (VK_BUILD_FLAG_64BIT_KEYS)
-
 static VkResult
-morton_sort(VkCommandBuffer commandBuffer, struct vk_device *device,
-             struct vk_meta_device *meta,
-             const struct vk_acceleration_structure_build_args *args,
-             struct vk_acceleration_structure_build_state *states,
-             uint32_t build_count, uint32_t build_flags)
+pair_triangles(VkCommandBuffer commandBuffer, struct vk_device *device,
+               struct vk_meta_device *meta,
+               const struct vk_acceleration_structure_build_args *args,
+               struct vk_acceleration_structure_build_state *states,
+               uint32_t build_count, uint32_t build_flags)
 {
-   const struct vk_device_dispatch_table *disp = &device->dispatch_table;
+   VkPipeline pipeline;
+   VkPipelineLayout layout;
+
+   const uint32_t *spirv = pair_triangles_spv;
+   size_t spirv_size = sizeof(pair_triangles_spv);
+
+   if (device->as_build_ops->pair_triangles_spirv_override) {
+      spirv = device->as_build_ops->pair_triangles_spirv_override;
+      spirv_size = device->as_build_ops->pair_triangles_spirv_override_size;
+   }
+
+   VkResult result = vk_get_bvh_build_pipeline_spv(device, meta, VK_META_OBJECT_KEY_PAIR_TRIANGLES,
+                                                   spirv, spirv_size,
+                                                   sizeof(struct pair_triangles_args), args, build_flags,
+                                                   &pipeline,
+                                                   false /* unaligned_dispatch */);
+   if (result != VK_SUCCESS)
+      return result;
+
+   result = vk_get_bvh_build_pipeline_layout(device, meta, sizeof(struct pair_triangles_args), &layout);
+   if (result != VK_SUCCESS)
+      return result;
 
    if (args->emit_markers) {
       struct vk_acceleration_structure_build_marker marker = {
-         .step = VK_ACCELERATION_STRUCTURE_BUILD_STEP_MORTON_SORT,
+         .step = VK_ACCELERATION_STRUCTURE_BUILD_STEP_PAIR_TRIANGLES,
       };
       device->as_build_ops->begin_debug_marker(commandBuffer, &marker);
    }
 
-   /* Copyright 2019 The Fuchsia Authors. */
-   uint32_t key_bits = 24;
-   const radix_sort_vk_t *rs = args->radix_sort_64;
-   if (build_flags & VK_BUILD_FLAG_64BIT_KEYS) {
-      key_bits = 64;
-      rs = args->radix_sort_96;
-   }
-
-   /*
-    * OVERVIEW
-    *
-    *   1. Pad the keyvals in `scatter_even`.
-    *   2. Zero the `histograms` and `partitions`.
-    *      --- BARRIER ---
-    *   3. HISTOGRAM is dispatched before PREFIX.
-    *      --- BARRIER ---
-    *   4. PREFIX is dispatched before the first SCATTER.
-    *      --- BARRIER ---
-    *   5. One or more SCATTER dispatches.
-    *
-    * Note that the `partitions` buffer can be zeroed anytime before the first
-    * scatter.
-    */
-
-   /* How many passes? */
-   uint32_t keyval_bytes = rs->config.keyval_dwords * (uint32_t)sizeof(uint32_t);
-   uint32_t passes = (key_bits + RS_RADIX_LOG2 - 1) / RS_RADIX_LOG2;
-
-   for (uint32_t i = 0; i < build_count; ++i) {
-      if (states[i].leaf_node_count)
-         states[i].scratch_offset = states[i].scratch.sort_buffer_offset[passes & 1];
-      else
-         states[i].scratch_offset = states[i].scratch.sort_buffer_offset[0];
-   }
-
-   /*
-    * PAD KEYVALS AND ZERO HISTOGRAM/PARTITIONS
-    *
-    * Pad fractional blocks with max-valued keyvals.
-    *
-    * Zero the histograms and partitions buffer.
-    *
-    * This assumes the partitions follow the histograms.
-    */
-
-   /* FIXME(allanmac): Consider precomputing some of these values and hang them off `rs`. */
-
-   /* How many scatter blocks? */
-   uint32_t scatter_wg_size = 1 << rs->config.scatter.workgroup_size_log2;
-   uint32_t scatter_block_kvs = scatter_wg_size * rs->config.scatter.block_rows;
-
-   /*
-    * How many histogram blocks?
-    *
-    * Note that it's OK to have more max-valued digits counted by the histogram
-    * than sorted by the scatters because the sort is stable.
-    */
-   uint32_t histo_wg_size = 1 << rs->config.histogram.workgroup_size_log2;
-   uint32_t histo_block_kvs = histo_wg_size * rs->config.histogram.block_rows;
-
-   uint32_t pass_idx = (keyval_bytes - passes);
-
-   for (uint32_t i = 0; i < build_count; ++i) {
-      if (!states[i].leaf_node_count)
-         continue;
-      if (states[i].config.internal_type == VK_INTERNAL_BUILD_TYPE_UPDATE)
-         continue;
-      if ((states[i].config.build_flags & VK_MORTON_SORT_BUILD_FLAGS) != build_flags)
-         continue;
-
-      uint64_t scratch_addr = states[i].build_info->scratchData.deviceAddress;
-      uint64_t keyvals_even_addr = scratch_addr + states[i].scratch.sort_buffer_offset[0];
-      uint64_t internal_addr = scratch_addr + states[i].scratch.sort_internal_offset;
-
-      states[i].scatter_blocks = (states[i].leaf_node_count + scatter_block_kvs - 1) / scatter_block_kvs;
-      states[i].count_ru_scatter = states[i].scatter_blocks * scatter_block_kvs;
-
-      states[i].histo_blocks = (states[i].count_ru_scatter + histo_block_kvs - 1) / histo_block_kvs;
-      states[i].count_ru_histo = states[i].histo_blocks * histo_block_kvs;
-
-      /* Fill with max values */
-      if (states[i].count_ru_histo > states[i].leaf_node_count) {
-         device->cmd_fill_buffer_addr(commandBuffer, keyvals_even_addr +
-                                      states[i].leaf_node_count * keyval_bytes,
-                                      (states[i].count_ru_histo - states[i].leaf_node_count) * keyval_bytes,
-                                      0xFFFFFFFF);
-      }
-
-      /*
-       * Zero histograms and invalidate partitions.
-       *
-       * Note that the partition invalidation only needs to be performed once
-       * because the even/odd scatter dispatches rely on the the previous pass to
-       * leave the partitions in an invalid state.
-       *
-       * Note that the last workgroup doesn't read/write a partition so it doesn't
-       * need to be initialized.
-       */
-      uint32_t histo_partition_count = passes + states[i].scatter_blocks - 1;
-
-      uint32_t fill_base = pass_idx * (RS_RADIX_SIZE * sizeof(uint32_t));
-
-      device->cmd_fill_buffer_addr(commandBuffer,
-                                   internal_addr + rs->internal.histograms.offset + fill_base,
-                                   histo_partition_count * (RS_RADIX_SIZE * sizeof(uint32_t)) + keyval_bytes * sizeof(uint32_t), 0);
-   }
-
-   /*
-    * Pipeline: HISTOGRAM
-    *
-    * TODO(allanmac): All subgroups should try to process approximately the same
-    * number of blocks in order to minimize tail effects.  This was implemented
-    * and reverted but should be reimplemented and benchmarked later.
-    */
-   vk_barrier_transfer_w_to_compute_r(commandBuffer);
-
-   disp->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                         rs->pipelines.named.histogram);
-
-   for (uint32_t i = 0; i < build_count; ++i) {
-      if (!states[i].leaf_node_count)
-         continue;
-      if (states[i].config.internal_type == VK_INTERNAL_BUILD_TYPE_UPDATE)
-         continue;
-      if ((states[i].config.build_flags & VK_MORTON_SORT_BUILD_FLAGS) != build_flags)
-         continue;
-
-      uint64_t scratch_addr = states[i].build_info->scratchData.deviceAddress;
-      uint64_t keyvals_even_addr = scratch_addr + states[i].scratch.sort_buffer_offset[0];
-      uint64_t internal_addr = scratch_addr + states[i].scratch.sort_internal_offset;
-
-      /* Dispatch histogram */
-      struct rs_push_histogram push_histogram = {
-         .devaddr_histograms = internal_addr + rs->internal.histograms.offset,
-         .devaddr_keyvals = keyvals_even_addr,
-         .passes = passes,
-      };
-
-      disp->CmdPushConstants(commandBuffer, rs->pipeline_layouts.named.histogram, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                             sizeof(push_histogram), &push_histogram);
-
-      disp->CmdDispatch(commandBuffer, states[i].histo_blocks, 1, 1);
-   }
-
-   /*
-    * Pipeline: PREFIX
-    *
-    * Launch one workgroup per pass.
-    */
-   vk_barrier_compute_w_to_compute_r(commandBuffer);
-
-   disp->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                         rs->pipelines.named.prefix);
-
-   for (uint32_t i = 0; i < build_count; ++i) {
-      if (!states[i].leaf_node_count)
-         continue;
-      if (states[i].config.internal_type == VK_INTERNAL_BUILD_TYPE_UPDATE)
-         continue;
-      if ((states[i].config.build_flags & VK_MORTON_SORT_BUILD_FLAGS) != build_flags)
-         continue;
-
-      uint64_t internal_addr = states[i].build_info->scratchData.deviceAddress +
-                               states[i].scratch.sort_internal_offset;
-
-      struct rs_push_prefix push_prefix = {
-         .devaddr_histograms = internal_addr + rs->internal.histograms.offset,
-      };
-
-      disp->CmdPushConstants(commandBuffer, rs->pipeline_layouts.named.prefix, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                             sizeof(push_prefix), &push_prefix);
-
-      disp->CmdDispatch(commandBuffer, passes, 1, 1);
-   }
-
-   /* Pipeline: SCATTER */
-   vk_barrier_compute_w_to_compute_r(commandBuffer);
-
-   uint32_t histogram_offset = pass_idx * (RS_RADIX_SIZE * sizeof(uint32_t));
+   const struct vk_device_dispatch_table *disp = &device->dispatch_table;
+   disp->CmdBindPipeline(
+      commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
    for (uint32_t i = 0; i < build_count; i++) {
+      if (states[i].config.internal_type == VK_INTERNAL_BUILD_TYPE_UPDATE)
+         continue;
+      if ((states[i].config.build_flags & VK_PAIR_TRIANGLES_BUILD_FLAGS) != build_flags)
+         continue;
+      if (!states[i].config.late_pair_compression)
+         continue;
+
+      uint32_t src_scratch_offset = states[i].scratch_offset;
+
       uint64_t scratch_addr = states[i].build_info->scratchData.deviceAddress;
-      uint64_t keyvals_even_addr = scratch_addr + states[i].scratch.sort_buffer_offset[0];
-      uint64_t keyvals_odd_addr = scratch_addr + states[i].scratch.sort_buffer_offset[1];
-      uint64_t internal_addr = scratch_addr + states[i].scratch.sort_internal_offset;
-
-      states[i].push_scatter = (struct rs_push_scatter){
-         .devaddr_keyvals_even = keyvals_even_addr,
-         .devaddr_keyvals_odd = keyvals_odd_addr,
-         .devaddr_partitions = internal_addr + rs->internal.partitions.offset,
-         .devaddr_histograms = internal_addr + rs->internal.histograms.offset + histogram_offset,
+      const struct pair_triangles_args consts = {
+         .bvh = scratch_addr + states[i].scratch.ir_offset,
+         .header = scratch_addr + states[i].scratch.header_offset,
+         .src_ids = scratch_addr + src_scratch_offset,
+         .prefix_scan_partitions = scratch_addr + states[i].scratch.prefix_sum_partition_offset,
       };
-   }
 
-   bool is_even = true;
-
-   while (true) {
-      uint32_t pass_dword = pass_idx / 4;
-
-      /* Bind new pipeline */
-      VkPipeline p =
-         is_even ? rs->pipelines.named.scatter[pass_dword].even : rs->pipelines.named.scatter[pass_dword].odd;
-      disp->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, p);
-
-      /* Update push constants that changed */
-      VkPipelineLayout pl = is_even ? rs->pipeline_layouts.named.scatter[pass_dword].even
-                                    : rs->pipeline_layouts.named.scatter[pass_dword].odd;
-
-      for (uint32_t i = 0; i < build_count; i++) {
-         if (!states[i].leaf_node_count)
-            continue;
-         if (states[i].config.internal_type == VK_INTERNAL_BUILD_TYPE_UPDATE)
-            continue;
-         if ((states[i].config.build_flags & VK_MORTON_SORT_BUILD_FLAGS) != build_flags)
-            continue;
-
-         states[i].push_scatter.pass_offset = (pass_idx & 3) * RS_RADIX_LOG2;
-
-         disp->CmdPushConstants(commandBuffer, pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(struct rs_push_scatter),
-                                &states[i].push_scatter);
-
-         disp->CmdDispatch(commandBuffer, states[i].scatter_blocks, 1, 1);
-
-         states[i].push_scatter.devaddr_histograms += (RS_RADIX_SIZE * sizeof(uint32_t));
-      }
-
-      /* Continue? */
-      if (++pass_idx >= keyval_bytes)
-         break;
-
-      vk_barrier_compute_w_to_compute_r(commandBuffer);
-
-      is_even ^= true;
+      disp->CmdPushConstants(commandBuffer, layout,
+                             VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(consts), &consts);
+      disp->CmdDispatch(commandBuffer, DIV_ROUND_UP(states[i].leaf_node_count, PAIR_TRIANGLES_WORKGROUP_SIZE), 1, 1);
    }
 
    if (args->emit_markers) {
       struct vk_acceleration_structure_build_marker marker = {
-         .step = VK_ACCELERATION_STRUCTURE_BUILD_STEP_MORTON_SORT,
+         .step = VK_ACCELERATION_STRUCTURE_BUILD_STEP_PAIR_TRIANGLES,
+      };
+      device->as_build_ops->end_debug_marker(commandBuffer, &marker);
+   }
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+id_prefix_sum(VkCommandBuffer commandBuffer, struct vk_device *device,
+              struct vk_meta_device *meta,
+              const struct vk_acceleration_structure_build_args *args,
+              struct vk_acceleration_structure_build_state *states,
+              uint32_t build_count, uint32_t build_flags)
+{
+   VkPipeline pipeline;
+   VkPipelineLayout layout;
+
+   if (args->emit_markers) {
+      struct vk_acceleration_structure_build_marker marker = {
+         .step = VK_ACCELERATION_STRUCTURE_BUILD_STEP_ID_PREFIX_SUM,
+      };
+      device->as_build_ops->begin_debug_marker(commandBuffer, &marker);
+   }
+
+   VkResult result = vk_get_bvh_build_pipeline_spv(device, meta, VK_META_OBJECT_KEY_ID_PREFIX_SCAN,
+                                                   id_prefix_sum_spv, sizeof(id_prefix_sum_spv),
+                                                   sizeof(struct id_prefix_sum_args), args, build_flags,
+                                                   &pipeline, false /* unaligned_dispatch */);
+   if (result != VK_SUCCESS)
+      return result;
+
+   result = vk_get_bvh_build_pipeline_layout(device, meta, sizeof(struct id_prefix_sum_args), &layout);
+   if (result != VK_SUCCESS)
+      return result;
+
+   const struct vk_device_dispatch_table *disp = &device->dispatch_table;
+   disp->CmdBindPipeline(
+      commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+
+   for (uint32_t i = 0; i < build_count; i++) {
+      if (states[i].config.internal_type == VK_INTERNAL_BUILD_TYPE_UPDATE)
+         continue;
+      if ((states[i].config.build_flags & VK_ID_PREFIX_SUM_BUILD_FLAGS) != build_flags)
+         continue;
+      if (!states[i].config.late_pair_compression)
+         continue;
+
+      uint64_t scratch_addr = states[i].build_info->scratchData.deviceAddress;
+      uint32_t src_scratch_offset = states[i].scratch_offset;
+      uint32_t dst_scratch_offset = states[i].scratch_offset == states[i].scratch.sort_buffer_offset[0] ?
+                                    states[i].scratch.sort_buffer_offset[1] : states[i].scratch.sort_buffer_offset[0];
+      states[i].scratch_offset = dst_scratch_offset;
+
+      const struct id_prefix_sum_args consts = {
+         .header = scratch_addr + states[i].scratch.header_offset,
+         .src_ids = scratch_addr + src_scratch_offset,
+         .dst_ids = scratch_addr + dst_scratch_offset,
+         .prefix_scan_partitions = scratch_addr + states[i].scratch.prefix_sum_partition_offset,
+      };
+
+      disp->CmdPushConstants(commandBuffer, layout,
+                             VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(consts), &consts);
+      disp->CmdDispatch(commandBuffer, DIV_ROUND_UP(states[i].leaf_node_count, PAIR_TRIANGLES_WORKGROUP_SIZE), 1, 1);
+   }
+
+   if (args->emit_markers) {
+      struct vk_acceleration_structure_build_marker marker = {
+         .step = VK_ACCELERATION_STRUCTURE_BUILD_STEP_ID_PREFIX_SUM,
       };
       device->as_build_ops->end_debug_marker(commandBuffer, &marker);
    }
@@ -1119,7 +1100,7 @@ ploc_build_internal(VkCommandBuffer commandBuffer, struct vk_device *device,
          .header = scratch_addr + states[i].scratch.header_offset,
          .ids_0 = scratch_addr + src_scratch_offset,
          .ids_1 = scratch_addr + dst_scratch_offset,
-         .prefix_scan_partitions = scratch_addr + states[i].scratch.ploc_prefix_sum_partition_offset,
+         .prefix_scan_partitions = scratch_addr + states[i].scratch.prefix_sum_partition_offset,
          .internal_node_offset = states[i].scratch.internal_node_offset - states[i].scratch.ir_offset,
       };
 
@@ -1283,6 +1264,8 @@ vk_cmd_build_acceleration_structures(VkCommandBuffer commandBuffer,
       else
          batch_state.any_non_updateable = true;
 
+      batch_state.any_late_pair_compression |= states[i].config.late_pair_compression;
+
       if (states[i].config.internal_type == VK_INTERNAL_BUILD_TYPE_PLOC) {
          batch_state.any_ploc = true;
       } else if (states[i].config.internal_type == VK_INTERNAL_BUILD_TYPE_HPLOC) {
@@ -1322,7 +1305,6 @@ vk_cmd_build_acceleration_structures(VkCommandBuffer commandBuffer,
       ops->init_update_scratch(commandBuffer, states, infoCount);
 
    bool flushed_compute_after_init_update_scratch = false;
-   bool flushed_cp_after_init_update_scratch = true;
 
    /* Wait for the write_buffer_cp to land before using in compute shaders */
    device->flush_buffer_write_cp(commandBuffer);
@@ -1345,17 +1327,20 @@ vk_cmd_build_acceleration_structures(VkCommandBuffer commandBuffer,
          return;
       }
 
-      if (batch_state.any_hploc) {
-         for (uint32_t i = 0; i < infoCount; ++i) {
-            if (states[i].config.internal_type == VK_INTERNAL_BUILD_TYPE_HPLOC) {
-               device->cmd_fill_buffer_addr(commandBuffer, pInfos[i].scratchData.deviceAddress + states[i].scratch.hploc_ranges_offset,
-                                            sizeof(uint32_t) * states[i].internal_node_count, 0xffffffff);
-            }
+      for (uint32_t i = 0; i < infoCount; ++i) {
+         if (states[i].config.internal_type != VK_INTERNAL_BUILD_TYPE_UPDATE) {
+            device->cmd_fill_buffer_addr(commandBuffer, pInfos[i].scratchData.deviceAddress + states[i].scratch.sort_internal_offset,
+                                         sizeof(struct morton_ready_count) * states[i].morton_sort_passes, 0x0);
          }
-         vk_barrier_transfer_w_to_compute_r(commandBuffer);
+
+         if (states[i].config.internal_type == VK_INTERNAL_BUILD_TYPE_HPLOC) {
+            device->cmd_fill_buffer_addr(commandBuffer, pInfos[i].scratchData.deviceAddress + states[i].scratch.hploc_ranges_offset,
+                                         sizeof(uint32_t) * states[i].internal_node_count, 0xffffffff);
+         }
       }
 
-      vk_barrier_compute_w_to_compute_r(commandBuffer);
+      vk_bvh_build_barrier_transfer_to_compute(commandBuffer);
+      vk_bvh_build_barrier_compute_to_compute(commandBuffer, false);
 
       result = vk_build_stage(morton_generate, commandBuffer, device, meta, args, states, infoCount, VK_MORTON_BUILD_FLAGS, false);
       if (result != VK_SUCCESS) {
@@ -1364,11 +1349,15 @@ vk_cmd_build_acceleration_structures(VkCommandBuffer commandBuffer,
          return;
       }
 
-      vk_barrier_compute_w_to_compute_r(commandBuffer);
+      vk_bvh_build_barrier_compute_to_compute(commandBuffer, false);
 
-      vk_build_stage(morton_sort, commandBuffer, device, meta, args, states, infoCount, VK_MORTON_SORT_BUILD_FLAGS, false);
 
-      vk_barrier_compute_w_to_compute_r(commandBuffer);
+      if (batch_state.any_late_pair_compression) {
+         vk_build_stage(pair_triangles, commandBuffer, device, meta, args, states, infoCount, VK_PAIR_TRIANGLES_BUILD_FLAGS, false);
+         vk_bvh_build_barrier_compute_to_compute(commandBuffer, false);
+         vk_build_stage(id_prefix_sum, commandBuffer, device, meta, args, states, infoCount, VK_ID_PREFIX_SUM_BUILD_FLAGS, false);
+         vk_bvh_build_barrier_compute_to_compute(commandBuffer, false);
+      }
 
       if (batch_state.any_lbvh) {
          result = vk_build_stage(lbvh_main, commandBuffer, device, meta, args, states, infoCount,
@@ -1379,7 +1368,7 @@ vk_cmd_build_acceleration_structures(VkCommandBuffer commandBuffer,
             return;
          }
 
-         vk_barrier_compute_w_to_compute_r(commandBuffer);
+         vk_bvh_build_barrier_compute_to_compute(commandBuffer, false);
 
          result = vk_build_stage(lbvh_generate_ir, commandBuffer, device, meta, args, states, infoCount,
                                  VK_LBVH_GENERATE_IR_BUILD_FLAGS, false);
@@ -1408,13 +1397,11 @@ vk_cmd_build_acceleration_structures(VkCommandBuffer commandBuffer,
          }
       }
 
-      vk_barrier_compute_w_to_compute_r(commandBuffer);
-      vk_barrier_compute_w_to_indirect_compute_r(commandBuffer);
       flushed_compute_after_init_update_scratch = true;
    }
 
    ops->encode(commandBuffer, device, meta, args, states, infoCount,
-               flushed_cp_after_init_update_scratch, flushed_compute_after_init_update_scratch);
+               flushed_compute_after_init_update_scratch);
 
    if (args->emit_markers)
       device->as_build_ops->end_debug_marker(commandBuffer, &top_marker);

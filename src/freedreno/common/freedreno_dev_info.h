@@ -205,6 +205,11 @@ struct fd_dev_info {
       /* see enum a6xx_ccu_cache_size */
       uint32_t gmem_ccu_color_cache_fraction;
       uint32_t gmem_per_ccu_color_cache_size;
+
+      /* Custom shader resolves can write depth through the CCU while input
+       * attachments are still in GMEM, so the driver needs to make sure it will
+       * not overwrite pixel data in GMEM that is still needed.
+       */
       uint32_t gmem_ccu_depth_cache_fraction;
       uint32_t gmem_per_ccu_depth_cache_size;
       uint32_t sysmem_ccu_color_cache_fraction;
@@ -488,6 +493,14 @@ struct fd_dev_info {
 
       uint32_t max_texel_buffer_range_elements;
       uint32_t max_storage_buffer_range_bytes;
+
+      /* On a7xx alias.tex may hang when in between mova and (ul). */
+      bool alias_mova_quirk;
+
+      /* On some HW alias.tex may hang when predicated (i.e. between
+       * predt/predf and prede).
+       */
+      bool alias_predication_quirk;
    } props;
 };
 

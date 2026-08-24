@@ -145,6 +145,7 @@ struct si_shader_info {
    bool uses_sysval_linear_center;
    bool uses_sysval_linear_centroid;
    bool uses_sysval_linear_sample;
+   bool uses_sysval_pull_model;
    bool uses_interp_at_offset;
    bool uses_interp_at_sample;
    bool uses_sysval_primitive_id;

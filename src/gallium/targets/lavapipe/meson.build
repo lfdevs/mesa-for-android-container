@@ -8,7 +8,8 @@ libvulkan_lvp = shared_library(
   link_whole : [ liblavapipe_st ],
   link_with : [libpipe_loader_static, libgallium, libwsw, libswdri, libws_null, libswkmsdri ],
   gnu_symbol_visibility : 'hidden',
-  link_args : [ld_args_bsymbolic, ld_args_gc_sections],
+  link_args : [vulkan_icd_link_args, ld_args_bsymbolic, ld_args_gc_sections],
+  link_depends : vulkan_icd_link_depends,
   # On Apple systems, "weak" is actually "weak_import", which is slightly different.
   # The linker still expects a definition for weak symbols at build time, just not at runtime.
   # We have to forcibly ignore undefined symbols, which unfortunately applies to all symbols.

@@ -344,6 +344,10 @@ emit_load(isel_context* ctx, Builder& bld, const LoadEmitInfo& info,
       new_info.offset = Operand(as_temp(bld, offset));
       new_info.const_offset = reduced_const_offset;
 
+      /* If we split the load, prevent the callback from writing to dst directly */
+      if (num_vals)
+         new_info.dst = Temp();
+
       unsigned align = align_offset ? 1 << (ffs(align_offset) - 1) : align_mul;
 
       Temp val = params.callback(bld, new_info, bytes_needed, align);
@@ -4566,6 +4570,26 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
       set_wqm(ctx);
       break;
    }
+   case nir_intrinsic_dpp8_swizzle_amd: {
+      Temp src = get_ssa_temp(ctx, instr->src[0].ssa);
+      if (!instr->def.divergent) {
+         emit_uniform_subgroup(ctx, instr, src);
+         break;
+      }
+
+      assert(instr->def.bit_size != 1);
+
+      Temp dst = get_ssa_temp(ctx, &instr->def);
+      uint32_t lane_sel = nir_intrinsic_swizzle_mask(instr);
+
+      if (dst.type() == RegType::vgpr && dst.size() == 1) {
+         bld.vop1_dpp8(aco_opcode::v_mov_b32, Definition(dst), as_vgpr(ctx, src), lane_sel);
+      } else {
+         isel_err(&instr->instr, "Unimplemented NIR instr bit size");
+      }
+      set_wqm(ctx);
+      break;
+   }
    case nir_intrinsic_write_invocation_amd: {
       Temp src = as_vgpr(ctx, get_ssa_temp(ctx, instr->src[0].ssa));
       Temp val = bld.as_uniform(get_ssa_temp(ctx, instr->src[1].ssa));
@@ -4595,10 +4619,10 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
       /* Fit 64-bit mask for wave32 */
       src = emit_extract_vector(ctx, src, 0, RegClass(src.type(), bld.lm.size()));
       emit_mbcnt(ctx, dst, Operand(src), Operand(add_src));
-      set_wqm(ctx);
       break;
    }
-   case nir_intrinsic_lane_permute_16_amd: {
+   case nir_intrinsic_lane_permute_16_amd:
+   case nir_intrinsic_lane_permute_x16_amd: {
       /* NOTE: If we use divergence analysis information here instead of the src regclass,
        * skip_uniformize_merge_phi() should be updated.
        */
@@ -4610,9 +4634,12 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
          bld.copy(Definition(dst), src);
       } else if (dst.type() == RegType::vgpr && src.type() == RegType::vgpr && dst.size() == 1 &&
                  src.size() == 1) {
-         bld.vop3(aco_opcode::v_permlane16_b32, Definition(dst), src,
-                  bld.as_uniform(get_ssa_temp(ctx, instr->src[1].ssa)),
+         aco_opcode op = instr->intrinsic == nir_intrinsic_lane_permute_16_amd
+                            ? aco_opcode::v_permlane16_b32
+                            : aco_opcode::v_permlanex16_b32;
+         bld.vop3(op, Definition(dst), src, bld.as_uniform(get_ssa_temp(ctx, instr->src[1].ssa)),
                   bld.as_uniform(get_ssa_temp(ctx, instr->src[2].ssa)));
+         set_wqm(ctx);
       } else {
          isel_err(&instr->instr, "Unimplemented lane_permute_16_amd");
       }

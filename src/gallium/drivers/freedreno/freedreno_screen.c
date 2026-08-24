@@ -457,6 +457,9 @@ fd_init_screen_caps(struct fd_screen *screen)
    caps->clip_halfz =
       is_a3xx(screen) || is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen);
 
+   /* a2xx has no depth export from the pixel shader */
+   caps->fragment_shader_depth = !is_a2xx(screen);
+
    caps->texture_multisample =
    caps->image_store_formatted =
    caps->image_load_formatted = is_a5xx(screen) || is_a6xx(screen);
@@ -668,6 +671,7 @@ fd_init_screen_caps(struct fd_screen *screen)
    caps->query_so_overflow =
    caps->query_pipeline_statistics_single = is_a6xx(screen);
 
+   caps->device_type = PIPE_DEVICE_TYPE_INTEGRATED_GPU;
    caps->vendor_id = 0x5143;
    caps->device_id = 0xFFFFFFFF;
 
@@ -727,6 +731,24 @@ fd_init_screen_caps(struct fd_screen *screen)
       }
 
       caps->shader_ballot = caps->shader_subgroup_size <= 64;
+
+      /* Up to 16 bytes are accelerated */
+      caps->hw_clear_buffer_sizes = 1 | 2 | 4 | 8 | 16;
+   }
+
+   /* All of the varying outputs go into the VPC, which counts towards our
+    * max_outputs cap.  We do skip this on 5xx, where the HW actually supports
+    * 128 (https://vulkan.gpuinfo.org/displayreport.php?id=2037#properties) but
+    * we only claim 64.
+    *
+    * MESA_SHADER_TESS_CTRL is left as default, because that mask is the
+    * per-patch built-ins rather than fixed-function outputs.
+    */
+   if (!is_a5xx(screen)) {
+      caps->ignored_output_varyings[MESA_SHADER_VERTEX] =
+         caps->ignored_output_varyings[MESA_SHADER_TESS_EVAL] =
+            caps->ignored_output_varyings[MESA_SHADER_GEOMETRY] =
+               caps->ignored_output_varyings[MESA_SHADER_MESH] = 0;
    }
 }
 

@@ -162,10 +162,17 @@ categoryToPerfettogrpMask = {
 // formula:
 //    sample_period = timestamp_period * 2^(period_exponent + 1)
 // So our minimum sampling period is twice the timestamp period
+//
+// We can simplify the formula further by expanding on the definition of the
+// timestamp period, which is defined as the inverse of the timestamp
+// frequency (in nanoseconds):
+//    timestamp_period = 1e9 / timestamp_frequency
+//    min_sampling_period_ns = 2 * (1e9 / timestamp_frequency)
 
 uint64_t IntelDriver::get_min_sampling_period_ns()
 {
-   return (2.f * perf->devinfo.timestamp_frequency) / 1000000000ull;
+   assert(perf->devinfo.timestamp_frequency > 0);
+   return 2000000000ull / perf->devinfo.timestamp_frequency;
 }
 
 IntelDriver::IntelDriver()

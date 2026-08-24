@@ -4,7 +4,7 @@ prog_cbindgen = find_program(
   'cbindgen',
   required : true,
   native : true,
-  version : '>= 0.25'
+  version : '>= 0.28'
 )
 
 dep_paste = dependency('paste',

@@ -60,7 +60,7 @@ enum tgsi_output_mode {
    /** The operation performed by this opcode is dependent on which channel
     *  of the destination register is being written.
     *
-    *  Example: TGSI_OPCODE_LOG
+    *  Example: TGSI_OPCODE_UP2H
     */
    TGSI_OUTPUT_CHAN_DEPENDENT  = 3,
 

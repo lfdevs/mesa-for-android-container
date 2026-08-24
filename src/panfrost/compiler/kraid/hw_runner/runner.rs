@@ -32,6 +32,10 @@ impl TestRunner {
         self.vm.dev().props().gpu_id
     }
 
+    pub fn gpu_variant(&self) -> u32 {
+        self.vm.dev().props().gpu_variant
+    }
+
     pub fn run(&self, invoc: InvocationInfo) -> Result<(), HwError> {
         // Create the command stream
         let cs = new_invocation_cs(&self.vm, &invoc)?;

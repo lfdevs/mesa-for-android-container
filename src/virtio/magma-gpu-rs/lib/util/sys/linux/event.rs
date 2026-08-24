@@ -27,16 +27,16 @@ impl Event {
         })
     }
 
-    pub fn add(&mut self, value: u64) -> MagmaGpuResult<()> {
+    pub fn add(&self, value: u64) -> MagmaGpuResult<()> {
         let _ = write(&self.descriptor, &value.to_le_bytes())?;
         Ok(())
     }
 
-    pub fn signal(&mut self) -> MagmaGpuResult<()> {
+    pub fn signal(&self) -> MagmaGpuResult<()> {
         self.add(1)
     }
 
-    pub fn wait(&mut self) -> MagmaGpuResult<u64> {
+    pub fn wait(&self) -> MagmaGpuResult<u64> {
         let mut buf = [0; 8];
         read(&self.descriptor, &mut buf)?;
         Ok(u64::from_le_bytes(buf))

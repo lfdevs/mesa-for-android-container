@@ -83,7 +83,8 @@ nouveau_screen_fence_ref(struct pipe_screen *pscreen,
                          struct pipe_fence_handle *pfence)
 {
    nouveau_fence_ref((pfence ? nouveau_fence(pfence) : NULL),
-                     (ptr ? (struct nouveau_fence **)ptr : NULL));
+                     (ptr ? (struct nouveau_fence **)ptr : NULL),
+                     nouveau_screen(pscreen));
 }
 
 static bool
@@ -219,17 +220,20 @@ nouveau_query_memory_info(struct pipe_screen *pscreen,
    info->avail_staging_memory = dev->gart_limit / 1024;
 }
 
-static void
+static bool
 nouveau_pushbuf_cb(struct nouveau_pushbuf *push)
 {
    struct nouveau_pushbuf_priv *p = (struct nouveau_pushbuf_priv *)push->user_priv;
 
-   if (p->context)
-      p->context->kick_notify(p->context);
-   else
+   if (p->context) {
+      if (!p->context->kick_notify(p->context))
+         return false;
+   } else {
       _nouveau_fence_update(p->screen, true);
+   }
 
    NOUVEAU_DRV_STAT(p->screen, pushbuf_count, 1);
+   return true;
 }
 
 int

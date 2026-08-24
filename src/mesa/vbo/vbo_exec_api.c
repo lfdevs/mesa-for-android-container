@@ -260,7 +260,6 @@ vbo_exec_wrap_upgrade_vertex(struct vbo_exec_context *exec,
    const GLuint old_vtx_size_no_pos = exec->vtx.vertex_size_no_pos;
    const GLuint old_vtx_size = exec->vtx.vertex_size; /* floats per vertex */
    const GLuint oldSize = exec->vtx.attr[attr].size;
-   GLuint i;
 
    assert(attr < VBO_ATTRIB_MAX);
 
@@ -373,7 +372,7 @@ vbo_exec_wrap_upgrade_vertex(struct vbo_exec_context *exec,
 
       assert(exec->vtx.buffer_ptr == exec->vtx.buffer_map);
 
-      for (i = 0 ; i < exec->vtx.copied.nr ; i++) {
+      for (GLuint i = 0 ; i < exec->vtx.copied.nr ; i++) {
          GLbitfield64 enabled = exec->vtx.enabled;
          while (enabled) {
             const int j = u_bit_scan64(&enabled);
@@ -523,7 +522,7 @@ do {                                                                    \
       unsigned vertex_size_no_pos = exec->vtx.vertex_size_no_pos;       \
                                                                         \
       /* Copy over attributes from exec. */                             \
-      for (unsigned i = 0; i < vertex_size_no_pos; i++)                 \
+      for (unsigned vi = 0; vi < vertex_size_no_pos; vi++)              \
          *dst++ = *src++;                                               \
                                                                         \
       /* Store the position, which is always last and can have 32 or */ \

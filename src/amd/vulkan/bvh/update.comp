@@ -45,14 +45,17 @@ void main() {
     uint32_t src_offset = gl_GlobalInvocationID.x * args.geom_data.stride;
 
     vk_aabb bounds = vk_aabb(vec3(0.0f), vec3(0.0f));
+    uint32_t node_type;
     if (args.geom_data.geometry_type == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
         radv_build_triangle(bounds, dst_ptr, args.geom_data, gl_GlobalInvocationID.x, false);
+        node_type = radv_bvh_node_triangle;
     } else {
         VOID_REF src_ptr = OFFSET(args.geom_data.data, src_offset);
         radv_build_aabb(bounds, src_ptr, dst_ptr, args.geom_data.geometry_id, gl_GlobalInvocationID.x, false);
+        node_type = radv_bvh_node_aabb;
     }
 
-    uint32_t node_id = pack_node_id(dst_offset, 0);
+    uint32_t node_id = pack_node_id(dst_offset, node_type);
     uint32_t parent_id = fetch_parent_node(src_bvh, node_id);
     uint32_t internal_nodes_offset = first_leaf_offset + args.leaf_node_count * leaf_node_size;
     while (parent_id != RADV_BVH_INVALID_NODE) {

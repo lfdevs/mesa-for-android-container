@@ -337,13 +337,3 @@ dEQP-VK.image.host_image_copy.simple.r8g8_unorm.optimal.general_general.1_1,Fail
 dEQP-VK.image.host_image_copy.simple.r8g8_unorm.optimal.general_general.1_4,Fail
 dEQP-VK.image.host_image_copy.simple.r8g8_unorm.optimal.transfer_src_transfer_dst.1_1,Fail
 dEQP-VK.image.host_image_copy.simple.r8g8_unorm.optimal.transfer_src_transfer_dst.1_4,Fail
-
-# CTS is missing -frounding-math: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6580
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.scalar.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.scalar.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec2.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec2.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec3.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec3.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec4.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec4.rte.denorm_flush.float_controls,Fail

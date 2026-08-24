@@ -55,6 +55,14 @@ tail -f results/lava.log &
 # making it easier to debug the job in case it fails.
 set -x
 
+FLASHER_ARGS=()
+if [ -n "${FLASHER_IMAGE}" ]; then
+	FLASHER_ARGS+=(
+		--flasher-url-prefix="https://${FLASHER_BASE_PATH}"
+		--flasher-image-name="${FLASHER_IMAGE}"
+		)
+fi
+
 # List of optional overlays
 # NOTE: If you encounter "Attempted path traversal in tar file at /dev/ttyS1",
 # that is an indication that one of your rootfs and overlays contain a duplicate file.
@@ -65,7 +73,7 @@ if [ -n "${LAVA_FIRMWARE:-}" ]; then
             - append-overlay
               --name=linux-firmware
               --url="https://${S3_BASE_PATH}/${FIRMWARE_REPO}/${fw}-${FIRMWARE_TAG}.tar"
-              --path="/"
+              --path="/usr"
               --format=tar
         )
     done
@@ -74,7 +82,7 @@ if [ -n "${HWCI_KERNEL_MODULES:-}" ]; then
 	LAVA_EXTRA_OVERLAYS+=(
 		- append-overlay
 		  --name=kernel-modules
-		  --url="${KERNEL_IMAGE_BASE}/${DEBIAN_ARCH}/modules.tar"
+		  --url="${KERNEL_IMAGE_BASE}/${ARCH}/modules.tar"
 		  --path="/"
 		  --format=tar
 	)
@@ -84,6 +92,16 @@ if [ -n "${ANDROID_CTS_TAG:-}" ]; then
 		- append-overlay
 		  --name=android-cts
 		  --url="$(fdo_find_s3_path "${DATA_STORAGE_PATH}/android-cts/${DEBIAN_ARCH}/${ANDROID_CTS_TAG}.tar.zst")"
+		  --path="/"
+		  --format=tar
+		  --compression=zstd
+	)
+fi
+if [ -n "${OPENCL_CTS_TAG:-}" ]; then
+	LAVA_EXTRA_OVERLAYS+=(
+		- append-overlay
+		  --name=opencl-cts
+		  --url="$(fdo_find_s3_path "${DATA_STORAGE_PATH}/opencl-cts/${DEBIAN_ARCH}/${OPENCL_CTS_TAG}.tar.zst")"
 		  --path="/"
 		  --format=tar
 		  --compression=zstd
@@ -144,12 +162,13 @@ lava-job-submitter \
 	--dump-yaml \
 	--pipeline-info "$CI_JOB_NAME: $CI_PIPELINE_URL on $CI_COMMIT_REF_NAME ${CI_NODE_INDEX}/${CI_NODE_TOTAL}" \
 	--rootfs-url "${ROOTFS_URL}" \
-	--kernel-url-prefix "${KERNEL_IMAGE_BASE}/${DEBIAN_ARCH}" \
+	--kernel-url-prefix "${KERNEL_IMAGE_BASE}/${ARCH}" \
 	--dtb-filename "${DTB}" \
 	--env-file dut-env-vars.sh \
 	--jwt-file "${S3_JWT_FILE}" \
 	--kernel-image-name "${KERNEL_IMAGE_NAME}" \
 	--kernel-image-type "${KERNEL_IMAGE_TYPE}" \
+	"${FLASHER_ARGS[@]}" \
 	--visibility-group "${VISIBILITY_GROUP}" \
 	--lava-tags "${LAVA_TAGS}" \
 	--mesa-job-name "$CI_JOB_NAME" \

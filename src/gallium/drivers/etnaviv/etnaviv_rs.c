@@ -213,6 +213,7 @@ etna_submit_rs_state(struct etna_context *ctx,
 
    if (cs->RS_KICKER_INPLACE) {
       etna_cmd_stream_reserve(stream, 6);
+      ETNA_CONTEXT_ATOMIC_EMIT(ctx);
       etna_coalesce_start(stream, &coalesce);
       /* 0/1 */ EMIT_STATE(RS_EXTRA_CONFIG, cs->RS_EXTRA_CONFIG);
       /* 2/3 */ EMIT_STATE(RS_SOURCE_STRIDE, cs->RS_SOURCE_STRIDE);
@@ -221,6 +222,7 @@ etna_submit_rs_state(struct etna_context *ctx,
    } else if (screen->specs.pixel_pipes > 1 ||
               VIV_FEATURE(screen, ETNA_FEATURE_RS_NEW_BASEADDR)) {
       etna_cmd_stream_reserve(stream, 34); /* worst case - both pipes multi=1 */
+      ETNA_CONTEXT_ATOMIC_EMIT(ctx);
       etna_coalesce_start(stream, &coalesce);
       /* 0/1 */ EMIT_STATE(RS_CONFIG, cs->RS_CONFIG);
       /* 2/3 */ EMIT_STATE(RS_SOURCE_STRIDE, cs->RS_SOURCE_STRIDE);
@@ -257,6 +259,7 @@ etna_submit_rs_state(struct etna_context *ctx,
       etna_coalesce_end(stream, &coalesce);
    } else {
       etna_cmd_stream_reserve(stream, 22);
+      ETNA_CONTEXT_ATOMIC_EMIT(ctx);
       etna_coalesce_start(stream, &coalesce);
       /* 0/1 */ EMIT_STATE(RS_CONFIG, cs->RS_CONFIG);
       /* 2   */ EMIT_STATE_RELOC(RS_SOURCE_ADDR, &cs->source[0]);

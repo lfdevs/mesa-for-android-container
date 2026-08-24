@@ -312,6 +312,7 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
 #endif
 
    assert(info->hiz_usage == ISL_AUX_USAGE_NONE ||
+          (GFX_VERx10 >= 125 && info->hiz_usage == ISL_AUX_USAGE_ZCS) ||
           isl_aux_usage_has_hiz(info->hiz_usage));
    if (isl_aux_usage_has_hiz(info->hiz_usage)) {
       assert(GFX_VER >= 12 || info->hiz_usage == ISL_AUX_USAGE_HIZ);
@@ -414,7 +415,9 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       hiz.SurfaceQPitch =
          isl_surf_get_array_pitch_sa_rows(info->hiz_surf) >> 2;
 #endif
+   }
 
+   if (info->hiz_usage != ISL_AUX_USAGE_NONE) {
 #if GFX_VER < 20
       clear.DepthClearValueValid = true;
 #if GFX_VER >= 8

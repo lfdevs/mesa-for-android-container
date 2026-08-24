@@ -214,6 +214,7 @@ radv_optimize_nir(struct nir_shader *shader, bool optimize_conservatively)
       NIR_LOOP_PASS(progress, skip, shader, nir_opt_intrinsics);
       NIR_LOOP_PASS_NOT_IDEMPOTENT(progress, skip, shader, nir_opt_algebraic);
       NIR_LOOP_PASS(progress, skip, shader, nir_opt_phi_to_bool);
+      NIR_LOOP_PASS(progress, skip, shader, nir_opt_phi_precision);
 
       NIR_LOOP_PASS(progress, skip, shader, nir_opt_undef);
 
@@ -281,7 +282,10 @@ radv_optimize_nir_algebraic_early(nir_shader *nir)
 void
 radv_optimize_nir_algebraic_late(nir_shader *nir)
 {
-   if (nir->info.stage != MESA_SHADER_VERTEX && nir->info.stage != MESA_SHADER_GEOMETRY)
+   /* Invariant position doesn't cover generic VS outputs used
+    * to compute position in later stages.
+    */
+   if (nir->info.stage != MESA_SHADER_VERTEX || nir->info.next_stage == MESA_SHADER_FRAGMENT)
       NIR_PASS(_, nir, nir_opt_reassociate_for_fma);
 
    /* Do late algebraic optimization to turn add(a,
@@ -538,6 +542,15 @@ radv_shader_spirv_to_nir(const struct radv_compiler_info *compiler_info, struct 
                          &compiler_info->nir_options[stage->stage]);
       nir->info.internal |= is_internal;
       assert(nir->info.stage == stage->stage);
+
+      /* Shorten the shader name for internal shaders. */
+      if (is_internal) {
+         while (strstr(nir->info.name, "src/")) {
+            nir->info.name = strstr(nir->info.name, "src/") + 4;
+         }
+         nir->info.name = ralloc_strdup(nir, nir->info.name);
+      }
+
       nir_validate_shader(nir, "after spirv_to_nir");
 
       vtn_free_specialization(spec);
@@ -557,14 +570,18 @@ radv_shader_spirv_to_nir(const struct radv_compiler_info *compiler_info, struct 
 
       progress = false;
       NIR_PASS(progress, nir, nir_inline_functions);
+
+      /* Inlining leaves the now-unused function implementations in the
+       * shader.  Drop them before running whole-shader cleanup passes.
+       * Cooperative matrix call functions are not inlined and must remain.
+       */
+      nir_remove_non_cmat_call_entrypoints(nir);
+
       if (progress) {
          NIR_PASS(_, nir, nir_opt_copy_prop_vars);
          NIR_PASS(_, nir, nir_opt_copy_prop);
       }
       NIR_PASS(_, nir, nir_opt_deref);
-
-      /* Pick off the single entrypoint that we want - leave cmat call functions */
-      nir_remove_non_cmat_call_entrypoints(nir);
 
       /* Make sure we lower constant initializers on output variables so that
        * nir_remove_dead_variables below sees the corresponding stores
@@ -579,14 +596,19 @@ radv_shader_spirv_to_nir(const struct radv_compiler_info *compiler_info, struct 
       radv_shader_choose_subgroup_size(compiler_info, nir, &stage->key, vk_spirv_version(spirv, stage->spirv.size));
 
       progress = false;
-      NIR_PASS(progress, nir, nir_lower_cooperative_matrix_flexible_dimensions, 16, 16, 16);
+      struct nir_lower_coopmat_args coopmat_args = {
+         .m_gran = 16,
+         .n_gran = 16,
+         .k_gran = 16,
+      };
+      NIR_PASS(progress, nir, nir_lower_cooperative_matrix_flexible_dimensions, &coopmat_args);
       if (progress) {
          NIR_PASS(_, nir, nir_opt_deref);
          NIR_PASS(_, nir, nir_opt_dce);
          NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_function_temp | nir_var_shader_temp, NULL);
       }
 
-      NIR_PASS(progress, nir, radv_nir_lower_cooperative_matrix, compiler_info->ac->gfx_level, stage,
+      NIR_PASS(progress, nir, radv_nir_lower_cooperative_matrix, compiler_info->ac->gfx_level,
                nir->info.max_subgroup_size);
       if (progress) {
          NIR_PASS(_, nir, nir_opt_dce);
@@ -640,9 +662,6 @@ radv_shader_spirv_to_nir(const struct radv_compiler_info *compiler_info, struct 
 
       NIR_PASS(_, nir, nir_normalize_sin_cos);
    }
-
-   if (nir->info.uses_printf)
-      NIR_PASS(_, nir, radv_nir_lower_printf, compiler_info->debug.debug_nir);
 
    if (nir->info.uses_abort) {
       nir_lower_abort_options abort_options = {
@@ -726,11 +745,15 @@ radv_shader_spirv_to_nir(const struct radv_compiler_info *compiler_info, struct 
 
    NIR_PASS(_, nir, nir_lower_image, &image_options);
 
-   if (nir->info.stage == MESA_SHADER_VERTEX || nir->info.stage == MESA_SHADER_GEOMETRY ||
-       nir->info.stage == MESA_SHADER_FRAGMENT) {
+   /* Depending on the variable mode mask, this lowers indirect IO, moves all input loads
+    * to the beginning, and moves all output stores to the end. This is an aggressive
+    * lowering and code motion pass.
+    */
+   if (nir->info.stage == MESA_SHADER_VERTEX) {
       NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries, nir_shader_get_entrypoint(nir),
                nir_var_shader_in | nir_var_shader_out);
-   } else if (nir->info.stage == MESA_SHADER_TESS_EVAL) {
+   } else if (nir->info.stage == MESA_SHADER_TESS_EVAL || nir->info.stage == MESA_SHADER_GEOMETRY ||
+              nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries, nir_shader_get_entrypoint(nir), nir_var_shader_out);
    }
 
@@ -739,29 +762,26 @@ radv_shader_spirv_to_nir(const struct radv_compiler_info *compiler_info, struct 
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
    NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 
-   bool gfx7minus = compiler_info->ac->gfx_level <= GFX7;
-   bool use_llvm = compiler_info->key.use_llvm;
-
-   NIR_PASS(_, nir, nir_lower_subgroups,
-            &(struct nir_lower_subgroups_options){
-               .subgroup_size = nir->info.api_subgroup_size,
-               .ballot_bit_size = nir->info.api_subgroup_size,
-               .ballot_components = 1,
-               .lower_to_scalar = 1,
-               .lower_subgroup_masks = 1,
-               .lower_relative_shuffle = 1,
-               .lower_rotate_to_shuffle = use_llvm,
-               .lower_shuffle_to_32bit = 1,
-               .lower_vote_feq = 1,
-               .lower_vote_ieq = 1,
-               .lower_vote_bool_eq = 1,
-               .lower_quad_broadcast_dynamic = 1,
-               .lower_quad_broadcast_dynamic_to_const = gfx7minus,
-               .lower_shuffle_to_swizzle_amd = 1,
-               .lower_ballot_bit_count_to_mbcnt_amd = 1,
-               .lower_boolean_reduce = !use_llvm,
-               .lower_boolean_shuffle = true,
-            });
+   nir_lower_subgroups_options lower_subgroup_options = {
+      .subgroup_size = nir->info.api_subgroup_size,
+      .ballot_bit_size = nir->info.api_subgroup_size,
+      .ballot_components = 1,
+      .lower_to_scalar = 1,
+      .lower_subgroup_masks = 1,
+      .lower_relative_shuffle = 1,
+      .lower_rotate_to_shuffle = compiler_info->key.use_llvm,
+      .lower_shuffle_to_32bit = 1,
+      .lower_vote_feq = 1,
+      .lower_vote_ieq = 1,
+      .lower_vote_bool_eq = 1,
+      .lower_quad_broadcast_dynamic = 1,
+      .lower_quad_broadcast_dynamic_to_const = compiler_info->ac->gfx_level <= GFX7,
+      .lower_shuffle_to_swizzle_amd = 1,
+      .lower_ballot_bit_count_to_mbcnt_amd = 1,
+      .lower_boolean_reduce = !compiler_info->key.use_llvm,
+      .lower_boolean_shuffle = true,
+   };
+   NIR_PASS(_, nir, nir_lower_subgroups, &lower_subgroup_options);
 
    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
    NIR_PASS(_, nir, nir_opt_shrink_stores, !compiler_info->key.disable_shrink_image_store);
@@ -826,7 +846,21 @@ radv_shader_spirv_to_nir(const struct radv_compiler_info *compiler_info, struct 
       if (nir->info.stage == MESA_SHADER_TASK || nir->info.stage == MESA_SHADER_MESH)
          var_modes |= nir_var_mem_task_payload;
 
-      NIR_PASS(_, nir, nir_opt_shared_vars_to_subgroup, 1, nir->info.max_subgroup_size);
+      nir_opt_shared_vars_to_subgroup_options shared_to_subgroup_options = {
+         .optimize_constant_access_to_uniform = true,
+         .optimize_divergent_access_to_shuffle = compiler_info->ac->gfx_level >= GFX8,
+         .linear_workgroup_ids = nir->info.derivative_group != DERIVATIVE_GROUP_QUADS,
+         .ballot_num_components = 1,
+         .ballot_size = nir->info.max_subgroup_size,
+      };
+
+      bool shared_to_subgroup = false;
+      NIR_PASS(shared_to_subgroup, nir, nir_opt_shared_vars_to_subgroup, &shared_to_subgroup_options);
+      if (shared_to_subgroup) {
+         NIR_PASS(_, nir, nir_opt_dead_write_vars);
+         NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_mem_shared, NULL);
+         NIR_PASS(_, nir, nir_lower_subgroups, &lower_subgroup_options);
+      }
 
       NIR_PASS(_, nir, nir_lower_vars_to_explicit_types, var_modes, shared_var_info);
       NIR_PASS(_, nir, nir_lower_explicit_io, var_modes, nir_address_format_32bit_offset);
@@ -863,6 +897,12 @@ radv_shader_spirv_to_nir(const struct radv_compiler_info *compiler_info, struct 
       .layout = &stage->layout,
       .embedded_samplers = &embedded_samplers,
    };
+
+   /* Remove deref_cast(undefined) texture derefs in dead control flow before nir_vk_lower_ycbcr_tex.
+    * An earlier radv_optimize_nir() would have done this if optimisations_disabled=false.
+    */
+   if (stage->key.optimisations_disabled)
+      NIR_PASS(_, nir, nir_opt_dead_cf);
 
    NIR_PASS(progress, nir, nir_vk_lower_ycbcr_tex, ycbcr_conversion_lookup, &lower_ycbcr_state);
    /* Gather info in the case that nir_vk_lower_ycbcr_tex might have emitted resinfo instructions. */
@@ -963,7 +1003,7 @@ radv_lower_ngg(const struct radv_compiler_info *compiler_info, struct radv_shade
          BITSET_SET(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID);
 
    } else if (nir->info.stage == MESA_SHADER_VERTEX) {
-      num_vertices_per_prim = radv_get_num_vertices_per_prim(gfx_state);
+      num_vertices_per_prim = radv_get_num_vertices_per_prim(compiler_info->ac->gfx_level, gfx_state);
 
       /* Manually mark the instance ID used, so the shader can repack it. */
       if (gfx_state->vi.instance_rate_inputs)
@@ -1970,13 +2010,17 @@ radv_precompute_registers_hw_fs(struct radv_device *device, struct radv_shader *
    const bool disable_rbplus = pdev->info.has_rbplus && !pdev->info.rbplus_allowed;
 
    regs->ps.db_shader_control =
-      S_02880C_Z_EXPORT_ENABLE(info->ps.writes_z) | S_02880C_STENCIL_TEST_VAL_EXPORT_ENABLE(info->ps.writes_stencil) |
-      S_02880C_KILL_ENABLE(info->ps.can_discard) | S_02880C_MASK_EXPORT_ENABLE(mask_export_enable) |
-      S_02880C_CONSERVATIVE_Z_EXPORT(conservative_z_export) | S_02880C_Z_ORDER(z_order) |
-      S_02880C_DEPTH_BEFORE_SHADER(info->ps.early_fragment_test) |
+      S_02880C_KILL_ENABLE(info->ps.can_discard) | S_02880C_CONSERVATIVE_Z_EXPORT(conservative_z_export) |
+      S_02880C_Z_ORDER(z_order) | S_02880C_DEPTH_BEFORE_SHADER(info->ps.early_fragment_test) |
       S_02880C_PRE_SHADER_DEPTH_COVERAGE_ENABLE(info->ps.post_depth_coverage) |
       S_02880C_EXEC_ON_HIER_FAIL(info->ps.writes_memory) | S_02880C_EXEC_ON_NOOP(info->ps.writes_memory) |
       S_02880C_DUAL_QUAD_DISABLE(disable_rbplus) | S_02880C_PRIMITIVE_ORDERED_PIXEL_SHADER(info->ps.pops);
+
+   if (!info->ps.has_epilog) {
+      regs->ps.db_shader_control |= S_02880C_Z_EXPORT_ENABLE(info->ps.writes_z) |
+                                    S_02880C_STENCIL_TEST_VAL_EXPORT_ENABLE(info->ps.writes_stencil) |
+                                    S_02880C_MASK_EXPORT_ENABLE(mask_export_enable);
+   }
 
    if (pdev->info.gfx_level >= GFX12) {
       regs->ps.spi_ps_in_control = S_028640_PS_W32_EN(info->wave_size == 32);
@@ -2018,8 +2062,8 @@ radv_precompute_registers_hw_fs(struct radv_device *device, struct radv_shader *
          regs->ps.pa_sc_shader_control = S_028C40_LOAD_COLLISION_WAVEID(info->ps.pops);
    }
 
-   regs->ps.spi_shader_z_format = ac_get_spi_shader_z_format(info->ps.writes_z, info->ps.writes_stencil,
-                                                             info->ps.writes_sample_mask, info->ps.writes_mrt0_alpha);
+   regs->ps.spi_shader_z_format = ac_get_spi_shader_z_format(
+      info->ps.writes_z, info->ps.writes_stencil, info->ps.writes_sample_mask, info->ps.writes_mrt0_alpha_to_mrtz);
 }
 
 static void
@@ -3175,6 +3219,7 @@ radv_shader_part_create(struct radv_device *device, struct radv_shader_part_bina
 
    shader_part->spi_shader_col_format = binary->info.spi_shader_col_format;
    shader_part->cb_shader_mask = binary->info.cb_shader_mask;
+   shader_part->db_shader_control = binary->info.db_shader_control;
    shader_part->spi_shader_z_format = binary->info.spi_shader_z_format;
 
    if (pdev->info.gfx_level >= GFX11)
@@ -3733,6 +3778,11 @@ radv_create_ps_epilog(struct radv_device *device, const struct radv_ps_epilog_ke
 
    binary->info.spi_shader_col_format = key->spi_shader_col_format;
    binary->info.cb_shader_mask = ac_get_cb_shader_mask(key->spi_shader_col_format);
+   binary->info.db_shader_control =
+      S_02880C_Z_EXPORT_ENABLE(key->has_depth_output && !key->ignore_depth_output) |
+      S_02880C_STENCIL_TEST_VAL_EXPORT_ENABLE(key->has_stencil_output && !key->ignore_stencil_output) |
+      S_02880C_MASK_EXPORT_ENABLE(key->has_sample_mask_output && !key->lower_1bit_sample_mask_to_discard) |
+      S_02880C_KILL_ENABLE(key->lower_1bit_sample_mask_to_discard);
    binary->info.spi_shader_z_format = key->spi_shader_z_format;
 
    epilog = radv_shader_part_create(device, binary, info.wave_size);
@@ -3893,13 +3943,23 @@ radv_compute_spi_ps_input(enum amd_gfx_level gfx_level, const struct radv_graphi
                       S_02865C_COVERAGE_TO_SHADER_SELECT(gfx_level >= GFX12 && info->ps.reads_fully_covered);
    }
 
-   if (G_0286CC_POS_W_FLOAT_ENA(spi_ps_input)) {
-      /* If POS_W_FLOAT (11) is enabled, at least one of PERSP_* must be enabled too */
+   /* POW_W_FLOAT requires that one set of perspective barycentric coordinates is enabled. */
+   if (G_0286CC_POS_W_FLOAT_ENA(spi_ps_input) &&
+       !G_0286CC_PERSP_SAMPLE_ENA(spi_ps_input) &&
+       !G_0286CC_PERSP_CENTER_ENA(spi_ps_input) &&
+       !G_0286CC_PERSP_CENTROID_ENA(spi_ps_input) &&
+       !G_0286CC_PERSP_PULL_MODEL_ENA(spi_ps_input))
       spi_ps_input |= S_0286CC_PERSP_CENTER_ENA(1);
-   }
 
-   if (!(spi_ps_input & 0x7F) && !G_0286CC_LINE_STIPPLE_TEX_ENA(spi_ps_input)) {
-      /* At least one of PERSP_* (0xF) or LINEAR_* (0x70) or LINE_STIPPLE_TEX must be enabled.
+   if (!G_0286CC_PERSP_SAMPLE_ENA(spi_ps_input) &&
+       !G_0286CC_PERSP_CENTER_ENA(spi_ps_input) &&
+       !G_0286CC_PERSP_CENTROID_ENA(spi_ps_input) &&
+       !G_0286CC_PERSP_PULL_MODEL_ENA(spi_ps_input) &&
+       !G_0286CC_LINEAR_SAMPLE_ENA(spi_ps_input) &&
+       !G_0286CC_LINEAR_CENTER_ENA(spi_ps_input) &&
+       !G_0286CC_LINEAR_CENTROID_ENA(spi_ps_input) &&
+       !G_0286CC_LINE_STIPPLE_TEX_ENA(spi_ps_input)) {
+      /* At least one of PERSP_*, LINEAR_*, or LINE_STIPPLE_TEX must be enabled.
        * LINE_STIPPLE_TEX uses the least number of initialized VGPRs, so let's use it because
        * pixel throughput is limited by the number of initialized VGPRs.
        *

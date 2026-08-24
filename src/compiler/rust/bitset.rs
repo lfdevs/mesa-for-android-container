@@ -266,16 +266,17 @@ fn every_nth_bit(n: usize) -> u32 {
     u32::MAX / ((1 << n) - 1)
 }
 
-fn find_aligned_set_range(
+#[inline]
+fn find_small_aligned_set_range(
     word_fn: impl Fn(usize) -> Option<u32>,
     start: BitIndex,
     count: usize,
     align_mul: usize,
     align_offset: usize,
 ) -> Option<BitIndex> {
-    assert!(align_mul <= 16);
-    assert!(align_offset + count <= align_mul);
-    assert!(count > 0);
+    debug_assert!(align_mul <= 16);
+    debug_assert!(align_offset + count <= align_mul);
+    debug_assert!(count > 0);
     let every_n = every_nth_bit(align_mul) << align_offset;
 
     let mut word_idx = start.word;
@@ -301,6 +302,123 @@ fn find_aligned_set_range(
 
         mask = u32::MAX;
         word_idx += 1;
+    }
+}
+
+#[inline]
+fn find_large_aligned_set_range(
+    word_fn: impl Fn(usize) -> Option<u32>,
+    start: BitIndex,
+    count: usize,
+    align_mul: usize,
+    align_offset: usize,
+) -> Option<BitIndex> {
+    debug_assert!(count > 0);
+    debug_assert!(align_mul >= 32);
+    debug_assert!(align_offset < align_mul);
+
+    let start = start.flatten();
+    let start = if start < align_offset {
+        align_offset
+    } else {
+        (start - align_offset).next_multiple_of(align_mul) + align_offset
+    };
+
+    let word_stride = align_mul / 32;
+    let mut cur = BitIndex::from(start);
+    loop {
+        let mut fail_word_idx = None;
+        for (word_idx, mask) in WordIdxMaskIter::new(cur, cur + count) {
+            let word = word_fn(word_idx)?;
+            if (!word) & mask != 0 {
+                fail_word_idx = Some(word_idx);
+                break;
+            }
+        }
+        let Some(fail_word_idx) = fail_word_idx else {
+            return Some(cur);
+        };
+
+        cur.word += word_stride;
+
+        // If we found unset bits at fail_word, then we can't find a set
+        // range any earlier than that.
+        while cur.word < fail_word_idx {
+            cur.word += word_stride;
+        }
+    }
+}
+
+#[inline]
+fn find_aligned_set_range(
+    word_fn: impl Fn(usize) -> Option<u32>,
+    start: BitIndex,
+    count: usize,
+    align_mul: usize,
+    align_offset: usize,
+) -> Option<BitIndex> {
+    assert!(count > 0);
+    assert!(align_mul.is_power_of_two());
+    assert!(align_offset < align_mul);
+    if align_mul >= 32 {
+        find_large_aligned_set_range(
+            word_fn,
+            start,
+            count,
+            align_mul,
+            align_offset,
+        )
+    } else if align_offset + count <= align_mul {
+        find_small_aligned_set_range(
+            word_fn,
+            start,
+            count,
+            align_mul,
+            align_offset,
+        )
+    } else {
+        let search_count = align_mul - align_offset;
+        debug_assert!(search_count < count);
+
+        let mut cur = start;
+        loop {
+            let idx = find_small_aligned_set_range(
+                &word_fn,
+                cur,
+                search_count,
+                align_mul,
+                align_offset,
+            )?;
+
+            // That only checked for the first search_count bits.  Nowe we
+            // have to check for the rest.
+            let mut fail_word_idx = None;
+            for (word_idx, mask) in WordIdxMaskIter::new(idx, idx + count) {
+                let word = word_fn(word_idx)?;
+                if (!word) & mask != 0 {
+                    fail_word_idx = Some(word_idx);
+                    break;
+                }
+            }
+            let Some(fail_word_idx) = fail_word_idx else {
+                return Some(idx);
+            };
+
+            cur = idx + align_mul;
+
+            // If we found unset bits at fail_word, then we can't find a set
+            // range any earlier than that.  However, the next set range may be
+            // in words[fail_word_idx], just later in the word so we can't
+            // increment any higher.
+            if cur.word < fail_word_idx {
+                debug_assert!(align_mul <= 16);
+                debug_assert!(align_offset < 16);
+                cur = BitIndex {
+                    word: fail_word_idx,
+                    bit: align_offset as u8,
+                };
+            }
+        }
     }
 }
 
@@ -340,6 +458,16 @@ impl<const W: usize, K> ConstBitSet<W, K> {
             w += 1;
         }
         true
+    }
+
+    pub const fn len(&self) -> usize {
+        let mut count = 0;
+        let mut w = 0_usize;
+        while w < W {
+            count += self.words[w].count_ones() as usize;
+            w += 1;
+        }
+        count
     }
 }
 
@@ -559,6 +687,14 @@ impl<K> BitSet<K> {
             }
         }
         true
+    }
+
+    pub fn len(&self) -> usize {
+        let mut count = 0;
+        for w in self.words.iter() {
+            count += usize::try_from(w.count_ones()).unwrap();
+        }
+        count
     }
 }
 
@@ -1368,27 +1504,50 @@ mod tests {
         }
     }
 
+    fn slow_find_aligned_unset_range(
+        bitset: &BitSet<usize>,
+        start: usize,
+        count: usize,
+        align_mul: usize,
+        align_offset: usize,
+    ) -> usize {
+        assert!(align_mul.is_power_of_two());
+        assert!(align_offset < align_mul);
+        let mut cur = ((start / align_mul) * align_mul) + align_offset;
+        if cur < start {
+            cur += align_mul
+        }
+        loop {
+            if bitset.all_unset_in_range(cur..(cur + count)) {
+                return cur;
+            }
+            cur += align_mul
+        }
+    }
+
     #[test]
     fn test_find_aligned_unset_range() {
-        let a: BitSet =
-            [0, 4, 5, 6, 7, 61, 128, 129, 130].into_iter().collect();
+        let a: BitSet = [0, 4, 5, 6, 7, 61, 128, 129, 130, 250]
+            .into_iter()
+            .collect();
 
-        /* (start, count, align_mul, align_offset) */
-        assert_eq!(a.find_aligned_unset_range(0, 1, 1, 0), 1);
-        assert_eq!(a.find_aligned_unset_range(4, 1, 1, 0), 8);
-        assert_eq!(a.find_aligned_unset_range(128, 1, 1, 0), 131);
-        assert_eq!(a.find_aligned_unset_range(0, 4, 4, 0), 8);
-        assert_eq!(a.find_aligned_unset_range(128, 4, 4, 0), 132);
-        assert_eq!(a.find_aligned_unset_range(0, 3, 4, 1), 1);
-        assert_eq!(a.find_aligned_unset_range(0, 3, 8, 1), 1);
-        assert_eq!(a.find_aligned_unset_range(0, 4, 8, 1), 9);
-        assert_eq!(a.find_aligned_unset_range(0, 2, 2, 0), 2);
-        assert_eq!(a.find_aligned_unset_range(2, 2, 2, 0), 2);
-        assert_eq!(a.find_aligned_unset_range(3, 2, 2, 0), 8);
-        assert_eq!(a.find_aligned_unset_range(0, 2, 4, 2), 2);
-        assert_eq!(a.find_aligned_unset_range(3, 2, 4, 2), 10);
-        assert_eq!(a.find_aligned_unset_range(40, 16, 16, 0), 64);
-        assert_eq!(a.find_aligned_unset_range(1337, 1, 1, 0), 1337);
-        assert_eq!(a.find_aligned_unset_range(161, 1, 2, 0), 162);
+        for am in [1, 2, 4, 8, 16, 32, 64] {
+            for ao in [0, 1, 2, 3, 7, 15, 29, 47] {
+                if ao >= am {
+                    continue;
+                }
+                let rem = am - ao;
+
+                for c in [1, 2, 5, 9, 17, 32, 37, rem, am, am * 2] {
+                    let mut s = 0;
+                    while s < 300 {
+                        let i = a.find_aligned_unset_range(s, c, am, ao);
+                        let j = slow_find_aligned_unset_range(&a, s, c, am, ao);
+                        assert_eq!(i, j);
+                        s = i + 1;
+                    }
+                }
+            }
+        }
     }
 }

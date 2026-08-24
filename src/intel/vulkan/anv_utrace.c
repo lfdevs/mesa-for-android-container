@@ -97,7 +97,6 @@ anv_utrace_delete_submit(struct u_trace_context *utctx, void *submit_data)
    intel_ds_flush_data_fini(&submit->ds);
 
    anv_state_stream_finish(&submit->dynamic_state_stream);
-   anv_state_stream_finish(&submit->general_state_stream);
 
    anv_async_submit_fini(&submit->base);
 
@@ -190,8 +189,6 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
    if (utrace_copies > 0) {
       anv_state_stream_init(&submit->dynamic_state_stream,
                             anv_device_get_dynamic_state_pool(device), 16384);
-      anv_state_stream_init(&submit->general_state_stream,
-                            anv_device_get_general_state_pool(device), 16384);
 
       /* Only engine class where we support timestamp copies
        *
@@ -237,7 +234,6 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
          submit->simple_state = (struct anv_simple_shader) {
             .device               = device,
             .dynamic_state_stream = &submit->dynamic_state_stream,
-            .general_state_stream = &submit->general_state_stream,
             .batch                = batch,
             .kernel               = copy_kernel,
          };

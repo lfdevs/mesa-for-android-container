@@ -590,8 +590,11 @@ d3d12_resource_from_handle(struct pipe_screen *pscreen,
                       " match d3d12 device (%p) instance from this pipe_screen."
                       " Attempting to re-import via NT Handle...\n", screen_device.Get(), res_device.Get());
 
+         ComPtr<ID3D12Device> res_d3d12_device;
+         res_device.As(&res_d3d12_device);
+
          handle->type = WINSYS_HANDLE_TYPE_FD;
-         HRESULT hr = screen->dev->CreateSharedHandle(((ID3D12DeviceChild *)handle->com_obj),
+         HRESULT hr = res_d3d12_device->CreateSharedHandle(((ID3D12DeviceChild *)handle->com_obj),
                nullptr,
                GENERIC_ALL,
                nullptr,

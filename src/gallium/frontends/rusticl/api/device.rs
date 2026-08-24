@@ -64,6 +64,10 @@ unsafe impl CLInfo<cl_device_info> for cl_device_id {
             CL_DEVICE_DEVICE_MEM_CAPABILITIES_INTEL => {
                 v.write::<cl_device_unified_shared_memory_capabilities_intel>(0)
             }
+            // Provided by cl_ext_float_atomics
+            CL_DEVICE_DOUBLE_FP_ATOMIC_CAPABILITIES_EXT if dev.has_atomic_float() => {
+                v.write::<cl_device_fp_atomic_capabilities_ext>(0)
+            }
             CL_DEVICE_DOUBLE_FP_CONFIG => v.write::<cl_device_fp_config>(
                 if dev.fp64_supported() {
                     let mut fp64_config = CL_FP_FMA
@@ -94,6 +98,10 @@ unsafe impl CLInfo<cl_device_info> for cl_device_id {
             CL_DEVICE_GLOBAL_MEM_CACHELINE_SIZE => v.write::<cl_uint>(0),
             CL_DEVICE_GLOBAL_MEM_SIZE => v.write::<cl_ulong>(dev.global_mem_size()),
             CL_DEVICE_GLOBAL_VARIABLE_PREFERRED_TOTAL_SIZE => v.write::<usize>(0),
+            // Provided by cl_ext_float_atomics
+            CL_DEVICE_HALF_FP_ATOMIC_CAPABILITIES_EXT if dev.has_atomic_float() => {
+                v.write::<cl_device_fp_atomic_capabilities_ext>(0)
+            }
             // Provided by the cl_khr_fp16 extension.
             CL_DEVICE_HALF_FP_CONFIG if dev.fp16_supported() => {
                 v.write::<cl_device_fp_config>((CL_FP_ROUND_TO_NEAREST | CL_FP_INF_NAN).into())
@@ -296,6 +304,23 @@ unsafe impl CLInfo<cl_device_info> for cl_device_id {
             }
             CL_DEVICE_SINGLE_DEVICE_SHARED_MEM_CAPABILITIES_INTEL => {
                 v.write::<cl_device_unified_shared_memory_capabilities_intel>(0)
+            }
+            // Provided by cl_ext_float_atomics
+            CL_DEVICE_SINGLE_FP_ATOMIC_CAPABILITIES_EXT if dev.has_atomic_float() => {
+                // Always supported
+                let mut flags = CL_DEVICE_GLOBAL_FP_ATOMIC_LOAD_STORE_EXT
+                    | CL_DEVICE_LOCAL_FP_ATOMIC_LOAD_STORE_EXT;
+
+                if dev.has_atomic_float_add() {
+                    flags |= CL_DEVICE_GLOBAL_FP_ATOMIC_ADD_EXT | CL_DEVICE_LOCAL_FP_ATOMIC_ADD_EXT;
+                }
+
+                if dev.has_atomic_float_minmax() {
+                    flags |= CL_DEVICE_GLOBAL_FP_ATOMIC_MIN_MAX_EXT
+                        | CL_DEVICE_LOCAL_FP_ATOMIC_MIN_MAX_EXT;
+                }
+
+                v.write::<cl_device_fp_atomic_capabilities_ext>(flags.into())
             }
             CL_DEVICE_SINGLE_FP_CONFIG => v.write::<cl_device_fp_config>(
                 (CL_FP_ROUND_TO_NEAREST | CL_FP_INF_NAN) as cl_device_fp_config,

@@ -522,6 +522,8 @@ fd_batch_resource_write(struct fd_batch *batch, struct fd_resource *rsc)
     */
    rsc->valid = true;
 
+   rsc->track->executed_barriers = 0;
+
    if (track->write_batch == batch)
       return;
 

@@ -51,6 +51,7 @@ buildah_export() {
     rm -rf "${mountpoint}/apitrace-msvc-win64"
     rm -rf "${mountpoint}/cuttlefish"
     rm -rf "${mountpoint}/fluster/resources"
+    rm -rf "${mountpoint}/opencl-cts"
     rm -rf "${mountpoint}/usr/lib/*/wine"
     rm -rf "${mountpoint}/renderdoc-win64"
     rm -rf "${mountpoint}/vkd3d-proton-tests"

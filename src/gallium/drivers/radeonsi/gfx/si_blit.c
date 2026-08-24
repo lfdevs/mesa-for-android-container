@@ -1204,7 +1204,7 @@ static bool si_generate_mipmap(struct pipe_context *ctx, struct pipe_resource *t
 
    si_blitter_begin(sctx, SI_BLIT | SI_DISABLE_RENDER_COND);
    util_blitter_generate_mipmap(sctx->blitter, tex, format, base_level, last_level, first_layer,
-                                last_layer);
+                                last_layer, 1);
    si_blitter_end(sctx);
 
    sctx->generate_mipmap_for_depth = false;

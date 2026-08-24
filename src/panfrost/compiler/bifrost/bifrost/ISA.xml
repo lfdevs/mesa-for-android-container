@@ -8456,6 +8456,12 @@
 
   <ins name="FABSNEG.f32" pseudo="true" unit="fma">
     <src start="0" mask="0xfb"/>
+    <mod name="round" start="13" size="2">
+      <opt>none</opt>
+      <opt>rtp</opt>
+      <opt>rtn</opt>
+      <opt>rtz</opt>
+    </mod>
     <mod name="neg0" start="7" size="1" opt="neg"/>
     <mod name="abs0" start="12" size="1" opt="abs"/>
     <mod name="widen0" size="2">
@@ -8479,6 +8485,12 @@
 
   <ins name="FCLAMP.f32" pseudo="true" unit="fma">
     <src start="0" mask="0xfb"/>
+    <mod name="round" start="13" size="2">
+      <opt>none</opt>
+      <opt>rtp</opt>
+      <opt>rtn</opt>
+      <opt>rtz</opt>
+    </mod>
     <mod name="clamp" start="15" size="2">
       <opt>none</opt>
       <opt>clamp_0_inf</opt>

@@ -7,10 +7,12 @@
 #define RADEON_COMPILER_H
 
 #include <stdbool.h>
+#include <string.h>
 
-#include "memory_pool.h"
 #include "radeon_code.h"
 #include "radeon_program.h"
+
+#include "util/ralloc.h"
 
 #define RC_DBG_LOG (1 << 0)
 
@@ -24,8 +26,33 @@ enum rc_program_type { RC_VERTEX_PROGRAM,
                        RC_FRAGMENT_PROGRAM,
                        RC_NUM_PROGRAM_TYPES };
 
+/**
+ * Generic helper for growing an array that has separate size/count
+ * and reserved counters to accommodate up to num new elements.
+ *
+ * \note Size is not changed by this macro.
+ *
+ * \warning Array, Size, Reserved have to be lvalues and may be evaluated
+ * several times.
+ */
+#define rc_array_reserve(pool, type, array, size, reserved, num)           \
+   do {                                                                    \
+      unsigned int _num = (num);                                           \
+      if ((size) + _num > (reserved)) {                                    \
+         unsigned int newreserve = (reserved) * 2;                         \
+         type *newarray;                                                   \
+         if (newreserve < _num)                                            \
+            newreserve = 4 * _num; /* arbitrary heuristic */               \
+         newarray = linear_alloc_array((pool), type, newreserve);          \
+         if (size)                                                         \
+            memcpy(newarray, (array), (size) * sizeof(type));              \
+         (array) = newarray;                                               \
+         (reserved) = newreserve;                                          \
+      }                                                                    \
+   } while (0)
+
 struct radeon_compiler {
-   struct memory_pool Pool;
+   linear_ctx *Pool;
    struct rc_program Program;
    const struct rc_regalloc_state *regalloc_state;
    struct util_debug_callback *debug;
@@ -87,7 +114,6 @@ int rc_if_fail_helper(struct radeon_compiler *c, const char *file, int line, con
 
 void rc_mark_unused_channels(struct radeon_compiler *c, void *user);
 void rc_calculate_inputs_outputs(struct radeon_compiler *c);
-void rc_copy_output(struct radeon_compiler *c, unsigned output, unsigned dup_output);
 void rc_transform_fragment_face(struct radeon_compiler *c, unsigned face);
 
 struct r300_fragment_program_compiler {

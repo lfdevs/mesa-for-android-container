@@ -29,27 +29,19 @@ uses_border(const VkSamplerCreateInfo *info)
 }
 
 static bool
-is_border_color_custom(VkBorderColor color, bool workaround_rgba4)
+is_border_color_custom(VkBorderColor color)
 {
-   switch (color) {
-   case VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK:
-      /* We may need to workaround RGBA4 UNORM issues with opaque black. This
-       * only affects float opaque black, there are no pure integer RGBA4
-       * formats to worry about.
-       */
-      return workaround_rgba4;
-
-   case VK_BORDER_COLOR_INT_CUSTOM_EXT:
-   case VK_BORDER_COLOR_FLOAT_CUSTOM_EXT:
-      return true;
-
-   default:
-      return false;
-   }
+   /* If border color features are enabled, we need to workaround RGBA4 UNORM
+    * issues with opaque black. This only affects float opaque black, there are
+    * no pure integer RGBA4 formats to worry about. */
+   return color == VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK ||
+          color == VK_BORDER_COLOR_INT_CUSTOM_EXT ||
+          color == VK_BORDER_COLOR_FLOAT_CUSTOM_EXT;
 }
 
 static struct mtl_sampler_packed
-pack_sampler_info(const struct VkSamplerCreateInfo *sampler_info)
+pack_sampler_info(const struct VkSamplerCreateInfo *sampler_info,
+                  bool custom_border)
 {
    /* Vulkan disallows unnormalized coordinates to sample 3D images in
     * VUID-vkCmdDraw-None-08609 but does not restrict the value for W in
@@ -73,13 +65,24 @@ pack_sampler_info(const struct VkSamplerCreateInfo *sampler_info)
          : vk_sampler_mipmap_mode_to_mtl_sampler_mip_filter(
               sampler_info->mipmapMode);
    enum mtl_sampler_border_color border_color =
-      uses_border(sampler_info) ? vk_border_color_to_mtl_sampler_border_color(
-                                     sampler_info->borderColor)
-                                : MTL_SAMPLER_BORDER_COLOR_OPAQUE_WHITE;
+      uses_border(sampler_info) && !custom_border
+         ? vk_border_color_to_mtl_sampler_border_color(
+              sampler_info->borderColor)
+         : MTL_SAMPLER_BORDER_COLOR_OPAQUE_WHITE;
    uint32_t max_anisotropy =
       sampler_info->anisotropyEnable
          ? util_next_power_of_two(MAX2(sampler_info->maxAnisotropy, 1))
          : 1u;
+
+   enum mtl_sampler_reduction_mode reduction_mode =
+      MTL_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE;
+   const VkSamplerReductionModeCreateInfo *reduction_info =
+      vk_find_struct_const(sampler_info->pNext,
+                           SAMPLER_REDUCTION_MODE_CREATE_INFO);
+   if (reduction_info)
+      reduction_mode = vk_sampler_reduction_mode_to_mtl_sampler_reduction_mode(
+         reduction_info->reductionMode);
+
    return (struct mtl_sampler_packed){
       .mode_u = vk_sampler_address_mode_to_mtl_sampler_address_mode(
          sampler_info->addressModeU),
@@ -93,6 +96,7 @@ pack_sampler_info(const struct VkSamplerCreateInfo *sampler_info)
       .mag_filter =
          vk_filter_to_mtl_sampler_min_mag_filter(sampler_info->magFilter),
       .mip_filter = mip_filter,
+      .reduction_mode = reduction_mode,
       .compare_func = compare,
       .min_lod = sampler_info->minLod,
       .max_lod = sampler_info->maxLod,
@@ -102,8 +106,11 @@ pack_sampler_info(const struct VkSamplerCreateInfo *sampler_info)
 }
 
 static mtl_sampler_descriptor *
-create_sampler_descriptor(const struct mtl_sampler_packed *packed)
+create_sampler_descriptor(const struct kk_device *dev,
+                          const struct mtl_sampler_packed *packed)
 {
+   const struct kk_physical_device *pdev = kk_device_physical(dev);
+
    mtl_sampler_descriptor *descriptor = mtl_new_sampler_descriptor();
    mtl_sampler_descriptor_set_normalized_coordinates(
       descriptor, packed->normalized_coordinates);
@@ -118,6 +125,11 @@ create_sampler_descriptor(const struct mtl_sampler_packed *packed)
                                              packed->max_anisotropy);
    mtl_sampler_descriptor_set_compare_function(descriptor,
                                                packed->compare_func);
+
+   if (pdev->vk.supported_extensions.EXT_sampler_filter_minmax)
+      mtl_sampler_descriptor_set_reduction_mode(descriptor,
+                                                packed->reduction_mode);
+
    return descriptor;
 }
 
@@ -125,7 +137,7 @@ mtl_sampler *
 kk_sampler_create(struct kk_device *dev,
                   const struct mtl_sampler_packed *packed)
 {
-   mtl_sampler_descriptor *desc = create_sampler_descriptor(packed);
+   mtl_sampler_descriptor *desc = create_sampler_descriptor(dev, packed);
    mtl_sampler *sampler = mtl_new_sampler(dev->mtl_handle, desc);
    mtl_release(desc);
    return sampler;
@@ -144,7 +156,12 @@ kk_CreateSampler(VkDevice device, const VkSamplerCreateInfo *pCreateInfo,
    if (!sampler)
       return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   struct mtl_sampler_packed packed = pack_sampler_info(pCreateInfo);
+   bool custom_border = dev->vk.enabled_features.customBorderColors &&
+                        uses_border(pCreateInfo) &&
+                        is_border_color_custom(pCreateInfo->borderColor);
+
+   struct mtl_sampler_packed packed =
+      pack_sampler_info(pCreateInfo, custom_border);
    result = kk_sampler_heap_add(dev, packed, &sampler->planes[0].hw);
    if (result != VK_SUCCESS) {
       kk_DestroySampler(device, kk_sampler_to_handle(sampler), pAllocator);
@@ -164,6 +181,9 @@ kk_CreateSampler(VkDevice device, const VkSamplerCreateInfo *pCreateInfo,
     */
 
    if (sampler->vk.ycbcr_conversion) {
+      assert(!uses_border(pCreateInfo) &&
+             "consequence of VUID-VkSamplerCreateInfo-addressModeU-01646");
+
       const VkFilter chroma_filter =
          sampler->vk.ycbcr_conversion->state.chroma_filter;
       if (pCreateInfo->magFilter != chroma_filter ||
@@ -178,20 +198,22 @@ kk_CreateSampler(VkDevice device, const VkSamplerCreateInfo *pCreateInfo,
          }
          sampler->plane_count = 2;
       }
-   }
+   } else if (custom_border) {
+      /* If the sampler uses custom border colours, we need both clamp-to-1
+       * and clamp-to-0 variants. We treat these as planes.
+       */
+      packed.border_color = MTL_SAMPLER_BORDER_COLOR_TRANSPARENT_BLACK;
+      result = kk_sampler_heap_add(dev, packed, &sampler->planes[1].hw);
+      if (result != VK_SUCCESS) {
+         kk_DestroySampler(device, kk_sampler_to_handle(sampler), pAllocator);
+         return result;
+      }
 
-   /* LOD data passed in the descriptor set */
-   sampler->lod_bias_fp16 = _mesa_float_to_half(pCreateInfo->mipLodBias);
-   sampler->lod_min_fp16 = _mesa_float_to_half(pCreateInfo->minLod);
-   sampler->lod_max_fp16 = _mesa_float_to_half(pCreateInfo->maxLod);
+      sampler->plane_count = 2;
 
-   /* Border color passed in the descriptor */
-   sampler->has_border = uses_border(pCreateInfo) &&
-                         is_border_color_custom(pCreateInfo->borderColor, true);
-   if (sampler->has_border) {
       /* We also need to record the border.
        *
-       * If there is a border colour component mapping, we need to swizzle with
+       * If there is a border color component mapping, we need to swizzle with
        * it. Otherwise, we can assume there's nothing to do.
        */
       VkClearColorValue bc = sampler->vk.border_color_value;
@@ -207,7 +229,13 @@ kk_CreateSampler(VkDevice device, const VkSamplerCreateInfo *pCreateInfo,
       }
 
       sampler->custom_border = bc;
+      sampler->has_border = true;
    }
+
+   /* LOD data passed in the descriptor set */
+   sampler->lod_bias_fp16 = _mesa_float_to_half(pCreateInfo->mipLodBias);
+   sampler->lod_min_fp16 = _mesa_float_to_half(pCreateInfo->minLod);
+   sampler->lod_max_fp16 = _mesa_float_to_half(pCreateInfo->maxLod);
 
    *pSampler = kk_sampler_to_handle(sampler);
 

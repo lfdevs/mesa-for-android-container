@@ -202,6 +202,12 @@ v3dv_descriptor_set_layout_unref(struct v3dv_device *device,
       v3dv_descriptor_set_layout_destroy(device, set_layout);
 }
 
+/* Number of entries the sampler map reserves for the "no sampler" cases, see
+ * V3DV_NO_SAMPLER_16BIT_IDX below. They are added before any real sampler, so
+ * the sampler map needs room for them on top of V3D_MAX_TEXTURE_SAMPLERS.
+ */
+#define V3DV_NUM_NO_SAMPLER_IDX 2
+
 /*
  * We are using descriptor maps for ubo/ssbo and texture/samplers, so we need
  * it to be big enough to include the max value for all of them.
@@ -209,7 +215,8 @@ v3dv_descriptor_set_layout_unref(struct v3dv_device *device,
  * FIXME: one alternative would be to allocate the map as big as you need for
  * each descriptor type. That would means more individual allocations.
  */
-#define DESCRIPTOR_MAP_SIZE MAX3(V3D_MAX_TEXTURE_SAMPLERS,                         \
+#define DESCRIPTOR_MAP_SIZE MAX3(V3D_MAX_TEXTURE_SAMPLERS +                        \
+                                 V3DV_NUM_NO_SAMPLER_IDX,                          \
                                  MAX_UNIFORM_BUFFERS + MAX_INLINE_UNIFORM_BUFFERS, \
                                  MAX_STORAGE_BUFFERS)
 

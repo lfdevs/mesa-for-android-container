@@ -91,16 +91,16 @@ device_select_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
 {
    VkLayerInstanceCreateInfo *chain_info = NULL;
    bool bypass_device_select = false;
-   vk_foreach_struct_const(s, pCreateInfo->pNext) {
-      switch (s->sType) {
+   vk_foreach_struct_const (sType, s, pCreateInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO: {
-         const VkLayerInstanceCreateInfo *this_info = (const void *)s;
+         const VkLayerInstanceCreateInfo *this_info = s;
          if (this_info->function == VK_LAYER_LINK_INFO)
             chain_info = (VkLayerInstanceCreateInfo *)this_info; /* loses const */
          break;
       }
       case VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT: {
-         const VkLayerSettingsCreateInfoEXT *lsci = (const void *)s;
+         const VkLayerSettingsCreateInfoEXT *lsci = s;
          for (unsigned i = 0; i < lsci->settingCount; i++) {
             const VkLayerSettingEXT *ls = &lsci->pSettings[i];
             if (!strcmp(ls->pLayerName, "MESA_device_select")) {

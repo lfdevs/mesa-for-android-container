@@ -140,13 +140,14 @@ elk_get_compiler_config_value(const struct elk_compiler *compiler)
 
    insert_u64_bit(&config, compiler->precise_trig);
    bits++;
+   insert_u64_bit(&config, compiler->limit_trig_input_range);
+   bits++;
 
    enum intel_debug_flag debug_bits[] = {
       DEBUG_NO_DUAL_OBJECT_GS,
       DEBUG_SPILL_FS,
       DEBUG_SPILL_VEC4,
       DEBUG_NO_COMPACTION,
-      DEBUG_DO32,
       DEBUG_SOFT64,
       DEBUG_NO_SEND_GATHER,
    };
@@ -160,6 +161,11 @@ elk_get_compiler_config_value(const struct elk_compiler *compiler)
 
    u_foreach_bit64(bit, mask)
       insert_u64_bit(&config, (intel_simd & (1ULL << bit)) != 0);
+
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      insert_u64_bit(&config, (intel_simd_overridden & (1 << i)) != 0);
+      bits++;
+   }
 
    mask = 3;
    bits += util_bitcount64(mask);

@@ -603,6 +603,25 @@ vk_video_session_parameters_create(struct vk_device *device,
       if (av1_create) {
          vk_video_deep_copy_av1_seq_hdr(&params->av1_enc.seq_hdr,
                                         av1_create->pStdSequenceHeader);
+
+         if (av1_create->stdOperatingPointCount && av1_create->pStdOperatingPoints) {
+            if (av1_create->stdOperatingPointCount > 32) {
+               vk_video_session_parameters_destroy(device, alloc, params);
+               return NULL;
+            }
+            memcpy(params->av1_enc.op_points, av1_create->pStdOperatingPoints,
+                   av1_create->stdOperatingPointCount * sizeof(StdVideoEncodeAV1OperatingPointInfo));
+            params->av1_enc.num_op_points = av1_create->stdOperatingPointCount;
+         } else {
+            params->av1_enc.op_points[0].seq_level_idx = STD_VIDEO_AV1_LEVEL_6_1;
+            params->av1_enc.num_op_points = 1;
+         }
+
+         if (av1_create->pStdDecoderModelInfo) {
+            memcpy(&params->av1_enc.decoder_model, av1_create->pStdDecoderModelInfo,
+                   sizeof(StdVideoEncodeAV1DecoderModelInfo));
+            params->av1_enc.pStdDecoderModelInfo = &params->av1_enc.decoder_model;
+         }
       }
       break;
    }
@@ -2224,7 +2243,7 @@ encode_rps(struct vl_bitstream_encoder *enc,
       const StdVideoH265ShortTermRefPicSet *rps_ref = &sps->pShortTermRefPicSet[ref_rps_idx];
       int num_delta_pocs = rps_ref->num_negative_pics + rps_ref->num_positive_pics;
 
-      for (int j = 0; j < num_delta_pocs; j++) {
+      for (int j = 0; j <= num_delta_pocs; j++) {
          vl_bitstream_put_bits(enc, 1, !!(rps->used_by_curr_pic_flag & (1 << j)));
          if (!(rps->used_by_curr_pic_flag & (1 << j))) {
             vl_bitstream_put_bits(enc, 1, !!(rps->use_delta_flag & (1 << j)));
@@ -2310,8 +2329,8 @@ vk_video_encode_h265_sps(const StdVideoH265SequenceParameterSet *sps,
    if (sps->flags.pcm_enabled_flag) {
       vl_bitstream_put_bits(&enc, 4, sps->bit_depth_luma_minus8 + 7);
       vl_bitstream_put_bits(&enc, 4, sps->bit_depth_chroma_minus8 + 7);
-      vl_bitstream_exp_golomb_ue(&enc, sps->log2_min_luma_coding_block_size_minus3);
-      vl_bitstream_exp_golomb_ue(&enc, sps->log2_diff_max_min_luma_coding_block_size);
+      vl_bitstream_exp_golomb_ue(&enc, sps->log2_min_pcm_luma_coding_block_size_minus3);
+      vl_bitstream_exp_golomb_ue(&enc, sps->log2_diff_max_min_pcm_luma_coding_block_size);
       vl_bitstream_put_bits(&enc, 1, sps->flags.pcm_loop_filter_disabled_flag);
    }
 
@@ -2324,7 +2343,7 @@ vk_video_encode_h265_sps(const StdVideoH265SequenceParameterSet *sps,
       vl_bitstream_exp_golomb_ue(&enc, sps->num_long_term_ref_pics_sps);
       for (int i = 0; i < sps->num_long_term_ref_pics_sps; i++) {
          vl_bitstream_put_bits(&enc, sps->log2_max_pic_order_cnt_lsb_minus4 + 4, sps->pLongTermRefPicsSps->lt_ref_pic_poc_lsb_sps[i]);
-         vl_bitstream_put_bits(&enc, 1, sps->pLongTermRefPicsSps->used_by_curr_pic_lt_sps_flag);
+         vl_bitstream_put_bits(&enc, 1, !!(sps->pLongTermRefPicsSps->used_by_curr_pic_lt_sps_flag & (1 << i)));
       }
    }
 
@@ -2845,17 +2864,17 @@ vk_video_encode_h265_slice_header(const StdVideoEncodeH265PictureInfo *pic_info,
    }
 
    if (slice_header->slice_type != STD_VIDEO_H265_SLICE_TYPE_I) {
-      unsigned num_ref_idx_l0_active = pps->num_ref_idx_l0_default_active_minus1 + 1;
-      unsigned num_ref_idx_l1_active = pps->num_ref_idx_l1_default_active_minus1 + 1;
+      unsigned num_ref_idx_l0_active_minus1 = pps->num_ref_idx_l0_default_active_minus1;
+      unsigned num_ref_idx_l1_active_minus1 = pps->num_ref_idx_l1_default_active_minus1;
 
       vl_bitstream_put_bits(&enc, 1, slice_header->flags.num_ref_idx_active_override_flag);
       if (slice_header->flags.num_ref_idx_active_override_flag) {
          vl_bitstream_exp_golomb_ue(&enc, pic_info->pRefLists->num_ref_idx_l0_active_minus1);
-         num_ref_idx_l0_active = pic_info->pRefLists->num_ref_idx_l0_active_minus1 + 1;
+         num_ref_idx_l0_active_minus1 = pic_info->pRefLists->num_ref_idx_l0_active_minus1;
 
          if (slice_header->slice_type == STD_VIDEO_H265_SLICE_TYPE_B) {
             vl_bitstream_exp_golomb_ue(&enc, pic_info->pRefLists->num_ref_idx_l1_active_minus1);
-            num_ref_idx_l1_active = pic_info->pRefLists->num_ref_idx_l1_active_minus1 + 1;
+            num_ref_idx_l1_active_minus1 = pic_info->pRefLists->num_ref_idx_l1_active_minus1;
          }
       }
 
@@ -2865,7 +2884,7 @@ vk_video_encode_h265_slice_header(const StdVideoEncodeH265PictureInfo *pic_info,
          vl_bitstream_put_bits(&enc, 1, pic_info->pRefLists->flags.ref_pic_list_modification_flag_l0);
          if (pic_info->pRefLists->flags.ref_pic_list_modification_flag_l0) {
 
-            for (int i = 0; i < num_ref_idx_l0_active - 1; i++) {
+            for (int i = 0; i <= num_ref_idx_l0_active_minus1; i++) {
                vl_bitstream_put_bits(&enc, num_pic_bits,
                      pic_info->pRefLists->list_entry_l0[i]);
             }
@@ -2875,7 +2894,7 @@ vk_video_encode_h265_slice_header(const StdVideoEncodeH265PictureInfo *pic_info,
             vl_bitstream_put_bits(&enc, 1, pic_info->pRefLists->flags.ref_pic_list_modification_flag_l1);
 
             if (pic_info->pRefLists->flags.ref_pic_list_modification_flag_l1) {
-               for (int i = 0; i < num_ref_idx_l1_active - 1; i++) {
+               for (int i = 0; i <= num_ref_idx_l1_active_minus1; i++) {
                   vl_bitstream_put_bits(&enc, num_pic_bits,
                         pic_info->pRefLists->list_entry_l1[i]);
                }
@@ -2895,9 +2914,9 @@ vk_video_encode_h265_slice_header(const StdVideoEncodeH265PictureInfo *pic_info,
             vl_bitstream_put_bits(&enc, 1, slice_header->flags.collocated_from_l0_flag);
          }
 
-         if (slice_header->flags.collocated_from_l0_flag && num_ref_idx_l0_active > 1)
+         if (slice_header->flags.collocated_from_l0_flag && num_ref_idx_l0_active_minus1)
             vl_bitstream_exp_golomb_ue(&enc, slice_header->collocated_ref_idx);
-         else if (!slice_header->flags.collocated_from_l0_flag && num_ref_idx_l1_active > 1)
+         else if (!slice_header->flags.collocated_from_l0_flag && num_ref_idx_l1_active_minus1)
             vl_bitstream_exp_golomb_ue(&enc, slice_header->collocated_ref_idx);
 
       }
@@ -3011,20 +3030,6 @@ static void vk_video_encode_av1_code_leb128(uint8_t *buf, uint32_t num_bytes, ui
    } while((leb128_byte & 0x80));
 }
 
-static StdVideoEncodeAV1OperatingPointInfo default_av1_operating_point = {
-   .flags = {
-      .decoder_model_present_for_this_op = 0,
-      .low_delay_mode_flag = 0,
-      .initial_display_delay_present_for_this_op = 0,
-   },
-   .operating_point_idc = 0,
-   .seq_level_idx = STD_VIDEO_AV1_LEVEL_6_1,
-   .seq_tier = 0,
-   .decoder_buffer_delay = 0,
-   .encoder_buffer_delay = 0,
-   .initial_display_delay_minus_1 = 0,
-};
-
 VkResult
 vk_video_encode_av1_seq_hdr(const struct vk_video_session_parameters *params,
                             size_t size_limit,
@@ -3044,19 +3049,15 @@ vk_video_encode_av1_seq_hdr(const struct vk_video_session_parameters *params,
    const StdVideoAV1TimingInfo* timing_info = &params->av1_enc.seq_hdr.timing_info;
    const StdVideoAV1SequenceHeader *seq_hdr = &params->av1_enc.seq_hdr.base;
    uint8_t decoder_model_present_flag = 0;
-   const StdVideoEncodeAV1DecoderModelInfo* decoder_model = &params->av1_enc.decoder_model;
-   int num_op_points = MAX2(params->av1_enc.num_op_points, 1);
-   const StdVideoEncodeAV1OperatingPointInfo* op_points = params->av1_enc.num_op_points ?
-      params->av1_enc.op_points : &default_av1_operating_point;
+   const StdVideoEncodeAV1DecoderModelInfo *decoder_model = params->av1_enc.pStdDecoderModelInfo;
+   uint32_t num_op_points = params->av1_enc.num_op_points;
+   const StdVideoEncodeAV1OperatingPointInfo *op_points = params->av1_enc.op_points;
 
    assert(params->op == VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR);
 
    vl_bitstream_encoder_clear(&enc, data_ptr, data_size, size_limit);
    /* AV1 does not need start code prevention */
    enc.prevent_start_code = false;
-
-   if (!color || (num_op_points > 0 && !op_points))
-      return VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR;
 
    emit_obu_av1_header(&enc, OBU_SEQUENCE_HEADER, obu_extension_flag, temporal_id, spatial_id);
 
@@ -3080,9 +3081,6 @@ vk_video_encode_av1_seq_hdr(const struct vk_video_session_parameters *params,
       vl_bitstream_put_bits(&enc, 1, seq_hdr->flags.timing_info_present_flag);
 
       if (seq_hdr->flags.timing_info_present_flag) {
-         if (!timing_info)
-            return VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR;
-
          /*  num_units_in_display_tick  */
          vl_bitstream_put_bits(&enc, 32, timing_info->num_units_in_display_tick);
          /*  time_scale  */
@@ -3122,8 +3120,9 @@ vk_video_encode_av1_seq_hdr(const struct vk_video_session_parameters *params,
          if (decoder_model_present_flag) {
             vl_bitstream_put_bits(&enc, 1, op_point_info->flags.decoder_model_present_for_this_op);
             if (op_point_info->flags.decoder_model_present_for_this_op) {
-               vl_bitstream_put_uvlc(&enc, op_point_info->decoder_buffer_delay);
-               vl_bitstream_put_uvlc(&enc, op_point_info->encoder_buffer_delay);
+               uint32_t length = decoder_model->buffer_delay_length_minus_1 + 1;
+               vl_bitstream_put_bits(&enc, length, op_point_info->decoder_buffer_delay);
+               vl_bitstream_put_bits(&enc, length, op_point_info->encoder_buffer_delay);
                vl_bitstream_put_bits(&enc, 1, op_point_info->flags.low_delay_mode_flag);
             }
          }
@@ -3238,6 +3237,628 @@ vk_video_encode_av1_seq_hdr(const struct vk_video_session_parameters *params,
     * which needs to be removed from the size.
     */
    obu_size = (uint32_t)(vl_bitstream_get_byte_offset(&enc) - size_offset - num_obu_size_bytes);
+   vk_video_encode_av1_code_leb128(obu_size_bin, 2, obu_size);
+
+   /* update obu_size */
+   for (int i = 0; i < sizeof(obu_size_bin); i++) {
+      *(size_offset++) = obu_size_bin[i];
+   }
+
+   vl_bitstream_flush(&enc);
+   *data_size_ptr += vl_bitstream_get_byte_count(&enc);
+   vl_bitstream_encoder_free(&enc);
+
+   return VK_SUCCESS;
+}
+
+static void
+av1_write_su(struct vl_bitstream_encoder *enc, uint32_t num_bits, int32_t val)
+{
+   vl_bitstream_put_bits(enc, num_bits, val & ((1u << num_bits) - 1));
+}
+
+static void
+av1_write_delta_q(struct vl_bitstream_encoder *enc, int32_t delta)
+{
+   /*  delta_coded  */
+   vl_bitstream_put_bits(enc, 1, delta != 0);
+   /*  delta_q su(1+6)  */
+   if (delta)
+      av1_write_su(enc, 7, delta);
+}
+
+static uint32_t
+av1_tile_log2(uint32_t blk_size, uint32_t target)
+{
+   uint32_t k = 0;
+   while ((blk_size << k) < target)
+      k++;
+   return k;
+}
+
+static void
+av1_write_ns(struct vl_bitstream_encoder *enc, uint32_t v, uint32_t n)
+{
+   if (n <= 1)
+      return;
+   uint32_t w = util_logbase2(n) + 1;
+   uint32_t m = (1u << w) - n;
+   if (v < m) {
+      vl_bitstream_put_bits(enc, w - 1, v);
+   } else {
+      uint32_t val = v + m;
+      vl_bitstream_put_bits(enc, w - 1, val >> 1);
+      vl_bitstream_put_bits(enc, 1, val & 1);
+   }
+}
+
+static int32_t
+vk_video_av1_relative_dist(uint32_t order_hint_bits_minus_1, uint32_t a, uint32_t b)
+{
+   int32_t m = 1 << order_hint_bits_minus_1;
+   int32_t diff = (int32_t)a - (int32_t)b;
+   return (diff & (m - 1)) - (diff & m);
+}
+
+/* Packs a frame header OBU (AV1 spec 5.9.2 uncompressed_header). */
+VkResult
+vk_video_encode_av1_frame_hdr(const struct vk_video_session_parameters *params,
+                              const StdVideoEncodeAV1PictureInfo *pic_info,
+                              uint32_t base_q_idx,
+                              bool reference_select, bool restoration_support,
+                              uint32_t frame_width, uint32_t frame_height,
+                              size_t size_limit,
+                              size_t *data_size_ptr,
+                              void *data_ptr)
+{
+   struct vl_bitstream_encoder enc;
+   const StdVideoAV1SequenceHeader *seq = &params->av1_enc.seq_hdr.base;
+   const StdVideoAV1ColorConfig *color = &params->av1_enc.seq_hdr.color_config;
+   const StdVideoAV1Quantization *quant = pic_info->pQuantization;
+   uint8_t *size_offset;
+   uint8_t obu_size_bin[2];
+   const int num_obu_size_bytes = 2;
+
+   bool frame_is_intra = pic_info->frame_type == STD_VIDEO_AV1_FRAME_TYPE_KEY ||
+                         pic_info->frame_type == STD_VIDEO_AV1_FRAME_TYPE_INTRA_ONLY;
+   bool show_frame = pic_info->flags.show_frame;
+   bool error_resilient = pic_info->flags.error_resilient_mode;
+   uint32_t order_hint_bits = seq->flags.enable_order_hint ?
+      seq->order_hint_bits_minus_1 + 1 : 0;
+   uint32_t num_planes = color->flags.mono_chrome ? 1 : 3;
+
+   int32_t y_dc_delta = quant ? quant->DeltaQYDc : 0;
+   int32_t u_dc_delta = quant ? quant->DeltaQUDc : 0;
+   int32_t u_ac_delta = quant ? quant->DeltaQUAc : 0;
+   int32_t v_dc_delta = quant ? quant->DeltaQVDc : 0;
+   int32_t v_ac_delta = quant ? quant->DeltaQVAc : 0;
+
+   /* CodedLossless (5.9.21): every segment qindex is 0 and all delta qs are 0.
+    * TODO: SEG_LVL_ALT_Q per-segment qindex when segmentation carries QP deltas.
+    */
+   bool coded_lossless = base_q_idx == 0 && !y_dc_delta &&
+                         !u_dc_delta && !u_ac_delta &&
+                         !v_dc_delta && !v_ac_delta;
+   bool all_lossless = coded_lossless && !pic_info->flags.use_superres;
+
+   assert(params->op == VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR);
+
+   if (seq->flags.reduced_still_picture_header ||
+       seq->flags.timing_info_present_flag) {
+      /* TODO: handle reduced still picture headers and buffer_removal_time. */
+      return VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR;
+   }
+
+   vl_bitstream_encoder_clear(&enc, data_ptr, *data_size_ptr, size_limit);
+   /* AV1 does not need start code prevention */
+   enc.prevent_start_code = false;
+
+   emit_obu_av1_header(&enc, OBU_FRAME_HEADER, 0, 0, 0);
+
+   /* obu_size, use two bytes for header, the size will be written in afterwards */
+   size_offset = vl_bitstream_get_byte_offset(&enc);
+   vl_bitstream_put_bits(&enc, num_obu_size_bytes * 8, 0);
+
+   /* uncompressed_header() */
+   /* show_existing_frame */
+   vl_bitstream_put_bits(&enc, 1, 0);
+   /* frame_type */
+   vl_bitstream_put_bits(&enc, 2, pic_info->frame_type);
+   /* show_frame */
+   vl_bitstream_put_bits(&enc, 1, show_frame);
+   /* showable_frame */
+   if (!show_frame)
+      vl_bitstream_put_bits(&enc, 1, pic_info->flags.showable_frame);
+
+   if (pic_info->frame_type == STD_VIDEO_AV1_FRAME_TYPE_SWITCH ||
+       (pic_info->frame_type == STD_VIDEO_AV1_FRAME_TYPE_KEY && show_frame))
+      error_resilient = true;
+   else
+      vl_bitstream_put_bits(&enc, 1, error_resilient);
+
+   /* disable_cdf_update */
+   vl_bitstream_put_bits(&enc, 1, pic_info->flags.disable_cdf_update);
+
+   /* allow_screen_content_tools */
+   if (seq->seq_force_screen_content_tools == STD_VIDEO_AV1_SELECT_SCREEN_CONTENT_TOOLS)
+      vl_bitstream_put_bits(&enc, 1, pic_info->flags.allow_screen_content_tools);
+   /* force_integer_mv */
+   if (pic_info->flags.allow_screen_content_tools &&
+       seq->seq_force_integer_mv == STD_VIDEO_AV1_SELECT_INTEGER_MV)
+      vl_bitstream_put_bits(&enc, 1, pic_info->flags.force_integer_mv);
+
+   /* current_frame_id */
+   if (seq->flags.frame_id_numbers_present_flag) {
+      uint32_t id_len = seq->additional_frame_id_length_minus_1 +
+                        seq->delta_frame_id_length_minus_2 + 3;
+      vl_bitstream_put_bits(&enc, id_len, pic_info->current_frame_id);
+   }
+
+   /* frame_size_override_flag: the coded frame size must be signaled
+    * explicitly when it differs from the sequence maximum
+    * (apps may align the sequence dimensions to the surface size).
+    */
+   bool frame_size_override = pic_info->flags.frame_size_override_flag ||
+      frame_width != (uint32_t)seq->max_frame_width_minus_1 + 1 ||
+      frame_height != (uint32_t)seq->max_frame_height_minus_1 + 1;
+   if (pic_info->frame_type == STD_VIDEO_AV1_FRAME_TYPE_SWITCH)
+      frame_size_override = true;
+   else
+      vl_bitstream_put_bits(&enc, 1, frame_size_override);
+
+   /* order_hint */
+   if (order_hint_bits)
+      vl_bitstream_put_bits(&enc, order_hint_bits, pic_info->order_hint);
+
+   /* primary_ref_frame */
+   if (!frame_is_intra && !error_resilient)
+      vl_bitstream_put_bits(&enc, 3, pic_info->primary_ref_frame);
+
+   /* refresh_frame_flags */
+   bool all_frames = false;
+   if (pic_info->frame_type == STD_VIDEO_AV1_FRAME_TYPE_KEY && show_frame)
+      all_frames = true;
+   else
+      vl_bitstream_put_bits(&enc, 8, pic_info->refresh_frame_flags);
+
+   if ((!frame_is_intra || !all_frames) &&
+       error_resilient && seq->flags.enable_order_hint) {
+      for (uint32_t i = 0; i < STD_VIDEO_AV1_NUM_REF_FRAMES; i++)
+         vl_bitstream_put_bits(&enc, order_hint_bits, pic_info->ref_order_hint[i]);
+   }
+
+   if (frame_is_intra) {
+      /* frame_size() */
+      if (frame_size_override) {
+         vl_bitstream_put_bits(&enc, seq->frame_width_bits_minus_1 + 1, frame_width - 1);
+         vl_bitstream_put_bits(&enc, seq->frame_height_bits_minus_1 + 1, frame_height - 1);
+      }
+      /* superres_params() */
+      if (seq->flags.enable_superres) {
+         vl_bitstream_put_bits(&enc, 1, pic_info->flags.use_superres);
+         if (pic_info->flags.use_superres)
+            vl_bitstream_put_bits(&enc, 3, pic_info->coded_denom);
+      }
+      /* render_size() */
+      vl_bitstream_put_bits(&enc, 1, pic_info->flags.render_and_frame_size_different);
+      if (pic_info->flags.render_and_frame_size_different) {
+         vl_bitstream_put_bits(&enc, 16, pic_info->render_width_minus_1);
+         vl_bitstream_put_bits(&enc, 16, pic_info->render_height_minus_1);
+      }
+      /* allow_intrabc */
+      if (pic_info->flags.allow_screen_content_tools && !pic_info->flags.use_superres)
+         vl_bitstream_put_bits(&enc, 1, pic_info->flags.allow_intrabc);
+   } else {
+      /* frame_refs_short_signaling */
+      bool short_signaling = false;
+      if (seq->flags.enable_order_hint) {
+         short_signaling = pic_info->flags.frame_refs_short_signaling;
+         vl_bitstream_put_bits(&enc, 1, short_signaling);
+         if (short_signaling) {
+            vl_bitstream_put_bits(&enc, 3, pic_info->ref_frame_idx[0]);
+            vl_bitstream_put_bits(&enc, 3, pic_info->ref_frame_idx[3]);
+         }
+      }
+      for (uint32_t i = 0; i < STD_VIDEO_AV1_REFS_PER_FRAME; i++) {
+         if (!short_signaling)
+            vl_bitstream_put_bits(&enc, 3, pic_info->ref_frame_idx[i]);
+         if (seq->flags.frame_id_numbers_present_flag)
+            vl_bitstream_put_bits(&enc, seq->delta_frame_id_length_minus_2 + 2,
+                                  pic_info->delta_frame_id_minus_1[i]);
+      }
+
+      if (frame_size_override && !error_resilient) {
+         for (uint32_t i = 0; i < STD_VIDEO_AV1_REFS_PER_FRAME; i++)
+            vl_bitstream_put_bits(&enc, 1, 0);
+      }
+      if (frame_size_override) {
+         vl_bitstream_put_bits(&enc, seq->frame_width_bits_minus_1 + 1, frame_width - 1);
+         vl_bitstream_put_bits(&enc, seq->frame_height_bits_minus_1 + 1, frame_height - 1);
+      }
+      if (seq->flags.enable_superres) {
+         vl_bitstream_put_bits(&enc, 1, pic_info->flags.use_superres);
+         if (pic_info->flags.use_superres)
+            vl_bitstream_put_bits(&enc, 3, pic_info->coded_denom);
+      }
+      vl_bitstream_put_bits(&enc, 1, pic_info->flags.render_and_frame_size_different);
+      if (pic_info->flags.render_and_frame_size_different) {
+         vl_bitstream_put_bits(&enc, 16, pic_info->render_width_minus_1);
+         vl_bitstream_put_bits(&enc, 16, pic_info->render_height_minus_1);
+      }
+
+      /* allow_high_precision_mv */
+      if (!pic_info->flags.force_integer_mv)
+         vl_bitstream_put_bits(&enc, 1, pic_info->flags.allow_high_precision_mv);
+
+      /* read_interpolation_filter() */
+      vl_bitstream_put_bits(&enc, 1, pic_info->flags.is_filter_switchable);
+      if (!pic_info->flags.is_filter_switchable)
+         vl_bitstream_put_bits(&enc, 2, pic_info->interpolation_filter);
+
+      /* is_motion_mode_switchable */
+      vl_bitstream_put_bits(&enc, 1, pic_info->flags.is_motion_mode_switchable);
+
+      /* use_ref_frame_mvs */
+      if (!error_resilient && seq->flags.enable_ref_frame_mvs)
+         vl_bitstream_put_bits(&enc, 1, pic_info->flags.use_ref_frame_mvs);
+   }
+
+   /* disable_frame_end_update_cdf */
+   if (!pic_info->flags.disable_cdf_update)
+      vl_bitstream_put_bits(&enc, 1, pic_info->flags.disable_frame_end_update_cdf);
+
+   /* tile_info() (5.9.15) */
+   const StdVideoAV1TileInfo *tile_info = pic_info->pTileInfo;
+   bool use_128x128 = seq->flags.use_128x128_superblock;
+   uint32_t mi_cols = 2 * ((frame_width + 7) >> 3);
+   uint32_t mi_rows = 2 * ((frame_height + 7) >> 3);
+   uint32_t sb_cols = use_128x128 ? (mi_cols + 31) >> 5 : (mi_cols + 15) >> 4;
+   uint32_t sb_rows = use_128x128 ? (mi_rows + 31) >> 5 : (mi_rows + 15) >> 4;
+   uint32_t sb_size = use_128x128 ? 7 : 6;
+   uint32_t max_tile_width_sb = 4096 >> sb_size;
+   uint32_t max_tile_area_sb = (4096 * 2304) >> (2 * sb_size);
+   uint32_t min_log2_tile_cols = av1_tile_log2(max_tile_width_sb, sb_cols);
+   uint32_t max_log2_tile_cols = av1_tile_log2(1, MIN2(sb_cols, 64));
+   uint32_t max_log2_tile_rows = av1_tile_log2(1, MIN2(sb_rows, 64));
+   uint32_t min_log2_tiles = MAX2(min_log2_tile_cols,
+                                  av1_tile_log2(max_tile_area_sb, sb_rows * sb_cols));
+   uint32_t tile_cols = tile_info ? tile_info->TileCols : 1;
+   uint32_t tile_rows = tile_info ? tile_info->TileRows : 1;
+   uint32_t tile_cols_log2 = av1_tile_log2(1, tile_cols);
+   uint32_t tile_rows_log2 = av1_tile_log2(1, tile_rows);
+
+   uint32_t uniform = tile_info ? tile_info->flags.uniform_tile_spacing_flag : 1;
+
+   /* uniform_tile_spacing_flag */
+   vl_bitstream_put_bits(&enc, 1, uniform);
+
+   if (uniform) {
+      /* increment_tile_cols_log2 */
+      for (uint32_t k = min_log2_tile_cols; k < tile_cols_log2; k++)
+         vl_bitstream_put_bits(&enc, 1, 1);
+      if (tile_cols_log2 < max_log2_tile_cols)
+         vl_bitstream_put_bits(&enc, 1, 0);
+
+      uint32_t min_log2_tile_rows = min_log2_tiles > tile_cols_log2 ?
+         min_log2_tiles - tile_cols_log2 : 0;
+
+      /* increment_tile_rows_log2 */
+      for (uint32_t k = min_log2_tile_rows; k < tile_rows_log2; k++)
+         vl_bitstream_put_bits(&enc, 1, 1);
+      if (tile_rows_log2 < max_log2_tile_rows)
+         vl_bitstream_put_bits(&enc, 1, 0);
+   } else {
+      /* Explicit per-column widths, then per-row heights, ns() coded. */
+      uint32_t widest_sb = 0, start_sb = 0;
+      for (uint32_t i = 0; start_sb < sb_cols; i++) {
+         uint32_t max_w = MIN2(sb_cols - start_sb, max_tile_width_sb);
+         uint32_t w_sb = tile_info->pWidthInSbsMinus1[i] + 1;
+         av1_write_ns(&enc, tile_info->pWidthInSbsMinus1[i], max_w);
+         widest_sb = MAX2(widest_sb, w_sb);
+         start_sb += w_sb;
+      }
+
+      uint32_t area = min_log2_tiles > 0 ?
+         (sb_rows * sb_cols) >> (min_log2_tiles + 1) : sb_rows * sb_cols;
+      uint32_t max_tile_height_sb = MAX2(area / widest_sb, 1);
+
+      start_sb = 0;
+      for (uint32_t i = 0; start_sb < sb_rows; i++) {
+         uint32_t max_h = MIN2(sb_rows - start_sb, max_tile_height_sb);
+         uint32_t h_sb = tile_info->pHeightInSbsMinus1[i] + 1;
+         av1_write_ns(&enc, tile_info->pHeightInSbsMinus1[i], max_h);
+         start_sb += h_sb;
+      }
+   }
+
+   if (tile_cols_log2 > 0 || tile_rows_log2 > 0) {
+      vl_bitstream_put_bits(&enc, tile_cols_log2 + tile_rows_log2,
+                            tile_info ? tile_info->context_update_tile_id : 0);
+      /* tile_size_bytes_minus_1 == 3 */
+      vl_bitstream_put_bits(&enc, 2, 3);
+   }
+
+   /* quantization_params() (5.9.12) */
+   bool diff_uv_delta = false;
+
+   /* base_q_idx */
+   vl_bitstream_put_bits(&enc, 8, base_q_idx);
+   av1_write_delta_q(&enc, y_dc_delta);
+   if (num_planes > 1) {
+      if (color->flags.separate_uv_delta_q) {
+         diff_uv_delta = quant && quant->flags.diff_uv_delta;
+         vl_bitstream_put_bits(&enc, 1, diff_uv_delta);
+      }
+      av1_write_delta_q(&enc, u_dc_delta);
+      av1_write_delta_q(&enc, u_ac_delta);
+      if (diff_uv_delta) {
+         av1_write_delta_q(&enc, v_dc_delta);
+         av1_write_delta_q(&enc, v_ac_delta);
+      }
+   }
+   /* using_qmatrix */
+   bool using_qmatrix = quant && quant->flags.using_qmatrix;
+   vl_bitstream_put_bits(&enc, 1, using_qmatrix);
+   if (using_qmatrix) {
+      vl_bitstream_put_bits(&enc, 4, quant->qm_y);
+      vl_bitstream_put_bits(&enc, 4, quant->qm_u);
+      if (color->flags.separate_uv_delta_q)
+         vl_bitstream_put_bits(&enc, 4, quant->qm_v);
+   }
+
+   /* segmentation_params() (5.9.14) */
+   bool enabled = pic_info->flags.segmentation_enabled;
+
+   vl_bitstream_put_bits(&enc, 1, enabled);
+   if (enabled) {
+      bool update_data = true;
+
+      if (pic_info->primary_ref_frame != STD_VIDEO_AV1_PRIMARY_REF_NONE) {
+         bool update_map = pic_info->flags.segmentation_update_map;
+
+         vl_bitstream_put_bits(&enc, 1, update_map);
+         if (update_map)
+            vl_bitstream_put_bits(&enc, 1, pic_info->flags.segmentation_temporal_update);
+         update_data = pic_info->flags.segmentation_update_data;
+         vl_bitstream_put_bits(&enc, 1, update_data);
+      }
+      if (update_data) {
+         static const uint8_t feature_bits[8] = { 8, 6, 6, 6, 6, 3, 0, 0 };
+         static const bool feature_signed[8] = { true, true, true, true, true, false, false, false };
+         const StdVideoAV1Segmentation *seg = pic_info->pSegmentation;
+
+         for (uint32_t i = 0; i < STD_VIDEO_AV1_MAX_SEGMENTS; i++) {
+            for (uint32_t j = 0; j < STD_VIDEO_AV1_SEG_LVL_MAX; j++) {
+               bool feature_enabled = seg && (seg->FeatureEnabled[i] & (1u << j));
+
+               vl_bitstream_put_bits(&enc, 1, feature_enabled);
+               if (feature_enabled && feature_bits[j]) {
+                  if (feature_signed[j])
+                     av1_write_su(&enc, 1 + feature_bits[j], seg->FeatureData[i][j]);
+                  else
+                     vl_bitstream_put_bits(&enc, feature_bits[j], seg->FeatureData[i][j]);
+               }
+            }
+         }
+      }
+   }
+
+   /* delta_q_params() (5.9.17) */
+   bool delta_q_present = false;
+   if (base_q_idx > 0) {
+      delta_q_present = pic_info->flags.delta_q_present;
+      vl_bitstream_put_bits(&enc, 1, delta_q_present);
+   }
+   if (delta_q_present)
+      vl_bitstream_put_bits(&enc, 2, pic_info->delta_q_res);
+
+   /* delta_lf_params() (5.9.18) */
+   if (delta_q_present) {
+      if (!pic_info->flags.allow_intrabc) {
+         vl_bitstream_put_bits(&enc, 1, pic_info->flags.delta_lf_present);
+         if (pic_info->flags.delta_lf_present) {
+            vl_bitstream_put_bits(&enc, 2, pic_info->delta_lf_res);
+            vl_bitstream_put_bits(&enc, 1, pic_info->flags.delta_lf_multi);
+         }
+      }
+   }
+
+   /* loop_filter_params() (5.9.11) */
+   if (!coded_lossless && !pic_info->flags.allow_intrabc) {
+      const StdVideoAV1LoopFilter *lf = pic_info->pLoopFilter;
+      uint8_t level0 = lf ? lf->loop_filter_level[0] : 0;
+      uint8_t level1 = lf ? lf->loop_filter_level[1] : 0;
+
+      vl_bitstream_put_bits(&enc, 6, level0);
+      vl_bitstream_put_bits(&enc, 6, level1);
+      if (num_planes > 1 && (level0 || level1)) {
+         vl_bitstream_put_bits(&enc, 6, lf ? lf->loop_filter_level[2] : 0);
+         vl_bitstream_put_bits(&enc, 6, lf ? lf->loop_filter_level[3] : 0);
+      }
+      /*  loop_filter_sharpness  */
+      vl_bitstream_put_bits(&enc, 3, lf ? lf->loop_filter_sharpness : 0);
+      /*  loop_filter_delta_enabled  */
+      bool delta_enabled = lf && lf->flags.loop_filter_delta_enabled;
+      vl_bitstream_put_bits(&enc, 1, delta_enabled);
+      if (delta_enabled) {
+         bool delta_update = lf->flags.loop_filter_delta_update;
+
+         vl_bitstream_put_bits(&enc, 1, delta_update);
+         if (delta_update) {
+            for (uint32_t i = 0; i < STD_VIDEO_AV1_TOTAL_REFS_PER_FRAME; i++) {
+               bool update = lf->update_ref_delta & (1u << i);
+
+               vl_bitstream_put_bits(&enc, 1, update);
+               if (update)
+                  av1_write_su(&enc, 7, lf->loop_filter_ref_deltas[i]);
+            }
+            for (uint32_t i = 0; i < STD_VIDEO_AV1_LOOP_FILTER_ADJUSTMENTS; i++) {
+               bool update = lf->update_mode_delta & (1u << i);
+
+               vl_bitstream_put_bits(&enc, 1, update);
+               if (update)
+                  av1_write_su(&enc, 7, lf->loop_filter_mode_deltas[i]);
+            }
+         }
+      }
+   }
+
+   /* cdef_params() (5.9.19) */
+   if (!coded_lossless && !pic_info->flags.allow_intrabc &&
+       seq->flags.enable_cdef) {
+      const StdVideoAV1CDEF *cdef = pic_info->pCDEF;
+      uint32_t cdef_bits = cdef ? cdef->cdef_bits : 0;
+
+      vl_bitstream_put_bits(&enc, 2, cdef ? cdef->cdef_damping_minus_3 : 0);
+      vl_bitstream_put_bits(&enc, 2, cdef_bits);
+      for (uint32_t i = 0; i < (1u << cdef_bits); i++) {
+         vl_bitstream_put_bits(&enc, 4, cdef ? cdef->cdef_y_pri_strength[i] : 0);
+         vl_bitstream_put_bits(&enc, 2, cdef ? cdef->cdef_y_sec_strength[i] : 0);
+         if (num_planes > 1) {
+            vl_bitstream_put_bits(&enc, 4, cdef ? cdef->cdef_uv_pri_strength[i] : 0);
+            vl_bitstream_put_bits(&enc, 2, cdef ? cdef->cdef_uv_sec_strength[i] : 0);
+         }
+      }
+   }
+
+   /* lr_params() (5.9.20) */
+   if (!all_lossless && !pic_info->flags.allow_intrabc &&
+       seq->flags.enable_restoration) {
+      if (restoration_support) {
+         const StdVideoAV1LoopRestoration *lr = pic_info->pLoopRestoration;
+         static const uint8_t lr_type_map[4] = { 0, 2, 3, 1 };
+         bool uses_lr = false;
+         bool uses_chroma_lr = false;
+
+         for (uint32_t i = 0; i < num_planes; i++) {
+            StdVideoAV1FrameRestorationType type = lr ?
+               lr->FrameRestorationType[i] : STD_VIDEO_AV1_FRAME_RESTORATION_TYPE_NONE;
+
+            vl_bitstream_put_bits(&enc, 2, lr_type_map[type]);
+            if (type != STD_VIDEO_AV1_FRAME_RESTORATION_TYPE_NONE) {
+               uses_lr = true;
+               if (i > 0)
+                  uses_chroma_lr = true;
+            }
+         }
+
+         if (uses_lr) {
+            /* LoopRestorationSize[0] = 256 >> (2 - lr_unit_shift) */
+            uint32_t unit_shift = 0;
+
+            for (unit_shift = 0; unit_shift < 2; unit_shift++) {
+               if (256u >> (2 - unit_shift) == lr->LoopRestorationSize[0])
+                  break;
+            }
+            if (seq->flags.use_128x128_superblock) {
+               vl_bitstream_put_bits(&enc, 1, unit_shift - 1);
+            } else {
+               vl_bitstream_put_bits(&enc, 1, unit_shift > 0);
+               if (unit_shift > 0)
+                  vl_bitstream_put_bits(&enc, 1, unit_shift - 1);
+            }
+            if (color->subsampling_x && color->subsampling_y && uses_chroma_lr) {
+               /* lr_uv_shift */
+               vl_bitstream_put_bits(&enc, 1,
+                  lr->LoopRestorationSize[0] != lr->LoopRestorationSize[1]);
+            }
+         }
+      } else {
+         /* The encoder HW does not support loop restoration, so always signal
+          * RESTORE_NONE for every plane (no unit-size bits follow). */
+         for (uint32_t i = 0; i < num_planes; i++)
+            vl_bitstream_put_bits(&enc, 2, 0);
+      }
+
+   }
+
+   if (!coded_lossless)
+      vl_bitstream_put_bits(&enc, 1, pic_info->TxMode != STD_VIDEO_AV1_TX_MODE_LARGEST);
+
+   /* frame_reference_mode() (5.9.23) */
+   if (!frame_is_intra)
+      vl_bitstream_put_bits(&enc, 1, reference_select);
+
+   /* skip_mode_params() (5.9.22) */
+   {
+      bool skip_mode_allowed = false;
+
+      if (!frame_is_intra && reference_select && seq->flags.enable_order_hint) {
+         int32_t forward_idx = -1, backward_idx = -1;
+         uint32_t forward_hint = 0, backward_hint = 0;
+
+         for (uint32_t i = 0; i < STD_VIDEO_AV1_REFS_PER_FRAME; i++) {
+            uint32_t ref_hint = pic_info->ref_order_hint[pic_info->ref_frame_idx[i]];
+
+            if (vk_video_av1_relative_dist(seq->order_hint_bits_minus_1, ref_hint, pic_info->order_hint) < 0) {
+               if (forward_idx < 0 ||
+                   vk_video_av1_relative_dist(seq->order_hint_bits_minus_1, ref_hint, forward_hint) > 0) {
+                  forward_idx = i;
+                  forward_hint = ref_hint;
+               }
+            } else if (vk_video_av1_relative_dist(seq->order_hint_bits_minus_1, ref_hint, pic_info->order_hint) > 0) {
+               if (backward_idx < 0 ||
+                   vk_video_av1_relative_dist(seq->order_hint_bits_minus_1, ref_hint, backward_hint) < 0) {
+                  backward_idx = i;
+                  backward_hint = ref_hint;
+               }
+            }
+         }
+         if (forward_idx >= 0 && backward_idx >= 0) {
+            skip_mode_allowed = true;
+         } else if (forward_idx >= 0) {
+            uint32_t second_forward_hint = 0;
+            int32_t second_forward_idx = -1;
+
+            for (uint32_t i = 0; i < STD_VIDEO_AV1_REFS_PER_FRAME; i++) {
+               uint32_t ref_hint = pic_info->ref_order_hint[pic_info->ref_frame_idx[i]];
+
+               if (vk_video_av1_relative_dist(seq->order_hint_bits_minus_1, ref_hint, forward_hint) < 0) {
+                  if (second_forward_idx < 0 ||
+                      vk_video_av1_relative_dist(seq->order_hint_bits_minus_1, ref_hint, second_forward_hint) > 0) {
+                     second_forward_idx = i;
+                     second_forward_hint = ref_hint;
+                  }
+               }
+            }
+            skip_mode_allowed = second_forward_idx >= 0;
+         }
+      }
+
+      if (skip_mode_allowed)
+         vl_bitstream_put_bits(&enc, 1, pic_info->flags.skip_mode_present);
+   }
+
+   /* allow_warped_motion */
+   if (!frame_is_intra && !error_resilient && seq->flags.enable_warped_motion)
+      vl_bitstream_put_bits(&enc, 1, pic_info->flags.allow_warped_motion);
+
+   /* reduced_tx_set */
+   vl_bitstream_put_bits(&enc, 1, pic_info->flags.reduced_tx_set);
+
+   /* global_motion_params() (5.9.24)
+    * TODO: only identity global motion is packed.
+    */
+   if (!frame_is_intra) {
+      for (uint32_t i = 0; i < STD_VIDEO_AV1_REFS_PER_FRAME; i++)
+         vl_bitstream_put_bits(&enc, 1, 0); /*  is_global  */
+   }
+
+   /* film_grain_params() (5.9.30)
+    * TODO: apply_grain. */
+   if (seq->flags.film_grain_params_present &&
+       (show_frame || pic_info->flags.showable_frame))
+      vl_bitstream_put_bits(&enc, 1, 0); /* apply_grain */
+
+   /* trailing_one_bit */
+   vl_bitstream_rbsp_trailing(&enc);
+
+   /* obu_size doesn't include the bytes within obu_header or obu_size syntax
+    * element (6.2.1), here we use num_obu_size_bytes for obu_size syntax
+    * which needs to be removed from the size.
+    */
+   uint32_t obu_size = (uint32_t)(vl_bitstream_get_byte_offset(&enc) -
+                                  size_offset - num_obu_size_bytes);
    vk_video_encode_av1_code_leb128(obu_size_bin, 2, obu_size);
 
    /* update obu_size */

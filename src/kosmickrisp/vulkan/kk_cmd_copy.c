@@ -29,9 +29,10 @@ kk_CmdCopyBuffer2(VkCommandBuffer commandBuffer,
    mtl_compute_encoder *encoder = cs_get_compute(cmd, true);
    for (uint32_t i = 0; i < pCopyBufferInfo->regionCount; i++) {
       const VkBufferCopy2 *region = &pCopyBufferInfo->pRegions[i];
-      mtl_copy_from_buffer_to_buffer(encoder, src->mtl_handle,
-                                     region->srcOffset, dst->mtl_handle,
-                                     region->dstOffset, region->size);
+      mtl_copy_from_buffer_to_buffer(
+         encoder, src->metal.handle,
+         kk_buffer_mtl_offset(src, region->srcOffset), dst->metal.handle,
+         kk_buffer_mtl_offset(dst, region->dstOffset), region->size);
    }
 }
 
@@ -98,9 +99,9 @@ kk_CmdCopyBufferToImage2(VkCommandBuffer commandBuffer,
       struct kk_image_plane *plane = &image->planes[plane_index];
       struct kk_buffer_image_copy_info info =
          vk_buffer_image_copy_to_mtl_buffer_image_copy(region, plane);
-      info.mtl_data.buffer = buffer->mtl_handle;
+      info.mtl_data.buffer = buffer->metal.handle;
       info.mtl_data.image = plane->mtl_handle;
-      size_t buffer_offset = region->bufferOffset;
+      size_t buffer_offset = kk_buffer_mtl_offset(buffer, region->bufferOffset);
 
       kk_foreach_slice(slice, image, imageSubresource)
       {
@@ -128,9 +129,9 @@ kk_CmdCopyImageToBuffer2(VkCommandBuffer commandBuffer,
       struct kk_image_plane *plane = &image->planes[plane_index];
       struct kk_buffer_image_copy_info info =
          vk_buffer_image_copy_to_mtl_buffer_image_copy(region, plane);
-      info.mtl_data.buffer = buffer->mtl_handle;
+      info.mtl_data.buffer = buffer->metal.handle;
       info.mtl_data.image = plane->mtl_handle;
-      size_t buffer_offset = region->bufferOffset;
+      size_t buffer_offset = kk_buffer_mtl_offset(buffer, region->bufferOffset);
 
       kk_foreach_slice(slice, image, imageSubresource)
       {

@@ -94,11 +94,9 @@ void trace_dump_video_codec_template(const struct pipe_video_codec *templat)
    trace_dump_member_enum(pipe_video_profile, templat, profile);
    trace_dump_member(uint, templat, level);
    trace_dump_member_enum(pipe_video_entrypoint, templat, entrypoint);
-   trace_dump_member(chroma_format, templat, chroma_format);
    trace_dump_member(uint, templat, width);
    trace_dump_member(uint, templat, height);
    trace_dump_member(uint, templat, max_references);
-   trace_dump_member(bool, templat, expect_chunked_decode);
 
    trace_dump_struct_end();
 }

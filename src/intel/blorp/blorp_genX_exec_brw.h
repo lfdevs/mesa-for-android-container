@@ -69,11 +69,9 @@ blorp_alloc_dynamic_state(struct blorp_batch *batch,
                           uint32_t alignment,
                           uint32_t *offset);
 
-UNUSED static void *
-blorp_alloc_general_state(struct blorp_batch *batch,
-                          uint32_t size,
-                          uint32_t alignment,
-                          uint32_t *offset);
+UNUSED static struct blorp_address
+blorp_dynamic_state_address(struct blorp_batch *batch,
+                            uint32_t offset);
 
 static uint32_t
 blorp_get_dynamic_state(struct blorp_batch *batch,
@@ -725,7 +723,9 @@ blorp_emit_vs_config(struct blorp_batch *batch,
 #endif
 
 #if GFX_VER >= 30
-         vs.RegistersPerThread = ptl_register_blocks(vs_prog_data->base.base.grf_used);
+         vs.RegistersPerThread =
+            intel_register_blocks(batch->blorp->isl_dev->info,
+                                  vs_prog_data->base.base.grf_used);
 #endif
       }
    }
@@ -927,7 +927,9 @@ blorp_emit_ps_config(struct blorp_batch *batch,
 #endif
 
 #if GFX_VER >= 30
-         ps.RegistersPerThread = ptl_register_blocks(prog_data->base.grf_used);
+         ps.RegistersPerThread =
+            intel_register_blocks(batch->blorp->isl_dev->info,
+                                  prog_data->base.grf_used);
 #endif
       }
    }
@@ -945,6 +947,13 @@ blorp_emit_ps_config(struct blorp_batch *batch,
 #if INTEL_WA_18038825448_GFX_VER
          psx.EnablePSDependencyOnCPsizeChange =
             batch->flags & BLORP_BATCH_FORCE_CPS_DEPENDENCY;
+#endif
+
+#if INTEL_WA_16030144090_GFX_VER
+         if (intel_needs_workaround(devinfo, 16030144090)) {
+            psx.EnablePSDependencyOnCPsizeChange =
+               prog_data->persample_dispatch;
+         }
 #endif
 
 #if GFX_VER < 20
@@ -1470,6 +1479,7 @@ blorp_emit_depth_stencil_config(struct blorp_batch *batch,
    }
 
    if (params->depth.enabled) {
+      info.depth_clear_value = params->depth.clear_color.f32[0];
       info.depth_surf = &params->depth.surf;
 
       info.depth_address =
@@ -1485,8 +1495,6 @@ blorp_emit_depth_stencil_config(struct blorp_batch *batch,
          info.hiz_address =
             blorp_emit_reloc(batch, dw + isl_dev->ds.hiz_offset / 4,
                              hiz_address, 0);
-
-         info.depth_clear_value = params->depth.clear_color.f32[0];
       }
    }
 
@@ -1749,9 +1757,6 @@ blorp_get_compute_push_const(struct blorp_batch *batch,
 
    uint32_t push_const_offset;
    uint32_t *push_const =
-      GFX_VERx10 >= 125 ?
-      blorp_alloc_general_state(batch, push_const_size, 64,
-                                &push_const_offset) :
       blorp_alloc_dynamic_state(batch, push_const_size, 64,
                                 &push_const_offset);
    if (push_const == NULL) {
@@ -1989,39 +1994,41 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
                                 &push_const_offset, &push_const_size);
 
 #if GFX_VERx10 >= 125
+   const bool has_vrt = devinfo->verx10 >= 300 && !INTEL_DEBUG(DEBUG_NO_VRT);
+   const uint64_t push_addr64 = _blorp_combine_address(
+      batch, NULL, blorp_dynamic_state_address(batch, push_const_offset), 0);
 
-/* Not need with VRT enabled */
-#if GFX_VERx10 < 300
-   uint8_t pixel_async_compute_thread_limit, z_pass_async_compute_thread_limit,
-           np_z_async_throttle_settings;
-   bool slm_or_barrier_enabled = prog_data->total_shared != 0 || cs_prog_data->uses_barrier;
+   if (!has_vrt) {
+      uint8_t pixel_async_compute_thread_limit, z_pass_async_compute_thread_limit,
+            np_z_async_throttle_settings;
+      bool slm_or_barrier_enabled = prog_data->total_shared != 0 || cs_prog_data->uses_barrier;
 
-   intel_compute_engine_async_threads_limit(devinfo, dispatch.threads,
-                                            slm_or_barrier_enabled,
-                                            cs_prog_data->uses_fence,
-                                            &pixel_async_compute_thread_limit,
-                                            &z_pass_async_compute_thread_limit,
-                                            &np_z_async_throttle_settings);
-   blorp_emit(batch, GENX(STATE_COMPUTE_MODE), cm) {
+      intel_compute_engine_async_threads_limit(devinfo, dispatch.threads,
+                                             slm_or_barrier_enabled,
+                                             cs_prog_data->uses_fence,
+                                             &pixel_async_compute_thread_limit,
+                                             &z_pass_async_compute_thread_limit,
+                                             &np_z_async_throttle_settings);
+      blorp_emit(batch, GENX(STATE_COMPUTE_MODE), cm) {
 #if GFX_VER >= 20
-      cm.AsyncComputeThreadLimit = pixel_async_compute_thread_limit;
-      cm.ZPassAsyncComputeThreadLimit = z_pass_async_compute_thread_limit;
-      cm.ZAsyncThrottlesettings = np_z_async_throttle_settings;
-      cm.AsyncComputeThreadLimitMask = 0x7;
-      cm.ZPassAsyncComputeThreadLimitMask = 0x7;
-      cm.ZAsyncThrottlesettingsMask = 0x3;
-#else
-      cm.PixelAsyncComputeThreadLimit = pixel_async_compute_thread_limit;
-      cm.ZPassAsyncComputeThreadLimit = z_pass_async_compute_thread_limit;
-      cm.PixelAsyncComputeThreadLimitMask = 0x7;
-      cm.ZPassAsyncComputeThreadLimitMask = 0x7;
-      if (intel_device_info_is_mtl_or_arl(devinfo)) {
+         cm.AsyncComputeThreadLimit = pixel_async_compute_thread_limit;
+         cm.ZPassAsyncComputeThreadLimit = z_pass_async_compute_thread_limit;
          cm.ZAsyncThrottlesettings = np_z_async_throttle_settings;
+         cm.AsyncComputeThreadLimitMask = 0x7;
+         cm.ZPassAsyncComputeThreadLimitMask = 0x7;
          cm.ZAsyncThrottlesettingsMask = 0x3;
-      }
+#else
+         cm.PixelAsyncComputeThreadLimit = pixel_async_compute_thread_limit;
+         cm.ZPassAsyncComputeThreadLimit = z_pass_async_compute_thread_limit;
+         cm.PixelAsyncComputeThreadLimitMask = 0x7;
+         cm.ZPassAsyncComputeThreadLimitMask = 0x7;
+         if (intel_device_info_is_mtl_or_arl(devinfo)) {
+            cm.ZAsyncThrottlesettings = np_z_async_throttle_settings;
+            cm.ZAsyncThrottlesettingsMask = 0x3;
+         }
 #endif
+      }
    }
-#endif /* GFX_VERx10 < 300 */
 
    struct GENX(COMPUTE_WALKER_BODY) body = {
       .SIMDSize                       = dispatch.simd_size / 16,
@@ -2046,6 +2053,8 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
        */
       .EmitInlineParameter            = true,
       .InlineData                     = {
+         [BLORP_INLINE_PARAM_PUSH_ADDRESS_LDW / 4]                = push_addr64 & 0xffffffff,
+         [BLORP_INLINE_PARAM_PUSH_ADDRESS_UDW / 4]                = push_addr64 >> 32,
          [BLORP_INLINE_PARAM_THREAD_GROUP_ID_Z_DIMENSION / 4 + 0] = params->num_layers,
       },
 
@@ -2078,7 +2087,8 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
                                                          dispatch.simd_size),
          .NumberOfBarriers = cs_prog_data->uses_barrier,
 #if GFX_VER >= 30
-         .RegistersPerThread = ptl_register_blocks(prog_data->grf_used),
+         .RegistersPerThread =
+            intel_register_blocks(devinfo, prog_data->grf_used),
 #endif
       },
    };
@@ -2255,8 +2265,8 @@ xy_aux_mode(const struct blorp_surface_info *info)
 {
    switch (info->aux_usage) {
    case ISL_AUX_USAGE_CCS_E:
-   case ISL_AUX_USAGE_FCV_CCS_E:
    case ISL_AUX_USAGE_STC_CCS:
+   case ISL_AUX_USAGE_ZCS:
       return XY_CCS_E;
    case ISL_AUX_USAGE_NONE:
       return XY_NONE;
@@ -2364,6 +2374,7 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
 #if GFX_VER < 20
       /* XY_BLOCK_COPY_BLT only supports AUX_CCS. */
       blt.DestinationDepthStencilResource =
+         params->dst.aux_usage == ISL_AUX_USAGE_ZCS ||
          params->dst.aux_usage == ISL_AUX_USAGE_STC_CCS;
 #endif
       blt.DestinationTargetMemory =
@@ -2410,6 +2421,7 @@ blorp_xy_block_copy_blt(struct blorp_batch *batch,
 #if GFX_VER < 20
       /* XY_BLOCK_COPY_BLT only supports AUX_CCS. */
       blt.SourceDepthStencilResource =
+         params->src.aux_usage == ISL_AUX_USAGE_ZCS ||
          params->src.aux_usage == ISL_AUX_USAGE_STC_CCS;
 #endif
       blt.SourceTargetMemory =
@@ -2507,6 +2519,7 @@ blorp_xy_fast_color_blit(struct blorp_batch *batch,
       blt.DestinationVerticalAlign = isl_encode_valign(dst_align.height);
       /* XY_FAST_COLOR_BLT only supports AUX_CCS. */
       blt.DestinationDepthStencilResource =
+         params->dst.aux_usage == ISL_AUX_USAGE_ZCS ||
          params->dst.aux_usage == ISL_AUX_USAGE_STC_CCS;
       blt.DestinationTargetMemory =
          params->dst.addr.local_hint ? XY_MEM_LOCAL : XY_MEM_SYSTEM;

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
 #include "pipe/p_state.h"
@@ -646,6 +647,15 @@ tensor_quantization_supported(struct pipe_tensor *tensor)
    return tensor->scales == NULL && tensor->zero_points == NULL;
 }
 
+static bool
+convolution_activation_supported(const struct pipe_ml_operation *operation)
+{
+   const struct pipe_tensor *output = operation->output_tensors[0];
+   int max = output->is_signed ? INT8_MAX : UINT8_MAX;
+
+   return operation->conv.activation_max >= max;
+}
+
 bool
 etna_ml_operation_supported(struct pipe_ml_device *pdevice,
                             const struct pipe_ml_operation *operation)
@@ -665,7 +675,8 @@ etna_ml_operation_supported(struct pipe_ml_device *pdevice,
              tensor_quantization_supported(bias_tensor) &&
              tensor_quantization_supported(output_tensor) &&
              operation->conv.dilation_width_factor == 1 &&
-             operation->conv.dilation_height_factor == 1) {
+             operation->conv.dilation_height_factor == 1 &&
+             convolution_activation_supported(operation)) {
             supported = true;
          }
          break;

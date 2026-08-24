@@ -2902,6 +2902,7 @@ emit_alu(struct ntd_context *ctx, nir_alu_instr *alu)
 
    switch (alu->op) {
    case nir_op_iadd:
+   case nir_op_fadd_rtne:
    case nir_op_fadd: return emit_binop(ctx, alu, DXIL_BINOP_ADD, src[0], src[1]);
 
    case nir_op_isub:

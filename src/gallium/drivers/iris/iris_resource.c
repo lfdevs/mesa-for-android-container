@@ -1050,6 +1050,9 @@ iris_resource_configure_aux(struct iris_screen *screen,
       if (isl_surf_usage_is_stencil(res->surf.usage)) {
          assert(!res->mod_info);
          res->aux.usage = ISL_AUX_USAGE_STC_CCS;
+      } else if (isl_surf_usage_is_depth(res->surf.usage)) {
+         assert(!res->mod_info);
+         res->aux.usage = ISL_AUX_USAGE_ZCS;
       } else if (res->mod_info && res->mod_info->supports_media_compression) {
          res->aux.usage = ISL_AUX_USAGE_MC;
       } else if (want_ccs_e_for_format(devinfo, res->surf.format)) {

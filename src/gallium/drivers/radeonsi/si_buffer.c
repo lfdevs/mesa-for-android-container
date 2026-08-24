@@ -57,10 +57,6 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
       break;
    }
 
-   /* If no compute/graphics -> use GTT since we can't copy/blit. */
-   if (!sscreen->has_gfx_compute)
-      res->domains = RADEON_DOMAIN_GTT;
-
    if (res->b.b.target == PIPE_BUFFER && res->b.b.flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT) {
       /* Use GTT for all persistent mappings with older
        * kernels, because they didn't always flush the HDP

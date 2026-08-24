@@ -45,6 +45,7 @@ struct vk_graphics_pipeline_state;
 struct vk_features;
 struct vk_physical_device;
 struct vk_pipeline;
+struct vk_pipeline_layout;
 struct vk_pipeline_robustness_state;
 struct vk_sampler_state;
 
@@ -350,6 +351,7 @@ struct vk_device_shader_ops {
 
    /** Sets scratch size & ray query count for RT pipelines */
    void (*cmd_set_rt_state)(struct vk_command_buffer *cmd_buffer,
+                            struct vk_pipeline_layout *layout,
                             VkDeviceSize scratch_size,
                             uint32_t ray_queries,
                             const uint8_t *dynamic_descriptor_offsets);

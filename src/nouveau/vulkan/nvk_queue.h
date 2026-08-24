@@ -75,6 +75,8 @@ nvk_queue_engines_from_queue_flags(VkQueueFlags queue_flags)
    }
    if (queue_flags & VK_QUEUE_TRANSFER_BIT)
       engines |= NVKMD_ENGINE_COPY;
+   if (queue_flags & VK_QUEUE_VIDEO_DECODE_BIT_KHR)
+      engines |= NVKMD_ENGINE_VDEC;
 
    return engines;
 }
@@ -99,6 +101,9 @@ nvk_queue_subchannels_from_engines(enum nvkmd_engines engines)
 
    if (engines & NVKMD_ENGINE_COMPUTE)
       subc_mask |= BITFIELD_BIT(SUBC_NV90C0);
+
+   if (engines & NVKMD_ENGINE_VDEC)
+      subc_mask |= BITFIELD_BIT(SUBC_NVC5B0);
 
    return subc_mask;
 }

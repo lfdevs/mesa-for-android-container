@@ -52,12 +52,11 @@ struct nouveau_copy {
 };
 
 static struct nouveau_copy_buffer
-nouveau_copy_rect_buffer(struct nvk_buffer *buf,
-                         VkDeviceSize offset,
+nouveau_copy_rect_buffer(VkDeviceAddress addr,
                          struct vk_image_buffer_layout buffer_layout)
 {
    return (struct nouveau_copy_buffer) {
-      .base_addr = vk_buffer_address(&buf->vk, offset),
+      .base_addr = addr,
       .image_type = VK_IMAGE_TYPE_2D,
       .bpp = buffer_layout.element_size_B,
       .row_stride = buffer_layout.row_stride_B,
@@ -371,18 +370,15 @@ nouveau_copy_rect(struct nvk_cmd_buffer *cmd,
 }
 
 void
-nvk_cmd_copy_buffer_ce(struct nvk_cmd_buffer *cmd,
-                       const VkCopyBufferInfo2 *pCopyBufferInfo)
+nvk_cmd_copy_memory_ce(struct nvk_cmd_buffer *cmd,
+                       const VkCopyDeviceMemoryInfoKHR *pCopyMemoryInfo)
 {
-   VK_FROM_HANDLE(nvk_buffer, src, pCopyBufferInfo->srcBuffer);
-   VK_FROM_HANDLE(nvk_buffer, dst, pCopyBufferInfo->dstBuffer);
+   for (unsigned r = 0; r < pCopyMemoryInfo->regionCount; r++) {
+      const VkDeviceMemoryCopyKHR *region = &pCopyMemoryInfo->pRegions[r];
 
-   for (unsigned r = 0; r < pCopyBufferInfo->regionCount; r++) {
-      const VkBufferCopy2 *region = &pCopyBufferInfo->pRegions[r];
-
-      uint64_t src_addr = vk_buffer_address(&src->vk, region->srcOffset);
-      uint64_t dst_addr = vk_buffer_address(&dst->vk, region->dstOffset);
-      uint64_t size = region->size;
+      uint64_t src_addr = region->srcRange.address;
+      uint64_t dst_addr = region->dstRange.address;
+      uint64_t size = region->srcRange.size;
 
       while (size) {
          struct nv_push *p = nvk_cmd_buffer_push(cmd, 10);
@@ -472,16 +468,15 @@ nvk_remap_insert_aspect(struct nouveau_copy *copy,
 }
 
 void
-nvk_cmd_copy_buffer_to_image_ce(struct nvk_cmd_buffer *cmd,
-                                const VkCopyBufferToImageInfo2 *pCopyBufferToImageInfo)
+nvk_cmd_copy_memory_to_image_ce(struct nvk_cmd_buffer *cmd,
+                                const VkCopyDeviceMemoryImageInfoKHR *pCopyMemoryInfo)
 {
-   VK_FROM_HANDLE(nvk_buffer, src, pCopyBufferToImageInfo->srcBuffer);
-   VK_FROM_HANDLE(nvk_image, dst, pCopyBufferToImageInfo->dstImage);
+   VK_FROM_HANDLE(nvk_image, dst, pCopyMemoryInfo->image);
 
-   for (unsigned r = 0; r < pCopyBufferToImageInfo->regionCount; r++) {
-      const VkBufferImageCopy2 *region = &pCopyBufferToImageInfo->pRegions[r];
+   for (unsigned r = 0; r < pCopyMemoryInfo->regionCount; r++) {
+      const VkDeviceMemoryImageCopyKHR *region = &pCopyMemoryInfo->pRegions[r];
       struct vk_image_buffer_layout buffer_layout =
-         vk_image_buffer_copy_layout(&dst->vk, region);
+         vk_image_memory_copy_layout(&dst->vk, region);
 
       const VkExtent3D extent_px =
          vk_image_sanitize_extent(&dst->vk, region->imageExtent);
@@ -498,7 +493,7 @@ nvk_cmd_copy_buffer_to_image_ce(struct nvk_cmd_buffer *cmd,
          dst->planes[dst_plane].nil.sample_layout;
 
       struct nouveau_copy copy = {
-         .src = nouveau_copy_rect_buffer(src, region->bufferOffset,
+         .src = nouveau_copy_rect_buffer(region->addressRange.address,
                                          buffer_layout),
          .dst = nouveau_copy_rect_image(dst, &dst->planes[dst_plane],
                                         region->imageOffset,
@@ -522,19 +517,19 @@ nvk_cmd_copy_buffer_to_image_ce(struct nvk_cmd_buffer *cmd,
          nouveau_copy_rect(cmd, &copy2,
                            NV90B5_LAUNCH_DMA_DATA_TRANSFER_TYPE_NON_PIPELINED);
 
-      vk_foreach_struct_const(ext, region->pNext) {
-         switch (ext->sType) {
+      vk_foreach_struct_const(sType, ext, region->pNext) {
+         switch (sType) {
          default:
-            vk_debug_ignored_stype(ext->sType);
+            vk_debug_ignored_stype(sType);
             break;
          }
       }
    }
 
-   vk_foreach_struct_const(ext, pCopyBufferToImageInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pCopyMemoryInfo->pNext) {
+      switch (sType) {
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -598,16 +593,15 @@ nvk_remap_extract_aspect(struct nouveau_copy *copy,
 }
 
 void
-nvk_cmd_copy_image_to_buffer_ce(struct nvk_cmd_buffer *cmd,
-                                const VkCopyImageToBufferInfo2 *pCopyImageToBufferInfo)
+nvk_cmd_copy_image_to_memory_ce(struct nvk_cmd_buffer *cmd,
+                                const VkCopyDeviceMemoryImageInfoKHR *pCopyMemoryInfo)
 {
-   VK_FROM_HANDLE(nvk_image, src, pCopyImageToBufferInfo->srcImage);
-   VK_FROM_HANDLE(nvk_buffer, dst, pCopyImageToBufferInfo->dstBuffer);
+   VK_FROM_HANDLE(nvk_image, src, pCopyMemoryInfo->image);
 
-   for (unsigned r = 0; r < pCopyImageToBufferInfo->regionCount; r++) {
-      const VkBufferImageCopy2 *region = &pCopyImageToBufferInfo->pRegions[r];
+   for (unsigned r = 0; r < pCopyMemoryInfo->regionCount; r++) {
+      const VkDeviceMemoryImageCopyKHR *region = &pCopyMemoryInfo->pRegions[r];
       struct vk_image_buffer_layout buffer_layout =
-         vk_image_buffer_copy_layout(&src->vk, region);
+         vk_image_memory_copy_layout(&src->vk, region);
 
       const VkExtent3D extent_px =
          vk_image_sanitize_extent(&src->vk, region->imageExtent);
@@ -627,7 +621,7 @@ nvk_cmd_copy_image_to_buffer_ce(struct nvk_cmd_buffer *cmd,
          .src = nouveau_copy_rect_image(src, &src->planes[src_plane],
                                         region->imageOffset,
                                         &region->imageSubresource),
-         .dst = nouveau_copy_rect_buffer(dst, region->bufferOffset,
+         .dst = nouveau_copy_rect_buffer(region->addressRange.address,
                                          buffer_layout),
          .extent_el = nil_extent4d_px_to_el(extent4d_px, format, sample_layout),
       };
@@ -648,19 +642,19 @@ nvk_cmd_copy_image_to_buffer_ce(struct nvk_cmd_buffer *cmd,
          nouveau_copy_rect(cmd, &copy2,
                            NV90B5_LAUNCH_DMA_DATA_TRANSFER_TYPE_NON_PIPELINED);
 
-      vk_foreach_struct_const(ext, region->pNext) {
-         switch (ext->sType) {
+      vk_foreach_struct_const(sType, ext, region->pNext) {
+         switch (sType) {
          default:
-            vk_debug_ignored_stype(ext->sType);
+            vk_debug_ignored_stype(sType);
             break;
          }
       }
    }
 
-   vk_foreach_struct_const(ext, pCopyImageToBufferInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pCopyMemoryInfo->pNext) {
+      switch (sType) {
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -954,16 +948,15 @@ nvk_cmd_fill_memory_ce(struct nvk_cmd_buffer *cmd,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-nvk_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
-                    VkBuffer dstBuffer,
-                    VkDeviceSize dstOffset,
-                    VkDeviceSize dataSize,
-                    const void *pData)
+nvk_CmdUpdateMemoryKHR(VkCommandBuffer commandBuffer,
+                       const VkDeviceAddressRangeKHR* pDstRange,
+                       VkAddressCommandFlagsKHR dstFlags,
+                       VkDeviceSize dataSize,
+                       const void *pData)
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-   VK_FROM_HANDLE(nvk_buffer, dst, dstBuffer);
 
-   uint64_t dst_addr = vk_buffer_address(&dst->vk, dstOffset);
+   uint64_t dst_addr = pDstRange->address;
    uint8_t subc = nvk_cmd_buffer_last_subchannel(cmd);
 
    /* From the Vulkan 1.4.354 spec:

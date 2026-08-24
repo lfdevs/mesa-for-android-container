@@ -30,6 +30,7 @@ intel_perf_sources = [
   'intel_perf.c',
   'intel_perf_query.c',
   'intel_perf_mdapi.c',
+  'intel_perf_metrics_library.cpp',
 ]
 
 intel_perf_sources += custom_target(

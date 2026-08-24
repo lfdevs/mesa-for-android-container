@@ -92,6 +92,27 @@ wrap_in_if(nir_builder *b, nir_intrinsic_instr *instr, nir_def *valid, bool is_l
 }
 
 static void
+predicate_offset(nir_builder *b, nir_intrinsic_instr *instr, uint32_t type_sz,
+                 uint32_t offset_src, nir_def *size)
+{
+   /* Only the components selected by the write mask are stored, each at
+    * offset + component * type_sz. Bound the access by the highest written
+    * component so an in-bounds low component is not dropped just because a
+    * higher, unwritten component would be out of bounds.
+    */
+   unsigned components = instr->num_components;
+   if (nir_intrinsic_has_write_mask(instr))
+      components = util_last_bit(nir_intrinsic_write_mask(instr));
+
+   const uint32_t access_size = components * type_sz;
+   nir_def *max_access_offset =
+      nir_iadd_imm(b, instr->src[offset_src].ssa, access_size - 1);
+   nir_def *valid = nir_ult(b, max_access_offset, size);
+
+   wrap_in_if(b, instr, valid, false);
+}
+
+static void
 lower_buffer_load(nir_builder *b, nir_intrinsic_instr *instr)
 {
    uint32_t type_sz = instr->def.bit_size / 8;
@@ -111,14 +132,14 @@ static void
 lower_buffer_store(nir_builder *b, nir_intrinsic_instr *instr)
 {
    uint32_t type_sz = nir_src_bit_size(instr->src[0]) / 8;
-   rewrite_offset(b, instr, type_sz, 2,
-                  nir_get_ssbo_size(b, 32, instr->src[1].ssa));
+   predicate_offset(b, instr, type_sz, 2,
+                    nir_get_ssbo_size(b, 32, instr->src[1].ssa));
 }
 
 static void
 lower_buffer_atomic(nir_builder *b, nir_intrinsic_instr *instr)
 {
-   rewrite_offset(b, instr, 4, 1, nir_get_ssbo_size(b, 32, instr->src[0].ssa));
+   predicate_offset(b, instr, 4, 1, nir_get_ssbo_size(b, 32, instr->src[0].ssa));
 }
 
 static void

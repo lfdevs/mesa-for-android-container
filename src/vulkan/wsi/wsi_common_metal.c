@@ -8,6 +8,7 @@
 #include "vk_physical_device.h"
 #include "vk_util.h"
 
+#include "util/cnd_monotonic.h"
 #include "util/timespec.h"
 #include "util/u_vector.h"
 
@@ -58,7 +59,10 @@ wsi_metal_surface_get_capabilities(VkIcdSurfaceBase *surface,
    if (!caps->surfaceCapabilities.currentExtent.width && !caps->surfaceCapabilities.currentExtent.height)
       caps->surfaceCapabilities.currentExtent.width = caps->surfaceCapabilities.currentExtent.height = UINT32_MAX;
 
-   caps->surfaceCapabilities.minImageCount = 2;
+   /* Force recommended 3 drawables, otherwise the OS frame pacing may slow
+    * down presentation.
+    */
+   caps->surfaceCapabilities.minImageCount = 3;
    caps->surfaceCapabilities.maxImageCount = 3;
 
    caps->surfaceCapabilities.minImageExtent = (VkExtent2D) { 1, 1 };
@@ -93,6 +97,16 @@ wsi_metal_surface_get_capabilities(VkIcdSurfaceBase *surface,
       caps->surfaceCapabilities.supportedUsageFlags = image_usage;
    }
 
+   VkSurfaceCapabilitiesPresentId2KHR *pid2 =
+      vk_find_struct(caps->pNext, SURFACE_CAPABILITIES_PRESENT_ID_2_KHR);
+   if (pid2)
+      pid2->presentId2Supported = VK_TRUE;
+
+   VkSurfaceCapabilitiesPresentWait2KHR *pwait2 =
+      vk_find_struct(caps->pNext, SURFACE_CAPABILITIES_PRESENT_WAIT_2_KHR);
+   if (pwait2)
+      pwait2->presentWait2Supported = VK_TRUE;
+
    return VK_SUCCESS;
 }
 
@@ -111,18 +125,17 @@ wsi_metal_surface_get_capabilities2(VkIcdSurfaceBase *surface,
       wsi_metal_surface_get_capabilities(surface, wsi_device,
                                       caps);
 
-   vk_foreach_struct(ext, caps->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, caps->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_SURFACE_PROTECTED_CAPABILITIES_KHR: {
-         VkSurfaceProtectedCapabilitiesKHR *protected = (void *)ext;
+         VkSurfaceProtectedCapabilitiesKHR *protected = ext;
          protected->supportsProtected = VK_FALSE;
          break;
       }
 
       case VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_KHR: {
          /* TODO: support scaling */
-         VkSurfacePresentScalingCapabilitiesKHR *scaling =
-            (VkSurfacePresentScalingCapabilitiesKHR *)ext;
+         VkSurfacePresentScalingCapabilitiesKHR *scaling = ext;
          scaling->supportedPresentScaling = 0;
          scaling->supportedPresentGravityX = 0;
          scaling->supportedPresentGravityY = 0;
@@ -133,8 +146,7 @@ wsi_metal_surface_get_capabilities2(VkIcdSurfaceBase *surface,
 
       case VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_KHR: {
          /* Unsupported, just report the input present mode. */
-         VkSurfacePresentModeCompatibilityKHR *compat =
-            (VkSurfacePresentModeCompatibilityKHR *)ext;
+         VkSurfacePresentModeCompatibilityKHR *compat = ext;
          if (compat->pPresentModes) {
             if (compat->presentModeCount) {
                assert(present_mode);
@@ -152,7 +164,7 @@ wsi_metal_surface_get_capabilities2(VkIcdSurfaceBase *surface,
       }
 
       case VK_STRUCTURE_TYPE_PRESENT_TIMING_SURFACE_CAPABILITIES_EXT: {
-         VkPresentTimingSurfaceCapabilitiesEXT *wait = (void *)ext;
+         VkPresentTimingSurfaceCapabilitiesEXT *wait = ext;
 
          wait->presentStageQueries = 0;
          wait->presentTimingSupported = VK_FALSE;
@@ -309,6 +321,17 @@ struct wsi_metal_image {
    CAMetalDrawable *drawable;
 };
 
+struct wsi_metal_present_info {
+   /* Present info is ref-counted so that, if a lingering present handler is
+    * waiting to execute after the swapchain is freed, we can defer freeing it
+    * until after we are done. */
+   int ref_count;
+   mtx_t mutex;
+
+   struct u_cnd_monotonic present_id_cond;
+   uint64_t present_id;
+};
+
 struct wsi_metal_swapchain {
    struct wsi_swapchain base;
 
@@ -318,12 +341,71 @@ struct wsi_metal_swapchain {
    VkIcdSurfaceMetal *surface;
 
    struct wsi_metal_layer_blit_context *blit_context;
+   struct wsi_metal_present_info *present_info;
 
    uint32_t current_image_index;
+
+   /* VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR */
+   bool opaque_composition;
+
    struct wsi_metal_image images[0];
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(wsi_metal_swapchain, base.base, VkSwapchainKHR,
                                VK_OBJECT_TYPE_SWAPCHAIN_KHR)
+
+static struct wsi_metal_present_info *
+wsi_metal_create_present_info()
+{
+   /* Per spec, we cannot use user-provided allocator callbacks from a thread.
+    * Since we may free from a lingering present handler, we need to use the
+    * default callbacks instead. */
+   const VkAllocationCallbacks *allocator = vk_default_allocator();
+
+   struct wsi_metal_present_info *info =
+      vk_zalloc(allocator, sizeof(struct wsi_metal_present_info),
+                alignof(struct wsi_metal_present_info),
+                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (info == NULL)
+      return NULL;
+
+   int ret = mtx_init(&info->mutex, mtx_plain);
+   if (ret != thrd_success) {
+      vk_free(allocator, info);
+      return NULL;
+   }
+
+   ret = u_cnd_monotonic_init(&info->present_id_cond);
+   if (ret != thrd_success) {
+      mtx_destroy(&info->mutex);
+      vk_free(allocator, info);
+      return NULL;
+   }
+
+   info->ref_count = 1;
+   return info;
+}
+
+static void
+wsi_metal_release_present_info(struct wsi_metal_present_info *info)
+{
+   int ref_count = p_atomic_dec_return(&info->ref_count);
+   assert(ref_count >= 0);
+
+   if (ref_count)
+      return;
+
+   mtx_destroy(&info->mutex);
+   u_cnd_monotonic_destroy(&info->present_id_cond);
+
+   /* See `wsi_metal_alloc_present_info` */
+   vk_free(vk_default_allocator(), info);
+}
+
+static void
+wsi_metal_retain_present_info(struct wsi_metal_present_info *info)
+{
+   p_atomic_inc(&info->ref_count);
+}
 
 static struct wsi_image *
 wsi_metal_swapchain_get_wsi_image(struct wsi_swapchain *wsi_chain,
@@ -343,6 +425,8 @@ wsi_cmd_blit_image_to_image(const struct wsi_swapchain *chain,
    assert(!chain->wsi->sw);
    
    const struct wsi_device *wsi = chain->wsi;
+   const struct wsi_metal_swapchain *metal_chain =
+      container_of(chain, struct wsi_metal_swapchain, base);
    struct wsi_metal_image *metal_image = container_of(image, struct wsi_metal_image, base);
    VkResult result;
    int queue_count = chain->blit.queue != NULL ? 1 : wsi->queue_family_count;
@@ -424,30 +508,42 @@ wsi_cmd_blit_image_to_image(const struct wsi_swapchain *chain,
                               0, NULL,
                               img_mem_barrier_count, img_mem_barriers);
 
-      struct VkImageCopy image_copy = {
-         .srcSubresource = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-         },
-         .srcOffset = { .x = 0, .y = 0, .z = 0 },
-         .dstSubresource = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-         },
-         .dstOffset = { .x = 0, .y = 0, .z = 0 },
-         .extent = info->create.extent,
+      const VkImageSubresourceLayers subresource = {
+         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+         .mipLevel = 0,
+         .baseArrayLayer = 0,
+         .layerCount = 1,
       };
 
-      wsi->CmdCopyImage(image->blit.cmd_buffers[i],
-                        image->image,
-                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                        image->blit.image,
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        1, &image_copy);
+      const VkOffset3D extent = {
+         .x = info->create.extent.width,
+         .y = info->create.extent.height,
+         .z = 1,
+      };
+      const VkImageBlit2 image_blit = {
+         .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
+         .srcSubresource = subresource,
+         .srcOffsets = { { .x = 0, .y = 0, .z = 0 }, extent },
+         .dstSubresource = subresource,
+         .dstOffsets = { { .x = 0, .y = 0, .z = 0 }, extent },
+      };
+      const VkBlitImageInfo2 blit_info = {
+         .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+         .srcImage = image->image,
+         .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+         .dstImage = image->blit.image,
+         .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+         .regionCount = 1,
+         .pRegions = &image_blit,
+         .filter = VK_FILTER_NEAREST,
+      };
+
+      /* The reason we perform a blit instead of a copy is because we dropped
+       * the alpha when setting up the Metal layer so we need to work around
+       * that. This is due to a Metal bug.
+       */
+      wsi->metal.cmd_blit_image(image->blit.cmd_buffers[i], &blit_info,
+                                metal_chain->opaque_composition);
 
       img_mem_barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
       img_mem_barriers[0].dstAccessMask = 0;
@@ -469,10 +565,6 @@ wsi_cmd_blit_image_to_image(const struct wsi_swapchain *chain,
 
       wsi->metal.encode_drawable_present(image->blit.cmd_buffers[i], metal_image->drawable);
    }
-
-   /* Release the drawable since command buffers should have retained the drawable. */
-   wsi_metal_release_drawable(metal_image->drawable);
-   metal_image->drawable = NULL;
 
    return result;
 }
@@ -531,21 +623,20 @@ wsi_metal_swapchain_release_images(struct wsi_swapchain *wsi_chain,
    for (uint32_t idx = 0; idx < count; idx++) {
       struct wsi_metal_image *image = &chain->images[indices[idx]];
 
-      if (wsi->sw) {
-         /* Directly release drawable */
-         if (image->drawable) {
-            wsi_metal_release_drawable(image->drawable);
-            image->drawable = NULL;
-         }
-      } else {
-         /* Drawable has been released and is retained by blit command buffers.
-          * Free them to release the reference. */
+      if (!wsi->sw) {
+         /* Free the command buffers recording the drawable present, in case
+          * they retain any references */
          for (uint32_t queue_idx = 0; queue_idx < queue_count; queue_idx++) {
             wsi->FreeCommandBuffers(
                chain->base.device, chain->base.cmd_pools[queue_idx], 1u,
                &image->base.blit.cmd_buffers[queue_idx]);
             image->base.blit.cmd_buffers[queue_idx] = NULL;
          }
+      }
+
+      if (image->drawable) {
+         wsi_metal_release_drawable(image->drawable);
+         image->drawable = NULL;
       }
    }
 
@@ -561,6 +652,21 @@ wsi_metal_swapchain_set_present_mode(struct wsi_swapchain *wsi_chain,
    wsi_metal_layer_set_immediate(chain->surface->pLayer, immediate_mode);
 }
 
+static void
+wsi_metal_present_complete(void *present_info_ptr, uint64_t present_id)
+{
+   struct wsi_metal_present_info *present_info = present_info_ptr;
+
+   mtx_lock(&present_info->mutex);
+   if (present_id > present_info->present_id) {
+      present_info->present_id = present_id;
+      u_cnd_monotonic_broadcast(&present_info->present_id_cond);
+   }
+   mtx_unlock(&present_info->mutex);
+
+   wsi_metal_release_present_info(present_info);
+}
+
 static VkResult
 wsi_metal_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
                                      uint32_t image_index,
@@ -574,18 +680,70 @@ wsi_metal_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
 
    struct wsi_metal_image *image = &chain->images[image_index];
 
+   if (present_id && wsi_chain->present_wait_enabled) {
+      wsi_metal_retain_present_info(chain->present_info);
+      wsi_metal_layer_add_presented_handler(
+         image->drawable, wsi_metal_present_complete, chain->present_info,
+         present_id);
+   }
+
    if (wsi_chain->wsi->sw) {
       wsi_metal_layer_blit_and_present(chain->blit_context,
          &image->drawable,
          image->base.cpu_map,
          chain->extent.width, chain->extent.height,
          image->base.row_pitches[0]);
+   } else {
+      /* Blit is already recorded, just present now */
+      wsi_metal_layer_present(&image->drawable);
    }
 
    uint32_t width = 0u, height = 0u;
    wsi_metal_layer_size(chain->surface->pLayer, &width, &height);
    bool is_optimal = (width == chain->extent.width && height == chain->extent.height);
    return is_optimal ? VK_SUCCESS : VK_SUBOPTIMAL_KHR;
+}
+
+static VkResult
+wsi_metal_swapchain_wait_for_present(struct wsi_swapchain *wsi_chain,
+                                     uint64_t waitValue,
+                                     uint64_t timeout)
+{
+   struct wsi_metal_swapchain *chain = (struct wsi_metal_swapchain *)wsi_chain;
+   struct wsi_metal_present_info *present_info = chain->present_info;
+
+   struct timespec abs_timespec;
+   uint64_t abs_timeout = 0;
+
+   if (timeout != 0)
+      abs_timeout = os_time_get_absolute_timeout(timeout);
+
+   /* Need to observe that the swapchain semaphore has been unsignalled,
+    * as this is guaranteed when a present is complete. */
+   VkResult result = wsi_swapchain_wait_for_present_semaphore(
+      &chain->base, waitValue, timeout);
+   if (result != VK_SUCCESS)
+      return result;
+
+   timespec_from_nsec(&abs_timespec, abs_timeout);
+
+   mtx_lock(&present_info->mutex);
+   while (present_info->present_id < waitValue) {
+      int ret = u_cnd_monotonic_timedwait(&present_info->present_id_cond,
+                                          &present_info->mutex,
+                                          &abs_timespec);
+      if (ret == thrd_timedout) {
+         result = VK_TIMEOUT;
+         break;
+      }
+      if (ret != thrd_success) {
+         result = VK_ERROR_DEVICE_LOST;
+         break;
+      }
+   }
+
+   mtx_unlock(&present_info->mutex);
+   return result;
 }
 
 static void
@@ -650,8 +808,11 @@ wsi_metal_create_image(const struct wsi_metal_swapchain *metal_chain,
    if (wsi->sw || result != VK_SUCCESS)
       return result;
 
-   /* Create VkImages to handle binding at acquisition. */
-   result = wsi->CreateImage(chain->device, &chain->image_info.create,
+   /* We perform blit through rendering */
+   VkImageCreateInfo blit_create = chain->image_info.create;
+   blit_create.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+   result = wsi->CreateImage(chain->device, &blit_create,
                              &chain->alloc, &image->blit.image);
    if (result != VK_SUCCESS)
       wsi_metal_destroy_image(metal_chain, metal_image);
@@ -680,6 +841,14 @@ wsi_metal_swapchain_destroy(struct wsi_swapchain *wsi_chain,
    if (chain->base.wsi->sw)
       wsi_destroy_metal_layer_blit_context(chain->blit_context);
 
+   wsi_metal_release_present_info(chain->present_info);
+
+   if (chain->base.wsi->metal.get_mtl4_command_queue) {
+      void *mtl4_queue = chain->base.wsi->metal.get_mtl4_command_queue(chain->base.device);
+      if (mtl4_queue)
+         wsi_metal_layer_remove_queue_resident(chain->surface->pLayer, mtl4_queue);
+   }
+
    wsi_swapchain_finish(&chain->base);
 
    vk_free(pAllocator, chain);
@@ -706,10 +875,19 @@ wsi_metal_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    const bool immediate_mode =
       pCreateInfo->presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR;
 
+   /* Non-software implementations need to work around a Metal bug
+    * when presenting through Metal4. This is accomplished through
+    * setting the layer's opaque value to false. And since we will
+    * be blitting to the drawable, which means rendering, we can
+    * set the framebuffer only usage.
+    */
+   const bool layer_opaque = opaque_composition && wsi_device->sw;
+   const bool framebuffer_only = !wsi_device->sw;
+
    VkResult result = wsi_metal_layer_configure(metal_surface->pLayer,
       pCreateInfo->imageExtent.width, pCreateInfo->imageExtent.height,
       num_images, pCreateInfo->imageFormat, pCreateInfo->imageColorSpace,
-      opaque_composition, immediate_mode);
+      layer_opaque, immediate_mode, framebuffer_only);
    if (result != VK_SUCCESS)
       return result;
 
@@ -744,6 +922,8 @@ wsi_metal_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->base.release_images = wsi_metal_swapchain_release_images;
    chain->base.set_present_mode = wsi_metal_swapchain_set_present_mode;
    chain->base.queue_present = wsi_metal_swapchain_queue_present;
+   chain->base.wait_for_present = wsi_metal_swapchain_wait_for_present;
+   chain->base.wait_for_present2 = wsi_metal_swapchain_wait_for_present;
    chain->base.set_hdr_metadata = wsi_metal_swapchain_set_hdr_metadata;
    chain->base.present_mode = wsi_swapchain_get_present_mode(wsi_device, pCreateInfo);
    chain->base.image_count = num_images;
@@ -751,6 +931,19 @@ wsi_metal_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->vk_format = pCreateInfo->imageFormat;
    chain->surface = metal_surface;
    chain->current_image_index = 0;
+   chain->opaque_composition = opaque_composition;
+
+   chain->present_info = wsi_metal_create_present_info();
+   if (chain->present_info == NULL) {
+      result = VK_ERROR_OUT_OF_HOST_MEMORY;
+      goto fail_present_info;
+   }
+
+   if (wsi_device->metal.get_mtl4_command_queue) {
+      void *mtl4_queue = wsi_device->metal.get_mtl4_command_queue(chain->base.device);
+      if (mtl4_queue)
+         wsi_metal_layer_make_queue_resident(metal_surface->pLayer, mtl4_queue);
+   }
 
    uint32_t created_image_count = 0;
    for (uint32_t i = 0; i < chain->base.image_count; i++) {
@@ -774,6 +967,9 @@ fail_init_images:
    for (uint32_t i = 0; i < created_image_count; i++)
       wsi_metal_destroy_image(chain, &chain->images[i]);
 
+   wsi_metal_release_present_info(chain->present_info);
+
+fail_present_info:
    wsi_swapchain_finish(&chain->base);
 
 fail_chain_alloc:
@@ -881,7 +1077,7 @@ wsi_metal_create_mem(const struct wsi_swapchain *chain,
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
       .pNext = &image_mem_dedicated_info,
       .allocationSize = requirements.size,
-      .memoryTypeIndex = requirements.memoryTypeBits,
+      .memoryTypeIndex = wsi_select_device_memory_type(wsi, requirements.memoryTypeBits),
    };
 
    return wsi->AllocateMemory(chain->device, &image_mem_info,

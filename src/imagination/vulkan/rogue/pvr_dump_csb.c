@@ -282,12 +282,14 @@ print_block_cdmctrl_kernel(struct pvr_dump_csb_ctx *const csb_ctx,
       goto end_pop_ctx;
    words_read += 1;
 
-   if (!pvr_dump_csb_block_take_packed(&ctx, CDMCTRL_KERNEL9, &kernel9) ||
-       !pvr_dump_csb_block_take_packed(&ctx, CDMCTRL_KERNEL10, &kernel10) ||
-       !pvr_dump_csb_block_take_packed(&ctx, CDMCTRL_KERNEL11, &kernel11)) {
-      goto end_pop_ctx;
+   if (kernel0.event_object_present) {
+      if (!pvr_dump_csb_block_take_packed(&ctx, CDMCTRL_KERNEL9, &kernel9) ||
+          !pvr_dump_csb_block_take_packed(&ctx, CDMCTRL_KERNEL10, &kernel10) ||
+          !pvr_dump_csb_block_take_packed(&ctx, CDMCTRL_KERNEL11, &kernel11)) {
+         goto end_pop_ctx;
+      }
+      words_read += 3;
    }
-   words_read += 3;
 
    pvr_dump_field_member_bool(base_ctx, &kernel0, indirect_present);
    pvr_dump_field_member_bool(base_ctx, &kernel0, global_offsets_present);

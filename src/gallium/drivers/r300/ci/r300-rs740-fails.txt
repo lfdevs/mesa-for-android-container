@@ -1,50 +1,7 @@
-dEQP-GLES2.functional.clipping.point.point_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.point.point_clip_viewport_corner,Fail
-dEQP-GLES2.functional.clipping.point.point_z_clip,Fail
-dEQP-GLES2.functional.clipping.point.point_z_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.point.point_z_clip_viewport_corner,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_clip_viewport_corner,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_z_clip,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_z_clip_viewport_center,Fail
-dEQP-GLES2.functional.clipping.point.wide_point_z_clip_viewport_corner,Fail
-
-dEQP-GLES2.functional.draw.draw_arrays.points.default_attribute,Fail
-dEQP-GLES2.functional.draw.draw_arrays.points.multiple_attributes,Fail
-dEQP-GLES2.functional.draw.draw_arrays.points.single_attribute,Fail
-dEQP-GLES2.functional.draw.draw_elements.points.default_attribute,Fail
-dEQP-GLES2.functional.draw.draw_elements.points.multiple_attributes,Fail
-dEQP-GLES2.functional.draw.draw_elements.points.single_attribute,Fail
-dEQP-GLES2.functional.draw.random.12,Fail
-dEQP-GLES2.functional.draw.random.25,Fail
-dEQP-GLES2.functional.draw.random.31,Fail
-dEQP-GLES2.functional.draw.random.32,Fail
-dEQP-GLES2.functional.draw.random.36,Fail
-dEQP-GLES2.functional.draw.random.46,Fail
-dEQP-GLES2.functional.draw.random.50,Fail
-dEQP-GLES2.functional.draw.random.51,Fail
-dEQP-GLES2.functional.draw.random.65,Fail
-dEQP-GLES2.functional.draw.random.69,Fail
-dEQP-GLES2.functional.draw.random.70,Fail
-dEQP-GLES2.functional.draw.random.71,Fail
-dEQP-GLES2.functional.draw.random.8,Fail
-
 dEQP-GLES2.functional.fbo.completeness.renderable.texture.color0.rgb_half_float_oes,Fail
-
-# This bunch is not reproducible outside of CI
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.8,Fail
-dEQP-GLES2.functional.fragment_ops.random.19,Fail
-dEQP-GLES2.functional.fragment_ops.random.34,Fail
-dEQP-GLES2.functional.fragment_ops.random.63,Fail
-dEQP-GLES2.functional.fragment_ops.random.66,Fail
-dEQP-GLES2.functional.fragment_ops.random.81,Fail
 
 dEQP-GLES2.functional.rasterization.primitives.line_loop_wide,Fail
 dEQP-GLES2.functional.rasterization.primitives.line_strip_wide,Fail
-dEQP-GLES2.functional.rasterization.primitives.points,Fail
-dEQP-GLES2.functional.shaders.builtin_variable.frontfacing,Fail
-dEQP-GLES2.functional.shaders.builtin_variable.pointcoord,Fail
 dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bool_to_ivec3_fragment,Fail
 dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_ivec4_fragment,Fail
 dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_ivec4_fragment,Fail
@@ -495,12 +452,9 @@ shaders@glsl-fs-fogscale@vs and fs,Fail
 shaders@glsl-fs-loop,Fail
 shaders@glsl-fs-loop-nested,Fail
 shaders@glsl-fwidth,Fail
-shaders@glsl-max-varyings >max_varying_components,Fail
-shaders@glsl-max-varyings,Fail
 shaders@glsl-uniform-interstage-limits@subdivide 5,Fail
 shaders@glsl-uniform-interstage-limits@subdivide 5- statechanges,Fail
 shaders@glsl-uniform-interstage-limits@520 vs- 1 fs,Fail
-shaders@glsl-vs-point-size,Fail
 shaders@ssa@fs-if-def-else-break,Fail
 shaders@ssa@fs-lost-copy-problem,Fail
 shaders@ssa@fs-swap-problem,Fail
@@ -569,8 +523,6 @@ spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
 
-spec@!opengl es 2.0@glsl-fs-pointcoord,Fail
-
 spec@arb_clear_texture@arb_clear_texture-float,Fail
 
 spec@arb_color_buffer_float@gl_rgba16f-render-sanity,Fail
@@ -593,10 +545,6 @@ spec@arb_framebuffer_object@fbo-generatemipmap-3d,Fail
 
 spec@arb_pixel_buffer_object@cubemap npot pbo,Fail
 spec@arb_pixel_buffer_object@fbo-pbo-readpixels-small,Fail
-
-spec@arb_point_parameters@arb_point_parameters-point-attenuation,Fail
-spec@arb_point_parameters@arb_point_parameters-point-attenuation@Aliased combinations,Fail
-spec@arb_point_parameters@arb_point_parameters-point-attenuation@Antialiased combinations,Fail
 
 spec@arb_texture_compression_bptc@texwrap formats bordercolor,Fail
 spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled,Fail
@@ -697,7 +645,6 @@ spec@ext_framebuffer_object@fbo-alphatest-formats@GL_RGB16,Fail
 spec@ext_framebuffer_object@fbo-alphatest-formats@GL_RGBA12,Fail
 spec@ext_framebuffer_object@fbo-alphatest-formats@GL_RGBA16,Fail
 spec@ext_framebuffer_object@fbo-depth-sample-compare,Fail
-spec@ext_framebuffer_object@fbo-fragcoord2,Fail
 spec@ext_framebuffer_object@getteximage-formats init-by-clear-and-render,Fail
 spec@ext_framebuffer_object@getteximage-formats init-by-rendering,Fail
 
@@ -941,11 +888,6 @@ spec@glsl-1.10@execution@derivatives@glsl-derivs-sign,Fail
 spec@glsl-1.10@execution@derivatives@glsl-derivs-swizzle,Fail
 spec@glsl-1.10@execution@derivatives@glsl-derivs-varyings,Fail
 spec@glsl-1.10@execution@discard@glsl-fs-discard-04,Fail
-spec@glsl-1.10@execution@fs-frontfacing-ternary-0.0-neg-1.0,Fail
-spec@glsl-1.10@execution@fs-frontfacing-ternary-1-neg-1,Fail
-spec@glsl-1.10@execution@fs-frontfacing-ternary-1.0-neg-1.0,Fail
-spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0,Fail
-spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0-alt,Fail
 spec@glsl-1.10@execution@fs-sign-times-abs,Fail
 spec@glsl-1.10@execution@fs-sign-times-neg,Fail
 spec@glsl-1.10@execution@fs-sign-times-neg-abs,Fail
@@ -958,32 +900,6 @@ spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-dst-in-n
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-src-in-nested-loop-combined,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-src-in-nested-loop-inner,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-src-in-nested-loop-outer,Fail
-spec@glsl-1.10@execution@varying-packing@simple float array,Fail
-spec@glsl-1.10@execution@varying-packing@simple float separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2x3 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2x3 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2x4 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat2x4 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3x2 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3x2 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3x4 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat3x4 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4x2 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4x2 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4x3 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple mat4x3 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec2 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec2 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec3 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec3 separate,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec4 array,Fail
-spec@glsl-1.10@execution@varying-packing@simple vec4 separate,Fail
 
 # HW limitation (SM3 256 loop iters)
 spec@glsl-1.10@execution@loops@glsl-fs-loop-300,Fail
@@ -1119,7 +1035,6 @@ spec@glsl-1.20@execution@built-in-functions@fs-op-sub-mat3x2-float,Fail
 spec@glsl-1.20@execution@built-in-functions@fs-outerproduct-vec4-vec4,Fail
 spec@glsl-1.20@execution@fs-underflow-mul-compare-zero,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-256-elements,Fail
-spec@glsl-1.20@execution@glsl-fs-frontfacing,Fail
 spec@glsl-1.20@execution@uniform-initializer@fs-mat4-array,Fail
 
 spec@intel_performance_query@intel_performance_query-issue_2235,Fail
@@ -1151,7 +1066,3 @@ glx@glx-swap-pixmap-bad,Fail
 glx@glx_arb_sync_control@waitformsc,Fail
 spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear,Fail
 spec@egl_mesa_configless_context@basic,Fail
-
-# Nightly run expectations update
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.86,Fail
-

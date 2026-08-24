@@ -56,6 +56,10 @@ impl<E: EnumAsU8, const N: usize> U8EnumSet<E, N> {
         self.set.is_empty()
     }
 
+    pub fn len(&self) -> usize {
+        self.set.len()
+    }
+
     pub fn contains(&self, e: E) -> bool {
         self.set.contains(e.as_u8())
     }

@@ -46,3 +46,6 @@ Models.Op/movenetthunder_movenet_single_pose_thunder_ptq,Fail
 Models.Op/ssdmobilenetv2_011,Fail
 Models.Op/ssdmobilenetv2_052,Fail
 Models.Op/ssdmobilenetv2_ssd_mobilenet_v2_coco_quant_postprocess,Fail
+
+Models.Op/ssdmobilenetv3_ssd_mobilenet_v3_int8,Fail
+Models.Op/vww4_vww4_128_128_INT8,Fail

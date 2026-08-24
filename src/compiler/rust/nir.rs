@@ -10,6 +10,9 @@ use std::marker::PhantomData;
 use std::mem::offset_of;
 use std::str;
 
+unsafe impl Send for nir_shader_compiler_options {}
+unsafe impl Sync for nir_shader_compiler_options {}
+
 pub struct ExecListIter<'a, T> {
     n: &'a exec_node,
     offset: usize,
@@ -84,6 +87,11 @@ impl ALUType {
     pub const BOOL: Self = Self(nir_type_bool);
     pub const FLOAT: Self = Self(nir_type_float);
     pub const INVALID: Self = Self(nir_type_invalid);
+
+    pub const INT8: Self = Self(nir_type_int8);
+    pub const UINT8: Self = Self(nir_type_uint8);
+    pub const FLOAT16: Self = Self(nir_type_float16);
+    pub const FLOAT32: Self = Self(nir_type_float32);
 
     pub fn new(base: Self, bit_size: u8) -> Self {
         assert!(bit_size.is_power_of_two());

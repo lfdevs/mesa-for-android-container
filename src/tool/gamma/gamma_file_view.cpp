@@ -991,6 +991,9 @@ gamma_file_view::render_viewport()
    if (!rendering_state.render)
       return;
 
+   if (rendering_state.viewport_size.x <= 0 || rendering_state.viewport_size.y <= 0)
+      return;
+
    rendering_state.acceleration_structure->ui.viewport.render_list->build();
 
    VkRenderingAttachmentInfo color_attachment = {

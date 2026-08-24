@@ -649,18 +649,23 @@ build_texture_state(struct fd_context *ctx, mesa_shader_stage type,
    struct fd_bo *tex_desc = NULL, *samp_desc = NULL;
    fd_cs cs(ctx->pipe, 32 * 4);
 
-   if (tex->num_samplers > 0) {
-      samp_desc = fd_bo_new(ctx->dev, tex->num_samplers * 4 * 4,
+   unsigned num_samplers = tex->num_samplers;
+   if (num_samplers == 0 && tex->num_textures > 0)
+      num_samplers = 1;
+
+   if (num_samplers > 0) {
+      samp_desc = fd_bo_new(ctx->dev, num_samplers * 4 * 4,
                             FD_BO_GPUREADONLY | FD_BO_HINT_COMMAND,
                             "samp desc");
       uint32_t *buf = (uint32_t *)fd_bo_map(samp_desc);
       fd_bo_mark_for_dump(samp_desc);
 
-      for (unsigned i = 0; i < tex->num_samplers; i++) {
+      for (unsigned i = 0; i < num_samplers; i++) {
          static const struct fd6_sampler_stateobj dummy_sampler = {};
          const struct fd6_sampler_stateobj *sampler =
-            tex->samplers[i] ? fd6_sampler_stateobj(tex->samplers[i])
-                             : &dummy_sampler;
+            (i < tex->num_samplers && tex->samplers[i])
+               ? fd6_sampler_stateobj(tex->samplers[i])
+               : &dummy_sampler;
          memcpy(buf, sampler->descriptor, 4 * 4);
          buf += 4;
       }
@@ -738,7 +743,7 @@ build_texture_state(struct fd_context *ctx, mesa_shader_stage type,
             .state_type = ST6_SHADER,
             .state_src = SS6_INDIRECT,
             .state_block = stage2sb(type),
-            .num_unit = tex->num_samplers,
+            .num_unit = num_samplers,
          ))
          .add(CP_LOAD_STATE6_EXT_SRC_ADDR(samp_desc));
 

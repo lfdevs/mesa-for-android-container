@@ -604,9 +604,11 @@ class ResourceTracker {
     void clearDescriptorPoolAndUnregisterDescriptorSets(void* context, VkDevice device,
                                                         VkDescriptorPool pool);
 
-    void setDeviceInfo(VkDevice device, VkPhysicalDevice physdev, VkPhysicalDeviceProperties props,
-                       VkPhysicalDeviceMemoryProperties memProps, uint32_t enabledExtensionCount,
-                       const char* const* ppEnabledExtensionNames, const void* pNext);
+    void setDeviceInfo(VkDevice device, VkPhysicalDevice physdev,
+                       const VkPhysicalDeviceProperties& props,
+                       const VkPhysicalDeviceMemoryProperties& memProps,
+                       uint32_t enabledExtensionCount, const char* const* ppEnabledExtensionNames,
+                       const void* pNext);
 
     void setDeviceMemoryInfo(VkDevice device, VkDeviceMemory memory, VkDeviceSize allocationSize,
                              uint8_t* ptr, uint32_t memoryTypeIndex, void* ahw, bool imported,
@@ -881,7 +883,7 @@ class ResourceTracker {
 
     VkDescriptorImageInfo filterNonexistentSampler(const VkDescriptorImageInfo& inputInfo);
 
-    void emitDeviceMemoryReport(VkDevice_Info info, VkDeviceMemoryReportEventTypeEXT type,
+    void emitDeviceMemoryReport(const VkDevice_Info& info, VkDeviceMemoryReportEventTypeEXT type,
                                 uint64_t memoryObjectId, VkDeviceSize size, VkObjectType objectType,
                                 uint64_t objectHandle, uint32_t heapIndex = 0);
 

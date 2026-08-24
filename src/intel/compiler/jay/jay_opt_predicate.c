@@ -13,24 +13,27 @@ static bool
 predicate_block(jay_builder *b,
                 jay_block *block,
                 jay_def condition,
+                bool uniform_condition,
                 signed limit)
 {
-   /* We can only access one flag per instruction, so do not predicate anything
-    * accessing flags. This also ensures the if-condition flag is kept live.
+   /* We can only access one implicit flag per instruction, so do not predicate
+    * anything accessing implicit flags. We also need to ensure the if-condition
+    * flag is kept live.
     *
     * A few opcodes can't be predicated due to ISA restrictions.
     *
-    * Predicating NoMask instructions only works with UFLAGs (where we know lane
-    * 0 controls the flag and we're not electing some other lane).
+    * Predicating NoMask instructions only works with uniform flags (where we
+    * know lane 0 is set correctly and we're not electing another lane).
     */
    jay_foreach_inst_in_block(block, I) {
-      if (jay_uses_flag(I) ||
+      if (jay_uses_implicit_flag(I) ||
+          (jay_is_flag(I->dst) && I->dst.reg == condition.reg) ||
           I->op == JAY_OPCODE_MIN ||
           I->op == JAY_OPCODE_MAX ||
           I->op == JAY_OPCODE_CSEL ||
           I->op == JAY_OPCODE_DPAS ||
           I->op == JAY_OPCODE_SLICE_REPACK ||
-          (condition.file != UFLAG && jay_is_no_mask(I)) ||
+          (!uniform_condition && jay_is_no_mask(I)) ||
           (--limit) < 0)
          return false;
    }
@@ -63,8 +66,10 @@ static void
 predicate_if(jay_function *f, jay_block *if_block, jay_inst *if_)
 {
    /* If's fallthrough to the then and branch to the else */
-   jay_block *then_block = if_block->logical_succs[0],
-             *else_block = if_block->logical_succs[1];
+   assert(jay_num_successors(if_block, GPR) == 2);
+   struct util_dynarray *succs = jay_successors(if_block, GPR);
+   jay_block *then_block = *util_dynarray_element(succs, jay_block *, 0),
+             *else_block = *util_dynarray_element(succs, jay_block *, 1);
    assert(then_block == jay_next_block(if_block) && "successors for if");
 
    jay_builder b = jay_init_builder(f, jay_before_inst(if_));
@@ -72,10 +77,12 @@ predicate_if(jay_function *f, jay_block *if_block, jay_inst *if_)
    jay_def pred = *jay_inst_get_predicate(if_);
 
    /* Else has a higher limit to account for else/endif ops */
-   bool no_then = else_block == jay_next_block(then_block) &&
-                  predicate_block(&b, then_block, pred, 3);
+   bool no_then =
+      else_block == jay_next_block(then_block) &&
+      predicate_block(&b, then_block, pred, if_->reads_uniform_flag, 3);
    bool no_else = endif->op == JAY_OPCODE_ENDIF &&
-                  predicate_block(&b, else_block, jay_negate(pred), 5);
+                  predicate_block(&b, else_block, jay_negate(pred),
+                                  if_->reads_uniform_flag, 5);
 
    if (no_then && no_else) {
       jay_remove_instruction(if_);

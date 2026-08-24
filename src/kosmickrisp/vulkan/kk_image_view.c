@@ -59,6 +59,10 @@ kk_image_view_init(struct kk_device *dev, struct kk_image_view *view,
 
    vk_image_view_init(&dev->vk, &view->vk, pCreateInfo);
 
+   if (image->wsi_opaque_alpha &&
+       (pCreateInfo->flags & VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA))
+      view->vk.swizzle.a = VK_COMPONENT_SWIZZLE_ONE;
+
    /* First, figure out which image planes we need.
     * For depth/stencil, we only have plane so simply assert
     * and then map directly betweeen the image and view plane

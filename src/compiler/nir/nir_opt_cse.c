@@ -77,6 +77,91 @@ dominates(const nir_instr *old_instr, const nir_instr *new_instr)
 }
 
 static bool
+do_subgroup_cse(nir_instr *instr)
+{
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+
+   if (!nir_intrinsic_has_semantic(intrin, NIR_INTRINSIC_SUBGROUP))
+      return false;
+
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_ddx:
+   case nir_intrinsic_ddx_fine:
+   case nir_intrinsic_ddx_coarse:
+   case nir_intrinsic_ddy:
+   case nir_intrinsic_ddy_fine:
+   case nir_intrinsic_ddy_coarse:
+      /* These are subgroup ops, but default nir_instr_set handles them better. */
+      return false;
+   default:
+      break;
+   }
+
+   /* There are load ops that are also subgroup ops, check their access. */
+   if (nir_intrinsic_has_access(intrin))
+      return nir_intrinsic_access(intrin) & ACCESS_CAN_REORDER;
+
+   return true;
+}
+
+static bool
+allow_discard(const nir_intrinsic_instr *intrin, const void *data)
+{
+   (void)data;
+
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_terminate:
+   case nir_intrinsic_terminate_if:
+   case nir_intrinsic_demote:
+   case nir_intrinsic_demote_if:
+      /* If a terminate/demote dominates another with the same source,
+       * the second won't affect additional invocations.
+       */
+      return true;
+   default:
+      return false;
+   }
+}
+
+static bool
+may_change_active_invocations(nir_instr *instr)
+{
+   if (instr->type == nir_instr_type_call)
+      return true;
+   if (instr->type != nir_instr_type_intrinsic)
+      return false;
+
+   nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_terminate:
+   case nir_intrinsic_terminate_if:
+   case nir_intrinsic_demote:
+   case nir_intrinsic_demote_if:
+      /* Disabling invocations is change. */
+      return true;
+   case nir_intrinsic_trace_ray:
+   case nir_intrinsic_execute_callable:
+   case nir_intrinsic_report_ray_intersection:
+      /* These are allowed to completely change the set of active invocations. */
+      return true;
+   default:
+      return false;
+   }
+}
+
+static bool
+allow_any_intrin(const nir_intrinsic_instr *intrin, const void *data)
+{
+   (void)data;
+   (void)intrin;
+   return true;
+}
+
+static bool
 nir_opt_cse_impl(nir_function_impl *impl)
 {
    struct set instr_set;
@@ -84,20 +169,37 @@ nir_opt_cse_impl(nir_function_impl *impl)
 
    _mesa_set_resize(&instr_set, impl->ssa_alloc);
 
+   struct set per_block_set = { 0 };
+
    nir_metadata_require(impl, nir_metadata_dominance);
 
    bool progress = false;
    nir_foreach_block(block, impl) {
+      if (per_block_set.table)
+         _mesa_set_clear(&per_block_set, NULL);
+
       nir_foreach_instr_safe(instr, block) {
-         if (nir_instr_set_add_or_rewrite(&instr_set, instr, dominates)) {
+         if (do_subgroup_cse(instr)) {
+            if (!per_block_set.table)
+               nir_instr_set_init(&per_block_set, NULL);
+
+            if (nir_instr_set_add_or_rewrite(&per_block_set, instr, allow_any_intrin, NULL, NULL)) {
+               progress = true;
+               nir_instr_remove(instr);
+            }
+         } else if (nir_instr_set_add_or_rewrite(&instr_set, instr, allow_discard, NULL, dominates)) {
             progress = true;
             nir_instr_remove(instr);
+         } else if (per_block_set.table && may_change_active_invocations(instr)) {
+            _mesa_set_clear(&per_block_set, NULL);
          }
       }
    }
 
    nir_progress(progress, impl, nir_metadata_control_flow);
 
+   if (per_block_set.table)
+      nir_instr_set_fini(&per_block_set);
    nir_instr_set_fini(&instr_set);
    return progress;
 }

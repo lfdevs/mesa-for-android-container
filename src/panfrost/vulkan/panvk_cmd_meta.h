@@ -27,6 +27,7 @@ struct panvk_cmd_meta_compute_save_ctx {
       struct panvk_opaque_desc desc_storage[MAX_PUSH_DESCS];
       uint64_t descs_dev_addr;
       uint32_t desc_count;
+      bool dirty;
    } push_set0;
    struct panvk_push_constant_state push_constants;
    bool cond_render_enabled;
@@ -40,6 +41,7 @@ struct panvk_cmd_meta_graphics_save_ctx {
       struct panvk_opaque_desc desc_storage[MAX_PUSH_DESCS];
       uint64_t descs_dev_addr;
       uint32_t desc_count;
+      bool dirty;
    } push_set0;
    struct panvk_push_constant_state push_constants;
    struct panvk_attrib_buf vb0;

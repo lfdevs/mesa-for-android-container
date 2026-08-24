@@ -105,6 +105,7 @@ bool ir3_nir_lower_load_constant(nir_shader *nir, struct ir3_shader_variant *v);
 void ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader_variant *v);
 bool ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v);
 bool ir3_nir_lower_const_global_loads(nir_shader *nir, struct ir3_shader_variant *v);
+bool ir3_nir_can_lower_to_ldg_k(nir_intrinsic_instr *intrin);
 bool ir3_nir_fixup_load_const_ir3(nir_shader *nir);
 bool ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v);
 bool ir3_nir_opt_prefetch_descriptors(nir_shader *nir, struct ir3_shader_variant *v);
@@ -174,7 +175,6 @@ is_intrinsic_store(nir_intrinsic_op op)
    case nir_intrinsic_store_ssbo:
    case nir_intrinsic_store_shared:
    case nir_intrinsic_store_global:
-   case nir_intrinsic_store_global_ir3:
       return true;
    default:
       return false;
@@ -191,7 +191,6 @@ is_intrinsic_load(nir_intrinsic_op op)
    case nir_intrinsic_load_ubo:
    case nir_intrinsic_load_shared:
    case nir_intrinsic_load_global:
-   case nir_intrinsic_load_global_ir3:
    case nir_intrinsic_load_const_ir3:
       return true;
    default:

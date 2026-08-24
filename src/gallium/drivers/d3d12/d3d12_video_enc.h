@@ -692,6 +692,8 @@ d3d12_video_encoder_reconfigure_encoder_objects(struct d3d12_video_encoder *pD3D
                                                 struct pipe_picture_desc *  picture);
 D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1
 d3d12_video_encoder_get_current_picture_param_settings(struct d3d12_video_encoder *pD3D12Enc);
+d3d12_video_encoder_picture_control_codec_data_mutable
+d3d12_video_encoder_get_current_picture_param_settings_mutable(struct d3d12_video_encoder *pD3D12Enc);
 D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA
 d3d12_video_encoder_get_current_picture_param_settings_legacy(struct d3d12_video_encoder *pD3D12Enc);
 D3D12_VIDEO_ENCODER_LEVEL_SETTING

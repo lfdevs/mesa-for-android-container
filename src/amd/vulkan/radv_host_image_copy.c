@@ -31,8 +31,13 @@ radv_get_surface_copy_region(struct radv_device *device, const struct radv_image
    const uint32_t texel_scale = radv_get_texel_scale(image->vk.format, subresource);
    const VkOffset3D img_offset_el = vk_image_offset_to_elements(&image->vk, image_offset);
    const VkExtent3D img_extent_el = vk_image_extent_to_elements(&image->vk, image_extent);
-   const uint32_t mem_row_pitch = memory_row_length ? memory_row_length : img_extent_el.width;
-   const uint32_t mem_slice_pitch = (memory_image_height ? memory_image_height : img_extent_el.height) * mem_row_pitch;
+   const VkExtent3D memory_extent = {
+      .width = memory_row_length ? memory_row_length : image_extent.width,
+      .height = memory_image_height ? memory_image_height : image_extent.height,
+   };
+   const VkExtent3D memory_extent_el = vk_image_extent_to_elements(&image->vk, memory_extent);
+   const uint32_t mem_row_pitch = memory_extent_el.width;
+   const uint32_t mem_slice_pitch = memory_extent_el.height * mem_row_pitch;
 
    const struct ac_surface_copy_region surf_copy_region = {
       .surf_ptr = surf_ptr,

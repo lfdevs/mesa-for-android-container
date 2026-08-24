@@ -91,7 +91,6 @@ pre_args = [
   '-D__STDC_FORMAT_MACROS',
   '-D__STDC_LIMIT_MACROS',
   '-DPACKAGE_VERSION="@0@"'.format(project_version),
-  '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/-/issues"',
 ]
 # Arguments for c or cpp compiler, can be compiler options
 c_cpp_args = []
@@ -359,6 +358,14 @@ with_vdrm = [
   with_asahi_vk,
   with_intel_virtio,
 ].contains(true)
+
+if with_virtio_vk
+  dep_venus_protocol = dependency('venus-protocol',
+    version : '== 1.1',
+    fallback : ['venus-protocol', 'dep_vn_protocol_driver'],
+    required : true
+  )
+endif
 
 with_dri = false
 if with_gallium and (system_has_kms_drm or (with_gallium_zink and (freedreno_kmds.contains('kgsl') or host_machine.system() == 'darwin')))
@@ -766,6 +773,79 @@ if prog_glslang.found()
   endif
 endif
 
+# Check for libdrm. Various drivers have different libdrm version requirements,
+# but we always want to use the same version for all libdrm modules. That means
+# even if driver foo requires 2.4.0 and driver bar requires 2.4.3, if foo and
+# bar are both on use 2.4.3 for both of them
+dep_libdrm_amdgpu = null_dep
+dep_libdrm_intel = null_dep
+
+_drm_ver = '2.4.109'
+
+_libdrm_checks = {
+  'intel': {
+    'version': '2.4.75',
+    'enabled': with_gallium_i915,
+  },
+  'amdgpu': {
+    'version': '2.4.133',
+    'enabled': (with_amd_vk and not with_platform_windows) or with_gallium_radeonsi,
+  },
+}
+
+# Loop over the enables versions and get the highest libdrm requirement for all
+# active drivers.
+_drm_blame = ''
+foreach name, d : _libdrm_checks
+  if d['enabled'] and d['version'].version_compare('>' + _drm_ver)
+    _drm_ver = d['version']
+    _drm_blame = name
+  endif
+endforeach
+if _drm_blame != ''
+  message('libdrm @0@ needed because @1@ has the highest requirement'.format(_drm_ver, _drm_blame))
+endif
+
+allow_fallback_for_libdrm = get_option('allow-fallback-for').contains('libdrm')
+
+with_gallium_drisw_kms = false
+if system_has_kms_drm
+  dep_libdrm = dependency(
+    'libdrm', version : '>=' + _drm_ver,
+    required : with_dri2 or with_dri or with_gbm,
+    allow_fallback: allow_fallback_for_libdrm,
+    default_options : {
+      'auto_features' : 'disabled',
+      'intel' : _libdrm_checks['intel']['enabled'].to_string('enabled', 'disabled'),
+      'amdgpu' : _libdrm_checks['amdgpu']['enabled'].to_string('enabled', 'disabled'),
+    },
+  )
+else
+  # We should prevent libdrm from being available when the target doesn't have it to avoid transitive
+  # dependencies (such as vk-runtime) linking to it
+  dep_libdrm = null_dep
+endif
+if dep_libdrm.found()
+  pre_args += '-DHAVE_LIBDRM'
+  if with_dri_platform == 'drm' and with_dri
+    with_gallium_drisw_kms = true
+  endif
+endif
+
+# Then get each libdrm module
+foreach name, d : _libdrm_checks
+  if d['enabled']
+    set_variable(
+      'dep_libdrm_' + name,
+      dependency(
+        'libdrm_' + name,
+        version : '>=' + _drm_ver,
+        allow_fallback: allow_fallback_for_libdrm,
+      )
+    )
+  endif
+endforeach
+
 _va_drivers = [
   with_gallium_d3d12_video,
   with_gallium_nouveau,
@@ -787,6 +867,11 @@ dep_va = dependency(
 )
 if dep_va.found()
   dep_va_headers = dep_va.partial_dependency(compile_args : true, includes : true)
+  # Same as dep_va_headers but also propagates generated sources (e.g. the
+  # win32 headers copied into the flat va/ layout by the libva subproject) so
+  # consumers get a build-order edge to them. Kept separate because compiler
+  # checks below require an external-only partial dependency.
+  dep_va_headers_sources = dep_va.partial_dependency(compile_args : true, includes : true, sources : true)
   if cc.has_header_symbol('va/va.h', 'VASurfaceAttribDRMFormatModifiers',
                           dependencies: dep_va_headers)
     pre_args += '-DHAVE_VA_SURFACE_ATTRIB_DRM_FORMAT_MODIFIERS'
@@ -957,6 +1042,7 @@ with_driver_using_cl = [
   with_gallium_iris, with_gallium_crocus, with_intel_vk, with_intel_hasvk,
   with_gallium_asahi, with_asahi_vk, with_tools.contains('asahi'),
   with_gallium_panfrost, with_panfrost_vk,
+  with_gallium_rusticl,
   with_nouveau_vk, with_imagination_vk,
   with_kosmickrisp_vk,
 ].contains(true)
@@ -968,7 +1054,7 @@ if get_option('mesa-clc') == 'system'
   with_clc = with_gallium_rusticl
 else
   with_clc = get_option('mesa-clc') != 'auto' or \
-             with_microsoft_clc or with_gallium_rusticl or \
+             with_microsoft_clc or \
              with_drivers_clc or with_driver_using_cl
 endif
 
@@ -981,8 +1067,14 @@ with_poly = [
 ].contains(true)
 
 dep_clc = null_dep
-if with_clc
-  dep_clc = dependency('libclc')
+if with_gallium_rusticl or with_microsoft_clc
+  dep_clc = dependency('mesa-libclc', required : false,
+    not_found_message :
+    'mesa-libclc not found. Build will fall back to upstream libclc, however ' +
+    'this is not recommended for most use cases.')
+  if not dep_clc.found()
+    dep_clc = dependency('libclc')
+  endif
 endif
 
 with_gfx_compute = [
@@ -1137,10 +1229,6 @@ endif
 
 if has_yaml.returncode() != 0
   error('Python (3.x) yaml module (PyYAML) required to build mesa.')
-endif
-
-if cc.get_id() == 'gcc' and cc.version().version_compare('< 4.4.6')
-  error('When using GCC, version 4.4.6 or later is required.')
 endif
 
 # Support systems without ETIME (e.g. FreeBSD)
@@ -1876,71 +1964,6 @@ if host_machine.system() == 'windows'
     dep_futex = cc.find_library('synchronization', required : true)
   endif
 endif
-
-# Check for libdrm. Various drivers have different libdrm version requirements,
-# but we always want to use the same version for all libdrm modules. That means
-# even if driver foo requires 2.4.0 and driver bar requires 2.4.3, if foo and
-# bar are both on use 2.4.3 for both of them
-dep_libdrm_amdgpu = null_dep
-dep_libdrm_intel = null_dep
-
-_drm_amdgpu_ver = '2.4.133'
-_drm_intel_ver = '2.4.75'
-_drm_ver = '2.4.109'
-
-_libdrm_checks = [
-  ['intel', with_gallium_i915],
-  ['amdgpu', (with_amd_vk and not with_platform_windows) or with_gallium_radeonsi],
-]
-
-# Loop over the enables versions and get the highest libdrm requirement for all
-# active drivers.
-_drm_blame = ''
-foreach d : _libdrm_checks
-  ver = get_variable('_drm_@0@_ver'.format(d[0]))
-  if d[1] and ver.version_compare('>' + _drm_ver)
-    _drm_ver = ver
-    _drm_blame = d[0]
-  endif
-endforeach
-if _drm_blame != ''
-  message('libdrm @0@ needed because @1@ has the highest requirement'.format(_drm_ver, _drm_blame))
-endif
-
-allow_fallback_for_libdrm = get_option('allow-fallback-for').contains('libdrm')
-
-with_gallium_drisw_kms = false
-if system_has_kms_drm
-  dep_libdrm = dependency(
-    'libdrm', version : '>=' + _drm_ver,
-    required : with_dri2 or with_dri or with_gbm,
-    allow_fallback: allow_fallback_for_libdrm,
-  )
-else
-  # We should prevent libdrm from being available when the target doesn't have it to avoid transitive
-  # dependencies (such as vk-runtime) linking to it
-  dep_libdrm = null_dep
-endif
-if dep_libdrm.found()
-  pre_args += '-DHAVE_LIBDRM'
-  if with_dri_platform == 'drm' and with_dri
-    with_gallium_drisw_kms = true
-  endif
-endif
-
-# Then get each libdrm module
-foreach d : _libdrm_checks
-  if d[1]
-    set_variable(
-      'dep_libdrm_' + d[0],
-      dependency(
-        'libdrm_' + d[0],
-        version : '>=' + _drm_ver,
-        allow_fallback: allow_fallback_for_libdrm,
-      )
-    )
-  endif
-endforeach
 
 dep_libudev = dependency('libudev', required : false)
 if dep_libudev.found()

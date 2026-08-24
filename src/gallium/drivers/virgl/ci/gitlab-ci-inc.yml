@@ -8,20 +8,20 @@
     - if: '$INPUT_HW_JOBS !~ /"(all|iris|i915.ko|virgl|virtio.ko)"/i'
       when: never
 
-.virgl-rules:
-  stage: layered-backends
+.virgl-manual-rules:
+  stage: layered-backends-nightly
   rules:
     - !reference [.enforce-hw-jobs-virgl-rules, rules]
     - !reference [.test, rules]
-    - !reference [.gl-rules, rules]
-    - !reference [.llvmpipe-rules, rules]
+    - !reference [.gl-manual-rules, rules]
+    - !reference [.llvmpipe-manual-rules, rules]
     - changes: &virgl_file_list
-      - src/gallium/drivers/virgl/**/*
-      - src/gallium/winsys/virgl/**/*
+        - src/gallium/drivers/virgl/**/*
+        - src/gallium/winsys/virgl/**/*
       when: on_success
 
 .virgl-iris-manual-rules:
-  stage: layered-backends
+  stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
     - !reference [.enforce-hw-jobs-virgl-iris-rules, rules]
@@ -57,7 +57,7 @@
 .virpipe-test:
   extends:
     - .test-gl
-    - .virgl-rules
+    - .virgl-manual-rules
   timeout: 15m
   variables:
     GALLIUM_DRIVER: virpipe
@@ -75,7 +75,7 @@
   extends:
     - .test-gl
     - .test-crosvm
-    - .virgl-rules
+    - .virgl-manual-rules
   timeout: 15m
   variables:
     FLAKES_CHANNEL: "#virgl-ci"

@@ -1,6 +1,6 @@
 [wrap-file]
 directory = zerocopy-0.8.13
-source_url = https://crates.io/api/v1/crates/zerocopy/0.8.13/download
+source_url = https://static.crates.io/crates/zerocopy/0.8.13/download
 source_filename = zerocopy-0.8.13.tar.gz
 source_hash = 67914ab451f3bfd2e69e5e9d2ef3858484e7074d63f204fd166ec391b54de21d
 patch_directory = zerocopy-0.8-rs

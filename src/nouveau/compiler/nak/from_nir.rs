@@ -948,21 +948,26 @@ impl<'a> ShaderFromNir<'a> {
                 }
                 dst
             }
-            nir_op_fabs | nir_op_fadd | nir_op_fneg => {
+            nir_op_fabs | nir_op_fadd | nir_op_fadd_rtne | nir_op_fneg => {
                 let (x, y) = match alu.op {
                     nir_op_fabs => (Src::ZERO.fneg(), srcs(0).fabs()),
                     nir_op_fadd => (srcs(0), srcs(1)),
+                    nir_op_fadd_rtne => (srcs(0), srcs(1)),
                     nir_op_fneg => (Src::ZERO.fneg(), srcs(0).fneg()),
                     _ => panic!("Unhandled case"),
                 };
                 let ftype = FloatType::from_bits(alu.def.bit_size().into());
+                let rnd_mode = match alu.op {
+                    nir_op_fadd_rtne => FRndMode::NearestEven,
+                    _ => self.float_ctl[ftype].rnd_mode,
+                };
                 let dst;
                 if alu.def.bit_size() == 64 {
                     dst = b.alloc_ssa_vec(RegFile::GPR, 2);
                     b.push_op(OpDAdd {
                         dst: dst.clone().into(),
                         srcs: [x, y],
-                        rnd_mode: self.float_ctl[ftype].rnd_mode,
+                        rnd_mode: rnd_mode,
                     });
                 } else if alu.def.bit_size() == 32 {
                     dst = b.alloc_ssa_vec(RegFile::GPR, 1);
@@ -970,7 +975,7 @@ impl<'a> ShaderFromNir<'a> {
                         dst: dst.clone().into(),
                         srcs: [x, y],
                         saturate: self.try_saturate_alu_dst(&alu.def),
-                        rnd_mode: self.float_ctl[ftype].rnd_mode,
+                        rnd_mode: rnd_mode,
                         ftz: self.float_ctl[ftype].ftz,
                     });
                 } else if alu.def.bit_size() == 16 {

@@ -70,39 +70,33 @@ read_const_values(nir_const_value *dst, const void *src,
 }
 
 static void
-write_const_values(void *dst, const nir_const_value *src,
-                   nir_component_mask_t write_mask,
-                   unsigned bit_size)
+write_const_value(void *dst, const nir_const_value src,
+                  unsigned index, unsigned bit_size)
 {
    switch (bit_size) {
    case 1:
       /* Booleans are special-cased to be 32-bit */
       assert(util_ptr_is_aligned(dst, 4));
-      u_foreach_bit(i, write_mask)
-         ((uint32_t *)dst)[i] = -(int)src[i].b;
+      ((uint32_t *)dst)[index] = -(int)src.b;
       break;
 
    case 8:
-      u_foreach_bit(i, write_mask)
-         ((uint8_t *)dst)[i] = src[i].u8;
+      ((uint8_t *)dst)[index] = src.u8;
       break;
 
    case 16:
       assert(util_ptr_is_aligned(dst, 2));
-      u_foreach_bit(i, write_mask)
-         ((uint16_t *)dst)[i] = src[i].u16;
+      ((uint16_t *)dst)[index] = src.u16;
       break;
 
    case 32:
       assert(util_ptr_is_aligned(dst, 4));
-      u_foreach_bit(i, write_mask)
-         ((uint32_t *)dst)[i] = src[i].u32;
+      ((uint32_t *)dst)[index] = src.u32;
       break;
 
    case 64:
       assert(util_ptr_is_aligned(dst, 8));
-      u_foreach_bit(i, write_mask)
-         ((uint64_t *)dst)[i] = src[i].u64;
+      ((uint64_t *)dst)[index] = src.u64;
       break;
 
    default:
@@ -218,7 +212,7 @@ build_constant_load(nir_builder *b, nir_deref_instr *deref,
 
 static void
 handle_constant_store(void *mem_ctx, struct var_info *info,
-                      nir_deref_instr *deref, nir_const_value *val,
+                      nir_deref_instr *deref, nir_def *val,
                       nir_component_mask_t write_mask,
                       glsl_type_size_align_func size_align)
 {
@@ -237,9 +231,13 @@ handle_constant_store(void *mem_ctx, struct var_info *info,
    if (offset >= info->constant_data_size)
       return;
 
-   write_const_values((char *)info->constant_data + offset, val,
-                      write_mask & nir_component_mask(num_components),
-                      bit_size);
+   write_mask &= nir_component_mask(num_components);
+
+   u_foreach_bit(i, write_mask) {
+      nir_const_value constant = nir_scalar_as_const_value(nir_scalar_resolved(val, i));
+      write_const_value((char *)info->constant_data + offset,
+                        constant, i, bit_size);
+   }
 }
 
 #define NIR_SMALL_CONSTANT_MAX_ABS_VALUE 255
@@ -575,8 +573,10 @@ nir_opt_large_constants(nir_shader *shader,
          switch (intrin->intrinsic) {
          case nir_intrinsic_store_deref:
             dst_deref = nir_src_as_deref(intrin->src[0]);
-            src_is_const = nir_src_is_const(intrin->src[1]);
             write_mask = nir_intrinsic_write_mask(intrin);
+            src_is_const = true;
+            u_foreach_bit(i, write_mask)
+               src_is_const &= nir_scalar_is_const(nir_scalar_resolved(intrin->src[1].ssa, i));
             break;
 
          case nir_intrinsic_load_deref:
@@ -613,9 +613,8 @@ nir_opt_large_constants(nir_shader *shader,
                 nir_deref_instr_has_indirect(dst_deref)) {
                info->is_constant = false;
             } else {
-               nir_const_value *val = nir_src_as_const_value(intrin->src[1]);
-               handle_constant_store(var_infos, info, dst_deref, val, write_mask,
-                                     size_align);
+               handle_constant_store(var_infos, info, dst_deref, intrin->src[1].ssa,
+                                     write_mask, size_align);
             }
          }
 

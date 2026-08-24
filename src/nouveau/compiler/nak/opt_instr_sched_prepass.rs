@@ -72,6 +72,7 @@ fn generate_dep_graph(sm: &ShaderModelInfo, instrs: &[Instr]) -> DepGraph {
 
     let mut last_memory_op = None;
     let mut last_barrier_op = None;
+    let mut last_carry_op = None;
 
     for ip in 0..instrs.len() {
         let instr = &instrs[ip];
@@ -98,6 +99,17 @@ fn generate_dep_graph(sm: &ShaderModelInfo, instrs: &[Instr]) -> DepGraph {
         }
 
         for (i, src) in instr.srcs().iter().enumerate() {
+            if src.src_ref.is_carry() {
+                if let Some(carry_ip) = last_carry_op {
+                    if carry_ip < ip {
+                        g.add_edge(carry_ip, ip, EdgeLabel { latency: 0 });
+                    } else {
+                        debug_assert!(carry_ip == ip);
+                    }
+                }
+                last_carry_op = Some(ip);
+            }
+
             for ssa in src.src_ref.iter_ssa() {
                 if let Some(&(def_ip, def_idx)) = defs.get(ssa) {
                     let def_instr = &instrs[def_ip];
@@ -139,6 +151,17 @@ fn generate_dep_graph(sm: &ShaderModelInfo, instrs: &[Instr]) -> DepGraph {
         }
 
         for (i, dst) in instr.dsts().iter().enumerate() {
+            if dst.is_carry() {
+                if let Some(carry_ip) = last_carry_op {
+                    if carry_ip < ip {
+                        g.add_edge(carry_ip, ip, EdgeLabel { latency: 0 });
+                    } else {
+                        debug_assert!(carry_ip == ip);
+                    }
+                }
+                last_carry_op = Some(ip);
+            }
+
             for &ssa in dst.iter_ssa() {
                 defs.insert(ssa, (ip, i));
             }

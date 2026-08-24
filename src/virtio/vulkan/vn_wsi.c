@@ -259,13 +259,13 @@ vn_wsi_memory_info_init(struct vn_device_memory *mem,
    const VkMemoryDedicatedAllocateInfo *dedicated_info = NULL;
    const struct wsi_memory_allocate_info *wsi_info = NULL;
 
-   vk_foreach_struct_const(pnext, alloc_info->pNext) {
-      switch ((uint32_t)pnext->sType) {
+   vk_foreach_struct_const(sType, pnext, alloc_info->pNext) {
+      switch ((uint32_t)sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO:
-         dedicated_info = (const void *)pnext;
+         dedicated_info = pnext;
          break;
       case VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA:
-         wsi_info = (const void *)pnext;
+         wsi_info = pnext;
          break;
       default:
          break;
@@ -388,8 +388,11 @@ vn_wsi_validate_image_format_info(struct vn_physical_device *physical_dev,
 }
 
 VkResult
-vn_wsi_fence_wait(struct vn_device *dev, struct vn_queue *queue)
+vn_wsi_fence_wait(VkQueue queue_handle)
 {
+   struct vn_queue *queue = vn_queue_from_handle(queue_handle);
+   struct vn_device *dev = vn_device_from_vk(queue->base.vk.base.device);
+
    /* External sync is supported by virtgpu backend but not vtest backend. For
     * vtest, common wsi will skip the implicit out fence installation due to
     * the lack of external SYNC_FD semaphore support. So we'll detect async
@@ -416,7 +419,6 @@ vn_wsi_fence_wait(struct vn_device *dev, struct vn_queue *queue)
          return result;
    }
 
-   VkQueue queue_handle = vn_queue_to_handle(queue);
    result = vn_QueueSubmit(queue_handle, 0, NULL, queue->async_present.fence);
    if (result != VK_SUCCESS)
       return result;
@@ -473,8 +475,10 @@ vn_wsi_sync_wait(struct vn_device *dev, int fd)
 }
 
 void
-vn_wsi_flush(struct vn_queue *queue)
+vn_wsi_flush(VkQueue queue_handle)
 {
+   struct vn_queue *queue = vn_queue_from_handle(queue_handle);
+
    /* No need to flush if there's no present. */
    if (!queue->async_present.initialized)
       return;
@@ -503,8 +507,8 @@ vn_wsi_clone_present_info(struct vn_device *dev, const VkPresentInfoKHR *pi)
    VkSwapchainPresentModeInfoKHR *spmi = NULL;
    VkPresentTimingsInfoEXT *pti = NULL;
 
-   vk_foreach_struct_const(pnext, pi->pNext) {
-      switch (pnext->sType) {
+   vk_foreach_struct_const(sType, pnext, pi->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR:
          dgpi = (void *)pnext;
          break;

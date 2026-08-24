@@ -1427,16 +1427,27 @@ fill_masks(struct intel_device_info *devinfo)
 void
 intel_device_info_update_cs_workgroup_threads(struct intel_device_info *devinfo)
 {
-   /* GPGPU_WALKER::ThreadWidthCounterMaximum is U6-1 so the most threads we
-    * can program is 64 without going up to a rectangular group. This only
-    * impacts Haswell and TGL which have higher thread counts.
-    *
-    * INTERFACE_DESCRIPTOR_DATA::NumberofThreadsinGPGPUThreadGroup on Xe-HP+
-    * is 10 bits so we have no such restrictions.
-    */
-   devinfo->max_cs_workgroup_threads =
-      devinfo->verx10 >= 125 ? devinfo->max_cs_threads :
-                               MIN2(devinfo->max_cs_threads, 64);
+   if (devinfo->verx10 >= 300) {
+      /* BSpec 56590 (r65834)
+       * PTL+ introduces compute workgroup limits that depend on SIMD
+       * width and GRF usage. Conservatively limit the workgroup thread
+       * count to 32 so brw_simd_should_compile() rejects SIMD16 variants
+       * that would require more than 32 hardware threads and selects
+       * SIMD32 instead.
+       */
+      devinfo->max_cs_workgroup_threads = MIN2(devinfo->max_cs_threads, 32);
+   } else if (devinfo->verx10 >= 125) {
+      /* INTERFACE_DESCRIPTOR_DATA::NumberofThreadsinGPGPUThreadGroup on Xe-HP+
+       * is 10 bits so we have no such restrictions.
+       */
+      devinfo->max_cs_workgroup_threads = devinfo->max_cs_threads;
+   } else {
+      /* GPGPU_WALKER::ThreadWidthCounterMaximum is U6-1 so the most threads we
+       * can program is 64 without going up to a rectangular group. This only
+       * impacts Haswell and TGL which have higher thread counts.
+       */
+      devinfo->max_cs_workgroup_threads = MIN2(devinfo->max_cs_threads, 64);
+   }
 }
 
 static bool

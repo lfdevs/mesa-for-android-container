@@ -1409,8 +1409,10 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 update_double_buffer_score(job, draws[0].count * info->instance_count);
 
         if (job->referenced_size > V3D_JOB_MAX_BO_REFERENCED_SIZE ||
-            job->submit.bo_handle_count > V3D_JOB_MAX_BO_HANDLE_COUNT) {
-                perf_debug("Flushing job with %u BOs referencing %dkb to try to free up memory\n",
+            job->submit.bo_handle_count > V3D_JOB_MAX_BO_HANDLE_COUNT ||
+            job->draw_calls_queued > V3D_JOB_MAX_DRAW_CALLS_QUEUED) {
+                perf_debug("Flushing job with %u draws, %u BOs referencing %dkb\n",
+                           job->draw_calls_queued,
                            job->submit.bo_handle_count,
                            job->referenced_size / 1024);
                 v3d_job_submit(v3d, job);

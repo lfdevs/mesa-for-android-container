@@ -87,6 +87,7 @@ util_fpstate_get(void)
    }
 #endif
 #if DETECT_ARCH_ARM
+#if !defined(__SOFTFP__)
    if (util_get_cpu_caps()->has_neon) {
 #ifdef HAVE___BUILTIN_ARM_GET_FPSCR
       fpstate = __builtin_arm_get_fpscr();
@@ -94,6 +95,7 @@ util_fpstate_get(void)
       __asm__ volatile("vmrs %0, fpscr" : "=r"(fpstate));
 #endif
    }
+#endif
 #elif DETECT_ARCH_AARCH64
    {
 #ifdef HAVE___BUILTIN_AARCH64_GET_FPCR
@@ -154,6 +156,7 @@ util_fpstate_set(unsigned fpstate)
    }
 #endif
 #if DETECT_ARCH_ARM
+#if !defined(__SOFTFP__)
    if (util_get_cpu_caps()->has_neon) {
 #ifdef HAVE___BUILTIN_ARM_SET_FPSCR
       __builtin_arm_set_fpscr(fpstate);
@@ -161,6 +164,7 @@ util_fpstate_set(unsigned fpstate)
       __asm__ volatile("vmsr fpscr, %0" :: "r"(fpstate));
 #endif
    }
+#endif
 #elif DETECT_ARCH_AARCH64
    {
 #ifdef HAVE___BUILTIN_AARCH64_SET_FPCR

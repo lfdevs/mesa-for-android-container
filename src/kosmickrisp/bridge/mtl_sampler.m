@@ -98,6 +98,16 @@ mtl_sampler_descriptor_set_compare_function(mtl_sampler_descriptor *descriptor,
    }
 }
 
+void
+mtl_sampler_descriptor_set_reduction_mode(mtl_sampler_descriptor *descriptor,
+                                          enum mtl_sampler_reduction_mode mode)
+{
+   @autoreleasepool {
+      MTLSamplerDescriptor *desc = (MTLSamplerDescriptor *)descriptor;
+      desc.reductionMode = (MTLSamplerReductionMode)mode;
+   }
+}
+
 mtl_sampler *
 mtl_new_sampler(mtl_device *device, mtl_sampler_descriptor *descriptor)
 {

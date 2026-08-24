@@ -9,12 +9,6 @@ spec@!opengl 1.0@rasterpos,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 
-spec@!opengl 1.1@linestipple,Fail
-spec@!opengl 1.1@linestipple@Factor 2x,Fail
-spec@!opengl 1.1@linestipple@Factor 3x,Fail
-spec@!opengl 1.1@linestipple@Line loop,Fail
-spec@!opengl 1.1@linestipple@Line strip,Fail
-
 # Fail: nothing rendered.
 spec@!opengl 2.0@vs-point_size-zero,Fail
 
@@ -108,3 +102,5 @@ spec@khr_shader_subgroup@execution@bitonic_sort,Fail
 glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Fail
 
+# uprev Piglit in Mesa
+vulkan@shaders@cmat-uniform-ctor,Fail

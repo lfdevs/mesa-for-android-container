@@ -155,6 +155,7 @@ enum vtn_branch_type {
    vtn_branch_type_terminate_ray,
    vtn_branch_type_emit_mesh_tasks,
    vtn_branch_type_return,
+   vtn_branch_type_abort,
 };
 
 static const char *
@@ -176,6 +177,7 @@ vtn_branch_type_to_string(enum vtn_branch_type t)
    CASE(terminate_ray);
    CASE(emit_mesh_tasks);
    CASE(return);
+   CASE(abort);
    }
 #undef CASE
    UNREACHABLE("unknown branch type");
@@ -370,6 +372,7 @@ structured_post_order_traversal(struct vtn_builder *b, struct vtn_block *block)
    case SpvOpReturnValue:
    case SpvOpEmitMeshTasksEXT:
    case SpvOpUnreachable:
+   case SpvOpAbortKHR:
       block->successors_count = 1;
       block->successors = vtn_zalloc(b, struct vtn_successor);
       break;
@@ -972,6 +975,8 @@ branch_type_for_terminator(struct vtn_builder *b, struct vtn_block *block)
    case SpvOpReturnValue:
    case SpvOpUnreachable:
       return vtn_branch_type_return;
+   case SpvOpAbortKHR:
+      return vtn_branch_type_abort;
    default:
       UNREACHABLE("unexpected terminator operation");
       return vtn_branch_type_none;
@@ -1246,6 +1251,12 @@ vtn_emit_branch(struct vtn_builder *b, const struct vtn_block *block,
       vtn_assert(block);
       vtn_emit_ret_store(b, block);
       nir_jump(&b->nb, nir_jump_return);
+      break;
+
+   case vtn_branch_type_abort:
+      vtn_assert(block);
+      vtn_assert(block->branch);
+      vtn_handle_abort(b, block->branch, block->branch[0] >> SpvWordCountShift);
       break;
 
    case vtn_branch_type_discard:

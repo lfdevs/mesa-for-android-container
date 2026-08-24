@@ -6,3 +6,4 @@ source_hash = 467c418c2640a178c6baad5be2e00d569842123763b80507721ab87eb7af8735
 
 [provide]
 libva = libva_dep
+libva-win32 = libva_win32_dep

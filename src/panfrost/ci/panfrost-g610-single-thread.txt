@@ -1,0 +1,8 @@
+# These OpenCL-CTS tests use large resource limits and can trip the OOM killer
+# when they are run with other tests in parallel
+^Allocations \(single maximum\)$
+^Allocations \(total maximum\)$
+^Images \(Kernel max size\)$
+^Images \(clCopyImage max size\)$
+^Images \(clFillImage max size\)$
+^Thread Dimensions$

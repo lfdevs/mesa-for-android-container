@@ -28,7 +28,6 @@ static const nvk_mme_builder_func mme_builders[NVK_MME_COUNT] = {
    [NVK_MME_DRAW_INDEXED_INDIRECT_COUNT]   = nvk_mme_draw_indexed_indirect_count,
    [NVK_MME_BEGIN_COND_RENDER]             = nvk_mme_begin_cond_render,
    [NVK_MME_ADD_CS_INVOCATIONS]            = nvk_mme_add_cs_invocations,
-   [NVK_MME_DISPATCH_INDIRECT]             = nvk_mme_dispatch_indirect,
    [NVK_MME_WRITE_CS_INVOCATIONS]          = nvk_mme_write_cs_invocations,
    [NVK_MME_XFB_COUNTER_LOAD]              = nvk_mme_xfb_counter_load,
    [NVK_MME_XFB_DRAW_INDIRECT]             = nvk_mme_xfb_draw_indirect,

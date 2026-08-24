@@ -342,16 +342,16 @@ struct tgsi_property_data {
 enum tgsi_opcode {
    TGSI_OPCODE_ARL                = 0,
    TGSI_OPCODE_MOV                = 1,
-   TGSI_OPCODE_LIT                = 2,
+   /* gap */
    TGSI_OPCODE_RCP                = 3,
    TGSI_OPCODE_RSQ                = 4,
-   TGSI_OPCODE_EXP                = 5,
-   TGSI_OPCODE_LOG                = 6,
+   /* gap */
+   /* gap */
    TGSI_OPCODE_MUL                = 7,
    TGSI_OPCODE_ADD                = 8,
    TGSI_OPCODE_DP3                = 9,
    TGSI_OPCODE_DP4                = 10,
-   TGSI_OPCODE_DST                = 11,
+   /* gap */
    TGSI_OPCODE_MIN                = 12,
    TGSI_OPCODE_MAX                = 13,
    TGSI_OPCODE_SLT                = 14,
@@ -381,9 +381,9 @@ enum tgsi_opcode {
    TGSI_OPCODE_DDY                = 38,
    TGSI_OPCODE_KILL               = 39 /* unconditional */,
    TGSI_OPCODE_PK2H               = 40,
-   TGSI_OPCODE_PK2US              = 41,
-   TGSI_OPCODE_PK4B               = 42,
-   TGSI_OPCODE_PK4UB              = 43,
+   /* gap */
+   /* gap */
+   /* gap */
    TGSI_OPCODE_D2U64              = 44,
    TGSI_OPCODE_SEQ                = 45,
    TGSI_OPCODE_D2I64              = 46,

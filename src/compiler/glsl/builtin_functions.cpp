@@ -2373,6 +2373,7 @@ builtin_builder::create_builtins()
    FHF(degrees)
    FHF(sin)
    FHF(cos)
+   FHF(tanh)
    FHF(tan)
    FHF(asin)
    FHF(acos)
@@ -2398,7 +2399,6 @@ builtin_builder::create_builtins()
 
    FHF130(sinh)
    FHF130(cosh)
-   FHF130(tanh)
    FHF130(asinh)
    FHF130(acosh)
    FHF130(atanh)
@@ -6508,6 +6508,8 @@ UNOPA(cos, ir_unop_cos)
 UNOPA(asin, ir_unop_asin)
 UNOPA(acos, ir_unop_acos)
 
+UNOPA(tanh, ir_unop_tanh)
+
 ir_function_signature *
 builtin_builder::_tan(builtin_available_predicate avail,
                       const glsl_type *type)
@@ -6576,28 +6578,6 @@ builtin_builder::_cosh(builtin_available_predicate avail,
 
    /* 0.5 * (e^x + e^(-x)) */
    body.emit(ret(mul(IMM_FP(type, 0.5f), add(exp(x), exp(neg(x))))));
-
-   return sig;
-}
-
-ir_function_signature *
-builtin_builder::_tanh(builtin_available_predicate avail,
-                       const glsl_type *type)
-{
-   ir_variable *x = in_var(type, "x");
-   MAKE_SIG(type, avail, 1, x);
-
-   /* Clamp x to [-10, +10] to avoid precision problems.
-    * When x > 10, e^(-x) is so small relative to e^x that it gets flushed to
-    * zero in the computation e^x + e^(-x). The same happens in the other
-    * direction when x < -10.
-    */
-   ir_variable *t = body.make_temp(type, "tmp");
-   body.emit(assign(t, min2(max2(x, IMM_FP(type, -10.0f)), IMM_FP(type, 10.0f))));
-
-   /* (e^x - e^(-x)) / (e^x + e^(-x)) */
-   body.emit(ret(div(sub(exp(t), exp(neg(t))),
-                     add(exp(t), exp(neg(t))))));
 
    return sig;
 }

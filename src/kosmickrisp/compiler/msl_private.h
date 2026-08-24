@@ -72,7 +72,7 @@ void msl_input_name(struct nir_to_msl_ctx *ctx, unsigned location,
                     unsigned component);
 
 void msl_output_name(struct nir_to_msl_ctx *ctx, unsigned location,
-                     unsigned component);
+                     unsigned component, bool from_input);
 
 uint32_t msl_input_num_components(struct nir_to_msl_ctx *ctx,
                                   uint32_t location);

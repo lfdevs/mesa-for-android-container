@@ -221,11 +221,11 @@ convert_ubyte_rgba_to_bgra(size_t width, size_t height,
          }
          if (width & 1) {
             /* handle the case of odd widths */
-            const GLuint s = ((const GLuint *) src)[width - 1];
-            GLuint *d = (GLuint *) dst + width - 1;
-            *d = ( (s & 0xff00ff00) |
-                  ((s &       0xff) << 16) |
-                  ((s &   0xff0000) >> 16));
+            const GLuint s2 = ((const GLuint *) src)[width - 1];
+            GLuint *d2 = (GLuint *) dst + width - 1;
+            *d2 = ( (s2 & 0xff00ff00) |
+                   ((s2 &       0xff) << 16) |
+                   ((s2 &   0xff0000) >> 16));
          }
          src += src_stride;
          dst += dst_stride;

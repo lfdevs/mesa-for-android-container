@@ -870,12 +870,12 @@ dzn_GetImageMemoryRequirements2(VkDevice _device,
    struct dzn_physical_device *pdev =
       container_of(device->vk.physical, struct dzn_physical_device, vk);
 
-   vk_foreach_struct_const(ext, pInfo->pNext) {
-      vk_debug_ignored_stype(ext->sType);
+   vk_foreach_struct_const(sType, ext, pInfo->pNext) {
+      vk_debug_ignored_stype(sType);
    }
 
-   vk_foreach_struct(ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
          VkMemoryDedicatedRequirements *requirements =
             (VkMemoryDedicatedRequirements *)ext;
@@ -886,7 +886,7 @@ dzn_GetImageMemoryRequirements2(VkDevice _device,
       }
 
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }

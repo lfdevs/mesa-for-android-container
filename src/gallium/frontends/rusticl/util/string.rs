@@ -65,12 +65,11 @@ impl CStrExt for CStr {
 
 #[test]
 fn test_from_ptr_or_empty() {
-    assert_eq!(unsafe { CStr::from_ptr_or_empty(&std::ptr::null()) }, c"");
+    let null_ptr = std::ptr::null();
+    assert_eq!(unsafe { CStr::from_ptr_or_empty(&null_ptr) }, c"");
     let some_str = c"SomeStr";
-    assert_eq!(
-        unsafe { CStr::from_ptr_or_empty(&some_str.as_ptr()) },
-        some_str
-    );
+    let some_ptr = some_str.as_ptr();
+    assert_eq!(unsafe { CStr::from_ptr_or_empty(&some_ptr) }, some_str);
 }
 
 #[test]

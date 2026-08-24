@@ -1002,8 +1002,7 @@ static void build_lighting( struct tnl_program *p )
              * negation makes the back-face specular term positive again.
              */
             unsigned swiz_xywz[] = {0, 1, 3, 2};
-            nir_def *dots =
-               nir_fneg(p->b, nir_swizzle(p->b, old_dots, swiz_xywz, 4));
+            dots = nir_fneg(p->b, nir_swizzle(p->b, old_dots, swiz_xywz, 4));
 
             if (att) {
                /* light is attenuated by distance */
@@ -1054,10 +1053,14 @@ static void build_fog( struct tnl_program *p )
                             nir_trim_vector(p->b, get_eye_position(p), 3));
       break;
    case FDM_EYE_PLANE: /* Z = Ze */
-      fog = get_eye_position_z(p);
-      break;
    case FDM_EYE_PLANE_ABS: /* Z = abs(Ze) */
-      fog = nir_fabs(p->b, get_eye_position_z(p));
+      /* Emit the *signed* eye-space Z.  For the EYE_PLANE_ABS mode the
+       * abs() is applied per-fragment in st_nir_lower_fog() instead of here,
+       * so that it is not baked into the interpolated per-vertex value.
+       * Doing abs() per vertex breaks primitives straddling the eye plane
+       * (e.g. a floor the camera stands on), fully fogging them.  See #15407.
+       */
+      fog = get_eye_position_z(p);
       break;
    case FDM_FROM_ARRAY:
       fog = load_input(p, VERT_ATTRIB_FOG, 1);

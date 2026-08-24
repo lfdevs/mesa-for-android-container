@@ -102,7 +102,7 @@ build_attr_desc_write(struct nir_builder *b, nir_def *data, uint32_t base,
                       const struct lower_vs_outputs_ctx *ctx)
 {
    nir_def *index = nir_imm_int(b, base);
-   nir_def *vertex_id = nir_load_raw_vertex_id_pan(b);
+   nir_def *vertex_id = nir_load_raw_vertex_id(b);
    nir_def *instance_id = nir_load_instance_id(b);
 
    nir_def *addr_cvt = nir_lea_attr_pan(b, index, vertex_id, instance_id,
@@ -170,8 +170,6 @@ get_or_create_var(nir_builder *b, struct lower_vs_outputs_ctx *ctx,
    bool is_per_view = intr->intrinsic == nir_intrinsic_store_per_view_output;
    ASSERTED nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
    unsigned slot_idx = nir_intrinsic_base(intr);
-   nir_alu_type src_type = nir_intrinsic_src_type(intr);
-   enum glsl_base_type base_type = nir_get_glsl_base_type_for_nir_type(src_type);
 
    /* Indirect array varyings are not yet supported (num_slots > 1) */
    assert(sem.num_slots == 1);
@@ -179,13 +177,15 @@ get_or_create_var(nir_builder *b, struct lower_vs_outputs_ctx *ctx,
 
    nir_variable *var = ctx->variables[slot_idx];
    if (var != NULL) {
-      /* All stores should agree per-location */
       assert(glsl_type_is_array(var->type) == is_per_view);
-      assert(glsl_get_base_type(glsl_without_array(var->type)) == base_type);
       return var;
    }
 
-   /* We need the slot section for the number of components */
+   /* Use the layout's authoritative type for the variable. The VS doesn't
+    * know if a varying is flat or smooth, and nir_opt_varyings can put
+    * stores of different types at the same slot, so we cannot trust the
+    * individual store's src_type.
+    */
    pan_varying_layout_require_format(ctx->varying_layout);
    const struct pan_varying_slot *slot =
       pan_varying_layout_slot_at(ctx->varying_layout, slot_idx);
@@ -193,6 +193,8 @@ get_or_create_var(nir_builder *b, struct lower_vs_outputs_ctx *ctx,
    assert(slot && slot->section != PAN_VARYING_SECTION_SPECIAL &&
           slot->location == sem.location);
 
+   enum glsl_base_type base_type =
+      nir_get_glsl_base_type_for_nir_type(slot->alu_type);
    const glsl_type *var_type = glsl_vector_type(base_type, slot->ncomps);
    if (is_per_view) {
       var_type = glsl_array_type(

@@ -1063,27 +1063,27 @@
     <enum name="LIGHT7"                        count="1"  value="0x4007">
         <size name="Get" mode="get"/>
     </enum>
-    <enum name="CURRENT_BIT"                              value="0x00000001"/>
-    <enum name="POINT_BIT"                                value="0x00000002"/>
-    <enum name="LINE_BIT"                                 value="0x00000004"/>
-    <enum name="POLYGON_BIT"                              value="0x00000008"/>
-    <enum name="POLYGON_STIPPLE_BIT"                      value="0x00000010"/>
-    <enum name="PIXEL_MODE_BIT"                           value="0x00000020"/>
-    <enum name="LIGHTING_BIT"                             value="0x00000040"/>
-    <enum name="FOG_BIT"                                  value="0x00000080"/>
-    <enum name="DEPTH_BUFFER_BIT"                         value="0x00000100"/>
-    <enum name="ACCUM_BUFFER_BIT"                         value="0x00000200"/>
-    <enum name="STENCIL_BUFFER_BIT"                       value="0x00000400"/>
-    <enum name="VIEWPORT_BIT"                             value="0x00000800"/>
-    <enum name="TRANSFORM_BIT"                            value="0x00001000"/>
-    <enum name="ENABLE_BIT"                               value="0x00002000"/>
-    <enum name="COLOR_BUFFER_BIT"                         value="0x00004000"/>
-    <enum name="HINT_BIT"                                 value="0x00008000"/>
-    <enum name="EVAL_BIT"                                 value="0x00010000"/>
-    <enum name="LIST_BIT"                                 value="0x00020000"/>
-    <enum name="TEXTURE_BIT"                              value="0x00040000"/>
-    <enum name="SCISSOR_BIT"                              value="0x00080000"/>
-    <enum name="ALL_ATTRIB_BITS"                          value="0x000FFFFF"/>
+    <enum name="CURRENT_BIT"                              value="0x00000001" group="AttribMask"/>
+    <enum name="POINT_BIT"                                value="0x00000002" group="AttribMask"/>
+    <enum name="LINE_BIT"                                 value="0x00000004" group="AttribMask"/>
+    <enum name="POLYGON_BIT"                              value="0x00000008" group="AttribMask"/>
+    <enum name="POLYGON_STIPPLE_BIT"                      value="0x00000010" group="AttribMask"/>
+    <enum name="PIXEL_MODE_BIT"                           value="0x00000020" group="AttribMask"/>
+    <enum name="LIGHTING_BIT"                             value="0x00000040" group="AttribMask"/>
+    <enum name="FOG_BIT"                                  value="0x00000080" group="AttribMask"/>
+    <enum name="DEPTH_BUFFER_BIT"                         value="0x00000100" group="ClearBufferMask,AttribMask"/>
+    <enum name="ACCUM_BUFFER_BIT"                         value="0x00000200" group="ClearBufferMask,AttribMask"/>
+    <enum name="STENCIL_BUFFER_BIT"                       value="0x00000400" group="ClearBufferMask,AttribMask"/>
+    <enum name="VIEWPORT_BIT"                             value="0x00000800" group="AttribMask"/>
+    <enum name="TRANSFORM_BIT"                            value="0x00001000" group="AttribMask"/>
+    <enum name="ENABLE_BIT"                               value="0x00002000" group="AttribMask"/>
+    <enum name="COLOR_BUFFER_BIT"                         value="0x00004000" group="ClearBufferMask,AttribMask"/>
+    <enum name="HINT_BIT"                                 value="0x00008000" group="AttribMask"/>
+    <enum name="EVAL_BIT"                                 value="0x00010000" group="AttribMask"/>
+    <enum name="LIST_BIT"                                 value="0x00020000" group="AttribMask"/>
+    <enum name="TEXTURE_BIT"                              value="0x00040000" group="AttribMask"/>
+    <enum name="SCISSOR_BIT"                              value="0x00080000" group="AttribMask"/>
+    <enum name="ALL_ATTRIB_BITS"                          value="0xFFFFFFFF" group="AttribMask"/>
 
     <type name="double"  size="8"  float="true"    glx_name="FLOAT64"/>
     <type name="clampd"  size="8"  float="true"    glx_name="FLOAT64"/>
@@ -2319,7 +2319,7 @@
     </function>
 
     <function name="Clear" es1="1.0" es2="2.0" no_error="true" exec="dlist">
-        <param name="mask" type="GLbitfield"/>
+        <param name="mask" type="GLbitfield" group="ClearBufferMask"/>
         <glx rop="127"/>
     </function>
 
@@ -2411,7 +2411,7 @@
 
     <function name="PushAttrib" deprecated="3.1" exec="dlist"
               marshal_call_after="_mesa_glthread_PushAttrib(ctx, mask);">
-        <param name="mask" type="GLbitfield"/>
+        <param name="mask" type="GLbitfield" group="AttribMask"/>
         <glx rop="142"/>
     </function>
 
@@ -3185,9 +3185,9 @@
     <enum name="INDEX_ARRAY_POINTER"                      value="0x8091"/>
     <enum name="TEXTURE_COORD_ARRAY_POINTER"              value="0x8092"/>
     <enum name="EDGE_FLAG_ARRAY_POINTER"                  value="0x8093"/>
-    <enum name="CLIENT_PIXEL_STORE_BIT"                   value="0x00000001"/>
-    <enum name="CLIENT_VERTEX_ARRAY_BIT"                  value="0x00000002"/>
-    <enum name="CLIENT_ALL_ATTRIB_BITS"                   value="0xFFFFFFFF"/>
+    <enum name="CLIENT_PIXEL_STORE_BIT"                   value="0x00000001" group="ClientAttribMask"/>
+    <enum name="CLIENT_VERTEX_ARRAY_BIT"                  value="0x00000002" group="ClientAttribMask"/>
+    <enum name="CLIENT_ALL_ATTRIB_BITS"                   value="0xFFFFFFFF" group="ClientAttribMask"/>
 
     <function name="ArrayElement" deprecated="3.1" exec="beginend" marshal="sync">
         <param name="i" type="GLint"/>
@@ -3427,7 +3427,7 @@
 
     <function name="PushClientAttrib" deprecated="3.1"
               marshal_call_after="_mesa_glthread_PushClientAttrib(ctx, mask, false);">
-        <param name="mask" type="GLbitfield"/>
+        <param name="mask" type="GLbitfield" group="ClientAttribMask"/>
         <glx handcode="true"/>
     </function>
 </category>
@@ -4176,7 +4176,7 @@
     <enum name="SAMPLE_COVERAGE_INVERT"        count="1"  value="0x80AB">
         <size name="Get" mode="get"/>
     </enum>
-    <enum name="MULTISAMPLE_BIT"                          value="0x20000000"/>
+    <enum name="MULTISAMPLE_BIT"                          value="0x20000000" group="AttribMask"/>
     <enum name="NORMAL_MAP"                               value="0x8511"/>
     <enum name="REFLECTION_MAP"                           value="0x8512"/>
     <enum name="TEXTURE_CUBE_MAP"              count="1"  value="0x8513">
@@ -5128,7 +5128,7 @@
 
     <function name="GetBufferParameteriv" es1="1.1" es2="2.0">
         <param name="target" type="GLenum"/>
-        <param name="pname" type="GLenum"/>
+        <param name="pname" type="GLenum" group="BufferPNameARB"/>
         <param name="params" type="GLint *" output="true" variable_param="pname"/>
         <glx ignore="true"/>
     </function>
@@ -6285,7 +6285,7 @@
     <enum name="SAMPLE_COVERAGE_INVERT_ARB"    count="1"  value="0x80AB">
         <size name="Get" mode="get"/>
     </enum>
-    <enum name="MULTISAMPLE_BIT_ARB"                      value="0x20000000"/>
+    <enum name="MULTISAMPLE_BIT_ARB"                      value="0x20000000" group="AttribMask"/>
 
     <function name="SampleCoverageARB" alias="SampleCoverage">
         <param name="value" type="GLclampf"/>
@@ -7488,7 +7488,7 @@
 
     <function name="GetBufferParameterivARB" alias="GetBufferParameteriv">
         <param name="target" type="GLenum"/>
-        <param name="pname" type="GLenum"/>
+        <param name="pname" type="GLenum" group="BufferPNameARB"/>
         <param name="params" type="GLint *"/>
     </function>
 
@@ -8206,26 +8206,26 @@
 <!-- ARB extension 142 - 143. -->
 
 <category name="GL_ARB_buffer_storage" number="144">
-    <enum name="MAP_PERSISTENT_BIT" value="0x40" />
-    <enum name="MAP_COHERENT_BIT" value="0x80" />
-    <enum name="DYNAMIC_STORAGE_BIT" value="0x100" />
-    <enum name="CLIENT_STORAGE_BIT" value="0x200" />
-    <enum name="BUFFER_IMMUTABLE_STORAGE" value="0x821F" />
-    <enum name="BUFFER_STORAGE_FLAGS" value="0x8220" />
-    <enum name="CLIENT_MAPPED_BUFFER_BARRIER_BIT" value="0x4000" />
+    <enum name="MAP_PERSISTENT_BIT"                       value="0x00000040" group="BufferStorageMask" />
+    <enum name="MAP_COHERENT_BIT"                         value="0x00000080" group="BufferStorageMask" />
+    <enum name="DYNAMIC_STORAGE_BIT"                      value="0x00000100" group="BufferStorageMask" />
+    <enum name="CLIENT_STORAGE_BIT"                       value="0x00000200" group="BufferStorageMask" />
+    <enum name="BUFFER_IMMUTABLE_STORAGE"                 value="0x0000821F" group="BufferPNameARB" />
+    <enum name="BUFFER_STORAGE_FLAGS"                     value="0x00008220" group="BufferPNameARB" />
+    <enum name="CLIENT_MAPPED_BUFFER_BARRIER_BIT"         value="0x00004000" group="BufferStorageMask" />
 
     <function name="BufferStorage" no_error="true">
         <param name="target" type="GLenum"/>
         <param name="size" type="GLsizeiptr"/>
         <param name="data" type="const GLvoid *"/>
-        <param name="flags" type="GLbitfield"/>
+        <param name="flags" type="GLbitfield" group="BufferStorageMask"/>
     </function>
 
    <function name="NamedBufferStorageEXT">
       <param name="buffer" type="GLuint" />
       <param name="size" type="GLsizeiptr" />
       <param name="data" type="const GLvoid *" />
-      <param name="flags" type="GLbitfield" />
+      <param name="flags" type="GLbitfield" group="BufferStorageMask"/>
    </function>
 </category>
 
@@ -8236,10 +8236,10 @@
 <xi:include href="ARB_multi_bind.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <category name="GL_ARB_query_buffer_object" number="148">
-    <enum name="QUERY_RESULT_NO_WAIT"               value="0x9194"/>
-    <enum name="QUERY_BUFFER"                       value="0x9192"/>
-    <enum name="QUERY_BUFFER_BINDING"               value="0x9193"/>
-    <enum name="QUERY_BUFFER_BARRIER_BIT"           value="0x00008000"/>
+    <enum name="QUERY_RESULT_NO_WAIT"                     value="0x9194"/>
+    <enum name="QUERY_BUFFER"                             value="0x9192"/>
+    <enum name="QUERY_BUFFER_BINDING"                     value="0x9193"/>
+    <enum name="QUERY_BUFFER_BARRIER_BIT"                 value="0x00008000" group="MemoryBarrierMask"/>
 </category>
 
 <!-- ARB extensions 149 - 151 -->

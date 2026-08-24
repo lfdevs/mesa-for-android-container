@@ -110,6 +110,9 @@ apple_cgl_init(void)
    apple_cgl.get_current_context = sym(h, "CGLGetCurrentContext");
    apple_cgl.error_string = sym(h, "CGLErrorString");
 
+   apple_cgl.set_parameter = sym(h, "CGLSetParameter");
+   apple_cgl.get_parameter = sym(h, "CGLGetParameter");
+
    apple_cgl.set_off_screen = sym(h, "CGLSetOffScreen");
 
    apple_cgl.copy_context = sym(h, "CGLCopyContext");

@@ -1,3 +1,0 @@
-# Haven't figured out why, but these two tests randomly timeout if run in parallel with others
-GStreamer-H.264-Vulkan-Gst1.0@LS_SVA_D
-GStreamer-H.265-Vulkan-Gst1.0@SAODBLK_A_MainConcept_4

@@ -50,11 +50,9 @@ struct pipe_video_codec
    enum pipe_video_profile profile;
    unsigned level;
    enum pipe_video_entrypoint entrypoint;
-   enum pipe_video_chroma_format chroma_format;
    unsigned width;
    unsigned height;
    unsigned max_references;
-   bool expect_chunked_decode;
    struct pipe_enc_two_pass_encoder_config two_pass;
 
    /**

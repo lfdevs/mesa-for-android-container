@@ -224,8 +224,8 @@ void unmap_images(swapchain_data *data) {
 static VkLayerInstanceCreateInfo *get_instance_chain_info(const VkInstanceCreateInfo *pCreateInfo,
                                                           VkLayerFunction func)
 {
-   vk_foreach_struct_const(item, pCreateInfo->pNext) {
-      if (item->sType == VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO &&
+   vk_foreach_struct_const(sType, item, pCreateInfo->pNext) {
+      if (sType == VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO &&
           ((VkLayerInstanceCreateInfo *) item)->function == func)
          return (VkLayerInstanceCreateInfo *) item;
    }
@@ -236,8 +236,8 @@ static VkLayerInstanceCreateInfo *get_instance_chain_info(const VkInstanceCreate
 static VkLayerDeviceCreateInfo *get_device_chain_info(const VkDeviceCreateInfo *pCreateInfo,
                                                       VkLayerFunction func)
 {
-   vk_foreach_struct_const(item, pCreateInfo->pNext) {
-      if (item->sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO &&
+   vk_foreach_struct_const(sType, item, pCreateInfo->pNext) {
+      if (sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO &&
           ((VkLayerDeviceCreateInfo *) item)->function == func)
          return (VkLayerDeviceCreateInfo *)item;
    }
@@ -660,13 +660,6 @@ static void screenshot_DestroySwapchainKHR(
 
    swapchain_data->device->vtable.DestroySwapchainKHR(device, swapchain, pAllocator);
    destroy_swapchain_data(swapchain_data);
-}
-
-/* Convert long int to string */
-static void itoa(uint32_t integer, char *dest_str)
-{
-   // Our sizes are limited to uin32_t max value: 4,294,967,295 (10 digits)
-   sprintf(dest_str, "%u", integer);
 }
 
 static bool get_mem_type_from_properties(
@@ -1312,7 +1305,7 @@ static VkResult screenshot_QueuePresentKHR(
          char filename[STANDARD_BUFFER_SIZE] = "";
          char frame_counter_str[11];
          bool rename_file = true;
-         itoa(frame_counter, frame_counter_str);
+         snprintf(frame_counter_str, ARRAY_SIZE(frame_counter_str), "%u", frame_counter);
 
          /* Check if we have an output directory given from the env options */
          if (instance_data->params.output_dir &&
@@ -1489,8 +1482,8 @@ static VkResult screenshot_CreateInstance(
 
    if (!globalLockInitialized) {
       loader_platform_thread_create_mutex(&globalLock);
-      globalLockInitialized = 1;
    }
+   globalLockInitialized++;
 
    return result;
 }
@@ -1503,6 +1496,10 @@ static void screenshot_DestroyInstance(
    instance_data_map_physical_devices(instance_data, false);
    instance_data->vtable.DestroyInstance(instance, pAllocator);
    destroy_instance_data(instance_data);
+
+   if (--globalLockInitialized == 0) {
+      loader_platform_thread_delete_mutex(&globalLock);
+   }
 }
 
 static const struct {

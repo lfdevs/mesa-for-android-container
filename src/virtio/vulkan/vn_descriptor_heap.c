@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "venus-protocol/vn_protocol_driver_descriptor_heap.h"
+#include "vn_protocol_driver_descriptor_heap.h"
 
 #include "vn_descriptor.h"
 #include "vn_device.h"

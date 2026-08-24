@@ -67,6 +67,7 @@ struct blorp_batch;
 struct blorp_params;
 
 struct blorp_config {
+   bool enable_tbimr;
    bool use_mesh_shading;
    bool use_unrestricted_depth_range;
    bool use_cached_dynamic_states;
@@ -101,8 +102,6 @@ struct blorp_context {
    const struct isl_device *isl_dev;
 
    struct blorp_compiler *compiler;
-
-   bool enable_tbimr;
 
    nir_shader *(*get_fp64_nir)(struct blorp_context *context);
 

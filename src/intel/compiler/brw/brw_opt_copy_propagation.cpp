@@ -1779,26 +1779,6 @@ try_copy_propagate_def(brw_shader &s,
       inst->src[arg].stride *= val.stride;
    }
 
-   /* Handle NoMask cases where the def replicates a small scalar to a number
-    * of channels, but the use is a lower SIMD width but larger type, so each
-    * invocation reads multiple channels worth of data, e.g.
-    *
-    *    mov(16) vgrf1:UW, u0<0>:UW NoMask
-    *    mov(8)  vgrf2:UD, vgrf1:UD NoMask group0
-    *
-    * In this case, we should just use the scalar's type.
-    */
-   if (val.stride == 0 &&
-       inst->opcode == BRW_OPCODE_MOV &&
-       inst->force_writemask_all && def->force_writemask_all &&
-       inst->exec_size < def->exec_size &&
-       (inst->exec_size * brw_type_size_bytes(inst->src[arg].type) ==
-        def->exec_size * brw_type_size_bytes(val.type))) {
-      inst->src[arg].type = val.type;
-      inst->dst.type = val.type;
-      inst->exec_size = def->exec_size;
-   }
-
    if (has_source_modifiers && !is_logic_op(inst->opcode)) {
       if (def->dst.type != inst->src[arg].type) {
          /* We are propagating source modifiers from a MOV with a different

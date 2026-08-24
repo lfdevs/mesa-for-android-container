@@ -216,3 +216,10 @@ spec@ext_framebuffer_multisample@accuracy all_samples color small depthstencil
 # Flaking since May 4, 2026.
 # https://gitlab.freedesktop.org/mesa/mesa/-/work_items/15383#note_3456035
 KHR-GLES31.core.draw_indirect.advanced-twoPass-transformFeedback-arrays
+
+# See Mesa bug #15880 ("panfrost: incomplete glCopyPixels() with feedback loop")
+spec@!opengl 1.4@copy-pixels
+
+# uprev Piglit in Mesa
+KHR-GLES31.core.draw_indirect.advanced-twoPass-transformFeedback-elements
+

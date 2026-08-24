@@ -24,7 +24,6 @@
 
 #include "tu_acceleration_structure.h"
 
-#include "radix_sort/radix_sort_u64.h"
 #include "util/u_hexdump.h"
 #include "vk_acceleration_structure.h"
 
@@ -162,15 +161,16 @@ tu_encode(VkCommandBuffer commandBuffer,
           struct vk_meta_device *meta,
           const struct vk_acceleration_structure_build_args *args,
           struct vk_acceleration_structure_build_state *states,
-          uint32_t build_count,
-          bool flushed_cp_after_init_update_scratch,
-          bool flushed_compute_after_init_update_scratch)
+          uint32_t build_count, bool flushed_compute_after_init_update_scratch)
 {
    VK_FROM_HANDLE(tu_cmd_buffer, cmdbuf, commandBuffer);
    struct tu_device *device = cmdbuf->device;
    VkResult result;
    VkPipeline pipeline;
    VkPipelineLayout layout;
+
+   /* Insert barrier so that build data gets reflected properly for encode pass */
+   vk_bvh_build_barrier_compute_to_compute(commandBuffer, true);
 
    result = get_pipeline_spv(device, "encode", encode_spv, sizeof(encode_spv), sizeof(encode_args), &pipeline, &layout);
    if (result != VK_SUCCESS) {
@@ -296,75 +296,6 @@ const struct vk_acceleration_structure_build_ops tu_as_build_ops = {
    .encode = tu_encode,
 };
 
-const struct radix_sort_vk_target_config tu_radix_sort_config_128 = {
-   .keyval_dwords = 2,
-   .init = { .workgroup_size_log2 = 8, },
-   .fill = { .workgroup_size_log2 = 8, .block_rows = 8 },
-   .histogram = {
-      .workgroup_size_log2 = 8,
-      .subgroup_size_log2 = 7,
-      .block_rows = 14, /* TODO tune this */
-   },
-   .prefix = {
-      .workgroup_size_log2 = 8,
-      .subgroup_size_log2 = 7,
-   },
-   .scatter = {
-      .workgroup_size_log2 = 8,
-      .subgroup_size_log2 = 7,
-      .block_rows = 14, /* TODO tune this */
-   },
-   .nonsequential_dispatch = false,
-};
-
-const struct radix_sort_vk_target_config tu_radix_sort_config_64 = {
-   .keyval_dwords = 2,
-   .init = { .workgroup_size_log2 = 8, },
-   .fill = { .workgroup_size_log2 = 8, .block_rows = 8 },
-   .histogram = {
-      .workgroup_size_log2 = 8,
-      .subgroup_size_log2 = 6,
-      .block_rows = 14, /* TODO tune this */
-   },
-   .prefix = {
-      .workgroup_size_log2 = 8,
-      .subgroup_size_log2 = 6,
-   },
-   .scatter = {
-      .workgroup_size_log2 = 8,
-      .subgroup_size_log2 = 6,
-      .block_rows = 14, /* TODO tune this */
-   },
-   .nonsequential_dispatch = false,
-};
-
-static VkResult
-init_radix_sort(struct tu_device *device)
-{
-   if (!device->radix_sort) {
-      mtx_lock(&device->radix_sort_mutex);
-      if (!device->radix_sort) {
-         const struct radix_sort_vk_target_config *cfg =
-            device->physical_device->info->props.supports_double_threadsize ?
-            &tu_radix_sort_config_128 :
-            &tu_radix_sort_config_64;
-         device->radix_sort =
-            vk_create_radix_sort_u64(tu_device_to_handle(device),
-                                     &device->vk.alloc,
-                                     VK_NULL_HANDLE, *cfg);
-         if (!device->radix_sort) {
-            /* TODO plumb through the error here */
-            mtx_unlock(&device->radix_sort_mutex);
-            return VK_ERROR_OUT_OF_HOST_MEMORY;
-         }
-
-      }
-      mtx_unlock(&device->radix_sort_mutex);
-   }
-
-   return VK_SUCCESS;
-}
-
 struct tu_saved_compute_state {
    uint32_t push_constants[MAX_PUSH_CONSTANTS_SIZE / 4];
    struct tu_shader *compute_shader;
@@ -399,19 +330,15 @@ tu_CmdBuildAccelerationStructuresKHR(VkCommandBuffer commandBuffer, uint32_t inf
    struct tu_device *device = cmd->device;
    struct tu_saved_compute_state state;
 
-   VkResult result = init_radix_sort(device);
-   if (result != VK_SUCCESS) {
-      vk_command_buffer_set_error(&cmd->vk, result);
-      return;
-   }
-
    tu_save_compute_state(cmd, &state);
 
    struct vk_acceleration_structure_build_args args = {
-      .subgroup_size = device->physical_device->info->props.supports_double_threadsize ? 128 : 64,
+      .subgroup_size = device->physical_device->info->threadsize_base *
+                       (device->physical_device->expose_double_threadsize ? 2 : 1),
       .bvh_bounds_offset = offsetof(tu_accel_struct_header, aabb),
+      .morton_sort_workgroup_size = 512,
+      .morton_sort_kvs_per_thread = 2,
       .emit_markers = false,
-      .radix_sort_64 = device->radix_sort,
    };
 
    vk_cmd_build_acceleration_structures(commandBuffer,
@@ -559,11 +486,11 @@ tu_GetAccelerationStructureBuildSizesKHR(VkDevice _device, VkAccelerationStructu
 {
    VK_FROM_HANDLE(tu_device, device, _device);
 
-   init_radix_sort(device);
-
    struct vk_acceleration_structure_build_args args = {
-      .subgroup_size = device->physical_device->info->props.supports_double_threadsize ? 128 : 64,
-      .radix_sort_64 = device->radix_sort,
+      .subgroup_size = device->physical_device->info->threadsize_base *
+                       (device->physical_device->expose_double_threadsize ? 2 : 1),
+      .morton_sort_workgroup_size = 512,
+      .morton_sort_kvs_per_thread = 2,
    };
 
    vk_get_as_build_sizes(_device, buildType, pBuildInfo, pMaxPrimitiveCounts,

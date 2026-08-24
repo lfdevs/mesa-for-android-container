@@ -36,6 +36,7 @@
 #include <stdbool.h>
 
 #include "glxclient.h"
+#include "glxextensions.h"
 #include "apple/apple_glx_context.h"
 #include "apple/apple_glx.h"
 #include "dri_common.h"
@@ -429,11 +430,41 @@ applegl_query_drawable(Display *dpy, GLXDrawable drawable, int attribute,
    int x, y;
    unsigned int width, height, bd, depth;
 
+   /* glXQueryDrawable() returns void and discards our return value, so
+    * an unhandled attribute has to leave a defined value behind rather
+    * than whatever the caller's variable happened to contain.
+    * __glXQueryDrawable() does the same for the protocol path.
+    */
+   *value = 0;
+
    if (apple_glx_pixmap_query(drawable, attribute, value))
       return 1;
 
    if (apple_glx_pbuffer_query(drawable, attribute, value))
       return 1;
+
+   /* CGL tracks the swap interval per context rather than per drawable,
+    * so report the calling thread's current context.
+    */
+   switch (attribute) {
+   case GLX_SWAP_INTERVAL_EXT: {
+      struct glx_context *gc = apple_glx_get_current_context();
+      int interval;
+
+      if (!gc)
+         return 0;
+
+      if (!apple_glx_context_get_swap_interval(gc->driContext, &interval))
+         return 0;
+
+      *value = interval;
+      return 1;
+   }
+
+   case GLX_MAX_SWAP_INTERVAL_EXT:
+      *value = APPLE_GLX_MAX_SWAP_INTERVAL;
+      return 1;
+   }
 
    /*
     * The OpenGL spec states that we should report GLXBadDrawable if
@@ -510,6 +541,14 @@ applegl_create_screen(int screen, struct glx_display * priv)
    glx_screen_init(psc, screen, priv);
    psc->vtable = &applegl_screen_vtable;
    psc->drawable_vtable = &applegl_drawable_vtable;
+
+   /* Swap control is implemented client-side on top of CGL, and this
+    * screen is never treated as direct-rendering capable, so force these
+    * on rather than relying on the direct_support path.
+    */
+   __glXForceEnableExtension(psc, "GLX_SGI_swap_control");
+   __glXForceEnableExtension(psc, "GLX_MESA_swap_control");
+   __glXForceEnableExtension(psc, "GLX_EXT_swap_control");
 
    priv->driver = GLX_DRIVER_APPLEGL;
 

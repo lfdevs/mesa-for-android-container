@@ -207,6 +207,10 @@ struct gamma_file_view {
       gamma_vec3 camera_pivot;
    } rendering_state;
 
+   virtual ~gamma_file_view()
+   {
+   }
+
    virtual void load(FILE *file, const gamma_header *header);
 
    virtual void load_driver_specific(FILE *file, const gamma_chunk_header *chunk_header, const gamma_header *header)

@@ -50,6 +50,7 @@ DEPS=(
     libexpat1-dev
     libglfw3-dev
     "libllvm${LLVM_VERSION}"
+    "libllvmspirvlib-${LLVM_VERSION}-dev"
     libpciaccess-dev
     libsdl3-dev
     libunwind-dev
@@ -65,6 +66,7 @@ DEPS=(
     libxxf86vm-dev
     libwayland-egl-backend-dev
     "llvm-${LLVM_VERSION}-dev"
+    "llvm-spirv-${LLVM_VERSION}"
     make
     ninja-build
     openssh-server
@@ -91,8 +93,6 @@ apt-get update
 
 apt-get install -y --no-remove "${DEPS[@]}" "${EPHEMERAL[@]}" \
         $EXTRA_LOCAL_PACKAGES
-
-. .gitlab-ci/container/build-llvm-spirv.sh
 
 . .gitlab-ci/container/build-libclc.sh
 

@@ -53,6 +53,7 @@ struct loop_simplify_state {
    nir_def *jump_flag;
    struct exec_list *cf_list;
    nir_jump_type type;
+   nir_loop *loop;
 };
 
 static bool
@@ -124,6 +125,12 @@ lower_jumps_in_if(nir_if *nif, struct loop_simplify_state *state)
       nir_cf_extract(&list, nir_after_cf_node(&nif->cf_node),
                      nir_after_cf_list(state->cf_list));
 
+      /* If this is top-level within the loop, phi lowering from the caller
+       * should handle this.
+       */
+      if (nif->cf_node.parent != &state->loop->cf_node)
+         nir_cf_list_detach_ssa(&list);
+
       if (then_jumps && else_jumps) {
          /* Both branches jump, just delete instructions following the IF. */
          nir_cf_delete(&list);
@@ -152,12 +159,17 @@ lower_jumps_in_if(nir_if *nif, struct loop_simplify_state *state)
       nir_cf_extract(&list, nir_after_cf_node_and_phis(&nif->cf_node),
                      nir_after_cf_list(state->cf_list));
 
-      state->b->cursor = nir_after_cf_node_and_phis(&nif->cf_node);
-      nir_if *if_stmt = nir_push_if(state->b, nir_load_reg(state->b, state->jump_flag));
+      if (nif->cf_node.parent != &state->loop->cf_node)
+         nir_cf_list_detach_ssa(&list);
 
-      assert(!exec_list_is_empty(&list.list));
-      nir_cf_reinsert(&list, nir_before_cf_list(&if_stmt->else_list));
-      nir_pop_if(state->b, NULL);
+      /* The list might be empty if the only instructions at the merge block are phis. */
+      if (!exec_list_is_empty(&list.list)) {
+         state->b->cursor = nir_after_cf_node_and_phis(&nif->cf_node);
+         nir_if *if_stmt = nir_push_if(state->b, nir_load_reg(state->b, state->jump_flag));
+
+         nir_cf_reinsert(&list, nir_before_cf_list(&if_stmt->else_list));
+         nir_pop_if(state->b, NULL);
+      }
    }
 
    return progress;
@@ -206,8 +218,10 @@ lower_jumps_in_cf_list(struct exec_list *cf_list,
  * For breaks, insert a single conditional break just before
  * the back edge.
  *
- * It's assumed that all phis for the jumps in question are
- * lowered to registers before the call to this function.
+ * It's assumed that all headers phis are lowered to registers
+ * before the call to this function. For breaks, exit phis must
+ * also be lowered. Before lowering exit phis, the loop should
+ * be in LCSSA.
  */
 void
 nir_simplify_loop(nir_loop *loop, nir_jump_type type)
@@ -218,6 +232,7 @@ nir_simplify_loop(nir_loop *loop, nir_jump_type type)
    state.type = type;
    nir_builder b = nir_builder_at(nir_before_block_after_phis(nir_loop_first_block(loop)));
    state.b = &b;
+   state.loop = loop;
 
    /* Initialize the variable to False. */
    state.jump_flag = nir_decl_reg(&b, 1, 1, 0);

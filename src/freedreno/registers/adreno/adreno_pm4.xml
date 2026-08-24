@@ -1039,6 +1039,11 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 </domain>
 
 <domain name="CP_DRAW_AUTO" width="32">
+	<doc>
+		Draws (counter - NUM_VERTICES_OFFSET / 4) / STRIDE vertices, counter
+		read from NUM_VERTICES_BASE.  a7xx divides the counter by four too,
+		earlier gens use it as-is.
+	</doc>
 	<reg32 offset="0" name="0" type="vgt_draw_initiator_a4xx"/>
 	<reg32 offset="1" name="1">
 		<bitfield name="NUM_INSTANCES" low="0" high="31" type="uint"/>
@@ -1048,7 +1053,8 @@ opcode: CP_LOAD_STATE4 (30) (4 dwords)
 		<bitfield name="NUM_VERTICES_OFFSET" low="0" high="31" type="uint"/>
 	</reg32>
 	<reg32 offset="5" name="5">
-		<bitfield name="STRIDE" low="0" high="31" type="uint"/>
+		<!-- the CP masks the stride to 11 bits before forwarding it -->
+		<bitfield name="STRIDE" low="0" high="10" type="uint"/>
 	</reg32>
 </domain>
 

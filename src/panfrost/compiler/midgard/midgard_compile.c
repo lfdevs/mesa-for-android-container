@@ -49,6 +49,13 @@ DEBUG_GET_ONCE_FLAGS_OPTION(midgard_debug, "MIDGARD_MESA_DEBUG",
 
 int midgard_debug = 0;
 
+uint32_t
+midgard_get_compiler_flags()
+{
+   midgard_debug = debug_get_option_midgard_debug();
+   return midgard_debug;
+}
+
 bool
 midgard_will_dump_shaders(void)
 {
@@ -1515,7 +1522,7 @@ static unsigned
 vertex_builtin_arg(nir_intrinsic_op op)
 {
    switch (op) {
-   case nir_intrinsic_load_raw_vertex_id_pan:
+   case nir_intrinsic_load_raw_vertex_id:
       return PAN_VERTEX_ID;
    case nir_intrinsic_load_instance_id:
       return PAN_INSTANCE_ID;
@@ -1899,6 +1906,7 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
             UNREACHABLE("Attempted to store unknown type");
             break;
          }
+         st.src_types[0] = type;
 
          emit_mir_instruction(ctx, &st);
       } else {
@@ -1944,7 +1952,7 @@ emit_intrinsic(compiler_context *ctx, nir_intrinsic_instr *instr)
       emit_compute_builtin(ctx, instr);
       break;
 
-   case nir_intrinsic_load_raw_vertex_id_pan:
+   case nir_intrinsic_load_raw_vertex_id:
       ctx->info->midgard.vs.reads_raw_vertex_id = true;
       FALLTHROUGH;
    case nir_intrinsic_load_instance_id:
@@ -2976,14 +2984,14 @@ midgard_compile_shader_nir(nir_shader *nir,
       memcpy(&info->varyings.formats, inputs->varying_layout,
              sizeof(*inputs->varying_layout));
    } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-      pan_varying_collect_formats(&info->varyings.formats,
-                                  nir, inputs->gpu_id,
-                                  inputs->trust_varying_flat_highp_types, false);
+      pan_varying_collect_formats(&info->varyings.formats, nir, inputs->gpu_id);
       info->varyings.noperspective =
          pan_nir_collect_noperspective_varyings_fs(nir);
    }
 
    if (nir->info.stage == MESA_SHADER_VERTEX) {
+      NIR_PASS(_, nir, pan_nir_resize_varying_io, &info->varyings.formats,
+               &info->varyings.formats);
       NIR_PASS(_, nir, pan_nir_lower_vs_outputs, inputs->gpu_id,
                inputs->varying_layout, false /* has_idvs */,
                NULL /* needs_extended_fifo */);
@@ -2999,6 +3007,7 @@ midgard_compile_shader_nir(nir_shader *nir,
       nir_log_shaderi(nir);
 
    info->tls_size = nir->scratch_size;
+   info->fau.max = PAN_MAX_PUSH;
 
    nir_foreach_function_with_impl(func, impl, nir) {
       list_inithead(&ctx->blocks);

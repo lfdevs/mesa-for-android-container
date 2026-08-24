@@ -56,6 +56,24 @@ get_prog_data(brw_simd_selection_state &state)
 
 }
 
+/**
+ * Return true if INTEL_SIMD_DEBUG allows the given SIMD mode.
+ */
+static bool
+simd_debug_allowed(mesa_shader_stage stage, unsigned simd)
+{
+   return intel_simd_debug_allowed_modes(stage) & (1 << simd);
+}
+
+/**
+ * Return true if INTEL_SIMD_DEBUG force-enables the given SIMD mode.
+ */
+static bool
+simd_debug_forced(mesa_shader_stage stage, unsigned simd)
+{
+   return intel_simd_debug_forced(stage) && simd_debug_allowed(stage, simd);
+}
+
 bool
 brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
 {
@@ -66,7 +84,21 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
    const auto prog_data = get_prog_data(state);
    const unsigned width = 8u << simd;
 
-   if (state.required_width && state.required_width != width) {
+   /* Hard requirements */
+   if (width == 8 && state.devinfo->ver >= 20) {
+      state.error[simd] = "SIMD8 not supported on Xe2+";
+      return false;
+   }
+
+   if (width == 32 && cs_prog_data && cs_prog_data->uses_btd_stack_ids) {
+      state.error[simd] = "Bindless shader calls not supported";
+      return false;
+   }
+
+   if (state.required_width) {
+      if (state.required_width == width)
+         return true;
+
       state.error[simd] = "Different than required dispatch width";
       return false;
    }
@@ -77,7 +109,8 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
     */
    const bool workgroup_size_variable = cs_prog_data && cs_prog_data->local_size[0] == 0;
 
-   if (!workgroup_size_variable && !state.required_width) {
+   if (!workgroup_size_variable &&
+       likely(!simd_debug_forced(prog_data->stage, simd))) {
       if (state.spilled[simd]) {
          state.error[simd] = "Would spill";
          return false;
@@ -114,57 +147,15 @@ brw_simd_should_compile(brw_simd_selection_state &state, unsigned simd)
        *
        * TODO: Use performance_analysis and drop this rule.
        */
-      if (width == 32 && state.devinfo->ver < 20) {
-         if (!INTEL_DEBUG(DEBUG_DO32) && (state.compiled[0] || state.compiled[1])) {
-            state.error[simd] = "SIMD32 not required (use INTEL_DEBUG=do32 to force)";
-            return false;
-         }
+      if (width == 32 && state.devinfo->ver < 20 &&
+          (state.compiled[0] || state.compiled[1])) {
+         state.error[simd] = "SIMD32 not required (use INTEL_SIMD_DEBUG to force)";
+         return false;
       }
    }
 
-   if (width == 8 && state.devinfo->ver >= 20) {
-      state.error[simd] = "SIMD8 not supported on Xe2+";
-      return false;
-   }
-
-   if (width == 32 && cs_prog_data && cs_prog_data->uses_btd_stack_ids) {
-      state.error[simd] = "Bindless shader calls not supported";
-      return false;
-   }
-
-   uint64_t start;
-   switch (prog_data->stage) {
-   case MESA_SHADER_COMPUTE:
-      start = DEBUG_CS_SIMD8;
-      break;
-   case MESA_SHADER_TASK:
-      start = DEBUG_TS_SIMD8;
-      break;
-   case MESA_SHADER_MESH:
-      start = DEBUG_MS_SIMD8;
-      break;
-   case MESA_SHADER_RAYGEN:
-   case MESA_SHADER_ANY_HIT:
-   case MESA_SHADER_CLOSEST_HIT:
-   case MESA_SHADER_MISS:
-   case MESA_SHADER_INTERSECTION:
-   case MESA_SHADER_CALLABLE:
-      start = DEBUG_RT_SIMD8;
-      break;
-   default:
-      UNREACHABLE("unknown shader stage in brw_simd_should_compile");
-   }
-
-   const bool env_skip[] = {
-      (intel_simd & (start << 0)) == 0,
-      (intel_simd & (start << 1)) == 0,
-      (intel_simd & (start << 2)) == 0,
-   };
-
-   static_assert(ARRAY_SIZE(env_skip) == SIMD_COUNT);
-
-   if (unlikely(env_skip[simd])) {
-      state.error[simd] = "Disabled by INTEL_DEBUG environment variable";
+   if (unlikely(!simd_debug_allowed(prog_data->stage, simd))) {
+      state.error[simd] = "Disabled by INTEL_SIMD_DEBUG environment variable";
       return false;
    }
 

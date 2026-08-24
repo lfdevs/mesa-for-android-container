@@ -927,7 +927,8 @@ static void pvr_pipeline_finish(struct pvr_device *device,
 
 static void pvr_early_init_shader_data(pco_data *data,
                                        nir_shader *nir,
-                                       const void *pCreateInfo);
+                                       const void *pCreateInfo,
+                                       struct pvr_device *const device);
 
 static void
 pvr_preprocess_shader_data(pco_data *data,
@@ -1022,8 +1023,8 @@ static VkResult pvr_compute_pipeline_compile(
    if (result != VK_SUCCESS)
       goto err_free_build_context;
 
-   pvr_early_init_shader_data(&shader_data, nir, pCreateInfo);
-   pco_preprocess_nir(pco_ctx, nir);
+   pvr_early_init_shader_data(&shader_data, nir, pCreateInfo, device);
+   pco_preprocess_nir(pco_ctx, nir, &shader_data);
    pvr_preprocess_shader_data(&shader_data,
                               nir,
                               pCreateInfo,
@@ -1344,10 +1345,7 @@ static void pvr_fragment_state_save(struct pvr_graphics_pipeline *gfx_pipeline,
    const pco_data *shader_data = pco_shader_data(fs);
    memcpy(&gfx_pipeline->fs_data, shader_data, sizeof(*shader_data));
 
-   /* TODO: add selection for other values of pass type and sample rate. */
-
-   /* TODO: do this dynamically as well */
-   if (shader_data->fs.uses.depth_feedback && !shader_data->fs.uses.early_frag)
+   if (shader_data->fs.uses.depth_feedback)
       fragment_state->pass_type = ROGUE_TA_PASSTYPE_DEPTH_FEEDBACK;
    else if (shader_data->fs.uses.discard)
       fragment_state->pass_type = ROGUE_TA_PASSTYPE_PUNCH_THROUGH;
@@ -2453,15 +2451,6 @@ static void pvr_init_descriptors(pco_data *data,
                                  nir_shader *nir,
                                  struct vk_pipeline_layout *layout)
 {
-   const struct pvr_device *device = vk_to_pvr_device(layout->base.device);
-   data->common.robust_buffer_access =
-      device->vk.enabled_features.robustBufferAccess;
-
-   data->common.null_descriptor = device->vk.enabled_features.nullDescriptor;
-
-   data->common.image_2d_view_of_3d =
-      device->vk.enabled_features.image2DViewOf3D;
-
    for (unsigned desc_set = 0; desc_set < layout->set_count; ++desc_set) {
       const struct pvr_descriptor_set_layout *set_layout =
          vk_to_pvr_descriptor_set_layout(layout->set_layouts[desc_set]);
@@ -2486,6 +2475,9 @@ static void pvr_init_descriptors(pco_data *data,
 
          binding_data->is_img_smp = layout_binding->type ==
                                     VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+
+         binding_data->is_inline_ubo = layout_binding->type ==
+                                       VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
       }
    }
 }
@@ -2708,6 +2700,9 @@ pvr_preprocess_shader_data(pco_data *data,
          data->fs.meta_present.color_write_enable = true;
       }
 
+      if (state->ms)
+         nir->info.fs.uses_sample_shading |= state->ms->sample_shading_enable;
+
       /* TODO: push consts, dynamic state, etc. */
       break;
    }
@@ -2786,9 +2781,18 @@ static void pvr_postprocess_shader_data(pco_data *data,
 
 static void pvr_early_init_shader_data(pco_data *data,
                                        nir_shader *nir,
-                                       const void *pCreateInfo)
+                                       const void *pCreateInfo,
+                                       struct pvr_device *const device)
 {
    const VkGraphicsPipelineCreateInfo *pGraphicsCreateInfo = pCreateInfo;
+
+   data->common.robust_buffer_access =
+      device->vk.enabled_features.robustBufferAccess;
+
+   data->common.null_descriptor = device->vk.enabled_features.nullDescriptor;
+
+   data->common.image_2d_view_of_3d =
+      device->vk.enabled_features.image2DViewOf3D;
 
    switch (nir->info.stage) {
    case MESA_SHADER_VERTEX:
@@ -2935,8 +2939,9 @@ pvr_graphics_pipeline_compile(struct pvr_device *const device,
 
       pvr_early_init_shader_data(&shader_data[stage],
                                  nir_shaders[stage],
-                                 pCreateInfo);
-      pco_preprocess_nir(pco_ctx, nir_shaders[stage]);
+                                 pCreateInfo,
+                                 device);
+      pco_preprocess_nir(pco_ctx, nir_shaders[stage], &shader_data[stage]);
    }
 
    for (mesa_shader_stage stage = 0; stage < MESA_SHADER_STAGES; ++stage) {

@@ -4,7 +4,7 @@ bin = "/va/bin/test_va_api"
 [[fluster]]
 bin = "/fluster/fluster.py"
 decoders = [
-  "GStreamer-VP9-VAAPI-Gst1.0",
-  "GStreamer-H.264-VAAPI-Gst1.0",
-  "GStreamer-H.265-VAAPI-Gst1.0",
+  "GStreamer-VP9-VAAPI",
+  "GStreamer-H.264-VAAPI",
+  "GStreamer-H.265-VAAPI",
 ]

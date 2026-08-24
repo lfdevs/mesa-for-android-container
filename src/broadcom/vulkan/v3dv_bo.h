@@ -29,6 +29,8 @@
 #include <time.h>
 #include "util/list.h"
 
+#include <vulkan/vulkan_core.h>
+
 struct v3dv_device;
 
 struct v3dv_bo {
@@ -64,6 +66,7 @@ struct v3dv_bo {
 
    /** If this BO has been imported */
    bool is_import;
+   bool is_self_import;
 
    /**
     * If this BO was allocated for a swapchain on the display device, the
@@ -72,14 +75,28 @@ struct v3dv_bo {
    int32_t dumb_handle;
 
    int32_t refcnt;
+
+   /* memoryObjectId for VK_EXT_device_memory_report.
+    *
+    * This is the BO handle (which is a system-wide unique ID),
+    * except for private BOs, which also include a monotonically
+    * increasing device-wide id in the upper 32-bit. This is to
+    * satisfy the requirement that each allocation has its own
+    * ID, even if the actual BO is recycled from the BO cache.
+    */
+   uint64_t report_id;
+
+   /* BO details to be reported for VK_EXT_device_memory_report */
+   VkObjectType report_obj_type;
+   uint64_t report_obj_handle;
 };
 
-void v3dv_bo_init(struct v3dv_bo *bo, uint32_t handle, uint32_t size, uint32_t offset, const char *name, bool private);
-void v3dv_bo_init_import(struct v3dv_bo *bo, uint32_t handle, uint32_t size, uint32_t offset, bool private);
+void v3dv_bo_init(struct v3dv_bo *bo, uint32_t handle, uint32_t size, uint32_t offset, const char *name, uint64_t report_id, VkObjectType obj_type, uint64_t obj_handle, bool private);
+void v3dv_bo_init_import(struct v3dv_bo *bo, uint32_t handle, uint32_t size, uint32_t offset, VkObjectType obj_type, uint64_t obj_handle, bool private);
 
-struct v3dv_bo *v3dv_bo_alloc(struct v3dv_device *device, uint32_t size, const char *name, bool private);
+struct v3dv_bo *v3dv_bo_alloc(struct v3dv_device *device, uint32_t size, const char *name, bool private, VkObjectType obj_type, uint64_t obj_handle);
 
-bool v3dv_bo_free(struct v3dv_device *device, struct v3dv_bo *bo);
+bool v3dv_bo_free(struct v3dv_device *device, struct v3dv_bo *bo, uint64_t mem_report_obj_handle);
 
 bool v3dv_bo_wait(struct v3dv_device *device, struct v3dv_bo *bo, uint64_t timeout_ns);
 

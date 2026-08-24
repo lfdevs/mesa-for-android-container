@@ -3331,6 +3331,7 @@ do_alu_action(struct lp_build_nir_soa_context *bld,
       result = lp_build_abs(float_bld, src[0]);
       break;
    case nir_op_fadd:
+   case nir_op_fadd_rtne:
       result = lp_build_add(float_bld, src[0], src[1]);
       break;
    case nir_op_fceil:
@@ -4237,6 +4238,21 @@ visit_get_ssbo_size(struct lp_build_nir_soa_context *bld,
 }
 
 static void
+visit_load_ssbo_address(struct lp_build_nir_soa_context *bld,
+                        nir_intrinsic_instr *instr,
+                        LLVMValueRef result[NIR_MAX_VEC_COMPONENTS])
+{
+   struct gallivm_state *gallivm = bld->base.gallivm;
+   LLVMValueRef idx = get_src(bld, &instr->src[0], 0);
+   idx = cast_type(bld, idx, nir_type_uint, nir_src_bit_size(instr->src[0]));
+
+   LLVMValueRef addr = ssbo_base_pointer(bld, 0, idx, lp_value_is_divergent(idx) ? first_active_invocation(bld, true) : NULL, NULL);
+
+   addr = LLVMBuildPtrToInt(gallivm->builder, addr, bld->int64_bld.elem_type, "");
+   result[0] = addr;
+}
+
+static void
 visit_ssbo_atomic(struct lp_build_nir_soa_context *bld,
                   nir_intrinsic_instr *instr,
                   LLVMValueRef result[NIR_MAX_VEC_COMPONENTS])
@@ -5065,6 +5081,9 @@ visit_intrinsic(struct lp_build_nir_soa_context *bld,
       break;
    case nir_intrinsic_get_ssbo_size:
       visit_get_ssbo_size(bld, instr, result);
+      break;
+   case nir_intrinsic_load_ssbo_address:
+      visit_load_ssbo_address(bld, instr, result);
       break;
    case nir_intrinsic_load_vertex_id:
    case nir_intrinsic_load_primitive_id:

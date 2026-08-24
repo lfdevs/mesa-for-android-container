@@ -142,6 +142,24 @@ slice_cut(slice s, char c)
 }
 
 slice_cut_result
+slice_cut_any(slice s, const char *chars)
+{
+   for (int i = 0; i < s.len; i++) {
+      if (s.data[i] != '\0' && strchr(chars, s.data[i])) {
+         slice_cut_result result = {
+            .before = slice_substr_to(s, i),
+            .after = slice_substr_from(s, i + 1),
+            .found = true,
+         };
+         return result;
+      }
+   }
+
+   slice_cut_result result = { .before = s, .after = {0}, .found = false };
+   return result;
+}
+
+slice_cut_result
 slice_cut_n(slice s, char c, int n)
 {
    if (n <= 0) {

@@ -1498,7 +1498,7 @@
 #       define R500_TX_MAX_ANISO(x)            ((x) << 23)
 #       define R500_TX_MAX_ANISO_MASK          (63 << 23)
 #       define R500_TX_ANISO_HIGH_QUALITY      (1 << 30)
-#	define R500_BORDER_FIX                 (1<<31)
+#	define R500_BORDER_FIX                 (1u<<31)
 
 #define R300_TX_FORMAT0_0                   0x4480
 #       define R300_TX_WIDTHMASK_SHIFT           0
@@ -1508,7 +1508,7 @@
 #	define R300_TX_DEPTHMASK_SHIFT           22
 #	define R300_TX_DEPTHMASK_MASK            (0xf << 22)
 #       define R300_TX_SIZE_PROJECTED            (1 << 30)
-#       define R300_TX_PITCH_EN                  (1 << 31)
+#       define R300_TX_PITCH_EN                  (1u << 31)
 #       define R300_TX_WIDTH(x)                  ((x) << 0)
 #       define R300_TX_HEIGHT(x)                 ((x) << 11)
 #       define R300_TX_DEPTH(x)                  ((x) << 22)
@@ -3058,8 +3058,8 @@ enum {
 #   define R500_ALPHA_ADDR2_REL				(1 << 29)
 #   define R500_ALPHA_SRCP_OP_1_MINUS_2A0		(0 << 30)
 #   define R500_ALPHA_SRCP_OP_A1_MINUS_A0		(1 << 30)
-#   define R500_ALPHA_SRCP_OP_A1_PLUS_A0		(2 << 30)
-#   define R500_ALPHA_SRCP_OP_1_MINUS_A0		(3 << 30)
+#   define R500_ALPHA_SRCP_OP_A1_PLUS_A0		(2u << 30)
+#   define R500_ALPHA_SRCP_OP_1_MINUS_A0		(3u << 30)
 #define R500_US_ALU_RGBA_INST_0				0xb000
 #   define R500_ALU_RGBA_OP_MAD				(0 << 0)
 #   define R500_ALU_RGBA_OP_DP3				(1 << 0)
@@ -3203,7 +3203,7 @@ enum {
 #   define R500_ALU_RGB_OMOD_DIV_8		(6 << R500_ALU_RGB_OMOD_SHIFT)
 #   define R500_ALU_RGB_OMOD_DISABLE		(7 << R500_ALU_RGB_OMOD_SHIFT)
 #   define R500_ALU_RGB_TARGET(x)			((x) << 29)
-#   define R500_ALU_RGB_WMASK				(1 << 31)
+#   define R500_ALU_RGB_WMASK				(1u << 31)
 #define R500_US_ALU_RGB_ADDR_0				0x9000
 #   define R500_RGB_ADDR0(x)				((x) << 0)
 #   define R500_RGB_ADDR0_CONST				(1 << 8)
@@ -3216,8 +3216,8 @@ enum {
 #   define R500_RGB_ADDR2_REL				(1 << 29)
 #   define R500_RGB_SRCP_OP_1_MINUS_2RGB0		(0 << 30)
 #   define R500_RGB_SRCP_OP_RGB1_MINUS_RGB0		(1 << 30)
-#   define R500_RGB_SRCP_OP_RGB1_PLUS_RGB0		(2 << 30)
-#   define R500_RGB_SRCP_OP_1_MINUS_RGB0		(3 << 30)
+#   define R500_RGB_SRCP_OP_RGB1_PLUS_RGB0		(2u << 30)
+#   define R500_RGB_SRCP_OP_1_MINUS_RGB0		(3u << 30)
 #define R500_US_CMN_INST_0				0xb800
 #  define R500_INST_TYPE_MASK				(3 << 0)
 #   define R500_INST_TYPE_ALU				(0 << 0)

@@ -333,7 +333,8 @@ panvk_meta_desc_copy_rsd(struct panvk_device *dev)
    nir_builder b = nir_builder_init_simple_shader(
       MESA_SHADER_COMPUTE,
       pan_get_nir_shader_compiler_options(
-         pan_arch(phys_dev->kmod.dev->props.gpu_id), false),
+         pan_arch(phys_dev->kmod.dev->props.gpu_id),
+         MESA_SHADER_COMPUTE, false),
       "%s", "desc_copy");
 
    /* We actually customize that at execution time to issue the
@@ -350,6 +351,7 @@ panvk_meta_desc_copy_rsd(struct panvk_device *dev)
    struct pan_compile_inputs inputs = {
       .gpu_id = phys_dev->kmod.dev->props.gpu_id,
       .gpu_variant = phys_dev->kmod.dev->props.gpu_variant,
+      .fau.reserved = DIV_ROUND_UP(sizeof(struct pan_nir_desc_copy_info), 4),
    };
 
    pan_preprocess_nir(b.shader, inputs.gpu_id);
@@ -361,9 +363,6 @@ panvk_meta_desc_copy_rsd(struct panvk_device *dev)
 
    if (result != VK_SUCCESS)
       return 0;
-
-   shader->info.push.count =
-      DIV_ROUND_UP(sizeof(struct pan_nir_desc_copy_info), 4);
 
    shader->rsd = panvk_pool_alloc_desc(&dev->mempools.rw, RENDERER_STATE);
    if (!panvk_priv_mem_check_alloc(shader->rsd)) {

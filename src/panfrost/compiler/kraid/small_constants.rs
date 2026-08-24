@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::ir::*;
+use crate::model::SmallConstantTable;
 
 fn try_fold_src(src: &mut Src, sc: &SmallConstant, sc_swz: Swizzle) -> bool {
     let Some(swz) = sc_swz.swizzle(src.swizzle) else {
@@ -16,7 +17,7 @@ fn try_fold_src(src: &mut Src, sc: &SmallConstant, sc_swz: Swizzle) -> bool {
 fn try_lower_src(
     src: &mut Src,
     src_type: DataType,
-    sc_table: &[SmallConstant],
+    sc_table: &SmallConstantTable,
 ) -> bool {
     let SrcRef::Imm32(imm32) = src.src_ref else {
         return false;
@@ -61,7 +62,7 @@ fn try_lower_src(
 
 impl Shader<'_> {
     pub fn lower_small_constants(&mut self) {
-        let sc_table = self.model.small_constants();
+        let sc_table = &self.model.fau().small_constants;
         for b in self.blocks.iter_mut() {
             for i in b.instrs.iter_mut() {
                 for (src, src_type) in i.srcs_types_mut() {

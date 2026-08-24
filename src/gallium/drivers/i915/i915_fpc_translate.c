@@ -514,20 +514,6 @@ i915_translate_instruction(struct i915_fp_compile *p,
       emit_simple_arith(p, inst, A0_DP4, 2, fs);
       break;
 
-   case TGSI_OPCODE_DST:
-      src0 = src_vector(p, &inst->Src[0], fs);
-      src1 = src_vector(p, &inst->Src[1], fs);
-
-      /* result[0] = 1    * 1;
-       * result[1] = a[1] * b[1];
-       * result[2] = a[2] * 1;
-       * result[3] = 1    * b[3];
-       */
-      i915_emit_arith(p, A0_MUL, get_result_vector(p, &inst->Dst[0]),
-                      get_result_flags(inst), 0, swizzle(src0, ONE, Y, Z, ONE),
-                      swizzle(src1, ONE, Y, ONE, W), 0);
-      break;
-
    case TGSI_OPCODE_END:
       /* no-op */
       break;
@@ -580,37 +566,6 @@ i915_translate_instruction(struct i915_fp_compile *p,
       i915_emit_arith(p, A0_LOG, get_result_vector(p, &inst->Dst[0]),
                       get_result_flags(inst), 0, swizzle(src0, X, X, X, X), 0,
                       0);
-      break;
-
-   case TGSI_OPCODE_LIT:
-      src0 = src_vector(p, &inst->Src[0], fs);
-      tmp = i915_get_utemp(p);
-
-      /* tmp = max( a.xyzw, a.00zw )
-       * XXX: Clamp tmp.w to -128..128
-       * tmp.y = log(tmp.y)
-       * tmp.y = tmp.w * tmp.y
-       * tmp.y = exp(tmp.y)
-       * result = cmp (a.11-x1, a.1x01, a.1xy1 )
-       */
-      i915_emit_arith(p, A0_MAX, tmp, A0_DEST_CHANNEL_ALL, 0, src0,
-                      swizzle(src0, ZERO, ZERO, Z, W), 0);
-
-      i915_emit_arith(p, A0_LOG, tmp, A0_DEST_CHANNEL_Y, 0,
-                      swizzle(tmp, Y, Y, Y, Y), 0, 0);
-
-      i915_emit_arith(p, A0_MUL, tmp, A0_DEST_CHANNEL_Y, 0,
-                      swizzle(tmp, ZERO, Y, ZERO, ZERO),
-                      swizzle(tmp, ZERO, W, ZERO, ZERO), 0);
-
-      i915_emit_arith(p, A0_EXP, tmp, A0_DEST_CHANNEL_Y, 0,
-                      swizzle(tmp, Y, Y, Y, Y), 0, 0);
-
-      i915_emit_arith(
-         p, A0_CMP, get_result_vector(p, &inst->Dst[0]), get_result_flags(inst),
-         0, negate(swizzle(tmp, ONE, ONE, X, ONE), 0, 0, 1, 0),
-         swizzle(tmp, ONE, X, ZERO, ONE), swizzle(tmp, ONE, X, Y, ONE));
-
       break;
 
    case TGSI_OPCODE_LRP:

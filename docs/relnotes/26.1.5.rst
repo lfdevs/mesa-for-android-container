@@ -1,0 +1,314 @@
+Mesa 26.1.5 Release Notes / 2026-07-15
+======================================
+
+Mesa 26.1.5 is a bug fix release which fixes bugs found since the 26.1.4 release.
+
+Mesa 26.1.5 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 26.1.5 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 79e421c7ce18cd9e790b8375920325779f10798630bf30e0b22f1a21c8617122  mesa-26.1.5.tar.xz
+    SHA512: 8b1714e0fe63d3077c0d761245680724537a94db65e17dedb7124c7c861f070a13493a060695e81b2ca9b6889007b52c7b5788dace8fe5d8e2e1ed67efdbbf07  mesa-26.1.5.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- A702: assertions at A6XX_TEX_MEMOBJ_4_BASE_LO
+- Celestia hit fallback on r300g from git?
+- Copy paste bug in \`gallium/drivers/radeonsi/si_texture.c`
+- Issues with shadows on DOOM: The Dark Ages - Revelations DLC
+- OpenGL app deadlocks in loader_dri3_swap_buffers_msc → xcb_wait_for_special_event on radeonsi / Mesa 26.1 / X11 (Telegram Desktop)
+- Qt application TrenchBroom hangs in glXSwapBuffers in recent version of Mesa
+- [ANV][PTL] - Elden Ring (1245620) - Blue artifacts and flickering lights with raytracing enabled
+- [ANV][PTL] - Persona 3 Reload (2161700) - Blue color on some objects + reflections do not reflect
+- [RADV] REGRESSION: Lighting Bleed-through in Need for Speed games on mesa 1:26.1.1-2 ArchLinux
+- [RADV] REGRESSION: Weird graphics glitches and Lighting Bleed-through in Saints Row 2
+- [RADV] Video color artifacts in mpv
+- [radv] Regression causes black patches on the ground in DOOM The Dark Ages Revelations DLC
+- frontends/va: Build fails with libva 2.15.0
+- r600: SFN assersion failed in Transport fever 2
+- v3dv: Compute shader crashes for unknown reason
+
+
+Changes
+-------
+
+Benjamin Cheng (1):
+
+- ac/surface: Remove GFX10 limitation for FORCE_SWIZZLE_MODE
+
+Boris Brezillon (1):
+
+- pan/kmod: Add a pan_kmod_timestamp_cycles_to_ns() helper
+
+Caio Oliveira (1):
+
+- anv: Initialize shader debug archive key size
+
+Christian Gmeiner (2):
+
+- etnaviv: Fix sampler view leak on unsupported texture target
+- panvk: Restore push descriptor dirty bit after meta operations
+
+Daivik Bhatia (1):
+
+- nir/opt_copy_prop_vars: kill stale entries when source deref is written
+
+Danylo Piliaiev (1):
+
+- tu: Enable tu_dont_care_as_load for all Kex Engine games
+
+David Rosca (2):
+
+- r600/uvd: Set correct h264 chroma format
+- [26.1 only] va: Fix build with free codecs only and libva < 2.16
+
+Eric Engestrom (5):
+
+- docs: add sha sum for 26.1.4
+- .pick_status.json: Update to 0ab29c1d21d56f1780bd057176c998fda738402a
+- zink/ci: drop leftover anv-cml deqp suite
+- loader: move variable to correct scope
+- radeonsi: fix truncated cache key
+
+Faith Ekstrand (2):
+
+- vulkan/meta: Use z_off/scale for 2D array images as well
+- vulkan/meta: Allow resolving a 2D MSAA image to a 3D image
+
+Filip Gawin (1):
+
+- nv30: fix truncated values in line_stipple_pattern
+
+Frank Binns (1):
+
+- pvr: define PVR_USE_WSI_PLATFORM for xcb and xlib
+
+Georg Lehmann (3):
+
+- spirv: add option to treat FMax/FMin/FClamp like NMax
+- radv: add radv_force_nan_preserve_min_max option
+- radv: enable radv_force_nan_preserve_min_max for DOOM: The Dark Ages
+
+Gert Wollny (1):
+
+- r600/sfn: Drop assertions when emitting IF asm instruction
+
+Hans-Kristian Arntzen (1):
+
+- radv: Consider VkImageView usage rather than VkImage usage in feedback.
+
+Iván Briano (3):
+
+- brw/rt: fix max_t selection on intersection report
+- brw/rt: split HitAttribute area in pending/committed
+- brw/rt, anv: reduce maxRayHitAttributeSize
+
+JaeHoon Lee (8):
+
+- v3d: fix slot and input indexing in v3d_set_global_binding
+- v3dv: report maxDrawIndirectCount of 1 without multiDrawIndirect
+- v3d: clamp transform feedback offset to buffer size
+- v3dv: report the correct dynamic storage buffer UAB limit
+- v3dv: fix blake3 key truncated to 20 bytes in pipeline cache
+- v3d: fix blake3 key truncated to 20 bytes in shader cache
+- broadcom/compiler: really enable GFXH-1625 TMUWT validation
+- vc4: fix incorrect resource unref in vc4_flush_resource
+
+Jeremy Huddleston (1):
+
+- glx/apple: silence OpenGL deprecation warnings
+
+Jose Maria Casanova Crespo (1):
+
+- v3dv: close the primary node fd on physical device destruction
+
+Karmjit Mahil (1):
+
+- freedreno/decode,ir3: Mark decoded dwords as const
+
+Karol Herbst (7):
+
+- gallium: remove PIPE_BARRIER_GLOBAL_BUFFER
+- rusticl/device: fix long vector_width queries on devices without int64 support
+- nak/sm20: fix immediate encoding for F2I and F2F
+- nir: add nir_shader_fully_linked helper
+- rusticl/kernel: handle nir shader compilation failures gracefully
+- rusticl: return Result instead of Option from convert_spirv_to_nir
+- rusticl: abort compilation if the nir shader is not fully linked
+
+Konstantin Seurer (2):
+
+- vulkan: Fix ROOT_FLAGS_OFFSET_ID offset
+- radv: Store root_flags for BVH8
+
+Lionel Landwerlin (4):
+
+- anv/brw: limit push constant promotion in vertex shaders
+- anv: fixup RT building barrier
+- anv: fill min_array_element with indirect descriptors
+- anv: fixup max push data delivered to shaders
+
+Marek Olšák (5):
+
+- radv: disable AMD_device_coherent_memory on gfx12 due to out of order behavior
+- ac/nir: fix incorrect upper bound for view_index
+- radv: fix a rare crash with NULL PS and force_vrs_per_vertex
+- radv: use radeon_opt_set_context_reg for PA_CL_VRS_CNTL to fix random behavior
+- ac: fix a GPU hang with LLVM due to incorrect VGPRS decoding of LLVM output
+
+Mario Kleiner (3):
+
+- wsi/display: Actually fix vblank-less systems for VK_EXT_present_timing.
+- hasvk: Expose VK_KHR_calibrated_timestamps.
+- wsi/display: Don't update connector last_frame/nsec in vkGetSwapchainCounterEXT.
+
+Mary Guillemard (1):
+
+- nvk: Do not enable remap in nvk_copy_indirect
+
+Matt Turner (5):
+
+- nir/tests: allow relative error in compare_inexact
+- nir: fix f2u/f2i constant folding to poison NaN and out-of-range inputs
+- nir: use i2f32 for patterns with signed-extraction opcodes
+- nir: fix pack_uvec4_to_uint to mask input components to 8 bits
+- nir/tests: fall back to integer comparison when float interpretation is NaN
+
+Mel Henning (2):
+
+- nvk: Fix DGC localsize computation
+- nvk: Handle large indirect stride pre-Turing
+
+Michel Dänzer (1):
+
+- dri3: Increment draw->send_sbc after waiting for last presentation
+
+Mike Blumenkrantz (6):
+
+- zink: unset unordered access on ordered transfer ops
+- gallium/cso: make unbind_context an explicit call
+- st/context: unbind gs shader before deleting hw select gs shaders
+- zink: always un-suspend queries on end
+- zink: fix the fix for ZINK_RENDERDOC=all
+- util/blitter: fix blitting multiple array layers
+
+Pavel Ondračka (1):
+
+- r300: fix swtcl per-vertex point size
+
+Pierre-Eric Pelloux-Prayer (1):
+
+- radeonsi: fix typo in si_copy_from_staging_texture
+
+Pohsiang (John) Hsu (1):
+
+- d3d12: fix build break in staging/26.1 due to DirectX header issue
+
+Rhys Perry (1):
+
+- radv: set RADV_CMD_DIRTY_GFX12_HIZ_WA_STATE around attachment clears
+
+Rob Clark (2):
+
+- freedreno/a6xx: Don't forget UBO driver params
+- freedreno/decode: Fix shader stats in summary mode
+
+Ryan Mckeever (1):
+
+- pan/bi: check if preds are dominated by header in bi_find_loop_blocks
+
+Sagar Ghuge (2):
+
+- brw: Track if CS uses fences
+- intel: Fix async compute thread limit
+
+Sahitya Kandru (1):
+
+- freedreno: Modify reg_size_vec4 for a608 and a612 to 32
+
+Samuel Pitoiset (12):
+
+- vulkan,anv,radv: do not crash when querying descriptor size for unsupported type
+- zink: fix a memleak in zink_init_format_props()
+- glsl: fix a memleak in link_assign_subroutine_types()
+- loader: fix a memleak
+- kopper: fix a memleak
+- zink: fix a memleak with fences
+- zink: fix a memleak with the emulated GS NIR shader
+- zink: fix a memleak with sampler state
+- pipe-loader: fix a global-buffer-overflow ASAN error when getting driconf
+- radv/meta: fix restoring descriptor heaps
+- Revert "spirv: allow mapping readonly buffers with struct members"
+- radv: force late-Z with fragment shaders that use fbfetch
+
+Simon Perretta (3):
+
+- pco: allow non-pure integer formats for image xchg atomics
+- pco: lower sysvals early for fragment shaders
+- pco: allow fence ops to be legalized if they come last in a block
+
+Stijn Tintel (1):
+
+- rocket: fix mmap leak in buffer map/unmap
+
+Timur Kristóf (3):
+
+- radv: Wait for idle after every submission on GFX6-7
+- radeonsi: Wait for shaders and flush L2 after every submission on GFX6-7
+- Revert "radv: Mitigate GPU hang on Hawaii in Dota 2 and RotTR"
+
+Valentine Burley (4):
+
+- tu: Fix uninitialized gmem_offset when a GMEM layout is impossible
+- tu: Fix capture/replay with sampler custom border color
+- tu: Disable VK_EXT_extended_dynamic_state2 patch control points on A702
+- zink: Gate tess/geom barrier stages on feature support
+
+Vincent Cloutier (1):
+
+- etnaviv: use buffer resource accessor for indirect draws
+
+Vinson Lee (4):
+
+- util/tests: replace sprintf with snprintf in cache tests
+- util/tests: fix unused variable warnings in cache List test
+- vulkan/screenshot-layer: replace itoa/sprintf with snprintf
+- vulkan/screenshot-layer: fix globalLock mutex leak
+
+Wujian Sun (1):
+
+- mesa: Allow GL_SRGB_ALPHA_EXT as color-renderable when EXT_sRGB is supported
+
+Yannis Juglaret (1):
+
+- nouveau: fix data race in nouveau_fence_ref
+
+Yiwei Zhang (3):
+
+- venus/virtgpu: amend a missing sim mutex init
+- venus: fix imported sync fence payload reset upon export
+- venus: avoid renderer semaphore wait upon temp payload export
+
+inspector-ambitious (1):
+
+- loader: fix loader_open_render_node_platform_devices result allocation

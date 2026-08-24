@@ -148,6 +148,7 @@ radeonsi-mendocino-glcts-piglit:
     DEQP_SUITE: radeonsi-mendocino
     GPU_VERSION: radeonsi-mendocino
     HWCI_START_WESTON: 1
+    ACO_DEBUG: validateir,validatera
 
 radv-cezanne-vkcts-asan:
   extends:
@@ -196,11 +197,11 @@ radv-polaris10-vkcts-full:
     - .ci-tron-test-radv-vk-nightly
     - .polaris10-test-valve-kws
     - .radv-valve-manual-rules
-  timeout: 47m
+  timeout: 57m
   variables:
     CI_TRON_TIMEOUT__BOOT_CYCLE__RETRIES: 4
     CI_TRON_TIMEOUT__BOOT_CYCLE__MINUTES: 70
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 45
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 55
     RADV_EXPERIMENTAL: video_decode,video_encode
     radv_enable_float16_gfx8: true
 
@@ -219,9 +220,9 @@ radv-renoir-vkcts-full:
     - .ci-tron-test-radv-vk-nightly
     - .renoir-test-valve
     - .radv-valve-manual-rules
-  timeout: 1h 10m
+  timeout: 1h 20m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 68
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 78
     RADV_EXPERIMENTAL: transfer_queue,msrtss
 
 radv-navi10-vkcts-full:
@@ -280,6 +281,7 @@ radeonsi-vangogh-glcts:
     DEQP_SUITE: radeonsi-vangogh
     DEQP_FRACTION: 6
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 17
+    ACO_DEBUG: validateir,validatera
 
 radeonsi-vangogh-glcts-full:
   extends:
@@ -358,6 +360,20 @@ radv-gfx1201-fluster:
     DEQP_SUITE: radv-fluster
 
 ############### Fossilize
+radv-validate-cache:
+  stage: code-validation
+  timeout: 5m
+  extends:
+    - .test-vk
+    - .radv-rules
+  rules:
+    - !reference [.no_downstream_pipeline-rules, rules]
+    - !reference [.radv-rules, rules]
+  variables:
+    VK_DRIVER: radeon
+  script:
+    - ./install/radv-validate-cache.sh
+
 radv-fossils:
   extends:
     - .radv-valve-rules

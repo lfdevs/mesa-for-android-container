@@ -752,6 +752,9 @@ optimizations.extend([
    (('iand', ('ilt', a, b), ('ilt', b, a)), False),
    (('iand', ('ult', a, b), ('ult', b, a)), False),
 
+   (('ieq', 'a', ('inot', 'a')), False),
+   (('ine', 'a', ('inot', 'a')), True),
+
    # This helps some shaders because, after some optimizations, they end up
    # with patterns like (-a < -b) || (b < a).  In an ideal world, this sort of
    # matching would be handled by CSE.
@@ -1726,6 +1729,10 @@ optimizations.extend([
    (('ior', ('ior', a, b), b), ('ior', a, b)),
    (('iand', ('ior', a, b), b), b),
    (('iand', ('iand', a, b), b), ('iand', a, b)),
+   (('iand', ('inot', ('iand', a, b)), ('ior', a, b)),                    ('ixor', a, b)),
+   (('ior',  ('inot', ('ior', a, b)), ('iand', a, b)),           ('inot', ('ixor', a, b))),
+   (('iand', ('ior', ('inot', a), b), ('ior', a,  ('inot', b))), ('inot', ('ixor', a, b))),
+   (('ior', ('iand', ('inot', a), b), ('iand', a, ('inot', b))),          ('ixor', a, b)),
 
    # It is common for sequences of (x & 1) to occur in large trees.  Replacing
    # an expression like ((a & 1) & (b & 1)) with ((a & b) & 1) allows the "&
@@ -2396,6 +2403,10 @@ optimizations.extend([
    (('~fadd', ('fadd(is_used_once)', 'a(is_not_const)', 'b(is_fmul)'), '#c'), ('fadd', ('fadd', a, c), b)),
    (('~fadd', ('fadd(is_used_once)', 'a(is_not_const)', 'b(is_not_const)'), '#c'), ('fadd', ('fadd', a, c), b)),
    (('iadd', ('iadd(is_used_once)', 'a(is_not_const)', 'b(is_not_const)'), '#c'), ('iadd', ('iadd', a, c), b)),
+
+   # Previous rules can strand a constant fadd between two fmuls, blocking the folding chain
+   (('~fadd', ('fadd(is_used_once)', ('fmul', a, '#b'), '#c'), ('fmul', a, '#d')), ('fadd', ('fmul', a, ('fadd', b, d)), c)),
+   (('~fadd', ('fadd(is_used_once)', ('fmulz', a, '#b'), '#c'), ('fmulz', a, '#d')), ('fadd', ('fmulz', a, ('fadd', b, d)), c)),
 
    # Reassociate constants in add/mul chains so they can be folded together.
    # For now, we mostly only handle cases where the constants are separated by

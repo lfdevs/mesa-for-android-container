@@ -187,34 +187,39 @@ pvr_stage_mask(VkPipelineStageFlags2 stage_mask)
 {
    enum pvr_pipeline_stage_bits stages = 0;
 
-   if (stage_mask & VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
+   if (stage_mask & VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT)
       return PVR_PIPELINE_STAGE_ALL_BITS;
 
-   if (stage_mask & (VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT))
+   if (stage_mask & (VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT))
       stages |= PVR_PIPELINE_STAGE_ALL_GRAPHICS_BITS;
 
-   if (stage_mask & (VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
-                     VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
-                     VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                     VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT |
-                     VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |
-                     VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT)) {
+   if (stage_mask & (VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT |
+                     VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT |
+                     VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+                     VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT |
+                     VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT |
+                     VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT)) {
       stages |= PVR_PIPELINE_STAGE_GEOM_BIT;
    }
 
-   if (stage_mask & (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-                     VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                     VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
-                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)) {
+   if (stage_mask & (VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+                     VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                     VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT |
+                     VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)) {
       stages |= PVR_PIPELINE_STAGE_FRAG_BIT;
    }
 
-   if (stage_mask & (VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
-                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT)) {
+   if (stage_mask & (VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT |
+                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)) {
       stages |= PVR_PIPELINE_STAGE_COMPUTE_BIT;
    }
 
-   if (stage_mask & (VK_PIPELINE_STAGE_TRANSFER_BIT))
+   if (stage_mask & (VK_PIPELINE_STAGE_2_TRANSFER_BIT |
+                     VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT |
+                     VK_PIPELINE_STAGE_2_COPY_BIT |
+                     VK_PIPELINE_STAGE_2_BLIT_BIT |
+                     VK_PIPELINE_STAGE_2_RESOLVE_BIT |
+                     VK_PIPELINE_STAGE_2_CLEAR_BIT))
       stages |= PVR_PIPELINE_STAGE_TRANSFER_BIT;
 
    return stages;

@@ -10,7 +10,6 @@
 
 #include "radeon_compiler.h"
 #include "radeon_compiler_util.h"
-#include "radeon_list.h"
 #include "radeon_swizzle.h"
 #include "radeon_variable.h"
 
@@ -648,14 +647,14 @@ omod_filter_writer_cb(void *userdata, struct rc_instruction *inst, rc_register_f
 
 static int
 peephole_mul_omod(struct radeon_compiler *c, struct rc_instruction *inst_mul,
-                  struct rc_list *var_list)
+                  struct util_dynarray *var_list)
 {
    unsigned int chan = 0, swz, i;
    int const_index = -1;
    int temp_index = -1;
    float const_value;
    rc_omod_op omod_op = RC_OMOD_DISABLE;
-   struct rc_list *writer_list;
+   struct util_dynarray *writer_list;
    struct rc_variable *var;
    struct peephole_mul_cb_data cb_data;
    unsigned writemask_sum;
@@ -754,10 +753,11 @@ peephole_mul_omod(struct radeon_compiler *c, struct rc_instruction *inst_mul,
    if (!writer_list) {
       return 0;
    }
+   struct rc_variable *writer = rc_variable_list_first(writer_list);
 
    cb_data.Clobbered = 0;
    cb_data.Writer = &inst_mul->U.I.DstReg;
-   for (var = writer_list->Item; var; var = var->Friend) {
+   for (var = writer; var; var = var->Friend) {
       struct rc_instruction *inst;
       const struct rc_opcode_info *info = rc_get_opcode_info(var->Inst->U.I.Opcode);
       if (info->HasTexture) {
@@ -788,7 +788,7 @@ peephole_mul_omod(struct radeon_compiler *c, struct rc_instruction *inst_mul,
       return 0;
    }
 
-   writemask_sum = rc_variable_writemask_sum(writer_list->Item);
+   writemask_sum = rc_variable_writemask_sum(writer);
 
    /* rc_normal_rewrite_writemask can't expand a previous writemask to store
     * more channels replicated.
@@ -797,7 +797,7 @@ peephole_mul_omod(struct radeon_compiler *c, struct rc_instruction *inst_mul,
       return 0;
 
    /* Rewrite the instructions */
-   for (var = writer_list->Item; var; var = var->Friend) {
+   for (var = writer; var; var = var->Friend) {
       struct rc_variable *writer = var;
       unsigned conversion_swizzle = RC_SWIZZLE_UUUU;
       for (chan = 0; chan < 4; chan++) {
@@ -1507,7 +1507,7 @@ rc_optimize(struct radeon_compiler *c, void *user)
 
    /* Output modifiers. */
    inst = c->Program.Instructions.Next;
-   struct rc_list *var_list = NULL;
+   struct util_dynarray *var_list = NULL;
    while (inst != &c->Program.Instructions) {
       struct rc_instruction *cur = inst;
       inst = inst->Next;

@@ -138,6 +138,7 @@ const struct pan_blendable_format
 #define FLAGS_VT____ (_V | _T)
 #define FLAGS_VT__IB (_V | _T | _I | _B)
 #define FLAGS__T_Z__ (_T | _Z)
+#define FLAGS_____I_ (_I)
 
 #define FMT(pipe, mali, swizzle, srgb, flags)                                  \
    [PIPE_FORMAT_##pipe] = {                                                    \
@@ -440,6 +441,13 @@ const struct pan_format GENX(pan_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT(R8G8B8A8_UINT,           RGBA8UI,         RGBA, L, VTR_IB),
    FMT(R16G16B16A16_UINT,       RGBA16UI,        RGBA, L, VTR_IB),
    FMT(R32G32B32A32_UINT,       RGBA32UI,        RGBA, L, VTR_IB),
+
+#if PAN_ARCH >= 9
+   /* No native R64 - aliased to RG32UI (matching 8-byte stride). */
+   FMT(R64_UINT,                RG32UI,          RG01, L, ____I_),
+   FMT(R64_SINT,                RG32UI,          RG01, L, ____I_),
+#endif
+
    FMT(R32_FLOAT,               R32F,            R001, L, VTR_IB),
    FMT(R32G32_FLOAT,            RG32F,           RG01, L, VTR_IB),
    FMT(R32G32B32_FLOAT,         RGB32F,          RGB1, L, VTR_IB),

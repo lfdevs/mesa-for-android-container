@@ -27,6 +27,7 @@
 #include "util/ralloc.h"
 #include "util/u_inlines.h"
 #include "util/format/u_format.h"
+#include "util/u_sample_positions.h"
 #include "util/u_upload_mgr.h"
 #include "drm-uapi/i915_drm.h"
 #include "crocus_context.h"
@@ -35,7 +36,6 @@
 #include "crocus_screen.h"
 #include "common/i915/intel_defines.h"
 #include "common/intel_debug_identifier.h"
-#include "common/intel_sample_positions.h"
 
 /**
  * The pipe->set_debug_callback() driver hook.
@@ -147,36 +147,6 @@ crocus_set_device_reset_callback(struct pipe_context *ctx,
       memset(&ice->reset, 0, sizeof(ice->reset));
 }
 
-static void
-crocus_get_sample_position(struct pipe_context *ctx,
-                           unsigned sample_count,
-                           unsigned sample_index,
-                           float *out_value)
-{
-   union {
-      struct {
-         float x[8];
-         float y[8];
-      } a;
-      struct {
-         float  _0XOffset,  _1XOffset,  _2XOffset,  _3XOffset,
-                _4XOffset,  _5XOffset,  _6XOffset,  _7XOffset;
-         float  _0YOffset,  _1YOffset,  _2YOffset,  _3YOffset,
-                _4YOffset,  _5YOffset,  _6YOffset,  _7YOffset;
-      } v;
-   } u;
-   switch (sample_count) {
-   case 1:  INTEL_SAMPLE_POS_1X(u.v._);  break;
-   case 2:  INTEL_SAMPLE_POS_2X(u.v._);  break;
-   case 4:  INTEL_SAMPLE_POS_4X(u.v._);  break;
-   case 8:  INTEL_SAMPLE_POS_8X(u.v._);  break;
-   default: UNREACHABLE("invalid sample count");
-   }
-
-   out_value[0] = u.a.x[sample_index];
-   out_value[1] = u.a.y[sample_index];
-}
-
 #define genX_call(devinfo, func, ...)                   \
    switch ((devinfo)->verx10) {                         \
    case 80:                                             \
@@ -278,7 +248,7 @@ crocus_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->set_debug_callback = crocus_set_debug_callback;
    ctx->set_device_reset_callback = crocus_set_device_reset_callback;
    ctx->get_device_reset_status = crocus_get_device_reset_status;
-   ctx->get_sample_position = crocus_get_sample_position;
+   ctx->get_sample_position = u_default_get_sample_position;
 
    ice->shaders.urb_size = devinfo->urb.size;
 

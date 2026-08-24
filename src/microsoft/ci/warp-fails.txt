@@ -20,6 +20,7 @@ dEQP-VK.glsl.builtin.precision_double.mix.compute.scalar,Fail
 dEQP-VK.glsl.builtin.precision_double.mix.compute.vec2,Fail
 dEQP-VK.glsl.builtin.precision_double.mix.compute.vec4,Fail
 dEQP-VK.renderpass.dedicated_allocation.attachment_allocation.grow_shrink.50,Fail
+dEQP-VK.renderpass.dedicated_allocation.attachment_allocation.grow_shrink.55,Fail
 dEQP-VK.renderpass.suballocation.attachment_allocation.grow_shrink.50,Fail
 dEQP-VK.renderpass2.dedicated_allocation.attachment_allocation.grow_shrink.50,Fail
 dEQP-VK.renderpass2.suballocation.attachment_allocation.grow_shrink.50,Fail

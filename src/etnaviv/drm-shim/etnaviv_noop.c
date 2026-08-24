@@ -26,6 +26,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/ioctl.h>
 #include "drm-uapi/etnaviv_drm.h"
 #include "drm-shim/drm_shim.h"
@@ -33,126 +34,38 @@
 
 struct etna_shim_gpu
 {
-   const char *name;
-   const uint64_t *reg_map;
+   uint32_t model;
+   uint32_t revision;
+   uint32_t product_id;
+   uint32_t customer_id;
+   uint32_t eco_id;
 };
 
-static const struct etna_shim_gpu gpus[] = {
-   {
-      .name = "GC400",
-      .reg_map = (const uint64_t[]){
-         [ETNAVIV_PARAM_GPU_MODEL] = 0x400,
-         [ETNAVIV_PARAM_GPU_REVISION] = 0x4652,
-         [ETNAVIV_PARAM_GPU_FEATURES_0] = 0xa0e9e004,
-         [ETNAVIV_PARAM_GPU_FEATURES_1] = 0xe1299fff,
-         [ETNAVIV_PARAM_GPU_FEATURES_2] = 0xbe13b219,
-         [ETNAVIV_PARAM_GPU_FEATURES_3] = 0xce110010,
-         [ETNAVIV_PARAM_GPU_FEATURES_4] = 0x8000001,
-         [ETNAVIV_PARAM_GPU_FEATURES_5] = 0x20102,
-         [ETNAVIV_PARAM_GPU_FEATURES_6] = 0x120000,
-         [ETNAVIV_PARAM_GPU_FEATURES_7] = 0x0,
-         [ETNAVIV_PARAM_GPU_STREAM_COUNT] = 0x4,
-         [ETNAVIV_PARAM_GPU_REGISTER_MAX] = 0x40,
-         [ETNAVIV_PARAM_GPU_THREAD_COUNT] = 0x80,
-         [ETNAVIV_PARAM_GPU_VERTEX_CACHE_SIZE] = 0x8,
-         [ETNAVIV_PARAM_GPU_SHADER_CORE_COUNT] = 0x1,
-         [ETNAVIV_PARAM_GPU_PIXEL_PIPES] = 0x1,
-         [ETNAVIV_PARAM_GPU_VERTEX_OUTPUT_BUFFER_SIZE] = 0x80,
-         [ETNAVIV_PARAM_GPU_BUFFER_SIZE] = 0x0,
-         [ETNAVIV_PARAM_GPU_INSTRUCTION_COUNT] = 0x100,
-         [ETNAVIV_PARAM_GPU_NUM_CONSTANTS] = 0x140,
-         [ETNAVIV_PARAM_GPU_NUM_VARYINGS] = 0x8,
-         [ETNAVIV_PARAM_SOFTPIN_START_ADDR] = ~0ULL,
-      }
-   },
-   {
-      .name = "GC2000",
-      .reg_map = (const uint64_t[]){
-         [ETNAVIV_PARAM_GPU_MODEL] = 0x2000,
-         [ETNAVIV_PARAM_GPU_REVISION] = 0x5108,
-         [ETNAVIV_PARAM_GPU_FEATURES_0] = 0xe0296cad,
-         [ETNAVIV_PARAM_GPU_FEATURES_1] = 0xc9799eff,
-         [ETNAVIV_PARAM_GPU_FEATURES_2] = 0x2efbf2d9,
-         [ETNAVIV_PARAM_GPU_FEATURES_3] = 0x0,
-         [ETNAVIV_PARAM_GPU_FEATURES_4] = 0x0,
-         [ETNAVIV_PARAM_GPU_FEATURES_5] = 0x0,
-         [ETNAVIV_PARAM_GPU_FEATURES_6] = 0x0,
-         [ETNAVIV_PARAM_GPU_FEATURES_7] = 0x0,
-         [ETNAVIV_PARAM_GPU_STREAM_COUNT] = 0x8,
-         [ETNAVIV_PARAM_GPU_REGISTER_MAX] = 0x40,
-         [ETNAVIV_PARAM_GPU_THREAD_COUNT] = 0x400,
-         [ETNAVIV_PARAM_GPU_VERTEX_CACHE_SIZE] = 0x10,
-         [ETNAVIV_PARAM_GPU_SHADER_CORE_COUNT] = 0x4,
-         [ETNAVIV_PARAM_GPU_PIXEL_PIPES] = 0x2,
-         [ETNAVIV_PARAM_GPU_VERTEX_OUTPUT_BUFFER_SIZE] = 0x200,
-         [ETNAVIV_PARAM_GPU_BUFFER_SIZE] = 0x0,
-         [ETNAVIV_PARAM_GPU_INSTRUCTION_COUNT] = 0x200,
-         [ETNAVIV_PARAM_GPU_NUM_CONSTANTS] = 0xa8,
-         [ETNAVIV_PARAM_GPU_NUM_VARYINGS] = 0xb,
-         [ETNAVIV_PARAM_SOFTPIN_START_ADDR] = ~0ULL,
-      }
-   },
-   {
-      .name = "GC3000",
-      .reg_map = (const uint64_t[]){
-         [ETNAVIV_PARAM_GPU_MODEL] = 0x3000,
-         [ETNAVIV_PARAM_GPU_REVISION] = 0x5450,
-         [ETNAVIV_PARAM_GPU_FEATURES_0] = 0xe0287cad,
-         [ETNAVIV_PARAM_GPU_FEATURES_1] = 0xc9799efb,
-         [ETNAVIV_PARAM_GPU_FEATURES_2] = 0xfefbfadb,
-         [ETNAVIV_PARAM_GPU_FEATURES_3] = 0xeb9d4bbf,
-         [ETNAVIV_PARAM_GPU_FEATURES_4] = 0xedffdced,
-         [ETNAVIV_PARAM_GPU_FEATURES_5] = 0x930d2f47,
-         [ETNAVIV_PARAM_GPU_FEATURES_6] = 0x10000133,
-         [ETNAVIV_PARAM_GPU_FEATURES_7] = 0x0,
-         [ETNAVIV_PARAM_GPU_STREAM_COUNT] = 0x10,
-         [ETNAVIV_PARAM_GPU_REGISTER_MAX] = 0x40,
-         [ETNAVIV_PARAM_GPU_THREAD_COUNT] = 0x400,
-         [ETNAVIV_PARAM_GPU_VERTEX_CACHE_SIZE] = 0x10,
-         [ETNAVIV_PARAM_GPU_SHADER_CORE_COUNT] = 0x4,
-         [ETNAVIV_PARAM_GPU_PIXEL_PIPES] = 0x2,
-         [ETNAVIV_PARAM_GPU_VERTEX_OUTPUT_BUFFER_SIZE] = 0x400,
-         [ETNAVIV_PARAM_GPU_BUFFER_SIZE] = 0x0,
-         [ETNAVIV_PARAM_GPU_INSTRUCTION_COUNT] = 0x100,
-         [ETNAVIV_PARAM_GPU_NUM_CONSTANTS] = 0x140,
-         [ETNAVIV_PARAM_GPU_NUM_VARYINGS] = 0x10,
-         [ETNAVIV_PARAM_SOFTPIN_START_ADDR] = ~0ULL,
-      }
-   },
-   {
-      .name = "GC7000L",
-      .reg_map = (const uint64_t[]){
-         [ETNAVIV_PARAM_GPU_MODEL] = 0x7000,
-         [ETNAVIV_PARAM_GPU_REVISION] = 0x6214,
-         [ETNAVIV_PARAM_GPU_FEATURES_0] = 0xe0287cad,
-         [ETNAVIV_PARAM_GPU_FEATURES_1] = 0xc1799eff,
-         [ETNAVIV_PARAM_GPU_FEATURES_2] = 0xfefbfad9,
-         [ETNAVIV_PARAM_GPU_FEATURES_3] = 0xeb9d4fbf,
-         [ETNAVIV_PARAM_GPU_FEATURES_4] = 0xedfffced,
-         [ETNAVIV_PARAM_GPU_FEATURES_5] = 0xdb0dafc7,
-         [ETNAVIV_PARAM_GPU_FEATURES_6] = 0xbb5ac333,
-         [ETNAVIV_PARAM_GPU_FEATURES_7] = 0xfc8ee200,
-         [ETNAVIV_PARAM_GPU_STREAM_COUNT] = 0x10,
-         [ETNAVIV_PARAM_GPU_REGISTER_MAX] = 0x40,
-         [ETNAVIV_PARAM_GPU_THREAD_COUNT] = 0x400,
-         [ETNAVIV_PARAM_GPU_VERTEX_CACHE_SIZE] = 0x10,
-         [ETNAVIV_PARAM_GPU_SHADER_CORE_COUNT] = 0x4,
-         [ETNAVIV_PARAM_GPU_PIXEL_PIPES] = 0x2,
-         [ETNAVIV_PARAM_GPU_VERTEX_OUTPUT_BUFFER_SIZE] = 0x400,
-         [ETNAVIV_PARAM_GPU_BUFFER_SIZE] = 0x0,
-         [ETNAVIV_PARAM_GPU_INSTRUCTION_COUNT] = 0x200,
-         [ETNAVIV_PARAM_GPU_NUM_CONSTANTS] = 0x140,
-         [ETNAVIV_PARAM_GPU_NUM_VARYINGS] = 0x10,
-         [ETNAVIV_PARAM_SOFTPIN_START_ADDR] = 0x00400000,
-      }
-   }
-};
+/* The GPU a bare LD_PRELOAD emulated before ETNA_SHIM_GPU took an identity. */
+#define ETNA_SHIM_GPU_DEFAULT "2000:5108"
 
-static const struct etna_shim_gpu *shim_gpu;
+/* Where the kernel would let the GPU allocate from. It describes the address
+ * space rather than the chip, so the hardware database has no opinion on it,
+ * and HALTI5 is refused without one.
+ */
+#define ETNA_SHIM_SOFTPIN_START_ADDR 0x00400000
+
+static struct etna_shim_gpu shim_gpu;
 
 static int
 etnaviv_ioctl_noop(int fd, unsigned long request, void *arg)
 {
+   return 0;
+}
+
+static int
+etnaviv_ioctl_pm_query_dom(int fd, unsigned long request, void *arg)
+{
+   struct drm_etnaviv_pm_domain *args = arg;
+
+   args->iter = 0xff;
+   args->nr_signals = 0;
+
    return 0;
 }
 
@@ -188,13 +101,43 @@ etnaviv_ioctl_get_param(int fd, unsigned long request, void *arg)
 {
    struct drm_etnaviv_param *gp = arg;
 
-   if (gp->param > ETNAVIV_PARAM_SOFTPIN_START_ADDR) {
-      fprintf(stderr, "Unknown DRM_IOCTL_ETNAVIV_GET_PARAM %d\n", gp->param);
+   /* Only one pipe is modelled. */
+   if (gp->pipe != 0) {
+      errno = -ENXIO;
+      return 0;
+   }
+
+   switch (gp->param) {
+   case ETNAVIV_PARAM_GPU_MODEL:
+      gp->value = shim_gpu.model;
+      break;
+   case ETNAVIV_PARAM_GPU_REVISION:
+      gp->value = shim_gpu.revision;
+      break;
+   case ETNAVIV_PARAM_GPU_PRODUCT_ID:
+      gp->value = shim_gpu.product_id;
+      break;
+   case ETNAVIV_PARAM_GPU_CUSTOMER_ID:
+      gp->value = shim_gpu.customer_id;
+      break;
+   case ETNAVIV_PARAM_GPU_ECO_ID:
+      gp->value = shim_gpu.eco_id;
+      break;
+   case ETNAVIV_PARAM_SOFTPIN_START_ADDR:
+      gp->value = ETNA_SHIM_SOFTPIN_START_ADDR;
+      break;
+   case ETNAVIV_PARAM_GPU_FEATURES_0 ... ETNAVIV_PARAM_GPU_NUM_VARYINGS:
+      /* Only asked for when the database had no entry for the identity. */
+      fprintf(stderr, "No hardware database entry for ETNA_SHIM_GPU=%x:%x:%x:%x:%x\n",
+              shim_gpu.model, shim_gpu.revision, shim_gpu.product_id,
+              shim_gpu.customer_id, shim_gpu.eco_id);
+      exit(1);
+   default:
+      errno = -EINVAL;
       return -1;
    }
 
-   gp->value = shim_gpu->reg_map[gp->param];
-
+   errno = 0;
    return 0;
 }
 
@@ -208,9 +151,42 @@ static ioctl_fn_t driver_ioctls[] = {
    [DRM_ETNAVIV_WAIT_FENCE] = etnaviv_ioctl_noop,
    [DRM_ETNAVIV_GEM_USERPTR] = etnaviv_ioctl_noop,
    [DRM_ETNAVIV_GEM_WAIT] = etnaviv_ioctl_noop,
-   [DRM_ETNAVIV_PM_QUERY_DOM] = etnaviv_ioctl_noop,
+   [DRM_ETNAVIV_PM_QUERY_DOM] = etnaviv_ioctl_pm_query_dom,
    [DRM_ETNAVIV_PM_QUERY_SIG] = etnaviv_ioctl_noop,
 };
+
+static bool
+parse_identity(const char *spec, struct etna_shim_gpu *gpu)
+{
+   uint32_t id[5] = { 0 };
+   const char *pos = spec;
+   unsigned n = 0;
+
+   while (n < ARRAY_SIZE(id)) {
+      char *end;
+
+      id[n++] = strtoul(pos, &end, 16);
+      if (end == pos)
+         return false;
+
+      pos = end;
+      if (*pos != ':')
+         break;
+
+      pos++;
+   }
+
+   if (*pos != '\0' || n < 2)
+      return false;
+
+   gpu->model = id[0];
+   gpu->revision = id[1];
+   gpu->product_id = id[2];
+   gpu->customer_id = id[3];
+   gpu->eco_id = id[4];
+
+   return true;
+}
 
 void
 drm_shim_driver_init(void)
@@ -218,26 +194,22 @@ drm_shim_driver_init(void)
    shim_device.driver_ioctls = driver_ioctls;
    shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);
 
-   /* etnaviv uses the DRM version to expose features, instead of getparam. */
+   /* Report a version that answers the GPU identity, so that the driver takes
+    * features and limits from the hardware database.
+    */
    shim_device.version_major = 1;
-   shim_device.version_minor = 1;
+   shim_device.version_minor = 4;
    shim_device.version_patchlevel = 0;
 
    drm_shim_platform_device_setup("etnaviv", "/soc/gpu3d", "vivante,gc");
 
-   /* decide what GPU to emulate */
-   const char *gpu = debug_get_option("ETNA_SHIM_GPU", "GC2000");
+   const char *spec = debug_get_option("ETNA_SHIM_GPU", ETNA_SHIM_GPU_DEFAULT);
 
-   for (unsigned i = 0; i < ARRAY_SIZE(gpus); i++) {
-      if (strncasecmp(gpu, gpus[i].name, strlen(gpus[i].name)) == 0) {
-         shim_gpu = &gpus[i];
-         break;
-      }
+   if (!parse_identity(spec, &shim_gpu)) {
+      fprintf(stderr, "ETNA_SHIM_GPU=%s is not an identity of the form "
+              "model:revision[:product:customer:eco]\n", spec);
+      exit(1);
    }
 
-   /* NOTE: keep keep default value and fallback index in sync */
-   if (!shim_gpu)
-      shim_gpu = &gpus[1];
-
-   fprintf(stderr, "Using %s as shim gpu\n", shim_gpu->name);
+   fprintf(stderr, "Using %s as shim gpu\n", spec);
 }

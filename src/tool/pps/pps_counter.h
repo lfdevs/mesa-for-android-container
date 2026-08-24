@@ -54,6 +54,10 @@ class Counter
       Byte,
       Hertz,
       None,
+      Primitive,
+      Instruction,
+      Pixel,
+      Fragment
    };
 
    using Value = std::variant<int64_t, double>;

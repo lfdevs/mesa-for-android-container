@@ -95,8 +95,7 @@ enum radv_meta_object_key_type {
 VkResult radv_device_init_meta(struct radv_device *device);
 void radv_device_finish_meta(struct radv_device *device);
 
-VkResult radv_device_init_accel_struct_build_state(struct radv_device *device);
-void radv_device_finish_accel_struct_build_state(struct radv_device *device);
+void radv_device_init_accel_struct_build_state(struct radv_device *device);
 
 void radv_meta_begin(struct radv_cmd_buffer *cmd_buffer);
 
@@ -201,7 +200,7 @@ void radv_meta_bind_descriptors(struct radv_cmd_buffer *cmd_buffer, VkPipelineBi
                                 VkPipelineLayout _layout, uint32_t num_descriptors,
                                 const VkDescriptorGetInfoEXT *descriptors);
 
-VkImageViewType radv_meta_get_view_type(const struct radv_image *image);
+VkImageViewType radv_meta_get_view_type(const struct radv_image *image, bool use_2d_array_for_3d);
 
 static inline VkFormat
 radv_meta_get_96bit_channel_format(VkFormat format)

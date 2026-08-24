@@ -1,0 +1,1365 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2019-2026 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<CounterInfoList>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRd</MachineName>
+    <SourceName>L2_EXT_READ</SourceName>
+    <StableID>111</StableID>
+    <HumanName>Output external read transactions</HumanName>
+    <GroupName>External Bus Accesses</GroupName>
+    <GroupHumanName>Read transactions</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of external read transactions.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every external read transaction made on the
+      memory bus. These transactions typically result in an external DRAM
+      access, but some designs include a system cache which can provide some
+      buffering.
+
+      The longest memory transaction possible is 64 bytes in length, but
+      shorter transactions are generated in some circumstances.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWr</MachineName>
+    <SourceName>L2_EXT_WRITE</SourceName>
+    <StableID>124</StableID>
+    <HumanName>Output external write transactions</HumanName>
+    <GroupName>External Bus Accesses</GroupName>
+    <GroupHumanName>Write transactions</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of external write transactions.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every external write transaction made on the
+      memory bus. These transactions typically result in an external DRAM
+      access, but some chips include a system cache which can provide some
+      buffering.
+
+      The longest memory transaction possible is 64 bytes in length, but
+      shorter transactions are generated in some circumstances.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdBt</MachineName>
+    <SourceName>L2_EXT_READ_BEATS</SourceName>
+    <StableID>114</StableID>
+    <HumanName>Output external read beats</HumanName>
+    <GroupName>External Bus Beats</GroupName>
+    <GroupHumanName>Read beats</GroupHumanName>
+    <Units>beats</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of external bus data read cycles.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when a data beat was read
+      from the external memory bus.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrBt</MachineName>
+    <SourceName>L2_EXT_WRITE_BEATS</SourceName>
+    <StableID>129</StableID>
+    <HumanName>Output external write beats</HumanName>
+    <GroupName>External Bus Beats</GroupName>
+    <GroupHumanName>Write beats</GroupHumanName>
+    <Units>beats</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of external bus data write cycles.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when a data beat was
+      written to the external memory bus.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdBy</MachineName>
+    <StableID>65548</StableID>
+    <HumanName>Output external read bytes</HumanName>
+    <GroupName>External Bus Bytes</GroupName>
+    <GroupHumanName>Read bytes</GroupHumanName>
+    <Units>bytes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The total output read bandwidth for the GPU.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the total output read bandwidth for the GPU.
+    </LongDescription>
+    <Equation>
+      MaliExtBusRdBt * MaliConfigExtBusBeatSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrBy</MachineName>
+    <StableID>65553</StableID>
+    <HumanName>Output external write bytes</HumanName>
+    <GroupName>External Bus Bytes</GroupName>
+    <GroupHumanName>Write bytes</GroupHumanName>
+    <Units>bytes</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The total output write bandwidth for the GPU.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the total output write bandwidth for the GPU.
+    </LongDescription>
+    <Equation>
+      MaliExtBusWrBt * MaliConfigExtBusBeatSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdBPS</MachineName>
+    <StableID>554</StableID>
+    <HumanName>Output external read bytes/second</HumanName>
+    <GroupName>External Bus Bandwidth</GroupName>
+    <GroupHumanName>Read bandwidth</GroupHumanName>
+    <Units>bytes/second</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The total output read bandwidth for the GPU.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the total output read bandwidth for the GPU,
+      measured in bytes per second.
+    </LongDescription>
+    <Equation>
+      MaliExtBusRdBy / MALI_CONFIG_TIME_SPAN
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrBPS</MachineName>
+    <StableID>555</StableID>
+    <HumanName>Output external write bytes/second</HumanName>
+    <GroupName>External Bus Bandwidth</GroupName>
+    <GroupHumanName>Write bandwidth</GroupHumanName>
+    <Units>bytes/second</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The total output write bandwidth for the GPU.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the total output write bandwidth for the GPU,
+      measured in bytes per second.
+    </LongDescription>
+    <Equation>
+      MaliExtBusWrBy / MALI_CONFIG_TIME_SPAN
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdStallCy</MachineName>
+    <SourceName>L2_EXT_AR_STALL</SourceName>
+    <StableID>115</StableID>
+    <HumanName>Output external read stall cycles</HumanName>
+    <GroupName>External Bus Stall Cycles</GroupName>
+    <GroupHumanName>Read stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when a read is stalled waiting for the external bus.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every stall cycle on the AXI bus where the
+      GPU has a valid read transaction to send, but is awaiting a ready signal
+      from the bus.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrStallCy</MachineName>
+    <SourceName>L2_EXT_W_STALL</SourceName>
+    <StableID>130</StableID>
+    <HumanName>Output external write stall cycles</HumanName>
+    <GroupName>External Bus Stall Cycles</GroupName>
+    <GroupHumanName>Write stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when a write is stalled waiting for the external
+      bus.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every stall cycle on the external bus where
+      the GPU has a valid write transaction to send, but is awaiting a ready
+      signal from the external bus.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdStallRate</MachineName>
+    <StableID>65549</StableID>
+    <HumanName>Output external read stall percentage</HumanName>
+    <GroupName>External Bus Stall Rate</GroupName>
+    <GroupHumanName>Read stall rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of cycles with an external read transaction stalled.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of GPU cycles with a memory stall
+      on an external read transaction.
+
+      Stall rates can be reduced by reducing the size of data resources, such
+      as buffers or textures.
+    </LongDescription>
+    <Equation>
+      (MaliExtBusRdStallCy / MaliConfigL2CacheCount / MaliGPUActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrStallRate</MachineName>
+    <StableID>65554</StableID>
+    <HumanName>Output external write stall percentage</HumanName>
+    <GroupName>External Bus Stall Rate</GroupName>
+    <GroupHumanName>Write stall rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of cycles with an external write transaction stalled.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of GPU cycles with a memory stall
+      on an external write transaction.
+
+      Stall rates can be reduced by reducing geometry complexity, or the size
+      of framebuffers in memory.
+    </LongDescription>
+    <Equation>
+      (MaliExtBusWrStallCy / MaliConfigL2CacheCount / MaliGPUActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdLat0</MachineName>
+    <SourceName>L2_EXT_RRESP_0_127</SourceName>
+    <StableID>119</StableID>
+    <HumanName>Output external read latency 0-127 cycles</HumanName>
+    <GroupName>External Bus Read Latency</GroupName>
+    <GroupHumanName>0-127 cycles</GroupHumanName>
+    <Units>beats</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of data beats returned 0-127 cycles after the read request.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every data beat that is returned between 0
+      and 127 cycles after the read transaction started. This latency is
+      considered a fast access response speed.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdLat128</MachineName>
+    <SourceName>L2_EXT_RRESP_128_191</SourceName>
+    <StableID>120</StableID>
+    <HumanName>Output external read latency 128-191 cycles</HumanName>
+    <GroupName>External Bus Read Latency</GroupName>
+    <GroupHumanName>128-191 cycles</GroupHumanName>
+    <Units>beats</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of data beats returned 128-191 cycles after the read request.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every data beat that is returned between 128
+      and 191 cycles after the read transaction started. This latency is
+      considered a normal access response speed.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdLat192</MachineName>
+    <SourceName>L2_EXT_RRESP_192_255</SourceName>
+    <StableID>121</StableID>
+    <HumanName>Output external read latency 192-255 cycles</HumanName>
+    <GroupName>External Bus Read Latency</GroupName>
+    <GroupHumanName>192-255 cycles</GroupHumanName>
+    <Units>beats</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of data beats returned 192-255 cycles after the read request.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every data beat that is returned between 192
+      and 255 cycles after the read transaction started. This latency is
+      considered a normal access response speed.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdLat256</MachineName>
+    <SourceName>L2_EXT_RRESP_256_319</SourceName>
+    <StableID>122</StableID>
+    <HumanName>Output external read latency 256-319 cycles</HumanName>
+    <GroupName>External Bus Read Latency</GroupName>
+    <GroupHumanName>256-319 cycles</GroupHumanName>
+    <Units>beats</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of data beats returned 256-319 cycles after the read request.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every data beat that is returned between 256
+      and 319 cycles after the read transaction started. This latency is
+      considered a slow access response speed.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdLat320</MachineName>
+    <SourceName>L2_EXT_RRESP_320_383</SourceName>
+    <StableID>123</StableID>
+    <HumanName>Output external read latency 320-383 cycles</HumanName>
+    <GroupName>External Bus Read Latency</GroupName>
+    <GroupHumanName>320-383 cycles</GroupHumanName>
+    <Units>beats</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of data beats returned 320-383 cycles after the read request.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every data beat that is returned between 320
+      and 383 cycles after the read transaction started. This latency is
+      considered a slow access response speed.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdLat384</MachineName>
+    <StableID>65551</StableID>
+    <HumanName>Output external read latency 384+ cycles</HumanName>
+    <GroupName>External Bus Read Latency</GroupName>
+    <GroupHumanName>384+ cycles</GroupHumanName>
+    <Units>beats</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of read beats that are returned at least 384 cycles after the
+      transaction started.
+    </ShortDescription>
+    <LongDescription>
+      This expression increments for every read beat that is returned at least
+      384 cycles after the transaction started. This latency is considered a
+      very slow access response speed.
+    </LongDescription>
+    <Equation>
+      MaliExtBusRdBt - MaliExtBusRdLat0 - MaliExtBusRdLat128 - MaliExtBusRdLat192 - MaliExtBusRdLat256 - MaliExtBusRdLat320
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdOTQ1</MachineName>
+    <SourceName>L2_EXT_AR_CNT_Q1</SourceName>
+    <StableID>116</StableID>
+    <HumanName>Output external outstanding reads 0-25%</HumanName>
+    <GroupName>External Bus Outstanding Reads</GroupName>
+    <GroupHumanName>0-25% outstanding</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of read transactions initiated when 0-25% of the maximum are
+      in use.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every read transaction initiated when 0-25%
+      of the available transaction IDs are in use.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdOTQ2</MachineName>
+    <SourceName>L2_EXT_AR_CNT_Q2</SourceName>
+    <StableID>117</StableID>
+    <HumanName>Output external outstanding reads 25-50%</HumanName>
+    <GroupName>External Bus Outstanding Reads</GroupName>
+    <GroupHumanName>25-50% outstanding</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of read transactions initiated when 25-50% of the maximum are
+      in use.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every read transaction initiated when 25-50%
+      of the available transaction IDs are in use.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdOTQ3</MachineName>
+    <SourceName>L2_EXT_AR_CNT_Q3</SourceName>
+    <StableID>118</StableID>
+    <HumanName>Output external outstanding reads 50-75%</HumanName>
+    <GroupName>External Bus Outstanding Reads</GroupName>
+    <GroupHumanName>50-75% outstanding</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of read transactions initiated when 50-75% of the maximum are
+      in use.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every read transaction initiated when 50-75%
+      of the available transaction IDs are in use.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdOTQ4</MachineName>
+    <StableID>65550</StableID>
+    <HumanName>Output external outstanding reads 75-100%</HumanName>
+    <GroupName>External Bus Outstanding Reads</GroupName>
+    <GroupHumanName>75-100% outstanding</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of read transactions initiated when 75-100% of transaction IDs
+      are in use.
+    </ShortDescription>
+    <LongDescription>
+      This expression increments for every read transaction initiated when
+      75-100% of transaction IDs are in use.
+    </LongDescription>
+    <Equation>
+      MaliExtBusRd - MaliExtBusRdOTQ1 - MaliExtBusRdOTQ2 - MaliExtBusRdOTQ3
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrOTQ1</MachineName>
+    <SourceName>L2_EXT_AW_CNT_Q1</SourceName>
+    <StableID>131</StableID>
+    <HumanName>Output external outstanding writes 0-25%</HumanName>
+    <GroupName>External Bus Outstanding Writes</GroupName>
+    <GroupHumanName>0-25% outstanding</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of write transactions initiated when 0-25% of the maximum are
+      in use.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every write transaction initiated when 0-25%
+      of the available transaction IDs are in use.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrOTQ2</MachineName>
+    <SourceName>L2_EXT_AW_CNT_Q2</SourceName>
+    <StableID>132</StableID>
+    <HumanName>Output external outstanding writes 25-50%</HumanName>
+    <GroupName>External Bus Outstanding Writes</GroupName>
+    <GroupHumanName>25-50% outstanding</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of write transactions initiated when 25-50% of the maximum are
+      in use.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every write transaction initiated when 25-50%
+      of the available transaction IDs are in use.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrOTQ3</MachineName>
+    <SourceName>L2_EXT_AW_CNT_Q3</SourceName>
+    <StableID>133</StableID>
+    <HumanName>Output external outstanding writes 50-75%</HumanName>
+    <GroupName>External Bus Outstanding Writes</GroupName>
+    <GroupHumanName>50-75% outstanding</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of write transactions initiated when 50-75% of the maximum are
+      in use.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every write transaction initiated when 50-75%
+      of the available transaction IDs are in use.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrOTQ4</MachineName>
+    <StableID>65555</StableID>
+    <HumanName>Output external outstanding writes 75-100%</HumanName>
+    <GroupName>External Bus Outstanding Writes</GroupName>
+    <GroupHumanName>75-100% outstanding</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of write transactions initiated when 75-100% of transaction
+      IDs are in use.
+    </ShortDescription>
+    <LongDescription>
+      This expression increments for every write transaction initiated when
+      75-100% of transaction IDs are in use.
+    </LongDescription>
+    <Equation>
+      MaliExtBusWr - MaliExtBusWrOTQ1 - MaliExtBusWrOTQ2 - MaliExtBusWrOTQ3
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdNoSnoop</MachineName>
+    <SourceName>L2_EXT_READ_NOSNP</SourceName>
+    <StableID>112</StableID>
+    <HumanName>Output external ReadNoSnoop transactions</HumanName>
+    <GroupName>External Bus Accesses</GroupName>
+    <GroupHumanName>ReadNoSnoop transactions</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of external non-coherent read transactions.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every non-coherent (ReadNoSnp) transaction.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusRdUnique</MachineName>
+    <SourceName>L2_EXT_READ_UNIQUE</SourceName>
+    <StableID>113</StableID>
+    <HumanName>Output external ReadUnique transactions</HumanName>
+    <GroupName>External Bus Accesses</GroupName>
+    <GroupHumanName>ReadUnique transactions</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of external coherent read unique transactions.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every coherent exclusive read (ReadUnique)
+      transaction.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrNoSnoopFull</MachineName>
+    <SourceName>L2_EXT_WRITE_NOSNP_FULL</SourceName>
+    <StableID>125</StableID>
+    <HumanName>Output external WriteNoSnoopFull transactions</HumanName>
+    <GroupName>External Bus Accesses</GroupName>
+    <GroupHumanName>WriteNoSnoopFull transactions</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of external non-coherent full write transactions.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every external non-coherent full write
+      (WriteNoSnpFull) transaction.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrNoSnoopPart</MachineName>
+    <SourceName>L2_EXT_WRITE_NOSNP_PTL</SourceName>
+    <StableID>126</StableID>
+    <HumanName>Output external WriteNoSnoopPartial transactions</HumanName>
+    <GroupName>External Bus Accesses</GroupName>
+    <GroupHumanName>WriteNoSnoopPartial transactions</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of external non-coherent partial write transactions.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every external non-coherent partial write
+      (WriteNoSnpPtl) transaction.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrSnoopFull</MachineName>
+    <SourceName>L2_EXT_WRITE_SNP_FULL</SourceName>
+    <StableID>127</StableID>
+    <HumanName>Output external WriteSnoopFull transactions</HumanName>
+    <GroupName>External Bus Accesses</GroupName>
+    <GroupHumanName>WriteSnoopFull transactions</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of external coherent full write transactions.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every external coherent full write
+      (WriteBackFull or WriteUniqueFull) transaction.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliExtBusWrSnoopPart</MachineName>
+    <SourceName>L2_EXT_WRITE_SNP_PTL</SourceName>
+    <StableID>128</StableID>
+    <HumanName>Output external WriteSnoopPartial transactions</HumanName>
+    <GroupName>External Bus Accesses</GroupName>
+    <GroupHumanName>WriteSnoopPartial transactions</GroupHumanName>
+    <Units>transactions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of external coherent partial write transactions.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every external coherent partial write
+      (WriteBackPtl or WriteUniquePtl) transaction.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+</CounterInfoList>

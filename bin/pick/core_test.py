@@ -223,29 +223,6 @@ class TestRE:
             assert cc_to.group(1) == '20.0'
             assert cc_to.group(2) == '20.1'
 
-    class TestRevert:
-
-        def test_simple(self):
-            message = textwrap.dedent("""\
-                Revert "radv: do not emit PKT3_CONTEXT_CONTROL with AMDGPU 3.6.0+"
-
-                This reverts commit 2ca8629fa9b303e24783b76a7b3b0c2513e32fbd.
-
-                This was initially ported from RadeonSI, but in the meantime it has
-                been reverted because it might hang. Be conservative and re-introduce
-                this packet emission.
-
-                Unfortunately this doesn't fix anything known.
-
-                Cc: 19.2 <mesa-stable@lists.freedesktop.org>
-                Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
-                Reviewed-by: Bas Nieuwenhuizen <bas@basnieuwenhuizen.nl>
-            """)
-
-            revert_of = core.IS_REVERT.search(message)
-            assert revert_of is not None
-            assert revert_of.group(1) == '2ca8629fa9b303e24783b76a7b3b0c2513e32fbd'
-
     class TestBackportTo:
 
         def test_single_release(self):
@@ -439,30 +416,6 @@ class TestResolveNomination:
         assert c.nomination_type is core.NominationType.NONE
 
     @pytest.mark.asyncio
-    async def test_revert_is_nominated(self):
-        s = self.FakeSubprocess(b'This reverts commit 1234567890123456789012345678901234567890.')
-        c = core.Commit('abcdef1234567890', 'a commit')
-
-        with mock.patch('bin.pick.core.asyncio.create_subprocess_exec', s.mock):
-            with mock.patch('bin.pick.core.is_commit_in_branch', self.return_true):
-                await core.resolve_nomination(c, '')
-
-        assert c.nominated
-        assert c.nomination_type is core.NominationType.REVERT
-
-    @pytest.mark.asyncio
-    async def test_revert_is_not_nominated(self):
-        s = self.FakeSubprocess(b'This reverts commit 1234567890123456789012345678901234567890.')
-        c = core.Commit('abcdef1234567890', 'a commit')
-
-        with mock.patch('bin.pick.core.asyncio.create_subprocess_exec', s.mock):
-            with mock.patch('bin.pick.core.is_commit_in_branch', self.return_false):
-                await core.resolve_nomination(c, '')
-
-        assert not c.nominated
-        assert c.nomination_type is core.NominationType.REVERT
-
-    @pytest.mark.asyncio
     async def test_is_fix_and_backport(self):
         s = self.FakeSubprocess(
             b'Fixes: 3d09bb390a39 (etnaviv: GC7000: State changes for HALTI3..5)\n'
@@ -491,36 +444,6 @@ class TestResolveNomination:
 
         assert c.nominated
         assert c.nomination_type is core.NominationType.FIXES
-
-    @pytest.mark.asyncio
-    async def test_is_fix_and_revert(self):
-        s = self.FakeSubprocess(
-            b'Fixes: 3d09bb390a39 (etnaviv: GC7000: State changes for HALTI3..5)\n'
-            b'This reverts commit 1234567890123456789012345678901234567890.'
-        )
-        c = core.Commit('abcdef1234567890', 'a commit')
-
-        with mock.patch('bin.pick.core.asyncio.create_subprocess_exec', s.mock):
-            with mock.patch('bin.pick.core.is_commit_in_branch', self.return_true):
-                await core.resolve_nomination(c, '16.1')
-
-        assert c.nominated
-        assert c.nomination_type is core.NominationType.FIXES
-
-    @pytest.mark.asyncio
-    async def test_is_cc_and_revert(self):
-        s = self.FakeSubprocess(
-            b'This reverts commit 1234567890123456789012345678901234567890.\n'
-            b'Cc: 16.1 <mesa-stable@lists.freedesktop.org>'
-        )
-        c = core.Commit('abcdef1234567890', 'a commit')
-
-        with mock.patch('bin.pick.core.asyncio.create_subprocess_exec', s.mock):
-            with mock.patch('bin.pick.core.is_commit_in_branch', self.return_true):
-                await core.resolve_nomination(c, '16.1')
-
-        assert c.nominated
-        assert c.nomination_type is core.NominationType.CC
 
 
 class TestResolveFixes:

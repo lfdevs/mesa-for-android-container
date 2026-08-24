@@ -10,5 +10,6 @@ struct radeon_winsys;
 struct pipe_screen_config;
 
 struct pipe_screen *r600_screen_create(struct radeon_winsys *ws,
-				       const struct pipe_screen_config *config);
+                                       const struct pipe_screen_config *config,
+                                       uint64_t debug_flags);
 #endif

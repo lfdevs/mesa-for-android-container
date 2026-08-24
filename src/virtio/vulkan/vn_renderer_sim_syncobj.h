@@ -6,6 +6,8 @@
 #ifndef VN_RENDERER_SIM_SYNCOBJ_H
 #define VN_RENDERER_SIM_SYNCOBJ_H
 
+#include "vn_common.h"
+
 struct util_sync_provider;
 
 struct util_sync_provider *

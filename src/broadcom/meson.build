@@ -65,7 +65,7 @@ libbroadcom_v3d = static_library(
     v3d_xml_pack,
   ],
   include_directories : [inc_include, inc_src, inc_broadcom],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, v3d_simulator_arg],
   gnu_symbol_visibility : 'hidden',
   link_whole : v3d_libs + per_version_libs,
   link_with: [libv3d_neon],

@@ -14,28 +14,7 @@ mtl_commit_options *
 mtl_new_commit_options(void)
 {
    @autoreleasepool {
-      return [[MTL4CommitOptions new] init];
-   }
-}
-
-enum mtl_command_queue_error
-error_code_to_mtl_command_queue_error(MTL4CommandQueueError code)
-{
-   switch (code) {
-   case MTL4CommandQueueErrorNone:
-      return MTL_COMMAND_QUEUE_ERROR_NONE;
-    case MTL4CommandQueueErrorTimeout:
-      return MTL_COMMAND_QUEUE_ERROR_TIMEOUT;
-    case MTL4CommandQueueErrorNotPermitted:
-      return MTL_COMMAND_QUEUE_ERROR_NOT_PERMITTED;
-    case MTL4CommandQueueErrorOutOfMemory:
-      return MTL_COMMAND_QUEUE_ERROR_OUT_OF_MEMORY;
-    case MTL4CommandQueueErrorDeviceRemoved:
-      return MTL_COMMAND_QUEUE_ERROR_DEVICE_REMOVED;
-    case MTL4CommandQueueErrorAccessRevoked:
-      return MTL_COMMAND_QUEUE_ERROR_ACCESS_REVOKED;
-    case MTL4CommandQueueErrorInternal:
-      return MTL_COMMAND_QUEUE_ERROR_INTERNAL;
+      return [MTL4CommitOptions new];
    }
 }
 
@@ -56,7 +35,7 @@ mtl_commit_options_add_feedback_handler(mtl_commit_options *options,
                .gpu_start = feedback.GPUStartTime,
                .gpu_end = feedback.GPUEndTime,
                .error = error
-                           ? error_code_to_mtl_command_queue_error(error.code)
+                           ? (enum mtl_command_queue_error)error.code
                            : MTL_COMMAND_QUEUE_ERROR_NONE,
             };
             callback(&feedback_data);
@@ -131,20 +110,21 @@ mtl_command_queue_commit(mtl_command_queue *queue,
 }
 
 void
+mtl_command_queue_wait_for_drawable(mtl_command_queue *queue, void *drawable)
+{
+   @autoreleasepool {
+      id<MTL4CommandQueue> q = (id<MTL4CommandQueue>)queue;
+      id<MTLDrawable> d = (id<MTLDrawable>)drawable;
+      [q waitForDrawable:d];
+   }
+}
+
+void
 mtl_command_queue_signal_drawable(mtl_command_queue *queue, void *drawable)
 {
    @autoreleasepool {
       id<MTL4CommandQueue> q = (id<MTL4CommandQueue>)queue;
       id<MTLDrawable> d = (id<MTLDrawable>)drawable;
       [q signalDrawable:d];
-   }
-}
-
-void
-mtl_drawable_present(void *drawable)
-{
-   @autoreleasepool {
-      id<MTLDrawable> d = (id<MTLDrawable>)drawable;
-      [d present];
    }
 }

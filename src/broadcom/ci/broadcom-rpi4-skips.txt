@@ -22,62 +22,10 @@ spec@glsl-es-3.20.*
 dEQP-VK.draw.renderpass.inverted_depth_ranges.nodepthclamp_deltazero
 dEQP-VK.rasterization.depth_bias.d32_sfloat
 
-# Slow CTS tests (> 1 minute to run)
-dEQP-GLES31.functional.ubo.random.all_per_block_buffers.13
-dEQP-GLES31.functional.ubo.random.all_per_block_buffers.20
+# Slow CTS tests (close to or over the 60s test timeout)
 dEQP-VK.memory.mapping.dedicated_alloc.buffer.full.variable.implicit_unmap
 dEQP-VK.memory.mapping.dedicated_alloc.image.full.variable.implicit_unmap
 dEQP-VK.spirv_assembly.instruction.graphics.spirv_ids_abuse.lots_ids_geom
-dEQP-VK.ssbo.layout.random.16bit.all_per_block_buffers.47
-dEQP-VK.ssbo.layout.random.16bit.all_per_block_buffers.5
-dEQP-VK.ssbo.layout.random.16bit.all_shared_buffer.31
-dEQP-VK.ssbo.layout.random.8bit.all_per_block_buffers.5
-dEQP-VK.ssbo.layout.random.8bit.nested_structs_arrays_instance_arrays.9
-dEQP-VK.ssbo.layout.random.all_shared_buffer.3
-dEQP-VK.ssbo.layout.random.nested_structs_arrays.17
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std140.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.column_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.column_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.column_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.mat4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.column_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std430.row_major_mat4
-dEQP-VK.ssbo.phys.layout.random.16bit.nested_structs_arrays.23
-dEQP-VK.ssbo.phys.layout.random.8bit.all_per_block_buffers.46
-dEQP-VK.ssbo.phys.layout.random.8bit.nested_structs_arrays.17
-dEQP-VK.ssbo.phys.layout.random.8bit.nested_structs_arrays_instance_arrays.12
-dEQP-VK.ssbo.phys.layout.random.all_shared_buffer.3
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.std140_instance_array
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.std140_instance_array_comp_access
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.std140_instance_array_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.std140_instance_array_store_cols
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.std430_instance_array
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.std430_instance_array_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.std430_instance_array_store_cols
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.std140_instance_array
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.std140_instance_array_comp_access
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.std140_instance_array_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.std140_instance_array_store_cols
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.std430_instance_array
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.std430_instance_array_comp_access
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.std430_instance_array_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.std430_instance_array_store_cols
-dEQP-VK.ubo.random.16bit.all_per_block_buffers.27
-dEQP-VK.ubo.random.all_shared_buffer.48
-ubsan-dEQP-VK.ssbo.layout.3_level_array.std140.column_major_mat4_comp_access
-ubsan-dEQP-VK.ssbo.phys.layout.3_level_array.std430.column_major_mat4x3_store_cols
-ubsan-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.column_major_mat4x3_store_cols
-ubsan-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.std140_instance_array_store_cols
 
 # WSI tests are too flaky to be useful
 dEQP-VK.image.swapchain_mutable.*

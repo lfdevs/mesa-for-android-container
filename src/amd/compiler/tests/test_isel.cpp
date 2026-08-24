@@ -183,6 +183,7 @@ BEGIN_TEST(isel.discard_early_exit.mrtz)
    //! s_endpgm                             ; $_
 
    PipelineBuilder pbld(get_vk_device(GFX11));
+   pbld.ds_output = VK_FORMAT_D32_SFLOAT;
    pbld.add_vsfs(vs, fs);
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "Assembly");
 END_TEST

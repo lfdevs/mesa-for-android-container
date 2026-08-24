@@ -35,9 +35,16 @@ uint32_t mtl_device_max_threadgroup_memory_length(mtl_device *dev);
 uint64_t mtl_device_max_buffer_length(mtl_device *dev);
 uint64_t mtl_device_recommended_max_working_set_size(mtl_device *dev);
 uint64_t mtl_device_current_allocated_size(mtl_device *dev);
+uint32_t mtl_device_max_argument_buffer_sampler_count(mtl_device *dev);
 
 /* Timestamp query */
 uint64_t mtl_device_get_gpu_timestamp(mtl_device *dev);
+/* Frequency of the GPU timestamp counter in ticks per second. */
+uint64_t mtl_device_timestamp_frequency(mtl_device *dev);
+/* Counter heap holding `count` GPU timestamp entries. Retained; release with
+ * mtl_release. */
+mtl_counter_heap *mtl_new_timestamp_counter_heap(mtl_device *dev,
+                                                 uint32_t count);
 
 /* Resource queries */
 void mtl_heap_buffer_size_and_align_with_length(mtl_device *device,

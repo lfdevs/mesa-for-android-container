@@ -5,6 +5,12 @@
 
 #pragma once
 
+#include <cstdint>
+#include <vector>
+#include <utility>
+#include <pps/pps.h>
+#include <pps/pps_counter.h>
+
 struct pan_perf;
 
 namespace pps {
@@ -33,11 +39,24 @@ class PanfrostPerf {
    PanfrostPerf(PanfrostPerf &&);
    PanfrostPerf &operator=(PanfrostPerf &&);
 
-   int enable() const;
-   void disable() const;
-   int dump() const;
+   int enable(uint64_t sampling_period_ns);
+   void disable();
+   bool dump();
 
+   std::pair<std::vector<CounterGroup>, std::vector<Counter>>
+   create_available_counters() const;
+
+   uint64_t get_min_sampling_period_ns();
+   uint64_t next();
+   uint32_t gpu_clock_id() const;
+   uint64_t gpu_timestamp() const;
+   bool cpu_gpu_timestamp(uint64_t &cpu_timestamp,
+                          uint64_t &gpu_timestamp) const;
+   void *get_subinstance();
+
+ private:
    struct pan_perf *perf = nullptr;
+   uint64_t last_dump_ts = 0;
 };
 
 } // namespace pps

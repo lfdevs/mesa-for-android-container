@@ -406,8 +406,31 @@ brw_validate(const brw_shader &s)
                    * mentioned in brw_opt_combine_constants.cpp), we have
                    * found that src0 and src2 can be immediate values with
                    * some limitations.
+                   *
+                   * Page 496 (page 502 of the PDF) of the Ice Lake PRM Volume
+                   * 9: Render Engine says:
+                   *
+                   *    Src0Regfile
+                   *        0 - GRF
+                   *        1 - (Src0.Type == Native Float) ? ARF : Immediate.
+                   *        (Restriction : Only valid ARF type is Accumulator)
+                   *
+                   *    Src1Regfile
+                   *        0 - GRF
+                   *        1 - ARF (Restriction : Only valid ARF type is Accumulator)
+                   *
+                   *    Src2Regfile
+                   *        0 - GRF
+                   *        1 - Immediate
+                   *
+                   * Bspec 3092 r149981 has the same table marked specifically
+                   * for Ice Lake platforms.
+                   *
+                   * Src0 can be ARF only if the type is NF. NF was only ever
+                   * used to emulate the removed PLN instruction. Support for
+                   * this was removed from BRW ages ago.
                    */
-                  VAL_ASSERT_NE(inst->src[1].file, ARF);
+                  VAL_ASSERT_NE(inst->src[0].file, ARF);
                   VAL_ASSERT_NE(inst->src[2].file, ARF);
                } else if (devinfo->verx10 < 200) {
                   VAL_ASSERT_NE(inst->src[2].file, ARF);

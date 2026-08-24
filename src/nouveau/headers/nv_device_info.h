@@ -55,8 +55,10 @@ struct nv_device_info {
    uint16_t tpc_count;
    uint8_t mp_per_tpc;
    uint8_t max_warps_per_mp;
+   uint8_t max_blocks_per_mp;
 
    bool has_transfer_queue;
+   bool has_video;
 
    /** Non-coherent memory map atom size */
    uint16_t nc_atom_size_B;
@@ -67,6 +69,7 @@ struct nv_device_info {
    uint16_t cls_m2mf;
    uint16_t cls_compute;
    uint16_t cls_gpfifo;
+   uint16_t cls_vdec;
 
    uint64_t vram_size_B;
    uint64_t bar_size_B;

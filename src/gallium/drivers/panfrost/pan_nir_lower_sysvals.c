@@ -67,7 +67,7 @@ sysval_for_intrinsic(unsigned arch, nir_intrinsic_instr *intr, unsigned *offset)
    case nir_intrinsic_load_num_vertices:
       return PAN_SYSVAL_NUM_VERTICES;
 
-   case nir_intrinsic_load_raw_vertex_offset_pan:
+   case nir_intrinsic_load_raw_vertex_offset:
       return PAN_SYSVAL_VERTEX_INSTANCE_OFFSETS;
    case nir_intrinsic_load_base_vertex:
       *offset = 4;

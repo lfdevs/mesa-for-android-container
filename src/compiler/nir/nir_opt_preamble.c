@@ -140,7 +140,6 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
 {
    switch (instr->intrinsic) {
    /* Intrinsics which can always be moved */
-   case nir_intrinsic_load_push_constant:
    case nir_intrinsic_load_work_dim:
    case nir_intrinsic_load_num_workgroups:
    case nir_intrinsic_load_ray_launch_size:
@@ -199,6 +198,7 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
    /* Intrinsics which can be moved if the sources can */
    case nir_intrinsic_load_ubo:
    case nir_intrinsic_load_ubo_vec4:
+   case nir_intrinsic_load_push_constant:
    case nir_intrinsic_get_ubo_size:
    case nir_intrinsic_get_ssbo_size:
    case nir_intrinsic_ballot_bitfield_extract:
@@ -249,7 +249,7 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
    case nir_intrinsic_load_ssbo:
    case nir_intrinsic_load_ssbo_intel:
    case nir_intrinsic_load_ssbo_ir3:
-   case nir_intrinsic_load_global_ir3:
+   case nir_intrinsic_load_global_offset:
    case nir_intrinsic_load_agx:
       return (nir_intrinsic_access(instr) & ACCESS_CAN_REORDER) &&
              can_move_srcs(&instr->instr, ctx);

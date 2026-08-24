@@ -342,6 +342,8 @@ free_shared_state(struct gl_context *ctx, struct gl_shared_state *shared)
 {
    GLuint i;
 
+   assert(list_is_empty(&shared->Contexts));
+
    /* Free the dummy/fallback texture objects */
    for (i = 0; i < NUM_TEXTURE_TARGETS; i++) {
       for (unsigned j = 0; j < ARRAY_SIZE(shared->FallbackTex[0]); j++) {

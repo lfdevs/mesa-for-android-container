@@ -31,6 +31,17 @@ struct vmw_buffer_desc {
    struct vmw_region *region;
 };
 
+struct vmw_dma_buffer
+{
+   struct pb_buffer base;
+
+   struct vmw_dma_bufmgr *mgr;
+
+   struct vmw_region *region;
+   void *map;
+   unsigned map_flags;
+   unsigned map_count;
+};
 
 #if MESA_DEBUG
 
@@ -56,6 +67,9 @@ vmw_svga_winsys_buffer_wrap(struct pb_buffer *buffer)
    return (struct svga_winsys_buffer *)buffer;
 }
 #endif
+
+struct vmw_dma_buffer *
+vmw_winsys_to_dma_buffer(struct svga_winsys_buffer *buffer);
 
 void
 vmw_svga_winsys_buffer_destroy(struct svga_winsys_screen *sws,

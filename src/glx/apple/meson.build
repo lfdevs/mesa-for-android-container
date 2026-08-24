@@ -20,6 +20,7 @@ files_libappleglx = files(
   'apple_glx_pbuffer.c',
   'apple_glx_pixmap.c',
   'apple_glx_surface.c',
+  'apple_glx_swap_interval.c',
   'apple_visual.c',
   'apple_visual.h',
   'apple_xgl_api.h',

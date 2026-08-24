@@ -11,7 +11,7 @@
 
 /* Validatation doesn't make sense in release builds */
 #ifndef NDEBUG
-#define NUM_VALIDATE_FILES (UACCUM + 1)
+#define NUM_VALIDATE_FILES (ACCUM + 1)
 
 struct regfile {
    /* For each register in each file, records the SSA index currently stored
@@ -26,11 +26,6 @@ struct regfile {
 static uint32_t *
 reg(struct regfile *rf, enum jay_file file, uint32_t reg)
 {
-   /* FLAG and UFLAG share their registers */
-   if (file == UFLAG) {
-      file = FLAG;
-   }
-
    assert(file < NUM_VALIDATE_FILES);
    assert(reg < rf->n[file]);
    return &rf->r[file][reg];
@@ -177,7 +172,7 @@ validate_block(jay_function *func, jay_block *block, struct regfile *blocks)
       }
 
       if (!ok) {
-         jay_print_inst(stderr, I);
+         jay_print_inst(stderr, block, I, NULL);
          print_regfile(rf, stderr);
       }
 
@@ -200,9 +195,8 @@ jay_validate_ra(jay_function *func)
       assert(block->index < func->num_blocks);
 
       for (unsigned file = 0; file < NUM_VALIDATE_FILES; ++file) {
-         b->n[file] = file == ACCUM  ? 8 / jay_grf_per_gpr(func->shader) :
-                      file == UACCUM ? 4 * jay_ugpr_per_grf(func->shader) :
-                                       jay_num_regs(func->shader, file);
+         b->n[file] = file == ACCUM ? 8 / jay_grf_per_gpr(func->shader) :
+                                      jay_num_regs(func->shader, file);
          b->r[file] = linear_zalloc_array(lin_ctx, uint32_t, b->n[file]);
       }
    }

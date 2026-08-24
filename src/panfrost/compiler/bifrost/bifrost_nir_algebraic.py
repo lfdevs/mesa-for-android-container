@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import itertools
 import sys
 import math
 
@@ -137,6 +138,74 @@ for isz in [8, 16, 32]:
         ((f'b2i{isz}', f'a@{isz}'), ('bcsel_pan', a, 1, 0), 'is_kraid'),
         ((f'b2i{isz}', a), ('bcsel_pan', a_isz, 1, 0), 'is_kraid'),
     ]
+
+LOPS = ['and', 'or', 'xor']
+SHIFTS = [
+    ('ishl', 'lshift'),
+    ('ushr', 'rshift'),
+    ('ishr', 'arshift'),
+]
+
+for (ns, ps), lop in itertools.product(SHIFTS, LOPS):
+    nl = f'i{lop}'
+    psl = f'{ps}_{lop}_pan'
+    algebraic_late += [
+        # Logic ops distribute across shifts so:
+        #
+        #   shift(a LOP b, c) LOP d = (shift(a, c) LOP shift(b, c)) LOP d
+        #
+        # and logic ops are associative so
+        #
+        #                           = shift(a, c) LOP (shift(b, c) LOP d)
+        #
+        ((nl, (f'{ns}(is_used_once)', (nl, a, '#b'), '#c'), '#d'),
+         (psl, a, ('u2u8', c), (nl, (ns, b, c), d)), 'is_kraid'),
+        ((nl, (f'{ns}(is_used_once)', a, b), c),
+         (psl, a, ('u2u8', b), c), 'is_kraid'),
+        ((ns, (nl, a, '#b'), '#c'),
+         (psl, a, ('u2u8', c), (ns, b, c)), 'is_kraid'),
+    ]
+
+# If we have any regular shifts or logic ops left, lower them
+algebraic_late += [
+    (('iand', a, b), ('lshift_and_pan', a, 0, b), 'is_kraid'),
+    (('ior', a, b), ('lshift_or_pan', a, 0, b), 'is_kraid'),
+    (('ixor', a, b), ('lshift_xor_pan', a, 0, b), 'is_kraid'),
+    (('inot', a), ('lshift_xor_pan', a, 0, -1), 'is_kraid'),
+    (('ishl', a, b), ('lshift_or_pan', a, ('u2u8', b), 0), 'is_kraid'),
+    (('ushr', a, b), ('rshift_or_pan', a, ('u2u8', b), 0), 'is_kraid'),
+    (('ishr', a, b), ('arshift_or_pan', a, ('u2u8', b), 0), 'is_kraid'),
+    (('urol', a, b), ('lrot_or_pan', a, ('u2u8', b), 0), 'is_kraid'),
+    (('uror', a, b), ('rrot_or_pan', a, ('u2u8', b), 0), 'is_kraid'),
+]
+
+def unpack_16_2x8_y(x):
+    return ('u2u8', ('extract_u8', x, 1))
+
+# Kraid doesn't have [iu]mul_high but it does have [iu]mul_2x32_64
+algebraic_late += [
+    (('imul_high', 'a@8', 'b@8'),
+     unpack_16_2x8_y(('imul', ('i2i16', a), ('i2i16', b))), 'is_kraid'),
+    (('umul_high', 'a@8', 'b@8'),
+     unpack_16_2x8_y(('imul', ('u2u16', a), ('u2u16', b))), 'is_kraid'),
+
+    (('imul_high', 'a@16', 'b@16'),
+     ('unpack_32_2x16_split_y', ('imul', ('i2i32', a), ('i2i32', b))), 'is_kraid'),
+    (('umul_high', 'a@16', 'b@16'),
+     ('unpack_32_2x16_split_y', ('imul', ('u2u32', a), ('u2u32', b))), 'is_kraid'),
+
+    (('imul_high', 'a@32', 'b@32'),
+     ('unpack_64_2x32_split_y', ('imul_2x32_64', a, b)), 'is_kraid'),
+    (('umul_high', 'a@32', 'b@32'),
+     ('unpack_64_2x32_split_y', ('umul_2x32_64', a, b)), 'is_kraid'),
+]
+
+# We don't have hardware fpow so we need to lower it.  However, the way we
+# implement 32-bit fexp makes it so we can do better than this for 32-bit
+# so we leave that unlowered
+algebraic_late += [
+    (('fpow', 'a@16', 'b@16'), ('fexp2', ('fmul', ('flog2', a), b)))
+]
 
 # Bifrost LDEXP.v2f16 takes i16 exponent, while nir_op_ldexp takes i32. Lower
 # to nir_op_ldexp16_pan.

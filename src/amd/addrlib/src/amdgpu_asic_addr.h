@@ -112,6 +112,7 @@
 #define AMDGPU_HAWK_POINT1_RANGE   0xC0, 0xF0 //# 192 <= x < 240
 #define AMDGPU_HAWK_POINT2_RANGE   0xF0, 0xFF //# 240 <= x < 255
 #define AMDGPU_GFX1170_RANGE        0x01, 0x40 //# 1 <= x < 64
+#define AMDGPU_GFX1171_RANGE        0x40, 0x80 //# 64 <= x < 128
 
 #define AMDGPU_REMBRANDT_RANGE  0x01, 0xFF //# 01 <= x < 255
 #define AMDGPU_RAPHAEL_RANGE    0x01, 0xFF //# 1 <= x < max
@@ -194,6 +195,7 @@
 #define ASICREV_IS_HAWK_POINT1(r)      ASICREV_IS(r, HAWK_POINT1)
 #define ASICREV_IS_HAWK_POINT2(r)      ASICREV_IS(r, HAWK_POINT2)
 #define ASICREV_IS_GFX1170(r)         ASICREV_IS(r, GFX1170)
+#define ASICREV_IS_GFX1171(r)         ASICREV_IS(r, GFX1171)
 
 #define ASICREV_IS_REMBRANDT(r)        ASICREV_IS(r, REMBRANDT)
 #define ASICREV_IS_RAPHAEL(r)          ASICREV_IS(r, RAPHAEL)

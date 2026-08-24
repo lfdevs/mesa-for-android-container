@@ -304,7 +304,21 @@ __bitset_extract(const BITSET_WORD *r, unsigned start, unsigned count)
 
 #define BITSET_EXTRACT(x, s, c) \
    __bitset_extract(x, s, c)
-   
+
+static inline uint64_t
+__bitset_extract64(const BITSET_WORD *r, unsigned start, unsigned count)
+{
+   uint64_t result = __bitset_extract(r, start, MIN2(count, 32));
+
+   if (count > 32)
+      result |= (uint64_t)__bitset_extract(r, start + 32, count - 32) << 32;
+
+   return result;
+}
+
+#define BITSET_EXTRACT64(x, s, c) \
+   __bitset_extract64(x, s, c)
+
 static inline unsigned
 __bitset_prefix_sum(const BITSET_WORD *x, unsigned b, unsigned n)
 {

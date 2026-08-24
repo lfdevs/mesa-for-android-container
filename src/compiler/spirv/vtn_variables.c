@@ -1449,6 +1449,7 @@ apply_var_decoration(struct vtn_builder *b,
    case SpvDecorationMatrixStride:
    case SpvDecorationUniform:
    case SpvDecorationUniformId:
+   case SpvDecorationNonUniformEXT:
    case SpvDecorationLinkageAttributes:
       break; /* Do nothing with these here */
 
@@ -1728,6 +1729,7 @@ var_decoration_cb(struct vtn_builder *b, struct vtn_value *val, int member,
             vtn_var->var->members[member].location = location;
       }
 
+      vtn_var->var->data.explicit_location = true;
       return;
    } else {
       if (vtn_var->var) {
@@ -2772,6 +2774,13 @@ buffer_ptr_decoration_cb(struct vtn_builder *b, struct vtn_value *val,
       break;
    case SpvDecorationCoherent:
       *access |= ACCESS_COHERENT;
+      break;
+   case SpvDecorationUniform:
+   case SpvDecorationUniformId:
+      /* TODO: we should probably use these */
+      break;
+   case SpvDecorationNonUniformEXT:
+      /* Descriptor heaps are non-uniform by default. */
       break;
    default:
       vtn_fail_with_decoration("Unhandled decoration", dec->decoration);

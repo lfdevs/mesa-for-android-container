@@ -46,6 +46,8 @@ struct nvfx_vpc {
 
    unsigned r_temps;
    unsigned r_temps_discard;
+   unsigned num_requested_tmps;
+
    struct nvfx_reg r_result[PIPE_MAX_SHADER_OUTPUTS];
    struct nvfx_reg *r_address;
    struct nvfx_reg *r_temp;
@@ -68,6 +70,7 @@ static struct nvfx_reg
 temp(struct nvfx_vpc *vpc)
 {
    int idx = ffs(~vpc->r_temps) - 1;
+   vpc->num_requested_tmps++;
 
    if (idx < 0 || (!vpc->is_nv4x && idx >= 16)) {
       NOUVEAU_ERR("out of temps!!\n");
@@ -461,7 +464,6 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
 {
    struct nvfx_src src[3], tmp;
    struct nvfx_reg dst;
-   struct nvfx_reg final_dst;
    struct nvfx_src none = nvfx_src(nvfx_reg(NVFXSR_NONE, 0));
    struct nvfx_insn insn;
    struct nvfx_relocation reloc;
@@ -537,15 +539,14 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
       finst->Instruction.Opcode != TGSI_OPCODE_ARL)
       return false;
 
-   final_dst = dst  = tgsi_dst(vpc, &finst->Dst[0]);
+   dst  = tgsi_dst(vpc, &finst->Dst[0]);
    mask = tgsi_mask(finst->Dst[0].Register.WriteMask);
    if(finst->Instruction.Saturate) {
       assert(finst->Instruction.Opcode != TGSI_OPCODE_ARL);
       if (vpc->is_nv4x)
          sat = true;
       else
-      if(dst.type != NVFXSR_TEMP)
-         dst = temp(vpc);
+         NOUVEAU_ERR("SAT should have been lowered.\n");
    }
 
    switch (finst->Instruction.Opcode) {
@@ -556,9 +557,7 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
       nvfx_vp_emit(vpc, arith(0, VEC, ARL, dst, mask, src[0], none, none));
       break;
    case TGSI_OPCODE_CEIL:
-      tmp = nvfx_src(temp(vpc));
-      nvfx_vp_emit(vpc, arith(0, VEC, FLR, tmp.reg, mask, neg(src[0]), none, none));
-      nvfx_vp_emit(vpc, arith(sat, VEC, MOV, dst, mask, neg(tmp), none, none));
+      NOUVEAU_ERR("CEIL should have been lowered.\n");
       break;
    case TGSI_OPCODE_CMP:
       insn = arith(0, VEC, MOV, none.reg, mask, src[0], none, none);
@@ -587,14 +586,8 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
    case TGSI_OPCODE_DP4:
       nvfx_vp_emit(vpc, arith(sat, VEC, DP4, dst, mask, src[0], src[1], none));
       break;
-   case TGSI_OPCODE_DST:
-      nvfx_vp_emit(vpc, arith(sat, VEC, DST, dst, mask, src[0], src[1], none));
-      break;
    case TGSI_OPCODE_EX2:
       nvfx_vp_emit(vpc, arith(sat, SCA, EX2, dst, mask, none, none, src[0]));
-      break;
-   case TGSI_OPCODE_EXP:
-      nvfx_vp_emit(vpc, arith(sat, SCA, EXP, dst, mask, none, none, src[0]));
       break;
    case TGSI_OPCODE_FLR:
       nvfx_vp_emit(vpc, arith(sat, VEC, FLR, dst, mask, src[0], none, none));
@@ -605,16 +598,8 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
    case TGSI_OPCODE_LG2:
       nvfx_vp_emit(vpc, arith(sat, SCA, LG2, dst, mask, none, none, src[0]));
       break;
-   case TGSI_OPCODE_LIT:
-      nvfx_vp_emit(vpc, arith(sat, SCA, LIT, dst, mask, none, none, src[0]));
-      break;
-   case TGSI_OPCODE_LOG:
-      nvfx_vp_emit(vpc, arith(sat, SCA, LOG, dst, mask, none, none, src[0]));
-      break;
    case TGSI_OPCODE_LRP:
-      tmp = nvfx_src(temp(vpc));
-      nvfx_vp_emit(vpc, arith(0, VEC, MAD, tmp.reg, mask, neg(src[0]), src[2], src[2]));
-      nvfx_vp_emit(vpc, arith(sat, VEC, MAD, dst, mask, src[0], src[1], tmp));
+      NOUVEAU_ERR("LRP should have been lowered.\n");
       break;
    case TGSI_OPCODE_MAD:
       nvfx_vp_emit(vpc, arith(sat, VEC, MAD, dst, mask, src[0], src[1], src[2]));
@@ -634,10 +619,7 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
    case TGSI_OPCODE_NOP:
       break;
    case TGSI_OPCODE_POW:
-      tmp = nvfx_src(temp(vpc));
-      nvfx_vp_emit(vpc, arith(0, SCA, LG2, tmp.reg, NVFX_VP_MASK_X, none, none, swz(src[0], X, X, X, X)));
-      nvfx_vp_emit(vpc, arith(0, VEC, MUL, tmp.reg, NVFX_VP_MASK_X, swz(tmp, X, X, X, X), swz(src[1], X, X, X, X), none));
-      nvfx_vp_emit(vpc, arith(sat, SCA, EX2, dst, mask, none, none, swz(tmp, X, X, X, X)));
+      NOUVEAU_ERR("POW should have been lowered.\n");
       break;
    case TGSI_OPCODE_RCP:
       nvfx_vp_emit(vpc, arith(sat, SCA, RCP, dst, mask, none, none, src[0]));
@@ -780,13 +762,6 @@ nvfx_vertprog_parse_instruction(struct nvfx_vpc *vpc,
    default:
       NOUVEAU_ERR("invalid opcode %d\n", finst->Instruction.Opcode);
       return false;
-   }
-
-   if(finst->Instruction.Saturate && !vpc->is_nv4x) {
-      if (!vpc->r_0_1.type)
-         vpc->r_0_1 = constant(vpc, -1, 0, 1, 0, 0);
-      nvfx_vp_emit(vpc, arith(0, VEC, MAX, dst, mask, nvfx_src(dst), swz(nvfx_src(vpc->r_0_1), X, X, X, X), none));
-      nvfx_vp_emit(vpc, arith(0, VEC, MIN, final_dst, mask, nvfx_src(dst), swz(nvfx_src(vpc->r_0_1), Y, Y, Y, Y), none));
    }
 
    release_temps(vpc);
@@ -953,7 +928,7 @@ nvfx_vertprog_prepare(struct nvfx_vpc *vpc)
 DEBUG_GET_ONCE_BOOL_OPTION(nvfx_dump_vp, "NVFX_DUMP_VP", false)
 
 bool
-_nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
+_nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp, struct util_debug_callback *debug)
 {
    struct tgsi_parse_context parse;
    struct nvfx_vpc *vpc = NULL;
@@ -1095,6 +1070,10 @@ _nvfx_vertprog_translate(uint16_t oclass, struct nv30_vertprog *vp)
    }
 
    vp->translated = true;
+
+   util_debug_message(debug, SHADER_INFO,
+                      "%s shader: %u inst, %u const, %u requested_temps",
+                      "VP", vp->nr_insns, vp->nr_consts, vpc->num_requested_tmps);
 
 out:
    tgsi_parse_free(&parse);

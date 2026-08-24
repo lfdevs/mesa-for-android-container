@@ -110,7 +110,6 @@ tgsi_util_get_src_usage_mask(enum tgsi_opcode opcode,
 
    case TGSI_OPCODE_DP2:
    case TGSI_OPCODE_PK2H:
-   case TGSI_OPCODE_PK2US:
    case TGSI_OPCODE_F2D:
    case TGSI_OPCODE_I2D:
    case TGSI_OPCODE_U2D:
@@ -139,8 +138,6 @@ tgsi_util_get_src_usage_mask(enum tgsi_opcode opcode,
    case TGSI_OPCODE_DSLT:
    case TGSI_OPCODE_DSGE:
    case TGSI_OPCODE_DP4:
-   case TGSI_OPCODE_PK4B:
-   case TGSI_OPCODE_PK4UB:
    case TGSI_OPCODE_D2F:
    case TGSI_OPCODE_D2I:
    case TGSI_OPCODE_D2U:
@@ -155,23 +152,6 @@ tgsi_util_get_src_usage_mask(enum tgsi_opcode opcode,
    case TGSI_OPCODE_I64SGE:
    case TGSI_OPCODE_I642F:
       read_mask = TGSI_WRITEMASK_XYZW;
-      break;
-
-   case TGSI_OPCODE_LIT:
-      read_mask = write_mask & TGSI_WRITEMASK_YZ ?
-                     TGSI_WRITEMASK_XY | TGSI_WRITEMASK_W : 0;
-      break;
-
-   case TGSI_OPCODE_EXP:
-   case TGSI_OPCODE_LOG:
-      read_mask = write_mask & TGSI_WRITEMASK_XYZ ? TGSI_WRITEMASK_X : 0;
-      break;
-
-   case TGSI_OPCODE_DST:
-      if (src_idx == 0)
-         read_mask = TGSI_WRITEMASK_YZ;
-      else
-         read_mask = TGSI_WRITEMASK_YW;
       break;
 
    case TGSI_OPCODE_DLDEXP:

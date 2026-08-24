@@ -4,6 +4,7 @@
 use crate::api::icd::CLResult;
 use crate::api::icd::DISPATCH;
 use crate::core::device::*;
+use crate::core::meta::Meta;
 use crate::core::version::*;
 
 use mesa_rust::pipe::screen::ScreenVMAllocation;
@@ -52,6 +53,7 @@ pub struct Platform {
     // lifetime has to match the one of devs
     pub vm: Option<PlatformVM<'static>>,
     pub worker_queue: LazyLock<util::queue::Queue>,
+    pub meta: LazyLock<Meta>,
 }
 
 pub enum PerfDebugLevel {
@@ -94,6 +96,7 @@ static mut PLATFORM: Platform = Platform {
         let max_job_count = worker_count * 8;
         util::queue::Queue::new(c"clctxworker", max_job_count, worker_count)
     }),
+    meta: LazyLock::new(|| Meta::new(&Platform::get().devs)),
 };
 static mut PLATFORM_DBG: PlatformDebug = PlatformDebug {
     allow_invalid_spirv: false,
@@ -284,6 +287,9 @@ impl Platform {
         // SAFETY: no concurrent static mut access due to std::Once
         #[allow(static_mut_refs)]
         PLATFORM_ONCE.call_once(|| unsafe { PLATFORM.init() });
+
+        // Also force initialize Meta so we know it's ready.
+        LazyLock::force(&Self::get().meta);
     }
 
     pub fn all_devs_have_semaphores(&self) -> bool {

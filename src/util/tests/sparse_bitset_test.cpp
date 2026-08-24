@@ -18,6 +18,7 @@ TEST(sparse_bitset, tree)
 
    unsigned num_nodes = 0;
    rb_tree_foreach(struct u_sparse_bitset_node, _, &set.tree, node) {
+      (void)_;
       ++num_nodes;
    }
    EXPECT_EQ(num_nodes, 2);

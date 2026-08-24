@@ -1,0 +1,244 @@
+.TH executor 1 2025-03-28
+
+.SH NAME
+
+executor - executes assembly for Intel GPUs
+
+.SH SYNOPSIS
+
+executor [-d DEVICE] FILENAME [ARGS...]
+
+executor [-d DEVICE] --oa OA [--oa-csv FILE] FILENAME [ARGS...]
+
+executor [-d DEVICE] --oa list
+
+executor -d list
+
+.SH DESCRIPTION
+
+Runs a Lua script that can perform data manipulation
+and dispatch execution of compute shaders, written in the same
+assembly format used by the gen assembler/parser or when dumping
+shaders in debug mode.
+
+The goal is to have a tool to experiment directly with certain
+assembly instructions and the shared units without having to
+instrument the drivers.
+
+The program will pick the first available device unless -d is
+passed with either the index or a substring of the device to use.
+Use "-d list" to list available devices.
+
+.SH PERFORMANCE COUNTERS
+
+If --oa OA is passed, executor wraps every execute() call in an OA
+performance query and writes one CSV row per execute().  The first row is
+a header.  By default, CSV is printed to stdout after the script finishes.
+With --oa-csv FILE, CSV is written to FILE as the script runs.
+
+--oa OA selects the OA profile and optional counter filter.  OA has the
+form PROFILE[:COUNTER1,COUNTER2].  If the counter list is omitted, all
+counters in the selected profile are written.  If PROFILE is omitted, or
+OA does not match a profile name, counters are selected from ComputeBasic.
+--oa-csv only selects the output file and must be combined with --oa.
+For example:
+
+  --oa ComputeBasic
+  --oa ComputeBasic:GpuTime,AvgGpuCoreFrequency
+  --oa GpuTime,AvgGpuCoreFrequency
+
+--oa list lists all OA profiles and counters and exits.  For example:
+
+  executor --oa list
+
+.SH SCRIPTING ENVIRONMENT
+
+In addition to the regular Lua standard library the following variables and
+functions are available
+
+- alloc(SIZE_DWORDS|TABLE, opts?) -> mem
+  Allocate from the implicit default context data buffer.  If the first
+  argument is a table, infer the size from its largest integer key, zero
+  the allocation, and fill it from the table.  opts may be a string name
+  or a table containing name=STR (for use with @addr), fill=VALUE, and
+  align=BYTES (a power-of-two GPU byte address alignment).  If no name
+  is provided, allocations are named buf0, buf1, ... in creation order.
+
+- surface_buffer(MEM, {format=STR}|STR) -> surface
+  Create a buffer surface view over MEM and assign the next BTI.  Supported
+  formats include r32uint, r32float, rgba32float, and rgba8unorm.
+
+- surface_2d(MEM, {format=STR, width=INT, height=INT, stride=BYTES?}) -> surface
+  Create a linear 2D surface view over MEM and assign the next BTI.
+
+- sampler({filter=nearest|linear, min_filter=STR, mag_filter=STR, address=clamp|repeat|mirror, normalized=BOOL, nonnormalized=BOOL, min_lod=NUM, max_lod=NUM}?) -> sampler
+  Create a sampler and assign the next sampler index.
+
+- sampler_desc{op=STR, surface=SURFACE|INT, bti=SURFACE|INT, sampler=SAMPLER|INT, simd=8|16|32, mlen=INT, rlen=INT, header=BOOL, hp=BOOL} -> INT
+  Build a sampler SEND descriptor for raw send.smpl assembly.
+
+- execute(SRC)
+- execute{src=SRC, thread_groups=N}
+  Assemble and execute SRC.  thread_groups selects the number of 1D thread
+  groups to dispatch, defaulting to 1.  The shader source can use @param
+  directives; see the parameter list below.
+
+- mem:fill(VALUE)
+  Fill all dwords with a constant value.
+
+- mem:set(TABLE, offset?)
+  Write dwords from a sparse table (0-based indexing).
+
+- mem:read(COUNT, offset?) -> TABLE
+- mem:to_table() -> TABLE
+  Read dwords into a Lua table.
+
+- mem:dump(COUNT, offset?)
+  Pretty print COUNT dwords starting at the given dword offset.
+
+- surface:bti(), sampler:index()
+  Return the implicitly assigned BTI or sampler index.
+
+- mem:offset(), mem:addr(), mem:name()
+  Return the dword offset relative to the data buffer, GPU byte address,
+  or memory name.  Indexing (mem[IDX]) is 0-based, #mem returns the
+  size in dwords.
+
+- arg
+  Table containing the command line arguments passed to the script, arg[0]
+  is the script filename, followed by the ARGS.  Arguments consumed by
+  executor itself are not in this table.
+
+- dump(ARRAY|MEM, COUNT)
+  Pretty print the first COUNT dwords from an array or memory object.
+
+- devinfo
+  Table containing device information:
+    - ver, verx10: Gfx version and detailed Gfx version
+    - has_dpas, has_bfloat16
+    - max_slm_size: Maximum shared local memory reservation in bytes
+
+.SH ASSEMBLY MACROS
+
+In addition to regular instructions, the follow macros will generate
+assembly code based on the Gfx version being executed.  Unlike in regular
+instructions, register operands must be plain rN GRFs (no subregisters,
+regions, or immediates).
+
+- @eot
+  Send an EOT message.
+
+- @mov REG IMM
+  Like a regular MOV but accepts numbers in both decimal and
+  floating-point.
+
+- @id REG
+  Write a linear local invocation index into REG.  The index is
+  hw_thread_id * SIMD_WIDTH + lane_id.
+
+- @tg REG
+  Write the linear thread-group id into REG.
+
+- @globalid REG
+  Write a linear global invocation index into REG.  The index is
+  thread_group_id * hw_threads * SIMD_WIDTH + local_id.
+
+- @addr DST_REG MEM [DWORD_INDEX]
+  Move the GPU byte address of MEM into DST_REG.  MEM is a memory name.
+  DWORD_INDEX may be an immediate or register dword index.
+
+- @load DST_REG ADDR_REG
+  Read dwords from the GPU byte address in ADDR_REG (a32).
+
+- @store ADDR_REG SRC_REG
+  Write dwords to the GPU byte address in ADDR_REG (a32).
+
+- @barrier
+  Synchronize multiple hardware threads within each thread group in the
+  execution.  If shared local memory is reserved, also fence shared local
+  memory.  Emits no code for a single hardware thread.
+
+- @param hw_regs N
+  Set the number of hardware register for execute(SRC).
+
+- @param hw_threads N
+  Set the number of hardware threads for execute(SRC).
+
+- @param simd 8|16|32
+  Set the SIMD width for execute(SRC).  Xe2+ accepts SIMD16/SIMD32;
+  earlier platforms accept SIMD8/SIMD16/SIMD32.
+
+- @param slm_size BYTES
+  Reserve shared local memory for the execution.
+
+- @param autoswsb
+  Fill in simple software scoreboard annotations on Xe+ when missing,
+  preserving annotations already present in the source.
+
+- @syncnop
+  Produce a coarse grained sync.nop (when applicable) to ensure data from
+  macros above are read/written.
+
+.SH GPU EXECUTION
+
+Compute shaders are dispatched with SIMD8 before Xe2 and SIMD16 on Xe2+
+by default.  Use @param simd WIDTH in the shader to select another
+supported SIMD width.  Xe2+ supports SIMD16 and SIMD32; earlier platforms
+support SIMD8/SIMD16/SIMD32.  By default one hardware thread is dispatched.
+Use @param hw_threads N in the shader to execute N hardware threads per
+thread group.  Use thread_groups=N in the execute{} table to dispatch N
+linear thread groups.  Use @param slm_size BYTES in the shader to reserve
+shared local memory for the execution.
+Context allocations are sub-allocated from a data buffer bound at graphics
+address 0x30000000.  @addr produces a32 byte addresses for @load/@store
+messages.
+
+The executor reserves r0..r1 for its own payload and the last 4 GRFs
+(as specified by @param hw_regs) for macros. Macro operands are
+checked for overlap, but raw assembly instructions are not.
+
+The number of registers available can be set with @param hw_regs N. By
+default 128 registers are available.
+
+The Gfx versions have differences in their assembly and shared units, so
+other than very simple examples, scripts for this program will be either
+specific to a version or provide shader variants for multiple versions.
+
+.SH ENVIRONMENT VARIABLES
+
+The following INTEL_DEBUG values (comma separated) are used:
+
+ - bat             Dumps the batch buffer.
+ - color           Uses colors for the batch buffer dump.
+ - cs              Dumps the source after macro processing
+                   the final assembly.
+
+.SH EXAMPLE
+
+The script
+
+  local buf = alloc({ [42] = 0x100 })  -- gets default name buf0
+
+  execute [[
+    @param autoswsb
+
+    @addr    r2      buf0 42
+    @load    r3      r2
+
+    @id      r4
+    @addr    r5      buf0 r4
+
+    add (8)  r6      r3      r4
+
+    @store   r5      r6
+    @eot
+  ]]
+
+  dump(buf, 4)
+
+Will produce the output
+
+   [0x00000000] 0x00000100 0x00000101 0x00000102 0x00000103
+
+More examples can be found in the examples/ directory in the source code.
+

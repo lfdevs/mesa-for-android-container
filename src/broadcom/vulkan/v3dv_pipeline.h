@@ -315,6 +315,14 @@ struct v3dv_pipeline_shared_data {
    struct v3dv_shader_variant *variants[BROADCOM_SHADER_STAGES];
 
    struct v3dv_bo *assembly_bo;
+
+   /* Owning VkPipelineCache, used for VK_EXT_device_memory_report
+    * attribution of assembly_bo. Pipeline cache is the correct owner (rather
+    * than whichever pipeline first populated this entry) since shared_data is
+    * refcounted and shared across any pipeline that hits this blake3_key.
+    */
+   VkObjectType owner_type;
+   uint64_t owner_handle;
 };
 
 struct v3dv_pipeline_executable_data {

@@ -443,7 +443,7 @@ anv_device_init_rt_shaders(struct anv_device *device)
 
       debug_archiver *debug_archiver =
          anv_rt_debug_archiver_open(tmp_ctx, trampoline_nir,
-                                    &trampoline_key.key, sizeof(trampoline_key));
+                                    &trampoline_key, sizeof(trampoline_key));
 
       struct brw_cs_prog_data trampoline_prog_data = {
          .uses_btd_stack_ids = true,
@@ -464,8 +464,8 @@ anv_device_init_rt_shaders(struct anv_device *device)
          struct jay_shader_bin *bin =
             jay_compile(device->info, tmp_ctx, trampoline_nir,
                         (union brw_any_prog_data *)&trampoline_prog_data,
-                        (union brw_any_prog_key *)&params.base.key,
-                        debug_archiver);
+                        (union brw_any_prog_key *)&trampoline_key.key.base,
+                        debug_archiver, NULL);
 
          tramp_data = bin->kernel;
       } else {
@@ -517,7 +517,7 @@ anv_device_init_rt_shaders(struct anv_device *device)
 
       debug_archiver *debug_archiver =
          anv_rt_debug_archiver_open(tmp_ctx, trivial_return_nir,
-                                    &return_key.key, sizeof(return_key));
+                                    &return_key, sizeof(return_key));
 
       NIR_PASS(_, trivial_return_nir, brw_nir_lower_rt_intrinsics,
                  &return_key.key.base, device->info);
@@ -540,7 +540,7 @@ anv_device_init_rt_shaders(struct anv_device *device)
             jay_compile(device->info, tmp_ctx, trivial_return_nir,
                         (union brw_any_prog_data *)&return_prog_data,
                         (union brw_any_prog_key *)&return_key.key.base,
-                        debug_archiver);
+                        debug_archiver, NULL);
 
          return_data = bin->kernel;
       } else {
@@ -592,7 +592,7 @@ anv_device_init_rt_shaders(struct anv_device *device)
 
       debug_archiver *debug_archiver =
          anv_rt_debug_archiver_open(tmp_ctx, null_ahs_nir,
-                                    &null_return_key.key, sizeof(null_return_key));
+                                    &null_return_key, sizeof(null_return_key));
       NIR_PASS(_, null_ahs_nir, brw_nir_lower_rt_intrinsics,
                  &null_return_key.key.base, device->info);
 
@@ -612,7 +612,7 @@ anv_device_init_rt_shaders(struct anv_device *device)
             jay_compile(device->info, tmp_ctx, null_ahs_nir,
                         (union brw_any_prog_data *)&return_prog_data,
                         (union brw_any_prog_key *)&null_return_key.key.base,
-                        debug_archiver);
+                        debug_archiver, NULL);
 
          return_data = bin->kernel;
       } else {
@@ -718,7 +718,6 @@ anv_cmd_buffer_dump_commands(struct anv_cmd_buffer *cmd_buffer,
       .device               = device,
       .cmd_buffer           = cmd_buffer,
       .dynamic_state_stream = &cmd_buffer->dynamic_state_stream,
-      .general_state_stream = &cmd_buffer->general_state_stream,
       .batch                = &cmd_buffer->batch,
       .kernel               = generate_kernel,
    };

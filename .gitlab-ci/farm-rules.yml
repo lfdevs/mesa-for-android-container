@@ -41,6 +41,7 @@
 #   microsoft        | custom                           | @jenatali, @alatiera
 #   ondracka         | ci-tron                          | @ondracka
 #   pengutronix      | lava                             | @hnez, @lynxeye
+#   qualcomm         | lava                             | @lumag
 #   valve-kws        | ci-tron                          | @mupuf, @eric
 #   valve-mupuf      | ci-tron                          | @mupuf, @eric
 #   vmware           | lava                             | @mombasa, @bhenden
@@ -292,6 +293,27 @@
       changes: [ .ci-farms-disabled/pengutronix ]
       when: never
     - !reference [.pengutronix-farm-rules, rules]
+
+
+.qualcomm-farm-rules:
+  rules:
+    - exists: [ .ci-farms-disabled/qualcomm ]
+      when: never
+    - if: '$CI_PIPELINE_SOURCE != "schedule"'
+      changes: [ .ci-farms-disabled/qualcomm ]
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE != "schedule"'
+      changes: [ .ci-farms-disabled/* ]
+      when: never
+
+.qualcomm-farm-manual-rules:
+  rules:
+    - exists: [ .ci-farms-disabled/qualcomm ]
+      when: never
+    - if: '$CI_PIPELINE_SOURCE != "schedule"'
+      changes: [ .ci-farms-disabled/qualcomm ]
+      when: never
+    - !reference [.qualcomm-farm-rules, rules]
 
 
 .lumag-farm-rules:

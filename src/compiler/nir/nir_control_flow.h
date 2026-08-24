@@ -145,6 +145,8 @@ void nir_cf_delete(nir_cf_list *cf_list);
 void nir_cf_list_clone(nir_cf_list *dst, nir_cf_list *src, nir_cf_node *parent,
                        struct hash_table *remap_table);
 
+void nir_cf_list_detach_ssa(nir_cf_list *cf_list);
+
 static inline void
 nir_cf_list_clone_and_reinsert(nir_cf_list *src_list, nir_cf_node *parent,
                                nir_cursor cursor,

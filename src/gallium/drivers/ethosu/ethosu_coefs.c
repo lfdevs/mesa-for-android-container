@@ -72,12 +72,12 @@ fill_scale_and_biases(struct ethosu_subgraph *subgraph, struct ethosu_operation 
    memset(*scales, 0, *scales_size);
 
    for (unsigned i = 0; i < operation->ofm.shape.depth; i++) {
-      double kernel_scale = (operation->kernel.scales != NULL) ?
-                             operation->kernel.scales[i] : operation->kernel.scale;
+      float kernel_scale = (operation->kernel.scales != NULL) ?
+                           operation->kernel.scales[i] : operation->kernel.scale;
       double conv_scale;
 
-      if (!operation->ifm.is_signed) {
-         /* UInt8 path: multiply as float first, then cast to double */
+      if (!operation->ifm.is_signed || operation->kernel.scale_as_float) {
+         /* Multiply as float first, then cast to double. */
          conv_scale = (double)(ifm_scale * kernel_scale) / (double)ofm_scale;
       } else {
          /* Int8 path: cast to double before multiply for higher precision */
@@ -128,6 +128,16 @@ fill_weights(struct ethosu_subgraph *subgraph, struct ethosu_operation *operatio
    ml_reorder_encode_weights(subgraph, operation, weights_in_data, weight_in_size, weights_out, weights_out_size);
 }
 
+unsigned
+ethosu_allocate_coefs(struct ethosu_subgraph *subgraph, unsigned size)
+{
+   unsigned address = ALIGN_POT(subgraph->coefs_used, 16);
+
+   subgraph->coefs_used = address + ALIGN_POT(size, 16);
+   subgraph->coefs = realloc(subgraph->coefs, subgraph->coefs_used);
+   return address;
+}
+
 void
 fill_coefs(struct ethosu_subgraph *subgraph,
            struct ethosu_operation *operation,
@@ -139,9 +149,8 @@ fill_coefs(struct ethosu_subgraph *subgraph,
    fill_scale_and_biases(subgraph, operation, &scales, &operation->conv.scales.size, bias_data);
 
    operation->conv.scales.region = COEFS_REGION;
-   operation->conv.scales.address = subgraph->coefs_used;
-   subgraph->coefs_used += ALIGN_POT(operation->conv.scales.size, 16);
-   subgraph->coefs = realloc(subgraph->coefs, subgraph->coefs_used);
+   operation->conv.scales.address =
+      ethosu_allocate_coefs(subgraph, operation->conv.scales.size);
    memcpy(subgraph->coefs + operation->conv.scales.address, scales, operation->conv.scales.size);
    free(scales);
 
@@ -154,9 +163,8 @@ fill_coefs(struct ethosu_subgraph *subgraph,
    }
 
    operation->conv.weights.region = COEFS_REGION;
-   operation->conv.weights.address = subgraph->coefs_used;
-   subgraph->coefs_used += ALIGN_POT(operation->conv.weights.size, 16);
-   subgraph->coefs = realloc(subgraph->coefs, subgraph->coefs_used);
+   operation->conv.weights.address =
+      ethosu_allocate_coefs(subgraph, operation->conv.weights.size);
    memcpy(subgraph->coefs + operation->conv.weights.address, weights, operation->conv.weights.size);
    free(weights);
 }
@@ -169,8 +177,7 @@ fill_lut(struct ethosu_subgraph *subgraph,
          void *lut)
 {
    operation->pooling.lut.region = COEFS_REGION;
-   operation->pooling.lut.address = subgraph->coefs_used;
-   subgraph->coefs_used += LUT_SIZE;
-   subgraph->coefs = realloc(subgraph->coefs, subgraph->coefs_used);
+   operation->pooling.lut.address =
+      ethosu_allocate_coefs(subgraph, LUT_SIZE);
    memcpy(subgraph->coefs + operation->pooling.lut.address, lut, LUT_SIZE);
 }

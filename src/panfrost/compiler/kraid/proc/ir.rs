@@ -146,7 +146,7 @@ pub fn derive_opcode(input: TokenStream) -> TokenStream {
 
     match data {
         Data::Struct(_) => {
-            if has_variants {
+            let op = if has_variants {
                 quote! {
                     impl Opcode for #ident {
                         fn variant(&self) -> Option<DataType> {
@@ -179,13 +179,25 @@ pub fn derive_opcode(input: TokenStream) -> TokenStream {
                         }
                     }
                 }
+            };
+
+            quote! {
+                #op
+
+                impl ::std::fmt::Debug for #ident {
+                    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                        crate::ir::DisplayOp::fmt(self, f)
+                    }
+                }
             }
         }
         Data::Enum(e) => {
             let mut var_cases = TokenStream2::new();
             let mut set_cases = TokenStream2::new();
             let mut val_cases = TokenStream2::new();
-            let mut fmt_cases = TokenStream2::new();
+            let mut fmt_dsts_cases = TokenStream2::new();
+            let mut fmt_name_cases = TokenStream2::new();
+            let mut fmt_body_cases = TokenStream2::new();
 
             let curr_order: Vec<_> =
                 e.variants.iter().map(|e| e.ident.to_string()).collect();
@@ -219,8 +231,14 @@ pub fn derive_opcode(input: TokenStream) -> TokenStream {
                         Opcode::is_valid_variant(b, variant)
                     }
                 });
-                fmt_cases.extend(quote! {
-                    #ident::#case(x) => x.fmt(f),
+                fmt_dsts_cases.extend(quote! {
+                    #ident::#case(x) => x.fmt_dsts(f),
+                });
+                fmt_name_cases.extend(quote! {
+                    #ident::#case(x) => x.fmt_name(f),
+                });
+                fmt_body_cases.extend(quote! {
+                    #ident::#case(x) => x.fmt_body(f),
                 });
             }
 
@@ -245,11 +263,29 @@ pub fn derive_opcode(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                impl fmt::Display for #ident {
-                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                impl DisplayOp for #ident {
+                    fn fmt_dsts(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                         match self {
-                            #fmt_cases
+                            #fmt_dsts_cases
                         }
+                    }
+
+                    fn fmt_name(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                        match self {
+                            #fmt_name_cases
+                        }
+                    }
+
+                    fn fmt_body(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                        match self {
+                            #fmt_body_cases
+                        }
+                    }
+                }
+
+                impl ::std::fmt::Debug for #ident {
+                    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                        crate::ir::DisplayOp::fmt(self, f)
                     }
                 }
             }

@@ -48,7 +48,7 @@ static void
 FUNC(FUNC_VARS)
 {
    unsigned idx[6], i;
-   uint16_t flags;
+   UNUSED uint16_t flags;
    LOCAL_VARS
 
    FUNC_ENTER;

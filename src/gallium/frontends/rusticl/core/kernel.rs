@@ -7,7 +7,6 @@ use crate::core::event::*;
 use crate::core::memory::*;
 use crate::core::platform::*;
 use crate::core::program::*;
-use crate::core::queue::*;
 use crate::impl_cl_type_trait;
 
 use mesa_rust::compiler::clc::*;
@@ -58,7 +57,10 @@ pub enum KernelArgValue {
     /// cl_ext_buffer_device_address
     BDA(u64),
     SVM(usize),
-    Buffer(Weak<Buffer>),
+    Buffer {
+        buffer: Weak<Buffer>,
+        offset: usize,
+    },
     Constant(Vec<u8>),
     Image(Weak<Image>),
     LocalMem(usize),
@@ -699,7 +701,7 @@ fn compile_nir_to_args(
     mut nir: NirShader,
     args: &[spirv::SPIRVKernelArg],
     lib_clc: &NirShader,
-) -> (Vec<KernelArg>, NirShader) {
+) -> Result<(Vec<KernelArg>, NirShader), &'static CStr> {
     nir_pass!(nir, nir_scale_fdiv);
     nir.structurize();
     nir_pass!(
@@ -727,7 +729,9 @@ fn compile_nir_to_args(
     nir_pass!(nir, rusticl_insert_libclc_config);
 
     nir.inline(lib_clc);
-    nir.cleanup_functions();
+    nir = nir
+        .cleanup_functions()
+        .ok_or(c"nir_shader not fully linked")?;
     // that should free up tons of memory
     nir.sweep_mem();
 
@@ -741,7 +745,7 @@ fn compile_nir_to_args(
 
     opt_nir(&mut nir, dev, false);
 
-    (KernelArg::from_spirv_nir(args, &mut nir), nir)
+    Ok((KernelArg::from_spirv_nir(args, &mut nir), nir))
 }
 
 fn compile_nir_prepare_for_variants(
@@ -835,10 +839,25 @@ fn compile_nir_variant(
     let global_address_format;
     let shared_address_format;
 
+    let nir_options = unsafe {
+        &*dev
+            .screen
+            .nir_shader_compiler_options(mesa_shader_stage::MESA_SHADER_COMPUTE)
+    };
+
     if dev.address_bits() == 64 {
         address_bits_ptr_type = unsafe { glsl_uint64_t_type() };
         address_bits_base_type = glsl_base_type::GLSL_TYPE_UINT64;
-        global_address_format = nir_address_format::nir_address_format_64bit_global;
+
+        // When load/store_global_offset is supported by the backend, we should use the
+        // 64bit_global_32bit_offset format to get the most efficient lowering from
+        // nir_lower_explicit_io.
+        global_address_format = if nir_options.has_global_offset {
+            nir_address_format::nir_address_format_64bit_global_32bit_offset
+        } else {
+            nir_address_format::nir_address_format_64bit_global
+        };
+
         shared_address_format = nir_address_format::nir_address_format_32bit_offset_as_64bit;
     } else {
         address_bits_ptr_type = unsafe { glsl_uint_type() };
@@ -846,12 +865,6 @@ fn compile_nir_variant(
         global_address_format = nir_address_format::nir_address_format_32bit_global;
         shared_address_format = nir_address_format::nir_address_format_32bit_offset;
     }
-
-    let nir_options = unsafe {
-        &*dev
-            .screen
-            .nir_shader_compiler_options(mesa_shader_stage::MESA_SHADER_COMPUTE)
-    };
 
     if variant == NirKernelVariant::Optimized {
         let wgsh = nir.workgroup_size_hint();
@@ -1018,6 +1031,18 @@ fn compile_nir_variant(
             | nir_variable_mode::nir_var_mem_generic,
         Some(glsl_get_cl_type_size_align),
     );
+
+    if global_address_format == nir_address_format::nir_address_format_64bit_global_32bit_offset {
+        // We ingest global addresses as 64bit_global from SPIR-V so convert to the requested
+        // format.
+        nir_pass!(
+            nir,
+            nir_convert_address_format,
+            nir_variable_mode::nir_var_mem_global | nir_variable_mode::nir_var_mem_constant,
+            nir_address_format::nir_address_format_64bit_global,
+            global_address_format,
+        );
+    }
 
     nir_pass!(
         nir,
@@ -1223,16 +1248,18 @@ pub(super) fn convert_spirv_to_nir(
     args: &[spirv::SPIRVKernelArg],
     spec_constants: &mut HashMap<u32, Vec<u8>>,
     dev: &'static Device,
-) -> Option<SPIRVToNirResult> {
+) -> Result<SPIRVToNirResult, &'static CStr> {
     let cache = dev.screen().shader_cache();
-    let key = build.hash_key(cache.as_ref(), name, spec_constants);
+    let key = build.hash_key(cache.as_ref(), name, spec_constants, &dev.lib_clc);
     let spirv_info = build.kernel_info(name).unwrap();
 
-    cache
+    match cache
         .as_ref()
         .and_then(|cache| cache.get(&mut key?))
         .and_then(|entry| SPIRVToNirResult::deserialize(&entry, dev, spirv_info))
-        .or_else(|| {
+    {
+        Some(entry) => Ok(entry),
+        None => {
             let nir = build.to_nir(name, dev, spec_constants)?;
 
             if Platform::dbg().nir {
@@ -1240,7 +1267,7 @@ pub(super) fn convert_spirv_to_nir(
                 nir.print();
             }
 
-            let (mut args, nir) = compile_nir_to_args(dev, nir, args, &dev.lib_clc);
+            let (mut args, nir) = compile_nir_to_args(dev, nir, args, &dev.lib_clc)?;
             let (default_build, optimized) = compile_nir_remaining(dev, nir, &args, name);
 
             for build in [Some(&default_build), optimized.as_ref()].into_iter() {
@@ -1266,14 +1293,15 @@ pub(super) fn convert_spirv_to_nir(
                 }
             }
 
-            Some(SPIRVToNirResult::new(
+            Ok(SPIRVToNirResult::new(
                 dev,
                 spirv_info,
                 args,
                 default_build,
                 optimized,
             ))
-        })
+        }
+    }
 }
 
 fn extract<'a, const S: usize>(buf: &'a mut &[u8]) -> &'a [u8; S] {
@@ -1322,11 +1350,13 @@ impl<'a> KernelExecBuilder<'a> {
 
     fn add_sysval(&mut self, vals: &[usize; 3]) {
         if self.dev.address_bits() == 64 {
+            let vals64 = vals.map(|v| v as u64);
             self.input
-                .extend_from_slice(unsafe { as_byte_slice(&vals.map(|v| v as u64)) });
+                .extend_from_slice(unsafe { as_byte_slice(&vals64) });
         } else {
+            let vals32 = vals.map(|v| v as u32);
             self.input
-                .extend_from_slice(unsafe { as_byte_slice(&vals.map(|v| v as u32)) });
+                .extend_from_slice(unsafe { as_byte_slice(&vals32) });
         }
     }
 
@@ -1639,21 +1669,33 @@ impl Kernel {
         }
     }
 
-    // the painful part is, that host threads are allowed to modify the kernel object once it was
-    // enqueued, so return a closure with all req data included.
     pub fn launch(
         self: &Arc<Self>,
-        q: &Arc<Queue>,
+        dev: &Device,
         work_dim: u32,
         block: &[usize],
         grid: &[usize],
         offsets: &[usize],
     ) -> CLResult<EventSig> {
+        let args = self.values.clone();
+        self.launch_with_args(dev, work_dim, block, grid, offsets, args)
+    }
+
+    // the painful part is, that host threads are allowed to modify the kernel object once it was
+    // enqueued, so return a closure with all req data included.
+    pub fn launch_with_args(
+        self: &Arc<Self>,
+        dev: &Device,
+        work_dim: u32,
+        block: &[usize],
+        grid: &[usize],
+        offsets: &[usize],
+        arg_values: Vec<Option<KernelArgValue>>,
+    ) -> CLResult<EventSig> {
         // Clone all the data we need to execute this kernel
         let work_group_size_hint = self.kernel_info.work_group_size_hint;
         let args = self.kernel_info.args.clone();
-        let arg_values = self.values.clone();
-        let nir_kernel_builds = Arc::clone(&self.builds[q.device]);
+        let nir_kernel_builds = Arc::clone(&self.builds[dev]);
         let mut bdas = self.bdas.clone();
         let svms = self.svms.clone();
 
@@ -1664,7 +1706,7 @@ impl Kernel {
         // event was processed.
         for arg in arg_values.iter() {
             match arg {
-                Some(KernelArgValue::Buffer(buffer)) => {
+                Some(KernelArgValue::Buffer { buffer, .. }) => {
                     buffer_arcs.insert(
                         // we use the ptr as the key, and also cast it to usize so we don't need to
                         // deal with Send + Sync here.
@@ -1689,7 +1731,7 @@ impl Kernel {
 
         let api_grid = grid;
 
-        self.optimize_local_size(q.device, work_dim, &mut grid, &mut block);
+        self.optimize_local_size(dev, work_dim, &mut grid, &mut block);
 
         Ok(Box::new(move |cl_ctx, ctx| {
             let hw_max_grid = ctx.dev.max_grid_size();
@@ -1776,7 +1818,7 @@ impl Kernel {
                                     exec_builder.add_pointer(*address);
                                 }
                             }
-                            KernelArgValue::Buffer(buffer) => {
+                            KernelArgValue::Buffer { buffer, offset } => {
                                 let buffer = &buffer_arcs[&(buffer.as_ptr() as usize)];
                                 let rw = if api_arg.spirv.address_qualifier
                                     == clc_kernel_arg_address_qualifier::CLC_KERNEL_ARG_ADDRESS_CONSTANT
@@ -1799,7 +1841,7 @@ impl Kernel {
                                     }
                                 } else {
                                     let res = buffer.get_res_for_access(ctx, rw)?;
-                                    exec_builder.add_global(res, buffer.offset());
+                                    exec_builder.add_global(res, buffer.offset() + offset);
                                 }
                             }
                             &KernelArgValue::SVM(handle) => {
@@ -1898,9 +1940,8 @@ impl Kernel {
                         exec_builder.add_values(&[work_dim as u8; 1]);
                     }
                     CompiledKernelArgType::NumWorkgroups => {
-                        exec_builder.add_values(unsafe {
-                            as_byte_slice(&[grid[0] as u32, grid[1] as u32, grid[2] as u32])
-                        });
+                        let grid = [grid[0] as u32, grid[1] as u32, grid[2] as u32];
+                        exec_builder.add_values(unsafe { as_byte_slice(&grid) });
                     }
                 }
             }
@@ -1933,11 +1974,33 @@ impl Kernel {
 
             let (resources, mut globals) = exec_builder.get_resources_and_globals();
 
+            let mut read_barriers = 0;
+            let mut write_barriers = 0;
+            if !resources.is_empty() || !bdas.is_empty() {
+                read_barriers |= PIPE_BARRIER_MAPPED_BUFFER
+                    | PIPE_BARRIER_SHADER_BUFFER
+                    | PIPE_BARRIER_UPDATE_BUFFER;
+                write_barriers |= PIPE_BARRIER_MAPPED_BUFFER
+                    | PIPE_BARRIER_SHADER_BUFFER
+                    | PIPE_BARRIER_UPDATE_BUFFER;
+            }
+            if !sviews.is_empty() {
+                read_barriers |= PIPE_BARRIER_TEXTURE | PIPE_BARRIER_UPDATE_TEXTURE;
+            }
+            if !iviews.is_empty() {
+                // TODO: skip this if there are only write_only images
+                read_barriers |= PIPE_BARRIER_IMAGE | PIPE_BARRIER_UPDATE_TEXTURE;
+                write_barriers |=
+                    PIPE_BARRIER_IMAGE | PIPE_BARRIER_TEXTURE | PIPE_BARRIER_UPDATE_TEXTURE;
+            }
+
             ctx.bind_kernel(&nir_kernel_builds, variant)?;
             ctx.bind_sampler_states(samplers);
             ctx.bind_sampler_views(sviews);
             ctx.bind_shader_images(iviews);
             ctx.set_global_binding(resources, &mut globals);
+
+            ctx.memory_barrier(read_barriers);
 
             for z in 0..grid[2].div_ceil(hw_max_grid[2]) {
                 for y in 0..grid[1].div_ceil(hw_max_grid[1]) {
@@ -1970,9 +2033,8 @@ impl Kernel {
                 }
             }
 
+            ctx.memory_barrier(write_barriers);
             ctx.clear_global_binding(globals.len() as u32);
-
-            ctx.memory_barrier(PIPE_BARRIER_SHADER_BUFFER);
 
             if let Some(printf_buf) = &printf_buf {
                 let tx = ctx

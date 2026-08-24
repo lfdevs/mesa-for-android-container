@@ -586,6 +586,12 @@ do_blit_framebuffer(struct gl_context *ctx,
    if (mask & depthStencil) {
       /* depth and/or stencil blit */
 
+      /* Reset any per-channel swizzle set by a prior color sub-blit;
+       * ZS blits never need channel remapping.
+       */
+      blit.swizzle_enable = false;
+      memset(blit.swizzle, 0, sizeof(blit.swizzle));
+
       /* get src/dst depth surfaces */
       struct gl_renderbuffer *srcDepthRb =
          readFB->Attachment[BUFFER_DEPTH].Renderbuffer;

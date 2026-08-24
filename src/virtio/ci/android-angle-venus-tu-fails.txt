@@ -1,2 +1,0 @@
-# Turnip host failure
-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_244,Fail

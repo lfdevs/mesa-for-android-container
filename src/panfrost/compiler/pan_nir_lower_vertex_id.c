@@ -25,7 +25,7 @@
  * indexed draw context.
  *
  * This pass is turning load_vertex_id() calls into
- * load_raw_vertex_id_pan() + load_raw_vertex_offset_pan().
+ * load_raw_vertex_id() + load_raw_vertex_offset().
  */
 
 static bool
@@ -36,8 +36,8 @@ lower_load_vertex_id(nir_builder *b, nir_intrinsic_instr *intr,
       return false;
 
    b->cursor = nir_before_instr(&intr->instr);
-   nir_def_replace(&intr->def, nir_iadd(b, nir_load_raw_vertex_id_pan(b),
-                                        nir_load_raw_vertex_offset_pan(b)));
+   nir_def_replace(&intr->def, nir_iadd(b, nir_load_raw_vertex_id(b),
+                                        nir_load_raw_vertex_offset(b)));
    return true;
 }
 

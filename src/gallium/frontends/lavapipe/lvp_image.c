@@ -281,14 +281,14 @@ static inline char conv_depth_swiz(char swiz) {
    }
 }
 
-static struct pipe_sampler_view *
-lvp_create_samplerview(struct pipe_context *pctx, struct lvp_image_view *iv, VkFormat plane_format, unsigned image_plane)
+static struct pipe_sampler_view
+lvp_create_samplerview(struct lvp_image_view *iv, VkFormat plane_format, unsigned image_plane)
 {
+   struct pipe_sampler_view templ = {0};
    if (!iv)
-      return NULL;
+      return templ;
 
    const struct lvp_image *image = (struct lvp_image *)iv->vk.image;
-   struct pipe_sampler_view templ;
    enum pipe_format pformat;
    if (iv->vk.aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
       pformat = lvp_vk_format_to_pipe_format(plane_format);
@@ -331,7 +331,9 @@ lvp_create_samplerview(struct pipe_context *pctx, struct lvp_image_view *iv, VkF
       templ.swizzle_a = conv_depth_swiz(templ.swizzle_a);
    }
 
-   return pctx->create_sampler_view(pctx, image->planes[image_plane].bo, &templ);
+   pipe_resource_reference(&templ.texture, image->planes[image_plane].bo);
+
+   return templ;
 }
 
 static struct pipe_image_view
@@ -438,8 +440,8 @@ lvp_CreateImageView(VkDevice _device,
       }
 
       if (image->planes[image_plane].bo->bind & PIPE_BIND_SAMPLER_VIEW) {
-         view->planes[view_plane].sv = lvp_create_samplerview(device->queue.ctx, view, plane_format, image_plane);
-         view->planes[view_plane].texture_handle = (void *)(uintptr_t)device->queue.ctx->create_texture_handle(device->queue.ctx, view->planes[view_plane].sv, NULL);
+         view->planes[view_plane].sv = lvp_create_samplerview(view, plane_format, image_plane);
+         view->planes[view_plane].texture_handle = (void *)(uintptr_t)device->queue.ctx->create_texture_handle(device->queue.ctx, &view->planes[view_plane].sv, NULL);
       }
    }
 
@@ -465,7 +467,7 @@ lvp_DestroyImageView(VkDevice _device, VkImageView _iview,
    for (uint8_t plane = 0; plane < iview->plane_count; plane++) {
       device->queue.ctx->delete_image_handle(device->queue.ctx, (uint64_t)(uintptr_t)iview->planes[plane].image_handle);
 
-      pipe_sampler_view_reference(&iview->planes[plane].sv, NULL);
+      pipe_resource_reference(&iview->planes[plane].sv.texture, NULL);
       device->queue.ctx->delete_texture_handle(device->queue.ctx, (uint64_t)(uintptr_t)iview->planes[plane].texture_handle);
    }
    simple_mtx_unlock(&device->queue.lock);
@@ -669,15 +671,14 @@ VKAPI_ATTR uint64_t VKAPI_CALL lvp_GetDeviceMemoryOpaqueCaptureAddress(
    return 0;
 }
 
-static struct pipe_sampler_view *
-lvp_create_samplerview_buffer(struct pipe_context *pctx, struct lvp_buffer_view *bv)
+static struct pipe_sampler_view
+lvp_create_samplerview_buffer(struct lvp_buffer_view *bv)
 {
+   struct pipe_sampler_view templ = {0};
    if (!bv)
-      return NULL;
+      return templ;
 
    struct pipe_resource *bo = ((struct lvp_buffer *)bv->vk.buffer)->bo;
-   struct pipe_sampler_view templ;
-   memset(&templ, 0, sizeof(templ));
    templ.target = PIPE_BUFFER;
    templ.swizzle_r = PIPE_SWIZZLE_X;
    templ.swizzle_g = PIPE_SWIZZLE_Y;
@@ -686,9 +687,9 @@ lvp_create_samplerview_buffer(struct pipe_context *pctx, struct lvp_buffer_view 
    templ.format = bv->pformat;
    templ.u.buf.offset = bv->vk.offset;
    templ.u.buf.size = bv->vk.range;
-   templ.texture = bo;
-   templ.context = pctx;
-   return pctx->create_sampler_view(pctx, bo, &templ);
+   pipe_resource_reference(&templ.texture, bo);
+
+   return templ;
 }
 
 static struct pipe_image_view
@@ -726,8 +727,8 @@ lvp_CreateBufferView(VkDevice _device,
    simple_mtx_lock(&device->queue.lock);
 
    if (buffer->bo->bind & PIPE_BIND_SAMPLER_VIEW) {
-      view->sv = lvp_create_samplerview_buffer(device->queue.ctx, view);
-      view->texture_handle = (void *)(uintptr_t)device->queue.ctx->create_texture_handle(device->queue.ctx, view->sv, NULL);
+      view->sv = lvp_create_samplerview_buffer(view);
+      view->texture_handle = (void *)(uintptr_t)device->queue.ctx->create_texture_handle(device->queue.ctx, &view->sv, NULL);
    }
 
    if (buffer->bo->bind & PIPE_BIND_SHADER_IMAGE) {
@@ -754,7 +755,7 @@ lvp_DestroyBufferView(VkDevice _device, VkBufferView bufferView,
 
    simple_mtx_lock(&device->queue.lock);
 
-   pipe_sampler_view_reference(&view->sv, NULL);
+   pipe_resource_reference(&view->sv.texture, NULL);
    device->queue.ctx->delete_texture_handle(device->queue.ctx, (uint64_t)(uintptr_t)view->texture_handle);
 
    device->queue.ctx->delete_image_handle(device->queue.ctx, (uint64_t)(uintptr_t)view->image_handle);

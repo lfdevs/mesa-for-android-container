@@ -100,7 +100,7 @@ GENX(pan_blend_get_shader_locked)(struct pan_blend_shader_cache *cache,
       .gpu_id = cache->gpu_id,
       .gpu_variant = cache->gpu_variant,
       .is_blend = true,
-      .pushable_ubos = BITFIELD_BIT(PAN_UBO_SYSVALS),
+      .fau.pushable_ubos = BITFIELD_BIT(PAN_UBO_SYSVALS),
    };
 
    struct pan_shader_info info;

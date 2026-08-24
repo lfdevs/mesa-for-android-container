@@ -65,7 +65,7 @@ mm_slab_alloc(struct mm_slab *slab)
          n = i * 32 + b;
          assert(n < slab->count);
          slab->free--;
-         slab->bits[i] &= ~(1 << b);
+         slab->bits[i] &= ~(1u << b);
          return n;
       }
    }
@@ -76,7 +76,7 @@ static inline void
 mm_slab_free(struct mm_slab *slab, int i)
 {
    assert(i < slab->count);
-   slab->bits[i / 32] |= 1 << (i % 32);
+   slab->bits[i / 32] |= 1u << (i % 32);
    slab->free++;
    assert(slab->free <= slab->count);
 }

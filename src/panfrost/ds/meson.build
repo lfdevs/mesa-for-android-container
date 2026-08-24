@@ -5,6 +5,7 @@
 
 pps_panfrost_sources = [
   'pan_pps_perf.cpp',
+  'pan_pps_dev.cpp',
   'pan_pps_driver.cpp'
 ]
 

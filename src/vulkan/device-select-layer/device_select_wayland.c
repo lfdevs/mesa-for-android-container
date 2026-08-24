@@ -158,6 +158,12 @@ static const struct zwp_linux_dmabuf_feedback_v1_listener dmabuf_feedback_listen
    .done = default_dmabuf_feedback_done,
 };
 
+#if defined(WL_FIXES_ACK_GLOBAL_REMOVE)
+#define MESA_WL_FIXES_VERSION 2
+#elif defined(WL_FIXES_INTERFACE)
+#define MESA_WL_FIXES_VERSION 1
+#endif
+
 static void
 device_select_registry_global(void *data, struct wl_registry *registry, uint32_t name,
                               const char *interface, uint32_t version)
@@ -176,9 +182,9 @@ device_select_registry_global(void *data, struct wl_registry *registry, uint32_t
       info->wl_dmabuf_feedback = zwp_linux_dmabuf_v1_get_default_feedback(info->wl_dmabuf);
       zwp_linux_dmabuf_feedback_v1_add_listener(info->wl_dmabuf_feedback, &dmabuf_feedback_listener,
                                                 data);
-#ifdef WL_FIXES_INTERFACE
+#ifdef MESA_WL_FIXES_VERSION
    } else if (strcmp(interface, wl_fixes_interface.name) == 0) {
-      info->wl_fixes = wl_registry_bind(registry, name, &wl_fixes_interface, 1);
+      info->wl_fixes = wl_registry_bind(registry, name, &wl_fixes_interface, MIN2(version, MESA_WL_FIXES_VERSION));
 #endif
    }
 }
@@ -186,6 +192,13 @@ device_select_registry_global(void *data, struct wl_registry *registry, uint32_t
 static void
 device_select_registry_global_remove_cb(void *data, struct wl_registry *registry, uint32_t name)
 {
+#ifdef WL_FIXES_ACK_GLOBAL_REMOVE
+   struct device_select_wayland_info *info = data;
+
+   if (info->wl_fixes && wl_fixes_get_version(info->wl_fixes) >= WL_FIXES_ACK_GLOBAL_REMOVE_SINCE_VERSION) {
+      wl_fixes_ack_global_remove(info->wl_fixes, registry, name);
+   }
+#endif
 }
 
 int

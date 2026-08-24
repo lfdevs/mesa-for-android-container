@@ -3,8 +3,13 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "v3d_submit_util.h"
+#include <string.h>
 #include <assert.h>
+#include <errno.h>
+
+#include "util/log.h"
+#include "v3d_util.h"
+#include "v3d_submit_util.h"
 
 
 void
@@ -73,4 +78,30 @@ v3d_multisync_init(struct v3d_multisync *ms,
    ms->ext.out_syncs = (uintptr_t)(void *)out_syncs;
 
    return true;
+}
+
+int
+v3d_submit_timestamp_query_ioctl(int fd, uint32_t bo_handle,
+                                 const uint32_t *offsets,
+                                 const uint32_t *syncs,
+                                 uint32_t count,
+                                 struct drm_v3d_extension *ext)
+{
+   struct drm_v3d_timestamp_query timestamp = {0};
+   v3d_submit_ext_set(&timestamp.base, ext,
+                      DRM_V3D_EXT_ID_CPU_TIMESTAMP_QUERY, 0);
+   timestamp.count = count;
+   timestamp.offsets = (uintptr_t)(void *)offsets;
+   timestamp.syncs = (uintptr_t)(void *)syncs;
+
+   struct drm_v3d_submit_cpu submit = {0};
+   submit.bo_handle_count = 1;
+   submit.bo_handles = (uintptr_t)(void *)&bo_handle;
+   submit.flags |= DRM_V3D_SUBMIT_EXTENSION;
+   submit.extensions = (uintptr_t)(void *)&timestamp;
+
+   int ret = v3d_ioctl(fd, DRM_IOCTL_V3D_SUBMIT_CPU, &submit);
+   if (ret)
+      mesa_loge("Failed to submit timestamp query: %s", strerror(errno));
+   return ret;
 }

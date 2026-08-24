@@ -38,6 +38,8 @@ def declare_options():
         I("nvk_override_compute_shader_version", 0, 0, 255,
           "Override compute shader version to force recompilation when NVK_BUILD_ID_OVERRIDE is enabled.",
           c_name="override_compute_shader_version"),
+
+        B("nvk_ssbo_align_4b", False, c_name="ssbo_align_4b"),
     ]
 
     drirc_gen.add_common_vk_options(debug_options, features_options, misc_options,

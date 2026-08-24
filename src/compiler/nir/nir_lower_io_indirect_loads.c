@@ -36,6 +36,7 @@ typedef struct {
 
 typedef struct {
    nir_variable_mode modes;
+   bool lower_indirect_vertex_index;
 
    /* If arrays are loaded only once at the beginning, these are the local
     * variables.
@@ -162,8 +163,17 @@ lower_load(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
    if (state->modes & (is_output ? nir_var_shader_out : nir_var_shader_in)) {
       nir_scalar array_index =
          nir_scalar_resolved(nir_get_io_offset_src(intr)->ssa, 0);
+      nir_src *vertex_index_src =
+         state->lower_indirect_vertex_index &&
+         intr->intrinsic != nir_intrinsic_load_interpolated_input ?
+                               nir_get_io_index_src(intr) : NULL;
+      nir_scalar vertex_index = {0};
 
-      if (!nir_scalar_is_const(array_index)) {
+      if (vertex_index_src)
+         vertex_index = nir_scalar_resolved(vertex_index_src->ssa, 0);
+
+      if (!nir_scalar_is_const(array_index) ||
+          (vertex_index_src && !nir_scalar_is_const(vertex_index))) {
          nir_variable *temp = NULL;
          nir_variable **array =
             get_load_once_variable(b->shader->info.stage, intr, state);
@@ -188,7 +198,29 @@ lower_load(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
           * others are loaded at every indirect load (such as TCS output loads).
           */
          if (!array || !*array) {
-            nir_def **elems = alloca(sizeof(nir_def*) * sem.num_slots);
+            unsigned num_vertices = 1;
+
+            if (vertex_index_src) {
+               if (b->shader->info.stage == MESA_SHADER_FRAGMENT && !is_output) {
+                  /* TODO: get the number of FS input vertices from the primitive
+                   * type in the pipeline object?
+                   */
+                  num_vertices = 3;
+               } else if (b->shader->info.stage == MESA_SHADER_GEOMETRY &&
+                          !is_output) {
+                  num_vertices = b->shader->info.gs.vertices_in;
+               } else if (b->shader->info.stage == MESA_SHADER_TESS_CTRL &&
+                          is_output) {
+                  num_vertices = b->shader->info.tess.tcs_vertices_out;
+               } else {
+                  UNREACHABLE("lowering for this per-vertex IO is unimplemented");
+               }
+
+               assert(num_vertices);
+            }
+
+            nir_def **elems = alloca(sizeof(nir_def*) * sem.num_slots *
+                                     num_vertices);
             unsigned num_comp = last_comp - first_comp + 1;
 
             if (array)
@@ -210,57 +242,67 @@ lower_load(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
 
             /* Load the vertex index at the beginning if it's constant. */
             if (array &&
-                (intr->intrinsic == nir_intrinsic_load_per_vertex_input ||
-                 intr->intrinsic == nir_intrinsic_load_input_vertex)) {
+                intr->intrinsic == nir_intrinsic_load_per_vertex_input) {
                nir_scalar s = nir_scalar_resolved(intr->src[0].ssa, 0);
                assert(nir_scalar_is_const(s));
                src0 = nir_imm_int(b, nir_scalar_as_uint(s));
             }
 
             /* Load individual array elements. */
-            for (unsigned i = 0; i < sem.num_slots; i++) {
-               /* Create a new load for each slot. */
-               nir_intrinsic_instr *new_load =
-                  nir_intrinsic_instr_create(b->shader, intr->intrinsic);
-               new_load->num_components = num_comp;
-               nir_def_init(&new_load->instr, &new_load->def,
-                            num_comp, intr->def.bit_size);
-               nir_intrinsic_copy_const_indices(new_load, intr);
+            for (unsigned v = 0; v < num_vertices; v++) {
+               nir_def *imm_vertex_index = vertex_index_src ?
+                                              nir_imm_int(b, v) : NULL;
 
-               /* Set the same srcs .. */
-               for (unsigned src = 0;
-                    src < nir_intrinsic_infos[intr->intrinsic].num_srcs; src++)
-                  new_load->src[src] = nir_src_for_ssa(intr->src[src].ssa);
+               for (unsigned i = 0; i < sem.num_slots; i++) {
+                  /* Create a new load for each slot. */
+                  nir_intrinsic_instr *new_load =
+                     nir_intrinsic_instr_create(b->shader, intr->intrinsic);
+                  new_load->num_components = num_comp;
+                  nir_def_init(&new_load->instr, &new_load->def,
+                               num_comp, intr->def.bit_size);
+                  nir_intrinsic_copy_const_indices(new_load, intr);
 
-               /* .. but change the indirect index to 0. */
-               new_load->src[nir_get_io_offset_src_number(intr)] =
-                  nir_src_for_ssa(zero);
+                  /* Set the same srcs .. */
+                  for (unsigned src = 0;
+                       src < nir_intrinsic_infos[intr->intrinsic].num_srcs; src++)
+                     new_load->src[src] = nir_src_for_ssa(intr->src[src].ssa);
 
-               nir_intrinsic_set_component(new_load, first_comp);
+                  /* .. but change the indirect index to 0. */
+                  new_load->src[nir_get_io_offset_src_number(intr)] =
+                     nir_src_for_ssa(zero);
 
-               /* Set barycentrics or the vertex index if we are loading inputs
-                * at the beginning.
-                */
-               if (src0)
-                  new_load->src[0] = nir_src_for_ssa(src0);
+                  /* .. and the FS input vertex index. */
+                  if (vertex_index_src) {
+                     new_load->src[nir_get_io_index_src_number(intr)] =
+                        nir_src_for_ssa(imm_vertex_index);
+                  }
 
-               /* and set IO semantics to the location of the array element. */
-               nir_io_semantics new_sem = sem;
-               new_sem.num_slots = 1;
+                  nir_intrinsic_set_component(new_load, first_comp);
 
-               if (!compact) {
-                  new_sem.location += i;
-                  nir_intrinsic_set_base(new_load, nir_intrinsic_base(intr) + i);
-               } else {
-                  new_sem.location += i / 4;
-                  nir_intrinsic_set_component(new_load, i % 4);
-                  nir_intrinsic_set_base(new_load, nir_intrinsic_base(intr) + i / 4);
+                  /* Set barycentrics or the vertex index if we are loading inputs
+                   * at the beginning.
+                   */
+                  if (src0)
+                     new_load->src[0] = nir_src_for_ssa(src0);
+
+                  /* and set IO semantics to the location of the array element. */
+                  nir_io_semantics new_sem = sem;
+                  new_sem.num_slots = 1;
+
+                  if (!compact) {
+                     new_sem.location += i;
+                     nir_intrinsic_set_base(new_load, nir_intrinsic_base(intr) + i);
+                  } else {
+                     new_sem.location += i / 4;
+                     nir_intrinsic_set_component(new_load, i % 4);
+                     nir_intrinsic_set_base(new_load, nir_intrinsic_base(intr) + i / 4);
+                  }
+
+                  nir_intrinsic_set_io_semantics(new_load, new_sem);
+
+                  nir_builder_instr_insert(b, &new_load->instr);
+                  elems[v * sem.num_slots + i] = &new_load->def;
                }
-
-               nir_intrinsic_set_io_semantics(new_load, new_sem);
-
-               nir_builder_instr_insert(b, &new_load->instr);
-               elems[i] = &new_load->def;
             }
 
             /* Put the array elements into a local array variable. */
@@ -269,21 +311,43 @@ lower_load(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
             const glsl_type *type =
                glsl_array_type(glsl_vector_type(base_type, num_comp),
                                sem.num_slots, 0);
+
+            if (vertex_index_src)
+               type = glsl_array_type(type, num_vertices, 0);
+
             if (!array)
                array = &temp; /* loaded at the load instead of the beginning */
             *array = nir_local_variable_create(b->impl, type, "");
 
+            nir_deref_instr *deref_var = nir_build_deref_var(b, *array);
+
             /* Fill the array with the loaded elements. */
-            for (unsigned i = 0; i < sem.num_slots; i++) {
-               nir_store_array_var_imm(b, *array, i, elems[i],
-                                       BITFIELD_MASK(num_comp));
+            for (unsigned v = 0; v < num_vertices; v++) {
+               nir_deref_instr *deref_vertex =
+                  vertex_index_src ? nir_build_deref_array_imm(b, deref_var, v)
+                                      : deref_var;
+
+               for (unsigned i = 0; i < sem.num_slots; i++) {
+                  nir_deref_instr *deref_array =
+                     nir_build_deref_array_imm(b, deref_vertex, i);
+                  nir_store_deref(b, deref_array, elems[v * sem.num_slots + i],
+                                  BITFIELD_MASK(num_comp));
+               }
             }
          }
 
          b->cursor = nir_before_instr(&intr->instr);
 
          /* Get the indirect value and upsize the vector to the original size. */
-         nir_def *value = nir_load_array_var(b, *array, array_index.def);
+         /* Do: ... = array[vertex_index][array_index] or array[array_index] */
+         nir_deref_instr *deref_var = nir_build_deref_var(b, *array);
+         nir_deref_instr *deref_vertex =
+            vertex_index_src ? nir_build_deref_array(b, deref_var,
+                                                        vertex_index.def)
+                                : deref_var;
+         nir_deref_instr *deref_array = nir_build_deref_array(b, deref_vertex,
+                                                              array_index.def);
+         nir_def *value = nir_load_deref(b, deref_array);
 
          value = nir_shift_channels(b, value,
                                     (int)first_comp - (int)intr_component,
@@ -298,10 +362,12 @@ lower_load(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
 }
 
 static bool
-lower_indirect_loads(nir_function_impl *impl, nir_variable_mode modes)
+lower_indirect_loads(nir_function_impl *impl, nir_variable_mode modes,
+                     bool lower_indirect_vertex_index)
 {
    lower_io_indir_loads_state *state = calloc(1, sizeof(*state));
    state->modes = modes;
+   state->lower_indirect_vertex_index = lower_indirect_vertex_index;
 
    if (modes & nir_var_shader_in) {
       nir_function_intrinsics_pass(impl, gather_indirect_inputs,
@@ -315,7 +381,8 @@ lower_indirect_loads(nir_function_impl *impl, nir_variable_mode modes)
 }
 
 bool
-nir_lower_io_indirect_loads(nir_shader *nir, nir_variable_mode modes)
+nir_lower_io_indirect_loads(nir_shader *nir, nir_variable_mode modes,
+                            bool lower_indirect_vertex_index)
 {
    assert(modes & (nir_var_shader_in | nir_var_shader_out));
    assert(!(modes & ~(nir_var_shader_in | nir_var_shader_out)));
@@ -326,7 +393,8 @@ nir_lower_io_indirect_loads(nir_shader *nir, nir_variable_mode modes)
 
    bool progress = false;
    nir_foreach_function_impl(impl, nir) {
-      progress |= lower_indirect_loads(impl, modes);
+      progress |= lower_indirect_loads(impl, modes,
+                                       lower_indirect_vertex_index);
    }
 
    return progress;

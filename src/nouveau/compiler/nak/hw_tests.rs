@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 use crate::api::{GetDebugFlags, ShaderBin, DEBUG};
-use crate::hw_runner::{Context, Runner, BO, CB0};
+use crate::hw_runner::{Context, PushBuilder, RunConfig, Runner, BO, CB0};
 use crate::ir::*;
 
 use acorn::Acorn;
 use compiler::bindings::MESA_SHADER_COMPUTE;
 use compiler::cfg::CFGBuilder;
 use nak_bindings::*;
+use nvidia_headers::classes::{
+    cla1c0::KEPLER_COMPUTE_B, clc0c0::PASCAL_COMPUTE_A,
+    clc5c0::TURING_COMPUTE_A, clc6c0::AMPERE_COMPUTE_A,
+};
 use rustc_hash::FxBuildHasher;
 use std::cell::RefCell;
 use std::io;
@@ -283,7 +287,13 @@ fn test_sanity() {
     let bin = b.compile();
     unsafe {
         run.run
-            .run_raw(&bin, LOCAL_SIZE_X.into(), 0, std::ptr::null_mut(), 0)
+            .run_raw([RunConfig::new(
+                &bin,
+                LOCAL_SIZE_X.into(),
+                0,
+                std::ptr::null_mut(),
+                0,
+            )])
             .unwrap();
     }
 }
@@ -460,13 +470,13 @@ pub fn test_foldable_op_with(
 
     unsafe {
         run.run
-            .run_raw(
+            .run_raw([RunConfig::new(
                 &bin,
                 invocations.try_into().unwrap(),
                 (comps * 4).try_into().unwrap(),
                 data.as_mut_ptr().cast(),
                 data.len() * 4,
-            )
+            )])
             .unwrap();
     }
 
@@ -697,6 +707,10 @@ fn test_op_iadd3x() {
 
 #[test]
 fn test_op_imnmx() {
+    if RunSingleton::get().sm.sm() == 70 {
+        return;
+    }
+
     for cmp_type in [IntCmpType::U32, IntCmpType::I32] {
         let op = OpIMnMx {
             dst: Dst::None,
@@ -1641,7 +1655,7 @@ fn test_shr64() {
 #[test]
 fn test_f2fp_pack_ab() {
     let run = RunSingleton::get();
-    if run.sm.sm() < 70 {
+    if run.sm.sm() < 75 {
         return;
     }
 
@@ -2091,4 +2105,727 @@ fn test_op_mufu_f16_down() {
             }
         }
     }
+}
+
+/// This test makes sure the float immediate encodes correctly with F2I, but
+/// also verifies expected behavior for converting NaN.
+#[test]
+fn test_op_f2i_immediate_nan() {
+    let run = &RunSingleton::get();
+
+    let mut b = TestShaderBuilder::new(&run.sm);
+    let dst = b.alloc_ssa(RegFile::GPR);
+    b.push_op(OpF2I {
+        dst: dst.into(),
+        src: f32::NAN.into(),
+        src_type: FloatType::F32,
+        dst_type: IntType::U32,
+        ftz: false,
+        rnd_mode: FRndMode::NearestEven,
+    });
+
+    b.st_test_data(0, MemType::B32, dst.into());
+
+    let bin = b.compile();
+
+    let mut data = vec![0u32];
+    run.run.run(&bin, &mut data).unwrap();
+
+    // TODO: Make the expected result depend on the QMD setting for
+    //       `FP32_F2I_NAN_BEHAVIOR`
+    assert!([0, 0x80000000].contains(&data[0]));
+}
+
+#[test]
+fn test_simple_multi_run() {
+    let run = &RunSingleton::get();
+    let mut b = TestShaderBuilder::new(&run.sm);
+
+    let v0 = b.copy(5.into());
+    let v1 = b.copy(10.into());
+
+    b.st_test_data(0, MemType::B32, v0.into());
+    b.st_test_data(4, MemType::B32, v1.into());
+
+    let bin = b.compile();
+    let mut data0 = Vec::new();
+    data0.push([0u32, 0u32]);
+    let mut data1 = data0.clone();
+
+    run.run
+        .run_multi([(&bin, &mut data0), (&bin, &mut data1)])
+        .unwrap();
+
+    assert_eq!(data0[0][0], 5);
+    assert_eq!(data0[0][1], 10);
+    assert_eq!(data1[0][0], 5);
+    assert_eq!(data1[0][1], 10);
+}
+
+#[test]
+fn test_parallel_qmd_dispatch() -> io::Result<()> {
+    let run = &RunSingleton::get();
+    let dev = run.run.device();
+
+    if dev.dev_info().cls_compute < TURING_COMPUTE_A {
+        return Ok(());
+    }
+
+    let shader_fast = {
+        let mut b = TestShaderBuilder::new(&run.sm);
+        let addr: Src = b.ld_test_data(0, MemType::B64).into();
+        let val = b.copy(5.into());
+
+        let access = MemAccess {
+            mem_type: MemType::B32,
+            space: MemSpace::Global(MemAddrType::A64),
+            order: MemOrder::Strong(MemScope::System),
+            eviction_priority: MemEvictionPriority::Normal,
+        };
+        b.push_op(OpSt {
+            addr: addr.clone().into(),
+            uniform_addr: Src::ZERO,
+            data: val.into(),
+            offset: 0,
+            access: access,
+            stride: OffsetStride::X1,
+        });
+        let one = b.copy(1.into());
+        b.push_op(OpAtom {
+            addr: addr.into(),
+            uniform_address: Src::ZERO,
+            addr_offset: 4,
+            addr_stride: OffsetStride::X1,
+            atom_op: AtomOp::Add,
+            atom_type: AtomType::U32,
+            cmpr: Src::ZERO,
+            data: one.into(),
+            dst: Dst::None,
+            mem_space: MemSpace::Global(MemAddrType::A64),
+            mem_order: MemOrder::Strong(MemScope::System),
+            mem_eviction_priority: MemEvictionPriority::Normal,
+        });
+
+        b.compile()
+    };
+
+    let shader_slow = {
+        let mut b = TestShaderBuilder::new(&run.sm);
+        let addr: Src = b.ld_test_data(0, MemType::B64).into();
+
+        // There is no guarantee the sleep actually waits that long, but it's
+        // good enough for testing.
+        b.push_op(OpNanosleep {
+            time: 0xffffffff.into(),
+        });
+
+        let val = b.copy(500.into());
+
+        let access = MemAccess {
+            mem_type: MemType::B32,
+            space: MemSpace::Global(MemAddrType::A64),
+            order: MemOrder::Strong(MemScope::System),
+            eviction_priority: MemEvictionPriority::Normal,
+        };
+        b.push_op(OpSt {
+            addr: addr.clone().into(),
+            uniform_addr: Src::ZERO,
+            data: val.into(),
+            offset: 0,
+            access: access,
+            stride: OffsetStride::X1,
+        });
+        let one = b.copy(1.into());
+        b.push_op(OpAtom {
+            addr: addr.into(),
+            uniform_address: Src::ZERO,
+            addr_offset: 4,
+            addr_stride: OffsetStride::X1,
+            atom_op: AtomOp::Add,
+            atom_type: AtomType::U32,
+            cmpr: Src::ZERO,
+            data: one.into(),
+            dst: Dst::None,
+            mem_space: MemSpace::Global(MemAddrType::A64),
+            mem_order: MemOrder::Strong(MemScope::System),
+            mem_eviction_priority: MemEvictionPriority::Normal,
+        });
+
+        b.compile()
+    };
+
+    // Allocate a bo for shared data
+    let bo = BO::new(dev.clone(), 0x1000)?;
+
+    let mut data_fast = vec![bo.addr];
+    let mut data_slow = data_fast.clone();
+
+    run.run
+        .run_multi([
+            (&shader_slow, &mut data_slow),
+            (&shader_fast, &mut data_fast),
+        ])
+        .unwrap();
+
+    let written_data =
+        unsafe { std::slice::from_raw_parts(bo.map.cast::<u32>(), 0x1000 / 4) };
+    assert_eq!(written_data[1], 2);
+    // Even though the slow shader gets dispatched first, we see the write from
+    // it instead of from the fast and second one.
+    assert_eq!(written_data[0], 500);
+
+    Ok(())
+}
+
+#[test]
+fn test_qmd_dependencies_simple() -> io::Result<()> {
+    let run = &RunSingleton::get();
+    let dev = run.run.device();
+
+    if dev.dev_info().cls_compute < KEPLER_COMPUTE_B {
+        return Ok(());
+    }
+
+    let shader_first = {
+        let mut b = TestShaderBuilder::new(&run.sm);
+        let addr: Src = b.ld_test_data(0, MemType::B64).into();
+        let val = b.copy(5.into());
+
+        let access = MemAccess {
+            mem_type: MemType::B32,
+            space: MemSpace::Global(MemAddrType::A64),
+            order: MemOrder::Strong(MemScope::System),
+            eviction_priority: MemEvictionPriority::Normal,
+        };
+        b.push_op(OpSt {
+            addr: addr.clone().into(),
+            uniform_addr: Src::ZERO,
+            data: val.into(),
+            offset: 0,
+            access: access,
+            stride: OffsetStride::X1,
+        });
+        let one = b.copy(100.into());
+        b.push_op(OpAtom {
+            addr: addr.into(),
+            uniform_address: Src::ZERO,
+            addr_offset: 4,
+            addr_stride: OffsetStride::X1,
+            atom_op: AtomOp::Add,
+            atom_type: AtomType::U32,
+            cmpr: Src::ZERO,
+            data: one.into(),
+            dst: Dst::None,
+            mem_space: MemSpace::Global(MemAddrType::A64),
+            mem_order: MemOrder::Strong(MemScope::System),
+            mem_eviction_priority: MemEvictionPriority::Normal,
+        });
+
+        b.compile()
+    };
+
+    let shader_second = {
+        let mut b = TestShaderBuilder::new(&run.sm);
+        let addr: Src = b.ld_test_data(0, MemType::B64).into();
+        let val = b.copy(500.into());
+
+        let access = MemAccess {
+            mem_type: MemType::B32,
+            space: MemSpace::Global(MemAddrType::A64),
+            order: MemOrder::Strong(MemScope::System),
+            eviction_priority: MemEvictionPriority::Normal,
+        };
+        b.push_op(OpSt {
+            addr: addr.clone().into(),
+            uniform_addr: Src::ZERO,
+            data: val.into(),
+            offset: 0,
+            access: access,
+            stride: OffsetStride::X1,
+        });
+        let five = b.copy(500.into());
+        b.push_op(OpAtom {
+            addr: addr.into(),
+            uniform_address: Src::ZERO,
+            addr_offset: 4,
+            addr_stride: OffsetStride::X1,
+            atom_op: AtomOp::Add,
+            atom_type: AtomType::U32,
+            cmpr: Src::ZERO,
+            data: five.into(),
+            dst: Dst::None,
+            mem_space: MemSpace::Global(MemAddrType::A64),
+            mem_order: MemOrder::Strong(MemScope::System),
+            mem_eviction_priority: MemEvictionPriority::Normal,
+        });
+
+        b.compile()
+    };
+
+    // Allocate a bo for shared data
+    let bo = BO::new(dev.clone(), 0x1000)?;
+    unsafe { bo.map.cast::<u32>().write(500) };
+
+    let mut pb = PushBuilder::new(dev.clone(), 0x10000, 256)?;
+
+    let shader_first_offset =
+        pb.bo_alloc(shader_first.code_size.try_into().unwrap(), 0x80);
+    let shader_second_offset =
+        pb.bo_alloc(shader_second.code_size.try_into().unwrap(), 0x80);
+
+    pb.copy_shader(shader_first_offset, &shader_first);
+    pb.copy_shader(shader_second_offset, &shader_second);
+
+    let cb0_offset = pb.bo_alloc(size_of::<CB0>(), 256);
+    let data_offset = pb.bo_alloc(0x100, 256);
+
+    let data = vec![bo.addr];
+    pb.copy_data_and_fill_cb0(
+        data_offset,
+        cb0_offset,
+        data.as_ptr().cast(),
+        size_of_val(&data),
+        0,
+        1,
+    );
+
+    let qmd_second = pb.create_qmd(
+        run.run.qmd_heap(),
+        &shader_second,
+        shader_second_offset,
+        cb0_offset,
+        1,
+    )?;
+
+    let qmd_first = pb.create_qmd(
+        run.run.qmd_heap(),
+        &shader_first,
+        shader_first_offset,
+        cb0_offset,
+        1,
+    )?;
+
+    unsafe {
+        nak_set_dependent_qmd(
+            run.run.dev_info(),
+            qmd_first.map,
+            run.run.qmd_heap().qmd_size(),
+            qmd_second.addr,
+            true,
+        );
+    }
+
+    pb.dispatch_qmd(&qmd_first);
+
+    pb.submit(run.run.ctx())?;
+
+    let written_data =
+        unsafe { std::slice::from_raw_parts(bo.map.cast::<u32>(), 0x1000 / 4) };
+
+    assert_eq!(written_data[1], 600);
+
+    Ok(())
+}
+
+/// This test dispatches one QMD having another dependent QMD and ensures:
+///   - ordering as expected
+///   - QMD based cache invalidation works to make writes visible across QMD
+///     dependencies
+#[test]
+fn test_qmd_dependencies() -> io::Result<()> {
+    let run = &RunSingleton::get();
+    let dev = run.run.device();
+
+    if dev.dev_info().cls_compute < PASCAL_COMPUTE_A {
+        return Ok(());
+    }
+
+    let shader_slow = {
+        let mut b = TestShaderBuilder::new(&run.sm);
+
+        let data_addr = b.alloc_ssa_vec(RegFile::UGPR, 2);
+        b.push_op(OpLdc {
+            dst: data_addr.clone().into(),
+            cb: CBufRef {
+                buf: CBuf::Binding(0),
+                offset: offset_of!(CB0, data_addr_lo).try_into().unwrap(),
+            }
+            .into(),
+            offset: Src::ZERO,
+            mem_type: MemType::B64,
+            mode: LdcMode::Indexed,
+        });
+
+        // There is no guarantee the sleep actually waits that long, but it's
+        // good enough for testing.
+        b.push_op(OpNanosleep {
+            time: 0xffffffff.into(),
+        });
+
+        let bo_addr = b.alloc_ssa_vec(RegFile::UGPR, 2);
+        b.push_op(OpLdcg {
+            addr: data_addr.into(),
+            dst: bo_addr.clone().into(),
+            offset: 0,
+            pred: false.into(),
+            mem_type: MemType::B64,
+        });
+
+        // Load the 500 with constant to cache it.
+        let five00 = b.alloc_ssa(RegFile::UGPR);
+        b.push_op(OpLdcg {
+            addr: bo_addr.clone().into(),
+            dst: five00.into(),
+            offset: 0,
+            pred: false.into(),
+            mem_type: MemType::B64,
+        });
+
+        // Overwrite the value
+        let val = b.copy(100.into());
+        let global_access = MemAccess {
+            mem_type: MemType::B32,
+            space: MemSpace::Global(MemAddrType::A64),
+            order: MemOrder::Strong(MemScope::GPU),
+            eviction_priority: MemEvictionPriority::Normal,
+        };
+        b.push_op(OpSt {
+            uniform_addr: bo_addr.clone().into(),
+            addr: Src::ZERO,
+            data: val.into(),
+            offset: 0,
+            access: global_access,
+            stride: OffsetStride::X1,
+        });
+
+        b.push_op(OpAtom {
+            uniform_address: bo_addr.into(),
+            addr: Src::ZERO,
+            addr_offset: 4,
+            addr_stride: OffsetStride::X1,
+            atom_op: AtomOp::Add,
+            atom_type: AtomType::U32,
+            cmpr: Src::ZERO,
+            data: five00.into(),
+            dst: Dst::None,
+            mem_space: MemSpace::Global(MemAddrType::A64),
+            mem_order: MemOrder::Strong(MemScope::System),
+            mem_eviction_priority: MemEvictionPriority::Normal,
+        });
+
+        b.compile()
+    };
+
+    let shader_fast = {
+        let mut b = TestShaderBuilder::new(&run.sm);
+        let data_addr = b.alloc_ssa_vec(RegFile::UGPR, 2);
+        b.push_op(OpLdc {
+            dst: data_addr.clone().into(),
+            cb: CBufRef {
+                buf: CBuf::Binding(0),
+                offset: offset_of!(CB0, data_addr_lo).try_into().unwrap(),
+            }
+            .into(),
+            offset: Src::ZERO,
+            mem_type: MemType::B64,
+            mode: LdcMode::Indexed,
+        });
+
+        let bo_addr = b.alloc_ssa_vec(RegFile::UGPR, 2);
+        b.push_op(OpLdcg {
+            addr: data_addr.into(),
+            dst: bo_addr.clone().into(),
+            offset: 0,
+            pred: false.into(),
+            mem_type: MemType::B64,
+        });
+
+        // Load the 100
+        let one00 = b.alloc_ssa(RegFile::UGPR);
+        b.push_op(OpLdcg {
+            addr: bo_addr.clone().into(),
+            dst: one00.into(),
+            offset: 0,
+            pred: false.into(),
+            mem_type: MemType::B64,
+        });
+
+        b.push_op(OpAtom {
+            uniform_address: bo_addr.into(),
+            addr: Src::ZERO,
+            addr_offset: 4,
+            addr_stride: OffsetStride::X1,
+            atom_op: AtomOp::Add,
+            atom_type: AtomType::U32,
+            cmpr: Src::ZERO,
+            data: one00.into(),
+            dst: Dst::None,
+            mem_space: MemSpace::Global(MemAddrType::A64),
+            mem_order: MemOrder::Strong(MemScope::System),
+            mem_eviction_priority: MemEvictionPriority::Normal,
+        });
+
+        b.compile()
+    };
+
+    // Allocate a bo for shared data
+    let bo = BO::new(dev.clone(), 0x1000)?;
+    unsafe { bo.map.cast::<u32>().write(500) };
+
+    let mut pb = PushBuilder::new(dev.clone(), 0x10000, 256)?;
+
+    let shader_fast_offset =
+        pb.bo_alloc(shader_fast.code_size.try_into().unwrap(), 0x80);
+    let shader_slow_offset =
+        pb.bo_alloc(shader_slow.code_size.try_into().unwrap(), 0x80);
+
+    pb.copy_shader(shader_fast_offset, &shader_fast);
+    pb.copy_shader(shader_slow_offset, &shader_slow);
+
+    let cb0_offset = pb.bo_alloc(size_of::<CB0>(), 256);
+    let data_offset = pb.bo_alloc(0x100, 256);
+
+    let data = vec![bo.addr];
+    pb.copy_data_and_fill_cb0(
+        data_offset,
+        cb0_offset,
+        data.as_ptr().cast(),
+        size_of_val(&data),
+        0,
+        1,
+    );
+
+    let qmd_slow = pb.create_qmd(
+        run.run.qmd_heap(),
+        &shader_slow,
+        shader_slow_offset,
+        cb0_offset,
+        1,
+    )?;
+
+    let qmd_fast = pb.create_qmd(
+        run.run.qmd_heap(),
+        &shader_fast,
+        shader_fast_offset,
+        cb0_offset,
+        1,
+    )?;
+
+    unsafe {
+        nak_set_dependent_qmd(
+            run.run.dev_info(),
+            qmd_slow.map,
+            run.run.qmd_heap().qmd_size(),
+            qmd_fast.addr,
+            true,
+        );
+    }
+
+    // So the write of 100 becomes visible in the second QMD
+    unsafe {
+        nak_set_invalidate_cache(
+            run.run.dev_info(),
+            qmd_fast.map,
+            run.run.qmd_heap().qmd_size(),
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+        );
+    }
+
+    pb.dispatch_qmd(&qmd_slow);
+
+    pb.submit(run.run.ctx())?;
+
+    let written_data =
+        unsafe { std::slice::from_raw_parts(bo.map.cast::<u32>(), 0x1000 / 4) };
+
+    // result can be 1000 if the constant cache is not invalidated
+    assert_eq!(written_data[1], 600);
+
+    Ok(())
+}
+
+/// This test verifies that we can use the hw dependence counter of QMDs to
+/// model multi to one dependency trees via QMD dependence. It also checks that
+/// we can launch a QMD with a hw dependence counter via PCAS2
+/// DECREMENT_DEPENDENCE.
+#[test]
+fn test_qmd_hw_decrement_dependence() -> io::Result<()> {
+    let run = &RunSingleton::get();
+    let dev = run.run.device();
+
+    if dev.dev_info().cls_compute < AMPERE_COMPUTE_A {
+        return Ok(());
+    }
+
+    let shader_first = {
+        let mut b = TestShaderBuilder::new(&run.sm);
+
+        let addr: Src = b.ld_test_data(0, MemType::B64).into();
+        let val = b.copy(5.into());
+        let access = MemAccess {
+            mem_type: MemType::B32,
+            space: MemSpace::Global(MemAddrType::A64),
+            order: MemOrder::Strong(MemScope::System),
+            eviction_priority: MemEvictionPriority::Normal,
+        };
+
+        // There is no guarantee the sleep actually waits that long, but it's
+        // good enough for testing.
+        b.push_op(OpNanosleep {
+            time: 0xffffffff.into(),
+        });
+
+        b.push_op(OpSt {
+            addr: addr.clone().into(),
+            uniform_addr: Src::ZERO,
+            data: val.into(),
+            offset: 0,
+            access: access,
+            stride: OffsetStride::X1,
+        });
+        let one = b.copy(1.into());
+        b.push_op(OpAtom {
+            addr: addr.into(),
+            uniform_address: Src::ZERO,
+            addr_offset: 4,
+            addr_stride: OffsetStride::X1,
+            atom_op: AtomOp::Add,
+            atom_type: AtomType::U32,
+            cmpr: Src::ZERO,
+            data: one.into(),
+            dst: Dst::None,
+            mem_space: MemSpace::Global(MemAddrType::A64),
+            mem_order: MemOrder::Strong(MemScope::System),
+            mem_eviction_priority: MemEvictionPriority::Normal,
+        });
+
+        b.compile()
+    };
+
+    let shader_last = {
+        let mut b = TestShaderBuilder::new(&run.sm);
+        let addr: Src = b.ld_test_data(0, MemType::B64).into();
+        let val = b.copy(500.into());
+        let access = MemAccess {
+            mem_type: MemType::B32,
+            space: MemSpace::Global(MemAddrType::A64),
+            order: MemOrder::Strong(MemScope::System),
+            eviction_priority: MemEvictionPriority::Normal,
+        };
+        b.push_op(OpSt {
+            addr: addr.clone().into(),
+            uniform_addr: Src::ZERO,
+            data: val.into(),
+            offset: 0,
+            access: access,
+            stride: OffsetStride::X1,
+        });
+        let one = b.copy(1.into());
+        b.push_op(OpAtom {
+            addr: addr.into(),
+            uniform_address: Src::ZERO,
+            addr_offset: 4,
+            addr_stride: OffsetStride::X1,
+            atom_op: AtomOp::Add,
+            atom_type: AtomType::U32,
+            cmpr: Src::ZERO,
+            data: one.into(),
+            dst: Dst::None,
+            mem_space: MemSpace::Global(MemAddrType::A64),
+            mem_order: MemOrder::Strong(MemScope::System),
+            mem_eviction_priority: MemEvictionPriority::Normal,
+        });
+
+        b.compile()
+    };
+
+    // Allocate a bo for shared data
+    let bo = BO::new(dev.clone(), 0x1000)?;
+
+    let mut pb = PushBuilder::new(dev.clone(), 0x10000, 256)?;
+
+    let shader_first_offset =
+        pb.bo_alloc(shader_first.code_size.try_into().unwrap(), 0x80);
+    let shader_last_offset =
+        pb.bo_alloc(shader_last.code_size.try_into().unwrap(), 0x80);
+
+    pb.copy_shader(shader_first_offset, &shader_first);
+    pb.copy_shader(shader_last_offset, &shader_last);
+
+    let cb0_offset = pb.bo_alloc(size_of::<CB0>(), 256);
+    let data_offset = pb.bo_alloc(0x100, 256);
+
+    let data = vec![bo.addr];
+    pb.copy_data_and_fill_cb0(
+        data_offset,
+        cb0_offset,
+        data.as_ptr().cast(),
+        size_of_val(&data),
+        0,
+        1,
+    );
+
+    let qmd_a = pb.create_qmd_with_dependence(
+        run.run.qmd_heap(),
+        &shader_first,
+        shader_first_offset,
+        cb0_offset,
+        1,
+        0,
+        1,
+    )?;
+    let qmd_b = pb.create_qmd(
+        run.run.qmd_heap(),
+        &shader_first,
+        shader_first_offset,
+        cb0_offset,
+        1,
+    )?;
+
+    let qmd_last = pb.create_qmd_with_dependence(
+        run.run.qmd_heap(),
+        &shader_last,
+        shader_last_offset,
+        cb0_offset,
+        1,
+        0,
+        2,
+    )?;
+
+    unsafe {
+        nak_set_dependent_qmd(
+            run.run.dev_info(),
+            qmd_a.map,
+            run.run.qmd_heap().qmd_size(),
+            qmd_last.addr,
+            false,
+        );
+        nak_set_dependent_qmd(
+            run.run.dev_info(),
+            qmd_b.map,
+            run.run.qmd_heap().qmd_size(),
+            qmd_last.addr,
+            false,
+        );
+    }
+
+    pb.dispatch_qmd(&qmd_b);
+    pb.qmd_decrement_dependence(&qmd_a);
+
+    pb.submit(run.run.ctx())?;
+
+    let written_data =
+        unsafe { std::slice::from_raw_parts(bo.map.cast::<u32>(), 0x1000 / 4) };
+
+    // We see three invocations launched
+    assert_eq!(written_data[1], 3);
+    // We see the write of qmd_last
+    assert_eq!(written_data[0], 500);
+
+    Ok(())
 }

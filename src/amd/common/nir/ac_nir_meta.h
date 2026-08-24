@@ -164,9 +164,9 @@ struct ac_cs_clear_copy_buffer_options {
 };
 
 struct ac_cs_clear_copy_buffer_info {
-   unsigned dst_offset;
-   unsigned src_offset;
-   unsigned size;
+   uint64_t dst_offset;
+   uint64_t src_offset;
+   uint64_t size;
    unsigned clear_value_size;
    uint32_t clear_value[4];
    unsigned dwords_per_thread;   /* Set to 0 to let the code choose the optimal value. */
@@ -186,14 +186,14 @@ struct ac_cs_clear_copy_buffer_dispatch {
    unsigned dispatch_interleave; /* COMPUTE_DISPATCH_INTERLEAVE.INTERLEAVE/INTERLEAVE_1D */
 
    struct {
-      unsigned offset;
-      unsigned size;
+      uint64_t offset;
+      uint64_t size;
    } ssbo[2];
 };
 
 nir_shader *
-ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
-                               union ac_cs_clear_copy_buffer_key *key);
+ac_create_clear_copy_buffer_cs(const struct ac_cs_clear_copy_buffer_options *options,
+                               const union ac_cs_clear_copy_buffer_key *key);
 
 bool
 ac_prepare_cs_clear_copy_buffer(const struct ac_cs_clear_copy_buffer_options *options,

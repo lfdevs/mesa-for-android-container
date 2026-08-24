@@ -274,12 +274,14 @@ intel_get_urb_config(const struct intel_device_info *devinfo,
       if (gs_present) {
          urb_cfg->deref_block_size = INTEL_URB_DEREF_BLOCK_SIZE_PER_POLY;
       } else if (tess_present) {
-         if (urb_cfg->entries[MESA_SHADER_TESS_EVAL] < 324)
+         unsigned lower_limit = devinfo->verx10 >= 200 ? 656 : 324;
+         if (urb_cfg->entries[MESA_SHADER_TESS_EVAL] < lower_limit)
             urb_cfg->deref_block_size = INTEL_URB_DEREF_BLOCK_SIZE_PER_POLY;
          else
             urb_cfg->deref_block_size = INTEL_URB_DEREF_BLOCK_SIZE_32;
       } else {
-         if (urb_cfg->entries[MESA_SHADER_VERTEX] < 192)
+         unsigned lower_limit = devinfo->verx10 >= 200 ? 384 : 192;
+         if (urb_cfg->entries[MESA_SHADER_VERTEX] < lower_limit)
             urb_cfg->deref_block_size = INTEL_URB_DEREF_BLOCK_SIZE_PER_POLY;
          else
             urb_cfg->deref_block_size = INTEL_URB_DEREF_BLOCK_SIZE_32;

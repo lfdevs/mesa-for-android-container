@@ -1085,8 +1085,16 @@ brw_from_nir_emit_alu(nir_to_brw_state &ntb, nir_alu_instr *instr,
       bld.COS(result, op[0]);
       break;
 
+   case nir_op_ftanh:
+      bld.TANH(result, op[0]);
+      break;
+
    case nir_op_fadd:
-      if (nir_has_any_rounding_mode_enabled(execution_mode)) {
+   case nir_op_fadd_rtne:
+      if (instr->op == nir_op_fadd_rtne) {
+         bld.exec_all().emit(SHADER_OPCODE_RND_MODE, bld.null_reg_ud(),
+                             brw_imm_d(BRW_RND_MODE_RTNE));
+      } else if (nir_has_any_rounding_mode_enabled(execution_mode)) {
          brw_rnd_mode rnd =
             brw_rnd_mode_from_execution_mode(execution_mode);
          bld.exec_all().emit(SHADER_OPCODE_RND_MODE, bld.null_reg_ud(),
@@ -1900,6 +1908,7 @@ get_nir_def(nir_to_brw_state &ntb, const nir_def &def, bool all_sources_uniform)
       case nir_intrinsic_load_ubo_uniform_block_intel:
       case nir_intrinsic_load_workgroup_id:
       case nir_intrinsic_load_indirect_address_intel:
+      case nir_intrinsic_subgroup_barrier_index_intel:
          is_scalar = true;
          break;
 
@@ -2578,7 +2587,7 @@ emit_gs_vertex(nir_to_brw_state &ntb, const nir_src &vertex_count_nir_src,
        * effect of any call to EndPrimitive() that the shader may have
        * made before outputting its first vertex.
        */
-      abld.exec_all().MOV(s.control_data_bits, brw_imm_ud(0u));
+      abld.MOV(s.control_data_bits, brw_imm_ud(0u));
       abld.emit(BRW_OPCODE_ENDIF);
    }
 
@@ -2621,6 +2630,7 @@ brw_from_nir_emit_vs_intrinsic(nir_to_brw_state &ntb,
    case nir_intrinsic_load_base_vertex:
       UNREACHABLE("should be lowered by nir_lower_system_values()");
 
+   case nir_intrinsic_load_urb_input_handle_intel:
    case nir_intrinsic_load_urb_output_handle_intel:
       bld.MOV(retype(dest, BRW_TYPE_UD), s.vs_payload().urb_handles);
       break;
@@ -4059,7 +4069,9 @@ static bool
 can_use_instruction_offset(enum lsc_addr_surface_type binding_type, int32_t offset)
 {
    const unsigned max_bits = brw_max_immediate_offset_bits(binding_type);
-   return offset >= u_intN_min(max_bits) && offset <= u_intN_max(max_bits);
+   return offset % 4 == 0 &&
+          offset >= u_intN_min(max_bits) &&
+          offset <= u_intN_max(max_bits);
 }
 
 static brw_reg
@@ -4207,48 +4219,35 @@ brw_from_nir_emit_cs_intrinsic(nir_to_brw_state &ntb,
       const brw_reg_type src_type =
          brw_type_for_base_type(nir_intrinsic_src_base_type(instr));
 
+      /* ACM PRM, Vol 2a, "Dot Product Accumulate Systolic" says
+       *
+       *     When Src0 is specified as null, it is treated as an
+       *     immediate value of +0.
+       */
+      bool src0_use_null = true;
+      for (unsigned c = 0; c < nir_src_num_components(instr->src[0]); c++)
+         src0_use_null &= nir_scalar_is_zero(nir_scalar_resolved(instr->src[0].ssa, c));
+
       brw_reg src[3] = {};
       for (unsigned i = 0; i < ARRAY_SIZE(src); i++) {
          nir_src nsrc = instr->src[i];
+         brw_reg val = get_nir_src(ntb, nsrc, 0);
 
-         if (!nir_src_is_const(nsrc)) {
-            src[i] = get_nir_src(ntb, nsrc, 0);
-            continue;
-         }
-
-         /* A single constant value can be used to fill the entire
-          * cooperative matrix.  In this case get_nir_src() would give a
-          * uniform value (with stride 0), but DPAS can't use regioning,
-          * it needs the full data available in the register.
-          *
-          * So when a source is a constant, allocate the space necessary
-          * and fill it with the constant value.  Except for
-          *
-          *     When Src0 is specified as null, it is treated as an
-          *     immediate value of +0.
-          *
-          * documented in ACM PRM, Vol 2a, "Dot Product Accumulate Systolic".
-          */
-         const unsigned num_components = nir_src_num_components(nsrc);
-         const unsigned bit_size = nir_src_bit_size(nsrc);
-         const nir_const_value *nval = nir_src_as_const_value(nsrc);
-
-         assert(bit_size <= 32);
-         for (unsigned j = 1; j < num_components; j++)
-            assert(nval[0].u32 == nval[j].u32);
-         uint32_t val = nval[0].u32;
-
-         if (i == 0 && val == 0) {
+         if (i == 0 && src0_use_null) {
             src[i] = brw_null_reg();
-
+         } else if (!is_uniform(val)) {
+            src[i] = val;
          } else {
-            unsigned size = bit_size * num_components;
-            unsigned count = size / 32;
-            assert(size % 32 == 0);
+            /* DPAS can't use regioning, so broadcast the uniform value in the
+             * registers to be consumed by it.
+             */
+            assert(nir_src_bit_size(nsrc) == 32);
+            const unsigned num_components = nir_src_num_components(nsrc);
 
-            src[i] = bld.vgrf(BRW_TYPE_UD, count);
-            for (unsigned j = 0; j < count; j++)
-               bld.exec_all().MOV(offset(src[i], bld, j), brw_imm_ud(val));
+            src[i] = bld.vgrf(BRW_TYPE_UD, num_components);
+            const brw_reg scalar = retype(component(val, 0), BRW_TYPE_UD);
+            for (unsigned j = 0; j < num_components; j++)
+               bld.exec_all().MOV(offset(src[i], bld, j), scalar);
          }
       }
 
@@ -4326,6 +4325,27 @@ brw_from_nir_emit_cs_intrinsic(nir_to_brw_state &ntb,
       }
       default:
          UNREACHABLE("not reached");
+      }
+      break;
+   }
+
+   /* Part of a temporary workaround for a broken shader in RE engine, see
+    * brw_nir_lower_divergent_barriers for more details.
+    */
+   case nir_intrinsic_subgroup_barrier_index_intel: {
+      brw_builder xbld = bld.scalar_group();
+      brw_builder ubld = bld.uniform();
+      if (s.subgroup_barrier_index.file == BAD_FILE) {
+         /* First source-order invocation always sets the initial value */
+         s.subgroup_barrier_index = component(ubld.vgrf(BRW_TYPE_UD), 0);
+         xbld.MOV(retype(dest, BRW_TYPE_UD), brw_imm_ud(0u));
+         ubld.MOV(s.subgroup_barrier_index,
+                  brw_imm_ud(nir_intrinsic_base(instr)));
+      } else {
+         xbld.MOV(retype(dest, BRW_TYPE_UD), s.subgroup_barrier_index);
+         ubld.ADD(s.subgroup_barrier_index,
+                  s.subgroup_barrier_index,
+                  brw_imm_ud(nir_intrinsic_base(instr)));
       }
       break;
    }
@@ -4757,17 +4777,21 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
 
    case nir_intrinsic_load_attribute_payload_intel: {
       assert(instr->def.bit_size == 32);
+      const unsigned vector_payload =
+         nir_intrinsic_vector_payload_intel(instr);
 
       if (nir_src_is_const(instr->src[0])) {
          const brw_reg src = byte_offset(brw_attr_reg(0, dest.type),
                                          nir_src_as_uint(instr->src[0]));
          brw_reg comps[NIR_MAX_VEC_COMPONENTS];
          for (unsigned i = 0; i < instr->num_components; i++) {
-            comps[i] = component(src, i);
+            comps[i] = vector_payload ? offset(src, bld, i) : component(src, i);
          }
          bld.VEC(dest, comps, instr->num_components);
       } else {
          assert(instr->def.num_components == 1);
+         /* Unsupported */
+         assert(!vector_payload);
 
          const brw_reg offset = retype(
             bld.emit_uniformize(get_nir_src(ntb, instr->src[0], 0)),
@@ -5150,6 +5174,7 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
       unsigned nr = base_offset / REG_SIZE;
       nr += instr->intrinsic == nir_intrinsic_load_inline_data_intel ? BRW_INLINE_PARAM_REG : 0;
       brw_reg src = brw_uniform_reg(nr, dest.type);
+      src.offset = base_offset % REG_SIZE;
 
       if (nir_src_is_const(instr->src[0])) {
          unsigned load_offset = nir_src_as_uint(instr->src[0]);
@@ -5158,7 +5183,7 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
           * data take the modulo of the offset with 4 bytes and add it to
           * the offset to read from within the source register.
           */
-         src.offset = load_offset + base_offset % REG_SIZE;
+         src.offset += load_offset;
 
          for (unsigned j = 0; j < instr->num_components; j++) {
             xbld.MOV(offset(dest, xbld, j), offset(src, xbld, j));
@@ -5213,6 +5238,10 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
 
    case nir_intrinsic_load_ubo: {
       s.prog_data->has_ubo_pull = true;
+      if (devinfo->has_lsc) {
+         brw_from_nir_emit_memory_access(ntb, bld, xbld, instr);
+         break;
+      }
 
       bool no_mask_handle = false;
 
@@ -5739,9 +5768,13 @@ brw_from_nir_emit_memory_access(nir_to_brw_state &ntb,
       if (!binding_type.has_value())
          binding_type = LSC_ADDR_SURFTYPE_BTI;
 
-      srcs[MEMORY_LOGICAL_ADDRESS] = get_nir_src(ntb, instr->src[1], 0);
+      /* Payload lowering uses MEMORY_LOGICAL_ADDRESS as a vector, so don't
+       * select a channel here.
+       */
+      srcs[MEMORY_LOGICAL_ADDRESS] = get_nir_src(ntb, instr->src[1], -1);
       break;
 
+   case nir_intrinsic_load_ubo:
    case nir_intrinsic_load_ubo_uniform_block_intel:
       mode = MEMORY_MODE_CONSTANT;
       FALLTHROUGH;

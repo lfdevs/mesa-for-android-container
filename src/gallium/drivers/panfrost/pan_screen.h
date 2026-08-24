@@ -15,6 +15,7 @@
 #include "util/disk_cache.h"
 #include "util/log.h"
 #include "util/set.h"
+#include "util/u_blitter.h"
 #include "util/u_dynarray.h"
 
 #include "pan_device.h"
@@ -30,6 +31,7 @@ struct panfrost_batch;
 struct panfrost_context;
 struct panfrost_resource;
 struct panfrost_compiled_shader;
+struct panfrost_uncompiled_shader;
 struct pan_fb_info;
 struct pan_blend_state;
 
@@ -106,9 +108,25 @@ struct panfrost_vtable {
    /* Run a compute shader to detile an MTK 16L32 image */
    void (*mtk_detile)(struct panfrost_context *ctx, struct pipe_blit_info *info);
 
+   /* Run the libpan copy compute kernel to copy size bytes between two
+    * PIPE_BUFFER resources. Requires at least 4-byte aligned offsets and a
+    * 4-byte-multiple size.
+    */
+   void (*compute_copy_buffer)(struct pipe_context *pctx,
+                               struct panfrost_resource *dst,
+                               unsigned dst_offset,
+                               struct panfrost_resource *src,
+                               unsigned src_offset, unsigned size);
+
    /* construct a render target blend descriptor */
    uint64_t (*get_conv_desc)(enum pipe_format fmt, unsigned rt,
                              unsigned force_size, bool dithered);
+
+   /* Run a fullscreen draw call (for blits) */
+   void (*draw_fullscreen)(struct panfrost_context *ctx,
+                           struct panfrost_uncompiled_shader *vs,
+                           enum blitter_attrib_type type,
+                           const struct blitter_attrib *attrib);
 };
 
 struct panfrost_screen {

@@ -34,6 +34,45 @@ impl<N> DerefMut for CFGNode<N> {
     }
 }
 
+// SAFETY: The caller must guarantee that:
+//
+//  - For each `i in 0..nodes.len()`, `remap_idx(i)` returns `None` or
+//    `Some(j)` where `(0..count).contains(j)`
+//
+//  - For each `j in 0..count`, `Some(j)` is returned exactly once
+//
+unsafe fn reorder_nodes<N>(
+    nodes: &mut Vec<CFGNode<N>>,
+    remap_idx: impl Fn(usize) -> Option<usize>,
+    count: usize,
+) {
+    // Re-map edges to use post-index numbering
+    for n in nodes.iter_mut() {
+        let remap_filter_idx = |i: &mut usize| {
+            if let Some(r) = remap_idx(*i) {
+                *i = r;
+                true
+            } else {
+                false
+            }
+        };
+        n.pred.retain_mut(remap_filter_idx);
+        n.succ.retain_mut(remap_filter_idx);
+    }
+
+    // We know a priori that each non-MAX post_idx is unique so we can sort the
+    // nodes by inserting them into a new array by index.
+    let mut sorted: Vec<CFGNode<N>> = Vec::with_capacity(count);
+    for (i, n) in nodes.drain(..).enumerate() {
+        if let Some(r) = remap_idx(i) {
+            unsafe { sorted.as_mut_ptr().add(r).write(n) };
+        }
+    }
+    unsafe { sorted.set_len(count) };
+
+    *nodes = sorted;
+}
+
 struct PostOrderSort {
     post_idx: Vec<usize>,
     count: usize,
@@ -93,31 +132,7 @@ fn rev_post_order_sort<N>(nodes: &mut Vec<CFGNode<N>>) {
     };
     assert!(remap_idx(0) == Some(0));
 
-    // Re-map edges to use post-index numbering
-    for n in nodes.iter_mut() {
-        let remap_filter_idx = |i: &mut usize| {
-            if let Some(r) = remap_idx(*i) {
-                *i = r;
-                true
-            } else {
-                false
-            }
-        };
-        n.pred.retain_mut(remap_filter_idx);
-        n.succ.retain_mut(remap_filter_idx);
-    }
-
-    // We know a priori that each non-MAX post_idx is unique so we can sort the
-    // nodes by inserting them into a new array by index.
-    let mut sorted: Vec<CFGNode<N>> = Vec::with_capacity(sort.count);
-    for (i, n) in nodes.drain(..).enumerate() {
-        if let Some(r) = remap_idx(i) {
-            unsafe { sorted.as_mut_ptr().add(r).write(n) };
-        }
-    }
-    unsafe { sorted.set_len(sort.count) };
-
-    std::mem::swap(nodes, &mut sorted);
+    unsafe { reorder_nodes(nodes, remap_idx, sort.count) };
 }
 
 struct ReachableDFS<'a, N> {
@@ -141,13 +156,28 @@ fn remove_unreachable<N>(nodes: &mut Vec<CFGNode<N>>) {
     };
     dfs(&mut reachable_dfs, 0);
 
-    // The Vec::retain() method guarantees that each item is visited once,
-    // in-order so it's safe to use an external iterator like this.
-    let mut idx_iter = (0_usize..).into_iter();
-    nodes.retain(|_| {
-        let i = idx_iter.next().unwrap();
-        reachable_dfs.reachable.contains(i)
-    });
+    let mut count = 0;
+    let mut order = Vec::with_capacity(nodes.len());
+    for i in 0..nodes.len() {
+        if reachable_dfs.reachable.contains(i) {
+            order.push(count);
+            count += 1;
+        } else {
+            order.push(usize::MAX);
+        }
+    }
+
+    let remap_idx = |i: usize| {
+        let j = order[i];
+        if j == usize::MAX {
+            None
+        } else {
+            Some(j)
+        }
+    };
+    assert!(remap_idx(0) == Some(0));
+
+    unsafe { reorder_nodes(nodes, remap_idx, count) };
 }
 
 fn find_common_dom<N>(
@@ -620,6 +650,7 @@ impl<K, N, H: BuildHasher + Default> Default for CFGBuilder<K, N, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
     use std::hash::RandomState;
 
     fn test_loop_nesting(edges: &[(usize, usize)], expected: &[Option<usize>]) {
@@ -871,6 +902,103 @@ mod tests {
         test_loop_nesting(
             &[(0, 1), (0, 2), (1, 3), (1, 2), (2, 1)],
             &[None, Some(1), None, None, None, None],
+        );
+    }
+
+    fn test_no_sort(edges: &[(usize, usize)], expected: &[usize]) {
+        let mut nodes = BitSet::new();
+        for &(a, b) in edges {
+            nodes.insert(a);
+            nodes.insert(b);
+        }
+
+        let mut builder = CFGBuilder::<_, _, RandomState>::new();
+        for i in nodes.iter() {
+            builder.add_node(i, i);
+        }
+        for &(a, b) in edges {
+            builder.add_edge(a, b);
+        }
+        let cfg = builder.as_cfg(false);
+
+        // We don't sort but we do delete dead blocks
+        assert_eq!(cfg.len(), expected.len());
+        assert_eq!(cfg[0], 0);
+        for i in 1..cfg.len() {
+            assert!(i <= cfg[i]);
+            assert!(cfg[i - 1] < cfg[i], "{} >= {}", cfg[i - 1], cfg[i]);
+            assert_eq!(cfg[i], expected[i]);
+        }
+
+        // Check that the new CFG is a subgraph of the old.
+        let edges: HashSet<_> = edges.iter().cloned().collect();
+        for p in 0..cfg.len() {
+            for &s in cfg.succ_indices(p) {
+                assert!(edges.contains(&(cfg[p], cfg[s])));
+            }
+        }
+        for s in 0..cfg.len() {
+            for &p in cfg.pred_indices(s) {
+                assert!(edges.contains(&(cfg[p], cfg[s])));
+            }
+        }
+    }
+
+    #[test]
+    fn test_no_sort_if_else() {
+        // block 0
+        // if ... {
+        //     block 1
+        // }
+        // block 2
+        // if ... {
+        //     block 3
+        // }
+        // block 4
+        test_no_sort(
+            &[(0, 1), (0, 2), (1, 2), (2, 3), (2, 4), (3, 4)],
+            &[0, 1, 2, 3, 4],
+        );
+    }
+
+    #[test]
+    fn test_no_sort_loop() {
+        // block 0
+        // loop {
+        //     block 1
+        //     if ... {
+        //         block 2
+        //         break;
+        //     } else {
+        //         block 3
+        //     }
+        //     block 4
+        // }
+        // block 5
+        test_no_sort(
+            &[(0, 1), (1, 2), (1, 3), (2, 5), (3, 4), (4, 1)],
+            &[0, 1, 2, 3, 4, 5],
+        );
+    }
+
+    #[test]
+    fn test_no_sort_loop_dead_block() {
+        // block 0
+        // loop {
+        //     block 1
+        //     if ... {
+        //         block 2
+        //         break;
+        //     } else {
+        //         block 3
+        //         continue;
+        //     }
+        //     block 4
+        // }
+        // block 5
+        test_no_sort(
+            &[(0, 1), (1, 2), (1, 3), (2, 5), (3, 1), (4, 1)],
+            &[0, 1, 2, 3, 5],
         );
     }
 }

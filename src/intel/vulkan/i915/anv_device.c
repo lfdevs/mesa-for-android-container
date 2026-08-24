@@ -154,13 +154,13 @@ anv_i915_physical_device_init_memory_types(struct anv_physical_device *device)
       device->memory.type_count = 3;
       device->memory.types[0] = (struct anv_memory_type) {
          .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-         .heapIndex = 0,
+         .heapIndex = 0,/* lmem */
       };
       device->memory.types[1] = (struct anv_memory_type) {
          .propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
                           VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
-         .heapIndex = 1,
+         .heapIndex = 1,/* smem */
       };
       device->memory.types[2] = (struct anv_memory_type) {
          .propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |

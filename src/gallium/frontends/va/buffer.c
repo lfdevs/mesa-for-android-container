@@ -103,7 +103,8 @@ vlVaBufferSetNumElements(VADriverContextP ctx, VABufferID buf_id,
    if (!buf)
       return VA_STATUS_ERROR_INVALID_BUFFER;
 
-   if (buf->derived_surface.resource)
+   if (buf->derived_surface.resource ||
+       buf->type == VAEncCodedBufferType)
       return VA_STATUS_ERROR_INVALID_BUFFER;
 
    buf->data = REALLOC(buf->data, buf->size * buf->num_elements,

@@ -20,20 +20,21 @@ apt-get install -y gstreamer1.0-vaapi  # This interferes with systemd deps, inst
 
 # Ephemeral packages (installed for this script and removed again at the end)
 EPHEMERAL=(
+    bison
+    dpkg-dev
+    flex
     g++
+    glslang-tools
+    libcairo2-dev
     libdrm-dev
+    libharfbuzz-dev
     libva-dev
+    libvulkan-dev
     meson
     pkgconf
 )
 
 DEPS=(
-    gstreamer1.0-plugins-bad
-    gstreamer1.0-plugins-base
-    gstreamer1.0-plugins-good
-    gstreamer1.0-plugins-ugly
-    gstreamer1.0-tools
-    libgstreamer1.0-0
     libva-drm2
     libva-wayland2
     libva2
@@ -51,6 +52,10 @@ section_end debian_setup
 ############### Build libva tests
 
 . .gitlab-ci/container/build-va-tools.sh
+
+############### Build Gstreamer
+
+. .gitlab-ci/container/build-gstreamer.sh
 
 ############### Install Fluster
 

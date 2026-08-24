@@ -1849,7 +1849,9 @@ v3dv_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
    V3DV_FROM_HANDLE(v3dv_buffer, dst_buffer, dstBuffer);
 
    struct v3dv_bo *src_bo =
-      v3dv_bo_alloc(cmd_buffer->device, dataSize, "vkCmdUpdateBuffer", true);
+      v3dv_bo_alloc(cmd_buffer->device, dataSize, "vkCmdUpdateBuffer", true,
+                    VK_OBJECT_TYPE_COMMAND_BUFFER,
+                    vk_object_to_u64_handle(&cmd_buffer->vk.base));
    if (!src_bo) {
       mesa_loge("Failed to allocate BO for vkCmdUpdateBuffer.\n");
       return;

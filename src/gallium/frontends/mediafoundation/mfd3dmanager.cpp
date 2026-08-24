@@ -61,36 +61,12 @@ CMFD3DManager::Shutdown( bool bReleaseDeviceManager )
 {
    HRESULT hr = S_OK;
 
-   m_spDevice = nullptr;
-   m_spVideoDevice = nullptr;
-   m_spDevice11 = nullptr;
-   m_spStagingQueue = nullptr;
+   m_spDevice.Reset();
+   m_spVideoDevice.Reset();
+   m_spDevice11.Reset();
+   m_spStagingQueue.Reset();
 
-   if( m_spVideoSampleAllocator )
-   {
-      m_spVideoSampleAllocator->UninitializeSampleAllocator();
-      m_spVideoSampleAllocator = nullptr;
-   }
-
-   if( m_spSatdStatsBufferPool )
-   {
-      m_spSatdStatsBufferPool.Reset();
-   }
-
-   if( m_spBitsUsedStatsBufferPool )
-   {
-      m_spBitsUsedStatsBufferPool.Reset();
-   }
-
-   if( m_spQPMapStatsBufferPool )
-   {
-      m_spQPMapStatsBufferPool.Reset();
-   }
-
-   if( m_spReconstructedPictureBufferPool )
-   {
-      m_spReconstructedPictureBufferPool.Reset();
-   }
+   ReleaseAllocators();
 
    // Release scheduler registrations before closing the device handle
    m_ContextPriorityMgr.m_registeredQueues.clear();
@@ -105,7 +81,7 @@ CMFD3DManager::Shutdown( bool bReleaseDeviceManager )
          m_hDevice = NULL;
       }
       if( bReleaseDeviceManager )
-         m_spDeviceManager = nullptr;
+         m_spDeviceManager.Reset();
    }
 
    if( m_pPipeContext )
@@ -136,6 +112,40 @@ CMFD3DManager::Shutdown( bool bReleaseDeviceManager )
    }
 
    return hr;
+}
+
+void CMFD3DManager::ReleaseAllocators()
+{
+   if( m_spVideoSampleAllocator )
+   {
+      m_spVideoSampleAllocator->UninitializeSampleAllocator();
+      m_spVideoSampleAllocator.Reset();
+   }
+
+   if( m_spSatdStatsBufferPool )
+   {
+      m_spSatdStatsBufferPool.Reset();
+   }
+
+   if( m_spBitsUsedStatsBufferPool )
+   {
+      m_spBitsUsedStatsBufferPool.Reset();
+   }
+
+   if( m_spQPMapStatsBufferPool )
+   {
+      m_spQPMapStatsBufferPool.Reset();
+   }
+
+   if( m_spReconstructedPictureBufferPool )
+   {
+      m_spReconstructedPictureBufferPool.Reset();
+   }
+
+   if( m_spD3D12BitstreamMFBufferManager )
+   {
+      m_spD3D12BitstreamMFBufferManager.Reset();
+   }
 }
 
 static inline HRESULT

@@ -173,6 +173,8 @@ si_semaphore_create(struct pipe_screen *screen)
 {
    struct radeon_winsys *rws = ((struct si_screen *)screen)->ws;
    struct si_fence *fence = si_alloc_fence();
+   if (!fence)
+      return NULL;
 
    fence->gfx = rws->semaphore_create(rws);
 

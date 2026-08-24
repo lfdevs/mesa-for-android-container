@@ -29,8 +29,6 @@ glx@glx-visuals-stencil -pixmap,Crash
 
 glx@glx_arb_create_context@invalid flag,Fail
 
-shaders@glsl-routing,Fail
-
 spec@!opengl 1.0@gl-1.0-swapbuffers-behavior,Fail
 spec@!opengl 1.0@rasterpos,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
@@ -108,4 +106,3 @@ spec@glsl-1.30@execution@glsl-packed-back-color,Fail
 
 # Nightly run expectations update
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88,Fail
-

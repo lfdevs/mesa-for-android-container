@@ -115,7 +115,7 @@ nv50_hw_destroy_query(struct nv50_context *nv50, struct nv50_query *q)
    }
 
    nv50_hw_query_allocate(nv50, q, 0);
-   nouveau_fence_ref(NULL, &hq->fence);
+   nouveau_fence_ref(NULL, &hq->fence, nv50->base.screen);
    FREE(hq);
 }
 
@@ -265,7 +265,7 @@ nv50_hw_end_query(struct nv50_context *nv50, struct nv50_query *q)
       break;
    }
    if (hq->is64bit)
-      nouveau_fence_ref(nv50->base.fence, &hq->fence);
+      nouveau_fence_ref(nv50->base.fence, &hq->fence, nv50->base.screen);
 }
 
 static bool

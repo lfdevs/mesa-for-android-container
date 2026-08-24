@@ -198,8 +198,9 @@ set_io_mask(nir_shader *shader, nir_variable *var, int offset, int len,
             }
          }
 
-         if (shader->info.stage == MESA_SHADER_FRAGMENT &&
-             !is_output_read && var->data.index == 1)
+         if (shader->info.stage == MESA_SHADER_FRAGMENT && !is_output_read &&
+             (var->data.index == 1 ||
+              var->data.location == FRAG_RESULT_DUAL_SRC_BLEND))
             shader->info.fs.color_is_dual_source = true;
 
          if (var->data.per_view)
@@ -376,8 +377,8 @@ nir_intrinsic_writes_external_memory(const nir_intrinsic_instr *instr)
    case nir_intrinsic_ssbo_atomic_ir3:
    case nir_intrinsic_ssbo_atomic_swap_ir3:
    case nir_intrinsic_store_global:
+   case nir_intrinsic_store_global_offset:
    case nir_intrinsic_store_global_etna:
-   case nir_intrinsic_store_global_ir3:
    case nir_intrinsic_store_global_amd:
    case nir_intrinsic_store_buffer_amd:
    case nir_intrinsic_store_ssbo:
@@ -559,7 +560,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
    case nir_intrinsic_load_input_vertex:
    case nir_intrinsic_load_interpolated_input:
    case nir_intrinsic_load_per_primitive_input:
-   case nir_intrinsic_load_attribute_pan:
+   case nir_intrinsic_load_attr_pan:
       if (shader->info.stage == MESA_SHADER_TESS_EVAL &&
           instr->intrinsic == nir_intrinsic_load_input &&
           !is_patch_special) {
@@ -737,6 +738,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
    case nir_intrinsic_load_sample_id:
    case nir_intrinsic_load_sample_pos:
    case nir_intrinsic_load_sample_pos_or_center:
+   case nir_intrinsic_load_sample_pos_intel:
    case nir_intrinsic_load_sample_mask_in:
    case nir_intrinsic_load_helper_invocation:
    case nir_intrinsic_load_tess_coord:
@@ -950,6 +952,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
           instr->intrinsic == nir_intrinsic_bindless_image_samples ||
           instr->intrinsic == nir_intrinsic_get_ubo_size ||
           instr->intrinsic == nir_intrinsic_get_ssbo_size ||
+          instr->intrinsic == nir_intrinsic_load_ssbo_address ||
           instr->intrinsic == nir_intrinsic_image_heap_levels ||
           instr->intrinsic == nir_intrinsic_image_heap_size ||
           instr->intrinsic == nir_intrinsic_image_heap_samples)

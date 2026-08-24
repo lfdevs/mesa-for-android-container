@@ -118,7 +118,7 @@ nvc0_hw_destroy_query(struct nvc0_context *nvc0, struct nvc0_query *q)
    }
 
    nvc0_hw_query_allocate(nvc0, q, 0);
-   nouveau_fence_ref(NULL, &hq->fence);
+   nouveau_fence_ref(NULL, &hq->fence, nvc0->base.screen);
    FREE(hq);
 }
 
@@ -301,7 +301,7 @@ nvc0_hw_end_query(struct nvc0_context *nvc0, struct nvc0_query *q)
       break;
    }
    if (hq->is64bit)
-      nouveau_fence_ref(nvc0->base.fence, &hq->fence);
+      nouveau_fence_ref(nvc0->base.fence, &hq->fence, nvc0->base.screen);
 }
 
 static bool
@@ -420,8 +420,14 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    /* If the fence guarding this query has not been emitted, that makes a lot
     * of the following logic more complicated.
     */
-   if (hq->is64bit)
-      nouveau_fence_next_if_current(&nvc0->base, hq->fence);
+   if (hq->is64bit) {
+      if (!nouveau_fence_next_if_current(&nvc0->base, hq->fence)) {
+         NOUVEAU_ERR("Could not allocate new fence. Aborting!");
+
+         /* TODO: report dead context instead */
+         os_abort();
+      }
+   }
 
    /* We either need to compute a 32- or 64-bit difference between 2 values,
     * and then store the result as either a 32- or 64-bit value. As such let's
@@ -642,8 +648,14 @@ nvc0_hw_query_fifo_wait(struct nvc0_context *nvc0, struct nvc0_query *q)
    unsigned offset = hq->offset;
 
    /* ensure the query's fence has been emitted */
-   if (hq->is64bit)
-      nouveau_fence_next_if_current(&nvc0->base, hq->fence);
+   if (hq->is64bit) {
+      if (!nouveau_fence_next_if_current(&nvc0->base, hq->fence)) {
+         NOUVEAU_ERR("Could not allocate new fence. Aborting!");
+
+         /* TODO: report dead context instead */
+         os_abort();
+      }
+   }
 
    PUSH_SPACE(push, 5);
    PUSH_REF1 (push, hq->bo, NOUVEAU_BO_GART | NOUVEAU_BO_RD);

@@ -1,0 +1,3 @@
+# Navi1x is less robust in hardware against mismatched types than later Navi.
+# D3D12 drivers are known to do fixups in SGPR registers to mitigate.
+test_undefined_descriptor_heap_mismatch_types

@@ -36,8 +36,10 @@ shader-db:
     - .use-debian/x86_64_build
   rules:
     - !reference [.never-post-merge-rules, rules]
+    - !reference [.no_downstream_pipeline-rules, rules]
     - !reference [.core-rules, rules]
     # Keep this list in sync with the drivers tested in run-shader-db.sh
+    - !reference [.etnaviv-rules, rules]
     - !reference [.freedreno-common-rules, rules]
     - !reference [.intel-common-rules, rules]
     - !reference [.lima-rules, rules]
@@ -81,6 +83,7 @@ yaml-toml-shell-py-test:
   rules:
     - !reference [.never-post-merge-rules, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
+    - !reference [.no_downstream_pipeline-rules, rules]
     # merge pipeline
     - if: $GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: &lint_files

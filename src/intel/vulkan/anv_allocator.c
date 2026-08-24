@@ -491,6 +491,11 @@ anv_device_has_perf_improvement_with_2mb_pages(struct anv_device *device)
 static bool
 anv_device_has_perf_improvement_with_64k_pages(struct anv_device *device)
 {
+   /* Whether to reduce page count at the cost of increased memory footprint.
+    * On MTL(Xe KMD only)/LNL platforms, there is a large perf penalty from
+    * page misses. On PTL platforms, there is a large perf penalty from IOMMU
+    * TLB thrashing.
+    */
    if (device->info->has_local_mem || device->info->verx10 < 110)
       return false;
 
@@ -1690,23 +1695,13 @@ anv_device_alloc_bo(struct anv_device *device,
       size = align64(size, 4096);
    }
 
-   /* Round up allocations to 2MB intervals so long as increase doesn't
-    * increase allocation by more than 1.33%. This reduces page
-    * count at the cost of increased memory footprint. Only apply on
-    * MTL(Xe KMD only)/LNL platforms, which incur largest perf penalty from
-    * page misses.
+   /* Try to allocate memory in multiples of 2MB, as this allows us to use
+    * 2MB pages rather than the less-efficient 4K pages.
     */
-   if (!ANV_DEBUG(NO_ALLOC_OVER_SUBSCRIPTION)) {
-      if (align64(size, 2 * 1024 * 1024) <= (size * 4 / 3) &&
+   if (device->physical->drirc.perf.alloc_oversubscription) {
+      if (size >= 1 * 1024 * 1024 &&
           anv_device_has_perf_improvement_with_2mb_pages_oversubscription(device))
          size = align64(size, 2 * 1024 * 1024);
-      /* bos larger than 1MB can't be allocated with slab but to reduce pages we
-       * could align size to 64k pages to gain performance with minimum memory
-       * waste.
-       */
-      else if ((size > (1 * 1024 * 1024)) &&
-               anv_device_has_perf_improvement_with_64k_pages(device))
-         size = align64(size, 64 * 1024);
    }
 
    const struct intel_memory_class_instance *regions[2];

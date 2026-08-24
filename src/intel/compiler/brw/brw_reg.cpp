@@ -251,3 +251,11 @@ brw_reg::component_size(unsigned width) const
       return MAX2(width * stride, 1) * brw_type_size_bytes(type);
    }
 }
+
+extern "C" uint32_t
+brw_register_file_size(const struct intel_device_info *devinfo)
+{
+   return (devinfo->ver >= 30 ? XE3_MAX_GRF :
+           devinfo->ver >= 20 ? XE2_MAX_GRF :
+           BRW_MAX_GRF) * REG_SIZE;
+}

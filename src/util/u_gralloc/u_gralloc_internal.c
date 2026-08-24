@@ -75,6 +75,7 @@ get_hal_format_bpp(int native)
 
    switch (native) {
    case HAL_PIXEL_FORMAT_RGBA_FP16:
+   case HAL_PIXEL_FORMAT_DEPTH_32F_STENCIL_8:
       bpp = 8;
       break;
    case HAL_PIXEL_FORMAT_RGBA_8888:
@@ -87,10 +88,17 @@ get_hal_format_bpp(int native)
    case HAL_PIXEL_FORMAT_RGBX_8888:
    case HAL_PIXEL_FORMAT_BGRA_8888:
    case HAL_PIXEL_FORMAT_RGBA_1010102:
+   case HAL_PIXEL_FORMAT_DEPTH_24:
+   case HAL_PIXEL_FORMAT_DEPTH_24_STENCIL_8:
+   case HAL_PIXEL_FORMAT_DEPTH_32F:
       bpp = 4;
       break;
    case HAL_PIXEL_FORMAT_RGB_565:
+   case HAL_PIXEL_FORMAT_DEPTH_16:
       bpp = 2;
+      break;
+   case HAL_PIXEL_FORMAT_STENCIL_8:
+      bpp = 1;
       break;
    default:
       bpp = 0;
@@ -122,6 +130,21 @@ get_fourcc_from_hal_format(int native)
       return DRM_FORMAT_ABGR16161616F;
    case HAL_PIXEL_FORMAT_RGBA_1010102:
       return DRM_FORMAT_ABGR2101010;
+   /* DRM has no fourcc for depth/stencil; map to size-equivalent single/
+    * dual-channel placeholders so AHB import flows can proceed.  Drivers
+    * resolve the real format from the VkImage create info, not from this
+    * value.
+    */
+   case HAL_PIXEL_FORMAT_STENCIL_8:
+      return DRM_FORMAT_R8;
+   case HAL_PIXEL_FORMAT_DEPTH_16:
+      return DRM_FORMAT_R16;
+   case HAL_PIXEL_FORMAT_DEPTH_24:
+   case HAL_PIXEL_FORMAT_DEPTH_24_STENCIL_8:
+   case HAL_PIXEL_FORMAT_DEPTH_32F:
+      return DRM_FORMAT_RG1616;
+   case HAL_PIXEL_FORMAT_DEPTH_32F_STENCIL_8:
+      return DRM_FORMAT_ABGR16161616F;
    default:
       mesa_logw("unsupported native buffer format 0x%x", native);
    }

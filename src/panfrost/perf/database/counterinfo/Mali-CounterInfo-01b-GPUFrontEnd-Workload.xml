@@ -1,0 +1,548 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2019-2026 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<CounterInfoList>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliNonFragQueueJob</MachineName>
+    <SourceName>JS1_JOBS</SourceName>
+    <StableID>66</StableID>
+    <HumanName>Non-fragment jobs</HumanName>
+    <GroupName>GPU Jobs</GroupName>
+    <GroupHumanName>Non-fragment jobs</GroupHumanName>
+    <Units>jobs</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of jobs processed by the GPU non-fragment queue.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every job processed by the GPU non-fragment
+      queue.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliNonFragQueueTask</MachineName>
+    <SourceName>JS1_TASKS</SourceName>
+    <StableID>67</StableID>
+    <HumanName>Non-fragment tasks</HumanName>
+    <GroupName>GPU Tasks</GroupName>
+    <GroupHumanName>Non-fragment tasks</GroupHumanName>
+    <Units>tasks</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of non-fragment tasks processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every non-fragment task processed by the GPU.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCompQueueJob</MachineName>
+    <SourceName>ITER_COMP_JOB_COMPLETED</SourceName>
+    <StableID>29</StableID>
+    <HumanName>Compute jobs</HumanName>
+    <GroupName>GPU Jobs</GroupName>
+    <GroupHumanName>Compute jobs</GroupHumanName>
+    <Units>jobs</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of compute jobs processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every job processed by the compute queue.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCompQueueTask</MachineName>
+    <SourceName>ITER_COMP_TASK_COMPLETED</SourceName>
+    <StableID>30</StableID>
+    <HumanName>Compute tasks</HumanName>
+    <GroupName>GPU Tasks</GroupName>
+    <GroupHumanName>Compute tasks</GroupHumanName>
+    <Units>tasks</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of compute tasks processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every compute task processed by the GPU.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliVertQueueJob</MachineName>
+    <SourceName>ITER_TILER_JOB_COMPLETED</SourceName>
+    <StableID>37</StableID>
+    <HumanName>Vertex jobs</HumanName>
+    <GroupName>GPU Jobs</GroupName>
+    <GroupHumanName>Vertex jobs</GroupHumanName>
+    <Units>jobs</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of vertex jobs processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every job processed by the vertex queue.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliVertQueueTask</MachineName>
+    <SourceName>ITER_TILER_IDVS_TASK_COMPLETED</SourceName>
+    <StableID>38</StableID>
+    <HumanName>Vertex tasks</HumanName>
+    <GroupName>GPU Tasks</GroupName>
+    <GroupHumanName>Vertex tasks</GroupHumanName>
+    <Units>tasks</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of vertex tasks processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every vertex task processed by the GPU.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliBinningQueueJob</MachineName>
+    <SourceName>ITER_TILER_JOB_COMPLETED</SourceName>
+    <StableID>448</StableID>
+    <HumanName>Binning phase jobs</HumanName>
+    <GroupName>GPU Jobs</GroupName>
+    <GroupHumanName>Binning phase jobs</GroupHumanName>
+    <Units>jobs</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of binning phase jobs processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every job processed by the binning phase
+      queue.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliBinningQueueTask</MachineName>
+    <SourceName>ITER_TILER_IDVS_TASK_COMPLETED</SourceName>
+    <StableID>449</StableID>
+    <HumanName>Binning phase tasks</HumanName>
+    <GroupName>GPU Tasks</GroupName>
+    <GroupHumanName>Binning phase tasks</GroupHumanName>
+    <Units>tasks</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of binning phase tasks processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every binning phase task processed by the
+      GPU.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragQueueJob</MachineName>
+    <SourceName>JS0_JOBS</SourceName>
+    <StableID>8</StableID>
+    <HumanName>Fragment jobs</HumanName>
+    <GroupName>GPU Jobs</GroupName>
+    <GroupHumanName>Fragment jobs</GroupHumanName>
+    <Units>jobs</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of fragment jobs processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every job processed by the fragment queue.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragQueueJob</MachineName>
+    <SourceName>ITER_FRAG_JOB_COMPLETED</SourceName>
+    <StableID>8</StableID>
+    <HumanName>Fragment jobs</HumanName>
+    <GroupName>GPU Jobs</GroupName>
+    <GroupHumanName>Fragment jobs</GroupHumanName>
+    <Units>jobs</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of fragment jobs processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every job processed by the fragment queue.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragQueueTask</MachineName>
+    <SourceName>JS0_TASKS</SourceName>
+    <StableID>46</StableID>
+    <HumanName>Fragment tasks</HumanName>
+    <GroupName>GPU Tasks</GroupName>
+    <GroupHumanName>Fragment tasks</GroupHumanName>
+    <Units>tasks</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of fragment tasks processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every {{C::MaliFragQueueTaskSize.equation}} x
+      {{C::MaliFragQueueTaskSize.equation}} pixel region of a render pass that
+      is processed by the GPU. The processed region of a render pass can be
+      smaller than the full size of the attached surfaces if the application's
+      viewport and scissor settings prevent the whole image being rendered.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragQueueTask</MachineName>
+    <SourceName>ITER_FRAG_TASK_COMPLETED</SourceName>
+    <StableID>46</StableID>
+    <HumanName>Fragment tasks</HumanName>
+    <GroupName>GPU Tasks</GroupName>
+    <GroupHumanName>Fragment tasks</GroupHumanName>
+    <Units>tasks</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of fragment tasks processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every {{C::MaliFragQueueTaskSize.equation}} x
+      {{C::MaliFragQueueTaskSize.equation}} pixel region of a render pass that
+      is processed by the GPU. The processed region of a render pass can be
+      smaller than the full size of the attached surfaces if the application's
+      viewport and scissor settings prevent the whole image being rendered.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliMainQueueJob</MachineName>
+    <SourceName>ITER_FRAG_JOB_COMPLETED</SourceName>
+    <StableID>452</StableID>
+    <HumanName>Main phase jobs</HumanName>
+    <GroupName>GPU Jobs</GroupName>
+    <GroupHumanName>Main phase jobs</GroupHumanName>
+    <Units>jobs</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of main phase jobs processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every job processed by the main phase queue.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliMainQueueTask</MachineName>
+    <SourceName>ITER_FRAG_TASK_COMPLETED</SourceName>
+    <StableID>446</StableID>
+    <HumanName>Main phase tasks</HumanName>
+    <GroupName>GPU Tasks</GroupName>
+    <GroupHumanName>Main phase tasks</GroupHumanName>
+    <Units>tasks</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of fragment tasks processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every {{C::MaliMainQueueTaskSize.equation}} x
+      {{C::MaliMainQueueTaskSize.equation}} pixel region of a render pass that
+      is processed by the GPU. The processed region of a render pass can be
+      smaller than the full size of the attached surfaces if the application's
+      viewport and scissor settings prevent the whole image being rendered.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliResQueueJob</MachineName>
+    <SourceName>JS2_JOBS</SourceName>
+    <StableID>74</StableID>
+    <HumanName>Reserved queue jobs</HumanName>
+    <GroupName>GPU Jobs</GroupName>
+    <GroupHumanName>Reserved jobs</GroupHumanName>
+    <Units>jobs</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of jobs processed by the GPU reserved queue.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every job processed by the GPU reserved
+      queue.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Unclassified</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliResQueueTask</MachineName>
+    <SourceName>JS2_TASKS</SourceName>
+    <StableID>75</StableID>
+    <HumanName>Reserved queue tasks</HumanName>
+    <GroupName>GPU Tasks</GroupName>
+    <GroupHumanName>Reserved tasks</GroupHumanName>
+    <Units>tasks</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of reserved tasks processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every reserved task processed by the GPU.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Unclassified</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+</CounterInfoList>

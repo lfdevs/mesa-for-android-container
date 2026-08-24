@@ -498,14 +498,23 @@ struct ldg_stg_offset {
 static struct ldg_stg_offset
 ldg_stg_offset(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 {
-   assert(intr->intrinsic == nir_intrinsic_load_global_ir3 ||
-          intr->intrinsic == nir_intrinsic_store_global_ir3);
+   assert(intr->intrinsic == nir_intrinsic_load_global_offset ||
+          intr->intrinsic == nir_intrinsic_store_global_offset ||
+          intr->intrinsic == nir_intrinsic_load_global ||
+          intr->intrinsic == nir_intrinsic_store_global);
+
+   if (intr->intrinsic == nir_intrinsic_load_global ||
+       intr->intrinsic == nir_intrinsic_store_global) {
+      return (struct ldg_stg_offset){
+         .imm = create_immed(&ctx->build, 0),
+      };
+   }
 
    if (ctx->compiler->gen >= 7) {
       assert(nir_intrinsic_offset_shift(intr) == 0);
    } else {
       ASSERTED unsigned bit_size =
-         intr->intrinsic == nir_intrinsic_load_global_ir3
+          intr->intrinsic == nir_intrinsic_load_global_offset
             ? intr->def.bit_size
             : intr->src[0].ssa->bit_size;
       assert(nir_intrinsic_offset_shift(intr) == ffs(bit_size / 8) - 1);
@@ -558,9 +567,8 @@ ldg_stg_offset(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 }
 
 static void
-emit_intrinsic_load_global_ir3(struct ir3_context *ctx,
-                               nir_intrinsic_instr *intr,
-                               struct ir3_instruction **dst)
+emit_intrinsic_load_global(struct ir3_context *ctx, nir_intrinsic_instr *intr,
+                           struct ir3_instruction **dst)
 {
    struct ir3_builder *b = &ctx->build;
    unsigned dest_components = nir_intrinsic_dest_components(intr);
@@ -589,8 +597,7 @@ emit_intrinsic_load_global_ir3(struct ir3_context *ctx,
 }
 
 static void
-emit_intrinsic_store_global_ir3(struct ir3_context *ctx,
-                                nir_intrinsic_instr *intr)
+emit_intrinsic_store_global(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 {
    struct ir3_builder *b = &ctx->build;
    struct ir3_instruction *value, *addr;
@@ -700,7 +707,7 @@ const struct ir3_context_funcs ir3_a6xx_funcs = {
    .emit_intrinsic_store_image = emit_intrinsic_store_image,
    .emit_intrinsic_atomic_image = emit_intrinsic_atomic_image,
    .emit_intrinsic_image_size = emit_intrinsic_image_size,
-   .emit_intrinsic_load_global_ir3 = emit_intrinsic_load_global_ir3,
-   .emit_intrinsic_store_global_ir3 = emit_intrinsic_store_global_ir3,
+   .emit_intrinsic_load_global = emit_intrinsic_load_global,
+   .emit_intrinsic_store_global = emit_intrinsic_store_global,
    .emit_intrinsic_atomic_global = emit_intrinsic_atomic_global,
 };

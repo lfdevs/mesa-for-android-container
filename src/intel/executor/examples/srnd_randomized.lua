@@ -14,7 +14,11 @@ for i = 0, N-1 do
   random_data[i] = math.random(1 << 32) - 1
 end
 
+local buf = alloc(random_data)
+
 src = [[
+  @param autoswsb
+
   @id        r10
   @mov       r20 ]] .. F32_VALUE .. [[
 
@@ -22,13 +26,14 @@ src = [[
 
 for i = 0, (N/16)-1 do
   src = src .. [[
-    @read      r30        r10
+    @addr      r50        buf0 r10
+    @load      r30        r50
     @mov       r40        0
-    (W) srnd (16) r40<2>:hf r20:f r30:f {A@1}
+    (W) srnd (16) r40<2>:hf r20:f r30:f
 
     // Change r30 to r40 to see the random values.
-    @write     r10        r40
-    add (16) r10 r10 0x10 {A@1}
+    @store     r50        r40
+    add (16) r10 r10 0x10
   ]]
 end
 
@@ -36,11 +41,8 @@ src = src .. [[
   @eot
 ]]
 
-
-local r = execute {
-  data = random_data,
-  src = src,
-}
+execute(src)
+local r = buf:read(N)
 
 up = 0
 down = 0

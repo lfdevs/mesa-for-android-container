@@ -21,6 +21,10 @@
 # source file, output name, defines
 bvh_shaders = [
   [
+    'id_prefix_sum.comp',
+    'id_prefix_sum',
+  ],
+  [
     'lbvh_generate_ir.comp',
     'lbvh_generate_ir',
   ],
@@ -33,8 +37,17 @@ bvh_shaders = [
     'leaf',
   ],
   [
-    'morton.comp',
-    'morton',
+    'morton_sort.comp',
+    'morton_sort_64',
+    [ 'MORTON_SORT_KEY64=1' ]
+  ],
+  [
+    'morton_sort.comp',
+    'morton_sort_32',
+  ],
+  [
+    'pair_triangles.comp',
+    'pair_triangles',
   ],
   [
     'ploc_internal.comp',
@@ -51,6 +64,7 @@ vk_bvh_include_dir = dir_source_root + '/src/vulkan/runtime/bvh'
 
 vk_bvh_includes = files(
   'leaf.h',
+  'pair_triangles.h',
   'vk_bvh_defines.h',
   'vk_bvh_helpers.h',
   'vk_debug.h',
@@ -59,6 +73,7 @@ vk_bvh_includes = files(
 
 vk_glsl_shader_extensions = [
   'GL_GOOGLE_include_directive',
+  'GL_EXT_control_flow_attributes',
   'GL_EXT_shader_explicit_arithmetic_types_int8',
   'GL_EXT_shader_explicit_arithmetic_types_int16',
   'GL_EXT_shader_explicit_arithmetic_types_int32',
@@ -76,6 +91,7 @@ vk_glsl_shader_extensions = [
   'GL_KHR_shader_subgroup_vote',
   'GL_EXT_shader_atomic_int64',
   'GL_EXT_spirv_intrinsics',
+  'GL_EXT_shared_memory_block',
 ]
 
 vk_glsl_shader_preamble = []
@@ -90,6 +106,11 @@ foreach s : bvh_shaders
   ] + (with_mesa_debug ? ['-g'] : [])
   command += glslang_quiet
   command += vk_glsl_shader_preamble
+  if s.length() > 2
+    foreach def : s[2]
+      command += [ '-D' + def ]
+    endforeach
+  endif
 
   bvh_spv += custom_target(
     s[1] + '.spv.h',

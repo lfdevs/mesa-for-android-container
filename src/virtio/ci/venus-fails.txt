@@ -9,9 +9,7 @@ dEQP-VK.pipeline.monolithic.timestamp.misc_tests.consistent_results,Fail
 dEQP-VK.draw.renderpass.multiple_interpolation.structured.with_sample_decoration.4_samples,Fail
 
 # Failed with native lavapipe as well with "Non-standard block shape used"
-dEQP-VK.sparse_resources.image_block_shapes.2d.g8b8g8r8_422_unorm.samples_1,Fail
 dEQP-VK.sparse_resources.image_block_shapes.2d.b8g8r8g8_422_unorm.samples_1,Fail
-dEQP-VK.sparse_resources.image_block_shapes.2d_array.g8b8g8r8_422_unorm.samples_1,Fail
 dEQP-VK.sparse_resources.image_block_shapes.2d_array.b8g8r8g8_422_unorm.samples_1,Fail
 
 # Failed with native lavapipe as well
@@ -19,3 +17,6 @@ dEQP-VK.mesh_shader.ext.smoke.fast_lib.depth_only_triangles_position_components,
 dEQP-VK.mesh_shader.ext.smoke.monolithic.depth_only_points_position_components,Fail
 dEQP-VK.mesh_shader.ext.smoke.monolithic.depth_only_triangles_position_components,Fail
 dEQP-VK.mesh_shader.ext.smoke.optimized_lib.depth_only_triangles_position_components,Fail
+
+# VKCTS 1.4.5.3 -> 1.4.6.1 uprev
+dEQP-VK.sparse_resources.buffer.texel_buffers.sparse_residency.uniform_texel_buffer_sparse_fetch_size_2_10_r32ui,Fail

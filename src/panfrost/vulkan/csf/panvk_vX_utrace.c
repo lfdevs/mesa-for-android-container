@@ -1,11 +1,13 @@
 /*
  * Copyright 2024 Google LLC
  * Copyright 2025 Arm Ltd.
+ * Copyright 2026 NXP
  * SPDX-License-Identifier: MIT
  */
 
 #include "panvk_utrace.h"
 
+#include "util/log.h"
 #include "util/os_misc.h"
 
 #include "drm-uapi/panthor_drm.h"
@@ -227,16 +229,48 @@ panvk_per_arch(utrace_copy_buffer)(struct u_trace_context *utctx,
    struct cs_builder *b = cmdstream;
    const struct panvk_utrace_buf *src_buf = ts_from;
    const struct panvk_utrace_buf *dst_buf = ts_to;
+
+   /* u_trace_clone_append() may store a NULL buffer when the copy heap is
+    * exhausted; skip the copy instead of dereferencing NULL. */
+   if (!src_buf || !dst_buf) {
+      mesa_loge("utrace: timestamp clone buffer allocation failed; "
+                "skipping copy, affected trace points have no timestamp");
+      return;
+   }
+
    const uint64_t src_addr = src_buf->dev + from_offset;
    const uint64_t dst_addr = dst_buf->dev + to_offset;
 
    cmd_copy_data(b, dst_addr, src_addr, size_B, false);
 }
 
+static struct cs_buffer
+alloc_clone_cs_buffer(void *cookie)
+{
+   struct panvk_utrace_clone_cs_ctx *ctx = cookie;
+   const uint64_t size = sizeof(uint64_t) * 1024;
+
+   struct panvk_utrace_buf *buf =
+      panvk_utrace_create_buffer(&ctx->dev->utrace.utctx, size);
+   if (!buf) {
+      mesa_loge("utrace: failed to allocate clone CS overflow chunk; "
+                "trace for this submit will be dropped");
+      return (struct cs_buffer){0};
+   }
+
+   util_dynarray_append(&ctx->cs_bufs, buf);
+
+   return (struct cs_buffer){
+      .cpu = buf->host,
+      .gpu = buf->dev,
+      .capacity = size / sizeof(uint64_t),
+   };
+}
+
 void
 panvk_per_arch(utrace_clone_init_builder)(struct cs_builder *b,
                                           struct panvk_device *dev,
-                                          const struct cs_buffer *cs_root)
+                                          struct panvk_utrace_clone_cs_ctx *ctx)
 {
    const struct drm_panthor_csif_info *csif_info =
       panthor_kmod_get_csif_props(dev->kmod.dev);
@@ -244,8 +278,12 @@ panvk_per_arch(utrace_clone_init_builder)(struct cs_builder *b,
       .nr_registers = csif_info->cs_reg_count,
       .nr_kernel_registers = MAX2(csif_info->unpreserved_cs_reg_count, 4),
       .ls_sb_slot = SB_ID(LS),
+      .alloc_buffer = alloc_clone_cs_buffer,
+      .cookie = ctx,
    };
-   cs_builder_init(b, &builder_conf, *cs_root);
+   /* Pass an empty root buffer so the builder allocates every CS chunk,
+    * including the first, through alloc_clone_cs_buffer(). */
+   cs_builder_init(b, &builder_conf, (struct cs_buffer){0});
 }
 
 void

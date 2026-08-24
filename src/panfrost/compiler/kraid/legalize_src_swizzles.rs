@@ -45,6 +45,15 @@ fn legalize_op_swizzles(b: &mut impl SSABuilder, op: &mut Op) {
 }
 
 impl Shader<'_> {
+    /// This pass gets run after ALU op widening and ensures that we only use
+    /// valid swizzles.  This lets us be a bit sloppy in NIR -> Kraid and just
+    /// assume every V4I8 source can do full swizzles and any V2X16 source can
+    /// do half swizzles.  After this pass is run, it's expected that Kraid will
+    /// keep swizzles valid going forwards.
+    ///
+    /// There are a few ops this pass cannot fix such as IMUL.[su]64 because it
+    /// doesn't support the NONE swizzle.  Instead, it's up to NIR -> Kraid to
+    /// get the swizzle right and this pass will assert fail if we screw it up.
     pub fn legalize_src_swizzles(&mut self) {
         let model = self.model;
         self.map_instrs(|mut instr, ssa_alloc| {

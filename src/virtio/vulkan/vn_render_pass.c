@@ -10,9 +10,9 @@
 
 #include "vn_render_pass.h"
 
-#include "venus-protocol/vn_protocol_driver_framebuffer.h"
-#include "venus-protocol/vn_protocol_driver_render_pass.h"
 #include "vk_format.h"
+#include "vn_protocol_driver_framebuffer.h"
+#include "vn_protocol_driver_render_pass.h"
 
 #include "vn_device.h"
 #include "vn_image.h"

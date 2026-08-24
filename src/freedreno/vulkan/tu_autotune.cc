@@ -425,6 +425,13 @@ struct PACKED tu_autotune::rp_gpu_data {
    alignas(16) uint64_t samples_end;
    uint64_t ts_start;
    uint64_t ts_end;
+   /* Binning pass timestamps, only written for GMEM with HW binning. Zero for
+    * SYSMEM or GMEM without binning. Added to (ts_end - ts_start) to get the
+    * true total GMEM cost, including the binning pass that precedes fragment
+    * rendering.  For concurrent binning (CB) this slightly over-counts since
+    * BV and BR overlap, but that is acceptable for the autotuner's purposes. */
+   uint64_t ts_binning_start;
+   uint64_t ts_binning_end;
 };
 
 /* Per-tile values for GMEM rendering, this structure is appended to the end of rp_gpu_data for each tile. */
@@ -639,7 +646,7 @@ struct tu_autotune::rp_entry {
    {
       assert(config.test(metric_flag::TS));
       rp_gpu_data &gpu = get_gpu_data();
-      return gpu.ts_end - gpu.ts_start;
+      return (gpu.ts_end - gpu.ts_start) + (gpu.ts_binning_end - gpu.ts_binning_start);
    }
 
    /* The amount of cycles spent in the longest tile. This is used to calculate the average draw duration for
@@ -665,6 +672,20 @@ struct tu_autotune::rp_entry {
    }
 
    /** CS Emission **/
+
+   void emit_binning_start(struct tu_cs *cs)
+   {
+      assert(map && bo.iova);
+      if (config.test(metric_flag::TS))
+         emit_metric_timestamp(cs, bo.iova + offsetof(rp_gpu_data, ts_binning_start));
+   }
+
+   void emit_binning_end(struct tu_cs *cs)
+   {
+      assert(map && bo.iova);
+      if (config.test(metric_flag::TS))
+         emit_metric_timestamp(cs, bo.iova + offsetof(rp_gpu_data, ts_binning_end));
+   }
 
    void emit_rp_start(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
    {
@@ -813,7 +834,12 @@ tu_autotune::rp_key::rp_key(const struct tu_render_pass *pass,
     */
 
    struct PACKED packed_att_properties {
-      uint64_t iova;
+      /* Use img_id (stable monotonic creation counter) + view offset rather than
+       * IOVA, so that the hash is consistent across separate process runs of the
+       * same API call sequence (e.g. apitrace replay).
+       */
+      uint64_t img_id;
+      uint32_t view_offset;
       bool load;
       bool store;
       bool load_stencil;
@@ -827,8 +853,14 @@ tu_autotune::rp_key::rp_key(const struct tu_render_pass *pass,
       *ptr++ = framebuffer->layers;
 
       for (unsigned i = 0; i < pass->attachment_count; i++) {
+         /* Every image reaching a render pass must have an identity (see
+          * tu_image_id_mode); 0 means a new image path missed assigning one.
+          */
+         assert(cmd->state.attachments[i]->image->id != 0);
+
          packed_att_properties props = {
-            .iova = cmd->state.attachments[i]->image->iova + cmd->state.attachments[i]->view.offset,
+            .img_id = cmd->state.attachments[i]->image->id,
+            .view_offset = cmd->state.attachments[i]->view.offset,
             .load = pass->attachments[i].load,
             .store = pass->attachments[i].store,
             .load_stencil = pass->attachments[i].load_stencil,
@@ -847,7 +879,8 @@ tu_autotune::rp_key::rp_key(const struct tu_render_pass *pass,
     * cases, while only extreme cases need to allocate on the heap.
     */
    size_t data_count = 3 + (pass->attachment_count * sizeof(packed_att_properties) / sizeof(uint32_t));
-   constexpr size_t STACK_MAX_DATA_COUNT = 3 + (5 * 3); /* in u32 units. */
+   constexpr size_t STACK_MAX_DATA_COUNT =
+      3 + (5 * (sizeof(packed_att_properties) / sizeof(uint32_t))); /* in u32 units, up to 5 attachments. */
 
    if (data_count <= STACK_MAX_DATA_COUNT) {
       /* If the data is small enough, we can use the stack. */
@@ -1968,8 +2001,7 @@ tu_autotune::write_preempt_counters_to_iova(struct tu_cs *cs,
 /** RP-level CS emissions **/
 
 void
-tu_autotune::begin_renderpass(
-   struct tu_cmd_buffer *cmd, struct tu_cs *cs, rp_ctx_t rp_ctx, bool sysmem, uint32_t tile_count)
+tu_autotune::init_renderpass(rp_ctx_t rp_ctx, bool sysmem, uint32_t tile_count)
 {
    if (!rp_ctx)
       return;
@@ -1978,7 +2010,37 @@ tu_autotune::begin_renderpass(
    assert(!sysmem || tile_count == 0);
 
    rp_ctx->allocate(sysmem, tile_count);
+}
+
+void
+tu_autotune::begin_renderpass(struct tu_cmd_buffer *cmd, struct tu_cs *cs, rp_ctx_t rp_ctx)
+{
+   if (!rp_ctx)
+      return;
+
    rp_ctx->emit_rp_start(cmd, cs);
+}
+
+void
+tu_autotune::begin_binning(struct tu_cs *cs, rp_ctx_t rp_ctx)
+{
+   if (!rp_ctx)
+      return;
+
+   assert(!rp_ctx->sysmem);
+
+   rp_ctx->emit_binning_start(cs);
+}
+
+void
+tu_autotune::end_binning(struct tu_cs *cs, rp_ctx_t rp_ctx)
+{
+   if (!rp_ctx)
+      return;
+
+   assert(!rp_ctx->sysmem);
+
+   rp_ctx->emit_binning_end(cs);
 }
 
 void

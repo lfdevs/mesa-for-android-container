@@ -233,6 +233,13 @@ gather_vars_written(struct copy_prop_var_state *state,
                               nir_var_shader_call_data;
             break;
 
+         case nir_intrinsic_cmat_store:
+            /* Be conservative: src[0] only refers to the base element, but
+             * cmat_store may write beyond it.
+             */
+            written->modes |= nir_src_as_deref(intrin->src[0])->modes;
+            break;
+
          case nir_intrinsic_deref_atomic:
          case nir_intrinsic_deref_atomic_swap:
          case nir_intrinsic_store_deref:
@@ -1089,6 +1096,14 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
             apply_barrier_for_modes(state, copies, nir_intrinsic_memory_modes(intrin));
          break;
 
+      case nir_intrinsic_cmat_store:
+         if (debug)
+            dump_instr(instr);
+
+         apply_barrier_for_modes(state, copies,
+                                 nir_src_as_deref(intrin->src[0])->modes);
+         break;
+
       case nir_intrinsic_emit_vertex:
       case nir_intrinsic_emit_vertex_with_counter:
          if (debug)
@@ -1444,14 +1459,19 @@ static void
 clone_copies(struct copy_prop_var_state *state, struct copies *clones,
              struct copies *copies)
 {
-   /* Simply clone the entire hash table. This is much faster than trying to
-    * rebuild it and is needed to avoid slow compilation of very large shaders.
-    * If needed we will clone the data later if it is ever looked up.
+   /* Keep the backing storage when a copies structure is reused for a later
+    * control-flow node.  Deep shaders otherwise repeatedly allocate and free
+    * similarly-sized hash tables while walking sibling nodes.
     */
-   assert(clones->ht.table == NULL);
-   _mesa_hash_table_copy(&clones->ht, &copies->ht, state->mem_ctx);
+   if (clones->ht.table == NULL) {
+      _mesa_hash_table_init(&clones->ht, state->mem_ctx,
+                            _mesa_hash_pointer, _mesa_key_pointer_equal);
+   }
 
-   util_dynarray_clone(&clones->arr, state->mem_ctx, &copies->arr);
+   _mesa_hash_table_clone_into(&clones->ht, &copies->ht);
+
+   util_dynarray_clear(&clones->arr);
+   util_dynarray_append_dynarray(&clones->arr, &copies->arr);
 }
 
 /* Returns an existing struct for reuse or creates a new on if they are
@@ -1479,8 +1499,6 @@ static void
 clear_copies_structure(struct copy_prop_var_state *state,
                        struct copies *copies)
 {
-   _mesa_hash_table_fini(&copies->ht, NULL);
-
    list_add(&copies->node, &state->unused_copy_structs_list);
 }
 

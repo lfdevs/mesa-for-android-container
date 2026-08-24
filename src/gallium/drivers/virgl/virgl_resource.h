@@ -165,6 +165,8 @@ static inline unsigned pipe_to_virgl_bind(const struct virgl_screen *vs,
    if (pbind & PIPE_BIND_COMMAND_ARGS_BUFFER)
       if (vs->caps.caps.v2.capability_bits & VIRGL_CAP_BIND_COMMAND_ARGS)
          outbind |= VIRGL_BIND_COMMAND_ARGS;
+   if (pbind & PIPE_BIND_LINEAR)
+      outbind |= VIRGL_BIND_LINEAR;
 
    /* Staging resources should only be created directly through the winsys,
     * not using pipe_resources.

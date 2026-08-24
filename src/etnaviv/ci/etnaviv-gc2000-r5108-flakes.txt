@@ -36,6 +36,7 @@ spec@!opengl 1.0@gl-1.0-texgen
 spec@!opengl 1.0@gl-1.0-textured-triangle
 spec@!opengl 1.1@depthstencil-default_fb-copypixels
 spec@!opengl 1.1@draw-pixels
+spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 vbo gl_line_strip
 spec@!opengl 1.1@tex-upside-down-miptree
 spec@!opengl 1.1@texgen
 spec@!opengl 1.1@texredefine
@@ -62,6 +63,7 @@ spec@arb_framebuffer_object@fbo-incomplete-texture-03
 spec@arb_pixel_buffer_object@texsubimage pbo manual gl_texture_2d gl_rgb8 6 10 0 94 53 0
 spec@arb_pixel_buffer_object@texsubimage-depth-formats pbo
 spec@arb_pixel_buffer_object@texsubimage-unpack pbo
+spec@arb_sampler_objects@sampler-incomplete
 spec@arb_texture_cube_map@copyteximage cube
 spec@arb_texture_cube_map@cubemap-shader bias
 spec@arb_texture_rectangle@copyteximage rect
@@ -73,6 +75,10 @@ spec@arb_texture_rectangle@texwrap rect@GL_RGBA8- NPOT
 spec@arb_texture_storage@texture-storage
 spec@arb_texture_storage@texture-storage@2D mipmap rendering
 spec@arb_texture_storage@texture-storage@cube array texture
+spec@arb_vertex_buffer_object@vbo-map-unsync
+spec@arb_vertex_buffer_object@vbo-subdata-many drawrangeelements
+spec@ati_fragment_shader@ati_fragment_shader-render-ops
+spec@ati_fragment_shader@ati_fragment_shader-render-ops@mov (1-c0)-0.5
 spec@ext_framebuffer_object@fbo-generatemipmap-viewport
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv
@@ -82,6 +88,15 @@ spec@ext_texture_compression_s3tc@s3tc-teximage
 spec@ext_texture_compression_s3tc@s3tc-texsubimage
 spec@ext_texture_compression_s3tc@s3tc-texsubimage_gles2
 spec@ext_texture_compression_s3tc@texwrap formats
+spec@glsl-1.10@execution@fs-texture-select
+spec@glsl-1.10@execution@built-in-functions@fs-notequal-ivec2-ivec2
+spec@glsl-1.10@execution@built-in-functions@fs-op-assign-mult-ivec2-ivec2
+spec@glsl-1.10@execution@built-in-functions@vs-op-div-mat4-float
+spec@glsl-1.10@execution@glsl-fs-functions-samplers
+spec@glsl-1.20@execution@built-in-functions@fs-matrixcompmult-mat4x2-mat4x2
+spec@glsl-1.20@execution@built-in-functions@fs-op-add-float-mat2x3
+spec@glsl-1.20@execution@built-in-functions@vs-op-mult-mat2-mat3x2
+spec@nv_copy_image@nv_copy_image-simple --rb-to-rb
 spec@nv_copy_image@nv_copy_image-simple --tex-to-tex
 spec@nv_conditional_render@bitmap
 spec@oes_compressed_etc1_rgb8_texture@miptree
@@ -228,6 +243,7 @@ spec@!opengl 1.1@fog-modes
 spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 vbo gl_lines
 spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 vbo gl_quads
 spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 vbo gl_triangle_strip
+spec@!opengl 1.1@gl-1.2-texture-base-level
 spec@!opengl 1.1@texsubimage
 spec@!opengl 1.2@levelclamp
 spec@!opengl 1.4@tex-miplevel-selection
@@ -488,6 +504,8 @@ spec@ext_texture_srgb@texwrap formats-s3tc@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EX
 spec@ext_texture_srgb@texwrap formats-s3tc@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT
 spec@ext_texture_srgb@texwrap formats-s3tc@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT- swizzled
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj\(bias\) 1d
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(bias\) 2d
+spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(bias\) 3d
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture\(bias\) cube
 spec@nv_texture_env_combine4@nv_texture_env_combine4-combine
 

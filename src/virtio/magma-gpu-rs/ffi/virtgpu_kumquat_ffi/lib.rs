@@ -126,6 +126,12 @@ pub unsafe extern "C" fn virtgpu_kumquat_init(
 #[no_mangle]
 pub extern "C" fn virtgpu_kumquat_finish(ptr: &mut *mut virtgpu_kumquat_ffi) -> i32 {
     catch_unwind(AssertUnwindSafe(|| {
+        // Accept a null pointer, the way free(3) does: a failed init leaves
+        // it null, and `Box::from_raw` on null aborts instead of unwinding.
+        if (*ptr).is_null() {
+            return NO_ERROR;
+        }
+
         // SAFETY:
         // The pointer `*ptr` must have been previously allocated by `virtgpu_kumquat_init`,
         // which uses `Box::into_raw`, and must not have been freed yet.

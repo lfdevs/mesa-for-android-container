@@ -5,7 +5,7 @@
 
 #include "vn_acceleration_structure.h"
 
-#include "venus-protocol/vn_protocol_driver_acceleration_structure.h"
+#include "vn_protocol_driver_acceleration_structure.h"
 
 #include "vn_device.h"
 

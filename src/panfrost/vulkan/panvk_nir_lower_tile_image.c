@@ -5,6 +5,7 @@
  */
 
 #include "panvk_device.h"
+#include "panvk_nir.h"
 
 #include "vk_limits.h"
 

@@ -858,7 +858,6 @@ glx@glx-tfp,Crash
 # X Error of failed request:  BadDrawable (invalid Pixmap or Window parameter)
 #   Major opcode of failed request:  130 (MIT-SHM)
 #   Minor opcode of failed request:  3 (X_ShmPutImage)
-glx@glx-visuals-depth,Crash
 glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil,Crash
 glx@glx-visuals-stencil -pixmap,Crash
@@ -982,9 +981,6 @@ spec@arb_direct_state_access@texture-buffer,Fail
 spec@arb_enhanced_layouts@arb_enhanced_layouts-transform-feedback-layout-qualifiers_gs,Crash
 spec@arb_enhanced_layouts@arb_enhanced_layouts-transform-feedback-layout-qualifiers_gs_max,Crash
 spec@arb_enhanced_layouts@arb_enhanced_layouts-transform-feedback-layout-qualifiers_vs,Crash
-spec@arb_enhanced_layouts@arb_enhanced_layouts-transform-feedback-layout-qualifiers_vs_interface,Crash
-spec@arb_enhanced_layouts@arb_enhanced_layouts-transform-feedback-layout-qualifiers_vs_named_interface,Crash
-spec@arb_enhanced_layouts@arb_enhanced_layouts-transform-feedback-layout-qualifiers_vs_struct,Crash
 
 spec@arb_es2_compatibility@texwrap formats,Fail
 spec@arb_es2_compatibility@texwrap formats offset,Fail
@@ -999,8 +995,6 @@ spec@arb_occlusion_query@occlusion_query_meta_no_fragments,Fail
 
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
-
-spec@arb_provoking_vertex@arb-provoking-vertex-render,Fail
 
 spec@arb_shader_image_load_store@execution@disable_early_z,Fail
 spec@arb_shader_storage_buffer_object@execution@ssbo-atomiccompswap-int,Fail
@@ -1066,21 +1060,15 @@ spec@arb_texture_rg@texwrap formats offset@GL_RG8- NPOT,Fail
 spec@arb_texture_rg@texwrap formats-float,Fail
 spec@arb_texture_rg@texwrap formats-float offset,Fail
 spec@arb_texture_rg@texwrap formats-float offset@GL_R16F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float offset@GL_R32F- NPOT,Fail
 spec@arb_texture_rg@texwrap formats-float offset@GL_RG16F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float offset@GL_RG32F- NPOT,Fail
 spec@arb_texture_rg@texwrap formats-float@GL_R16F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float@GL_R32F- NPOT,Fail
 spec@arb_texture_rg@texwrap formats-float@GL_RG16F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float@GL_RG32F- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_R16- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_R8- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_RG16- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_RG8- NPOT,Fail
 
-spec@arb_transform_feedback3@arb_transform_feedback3-ext_interleaved_two_bufs_gs,Crash
 spec@arb_transform_feedback3@arb_transform_feedback3-ext_interleaved_two_bufs_gs_max,Crash
-spec@arb_transform_feedback3@arb_transform_feedback3-ext_interleaved_two_bufs_vs,Crash
 
 # error: main:90: eglChooseConfig() returned no configs
 spec@egl 1.4@eglterminate then unbind context,Fail
@@ -1246,6 +1234,12 @@ spec@!opengl 2.0@vertex-program-two-side enabled front back@gs-out and fs,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled front2 back2,Fail
 spec@!opengl 2.0@vertex-program-two-side enabled front2 back2@gs-out and fs,Fail
 spec@!opengl 3.0@clearbuffer-depth-cs-probe,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_type pname checks,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_type pname checks@GL_INTERNALFORMAT_ALPHA_TYPE,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_type pname checks@GL_INTERNALFORMAT_BLUE_TYPE,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_type pname checks@GL_INTERNALFORMAT_DEPTH_TYPE,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_type pname checks@GL_INTERNALFORMAT_GREEN_TYPE,Fail
+spec@arb_internalformat_query2@all internalformat_<x>_type pname checks@GL_INTERNALFORMAT_RED_TYPE,Fail
 spec@arb_internalformat_query2@image_format_compatibility_type pname checks,Fail
 spec@arb_internalformat_query2@image_format_compatibility_type pname checks@GL_IMAGE_FORMAT_COMPATIBILITY_TYPE,Fail
 spec@arb_internalformat_query2@max dimensions related pname checks,Fail
@@ -1254,6 +1248,7 @@ spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_DEPTH,
 spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_HEIGHT,Fail
 spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_LAYERS,Fail
 spec@arb_internalformat_query2@max dimensions related pname checks@GL_MAX_WIDTH,Fail
+vulkan@shaders@cmat-uniform-ctor,Fail
 
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_dst_x,Fail

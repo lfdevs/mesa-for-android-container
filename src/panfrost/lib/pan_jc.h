@@ -114,7 +114,8 @@ static inline bool
 job_uses_tiling(enum mali_job_type type)
 {
 #if PAN_ARCH >= 9
-   if (type == MALI_JOB_TYPE_MALLOC_VERTEX)
+   if (type == MALI_JOB_TYPE_MALLOC_VERTEX ||
+       type == MALI_JOB_TYPE_FULLSCREEN)
       return true;
 #endif
 

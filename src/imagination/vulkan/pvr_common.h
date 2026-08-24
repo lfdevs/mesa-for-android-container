@@ -241,8 +241,6 @@ struct pvr_descriptor_state {
    uint32_t dirty_sets;
 };
 
-#undef PVR_MAX_DYNAMIC_BUFFERS
-
 struct pvr_pds_upload {
    struct pvr_suballoc_bo *pvr_bo;
    /* Offset from the pds heap base address. */

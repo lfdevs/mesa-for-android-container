@@ -1310,19 +1310,20 @@ virgl_drm_screen_destroy(struct pipe_screen *pscreen)
 {
    struct virgl_screen *screen = virgl_screen(pscreen);
    bool destroy;
+   int fd = -1;
 
    simple_mtx_lock(&virgl_screen_mutex);
    destroy = --screen->refcnt == 0;
    if (destroy) {
-      int fd = virgl_drm_winsys(screen->vws)->fd;
+      fd = virgl_drm_winsys(screen->vws)->fd;
       _mesa_hash_table_remove_key(fd_tab, intptr_to_pointer(fd));
-      close(fd);
    }
    simple_mtx_unlock(&virgl_screen_mutex);
 
    if (destroy) {
       pscreen->destroy = screen->winsys_priv;
       pscreen->destroy(pscreen);
+      close(fd);
    }
 }
 

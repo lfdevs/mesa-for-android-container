@@ -106,7 +106,7 @@ typedef enum {
    OPC_BL,            /* Branch and Link (same as the MIPS/ARM instruction) */
    OPC_SETSECURE,     /* switch secure mode on/off */
    OPC_JUMPR,         /* indirect jump with a register offset */
-   OPC_SRET,          /* Return instruction to use with "bl" */
+   OPC_JUMPD,          /* mysterious indirect jump instruction, seems to be equivelent to jumpr */
    OPC_JUMPA,         /* Absolute jump instruction */
 
    /* pseudo-opcodes without an actual encoding */

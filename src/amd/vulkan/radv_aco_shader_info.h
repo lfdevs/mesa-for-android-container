@@ -108,6 +108,11 @@ radv_aco_convert_ps_epilog_key(struct aco_ps_epilog_info *aco_info, const struct
    aco_info->stencil = radv_args->stencil;
    aco_info->samplemask = radv_args->sample_mask;
 
+   aco_info->kill_depth = radv->ignore_depth_output;
+   aco_info->kill_stencil = radv->ignore_stencil_output;
+   aco_info->lower_1bit_sample_mask_to_discard = radv->lower_1bit_sample_mask_to_discard;
+   aco_info->spi_shader_z_format = radv->spi_shader_z_format;
+
    aco_info->alpha_func = COMPARE_FUNC_ALWAYS;
 }
 #undef ASSIGN_VS_STATE_FIELD

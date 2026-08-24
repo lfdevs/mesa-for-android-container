@@ -1377,6 +1377,9 @@ radv_amdgpu_winsys_get_cpu_addr(void *_cs, uint64_t addr, struct ac_addr_info *i
    }
    u_rwlock_rdunlock(&cs->ws->global_bo_list.lock);
 
+   if (cs->chained_to)
+      radv_amdgpu_winsys_get_cpu_addr(cs->chained_to, addr, info);
+
    return;
 }
 
@@ -1618,28 +1621,28 @@ radv_to_amdgpu_pstate(enum radeon_ctx_pstate radv_pstate)
 }
 
 static int
-radv_amdgpu_ctx_set_pstate(struct radeon_winsys_ctx *rwctx, enum radeon_ctx_pstate pstate)
+radv_amdgpu_ctx_set_pstate(struct radeon_winsys_ctx *rwctx, enum radeon_ctx_pstate pstate, uint64_t timeout)
 {
    struct radv_amdgpu_ctx *ctx = (struct radv_amdgpu_ctx *)rwctx;
    uint32_t new_pstate = radv_to_amdgpu_pstate(pstate);
-   uint32_t current_pstate = 0;
    int r;
 
-   r = ac_drm_cs_ctx_stable_pstate(ctx->ws->dev, ctx->ctx_handle, AMDGPU_CTX_OP_GET_STABLE_PSTATE, 0, &current_pstate);
-   if (r) {
-      fprintf(stderr, "radv/amdgpu: failed to get current pstate\n");
-      return r;
-   }
-
-   /* Do not try to set a new pstate when the current one is already what we want. Otherwise, the
-    * kernel might return -EBUSY if we have multiple AMDGPU contexts in flight.
+   /* The kernel might return -EBUSY with many parallel processes because pstate is per-device, and
+    * not per-context. This happens frequently with dEQP using performance query.
     */
-   if (current_pstate == new_pstate)
-      return 0;
+   const uint64_t abs_timeout_ns = os_time_get_absolute_timeout(timeout);
 
-   r = ac_drm_cs_ctx_stable_pstate(ctx->ws->dev, ctx->ctx_handle, AMDGPU_CTX_OP_SET_STABLE_PSTATE, new_pstate, NULL);
+   r = 0;
+   do {
+      /* Wait 1 ms and try again. */
+      if (r == -EBUSY)
+         os_time_sleep(1000);
+
+      r = ac_drm_cs_ctx_stable_pstate(ctx->ws->dev, ctx->ctx_handle, AMDGPU_CTX_OP_SET_STABLE_PSTATE, new_pstate, NULL);
+   } while (r == -EBUSY && os_time_get_nano() < abs_timeout_ns);
+
    if (r) {
-      fprintf(stderr, "radv/amdgpu: failed to set new pstate\n");
+      fprintf(stderr, "radv/amdgpu: failed to set new pstate. (%i)\n", r);
       return r;
    }
 

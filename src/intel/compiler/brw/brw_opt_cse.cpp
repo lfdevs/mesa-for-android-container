@@ -88,6 +88,7 @@ is_expression(const brw_shader *v, const brw_inst *const inst)
    case SHADER_OPCODE_INT_REMAINDER:
    case SHADER_OPCODE_SIN:
    case SHADER_OPCODE_COS:
+   case SHADER_OPCODE_TANH:
    case SHADER_OPCODE_LOAD_SUBGROUP_INVOCATION:
    case FS_OPCODE_INTERPOLATE_AT_SAMPLE:
    case FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET:

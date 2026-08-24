@@ -683,7 +683,7 @@ virgl_resource_async_query_gbm_layout(struct pipe_screen *screen,
    if (!(bind & PIPE_BIND_SHARED))
       return;
 
-   if (!(vs->caps.caps.v2.capability_bits_v2 & VIRGL_CAP_V2_RESOURCE_LAYOUT))
+   if (!(vs->caps.caps.v2.capability_bits_v2 & VIRGL_CAP_V2_QUERY_FORMAT_MODIFIER))
       return;
 
    out_res = (struct virgl_resource *)
@@ -708,8 +708,9 @@ virgl_resource_async_query_gbm_layout(struct pipe_screen *screen,
 
 static size_t virgl_resource_shared_tex_size(struct virgl_resource *res)
 {
-   size_t aligned_stride = align(res->metadata.stride[0], 256);
+   size_t aligned_stride = align(res->metadata.stride[0], 1024);
    struct virgl_resource_metadata metadata = {};
+   struct pipe_resource pres = res->b;
 
    /*
     * Size of a shared buffer is validated by WSI. WSI retrieves BO size
@@ -717,10 +718,13 @@ static size_t virgl_resource_shared_tex_size(struct virgl_resource *res)
     * by a GBM BO on host, WSI validation may fail for a classic resource
     * because we will tell WSI to use stride of the host's GBM BO that won't
     * match guest BO stride. Mitigate this problem by using stride aligned to
-    * 256 bytes for estimated buffer size, which is a max possible alignment
-    * that GPUs are using today.
+    * 1024 bytes for estimated buffer size, which is a max possible alignment
+    * that GPUs are using today, and rounding height to a common 64x64
+    * block size.
     */
-   virgl_resource_layout(&res->b, &metadata, 0, aligned_stride, 0, 0);
+   pres.height0 = align(pres.height0, 64);
+
+   virgl_resource_layout(&pres, &metadata, 0, aligned_stride, 0, 0);
 
    return metadata.total_size;
 }
@@ -806,12 +810,33 @@ virgl_resource_create_with_modifiers(struct pipe_screen *screen,
                                      const uint64_t *modifiers,
                                      int count)
 {
-   if (!drm_find_modifier(DRM_FORMAT_MOD_LINEAR, modifiers, count)) {
-        mesa_loge("unsupported modifier requested\n");
-        return NULL;
+   struct virgl_screen *vscreen = virgl_screen(screen);
+   uint32_t vformat = pipe_to_virgl_format(templ->format);
+   uint64_t mod = DRM_FORMAT_MOD_LINEAR;
+   struct pipe_resource vtempl = *templ;
+
+   if (vtempl.bind & PIPE_BIND_SHARED) {
+      virgl_screen_sync_format_modifier(vscreen);
+
+      for (int i = 0; i < vscreen->gbm.list.num; i++) {
+         if (vscreen->gbm.list.formats[i].virgl_format == vformat) {
+            if (drm_find_modifier(vscreen->gbm.list.formats[i].modifier,
+                                  modifiers, count))
+               mod = vscreen->gbm.list.formats[i].modifier;
+            break;
+         }
+      }
+
+      if (mod == DRM_FORMAT_MOD_LINEAR)
+         vtempl.bind |= PIPE_BIND_LINEAR;
    }
 
-   return virgl_resource_create_front(screen, templ, NULL);
+   if (!drm_find_modifier(mod, modifiers, count)) {
+      mesa_loge("unsupported modifier requested\n");
+      return NULL;
+   }
+
+   return virgl_resource_create_front(screen, &vtempl, NULL);
 }
 #endif
 
@@ -942,6 +967,28 @@ virgl_resource_get_param(struct pipe_screen *screen,
          *value = res->metadata.gbm.layout.modifier;
       else
          *value = res->metadata.modifier;
+      return true;
+   case PIPE_RESOURCE_PARAM_NPLANES:
+      *value = util_resource_num(resource);
+      return true;
+    case PIPE_RESOURCE_PARAM_DISJOINT_PLANES:
+        *value = true;
+        return true;
+   case PIPE_RESOURCE_PARAM_STRIDE:
+      virgl_resource_sync_gbm_layout(res);
+
+      if (res->metadata.gbm.layout.planes[0].stride)
+         *value = res->metadata.gbm.layout.planes[plane].stride;
+      else
+         return false;
+      return true;
+   case PIPE_RESOURCE_PARAM_OFFSET:
+      virgl_resource_sync_gbm_layout(res);
+
+      if (res->metadata.gbm.layout.planes[0].stride)
+         *value = res->metadata.gbm.layout.planes[plane].offset;
+      else
+         return false;
       return true;
    default:
       return false;

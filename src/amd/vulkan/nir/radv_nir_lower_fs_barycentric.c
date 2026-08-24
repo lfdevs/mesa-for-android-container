@@ -15,7 +15,7 @@
 typedef struct {
    bool dynamic_rasterization_samples;
    unsigned num_rasterization_samples;
-   unsigned vgt_outprim_type;
+   unsigned num_raster_vertices_per_prim;
 } lower_fs_barycentric_state;
 
 static nir_def *
@@ -194,7 +194,7 @@ lower_load_barycentric_coord(nir_builder *b, nir_intrinsic_instr *intrin, void *
    b->cursor = nir_after_instr(&intrin->instr);
 
    /* When the rasterization primitive isn't known at compile time (GPL), load it. */
-   if (state->vgt_outprim_type == -1) {
+   if (!state->num_raster_vertices_per_prim) {
       nir_def *vgt_outprim_type = nir_load_rasterization_primitive_amd(b);
       nir_def *res1, *res2;
 
@@ -228,17 +228,17 @@ lower_load_barycentric_coord(nir_builder *b, nir_intrinsic_instr *intrin, void *
 
       new_dest = nir_if_phi(b, res1, res2);
    } else {
-      if (state->vgt_outprim_type == V_028A6C_POINTLIST) {
+      if (state->num_raster_vertices_per_prim == 1) {
          new_dest = lower_point(b);
       } else {
          interp = get_interp_param(b, state, intrin);
          p1 = nir_channel(b, interp, 0);
          p2 = nir_channel(b, interp, 1);
 
-         if (state->vgt_outprim_type == V_028A6C_LINESTRIP) {
+         if (state->num_raster_vertices_per_prim == 2) {
             new_dest = lower_line(b, p1, p2);
          } else {
-            assert(state->vgt_outprim_type == V_028A6C_TRISTRIP);
+            assert(state->num_raster_vertices_per_prim == 3);
             new_dest = lower_triangle(b, p1, p2);
          }
       }
@@ -251,12 +251,12 @@ lower_load_barycentric_coord(nir_builder *b, nir_intrinsic_instr *intrin, void *
 
 bool
 radv_nir_lower_fs_barycentric(nir_shader *shader, const struct radv_graphics_state_key *gfx_state,
-                              unsigned vgt_outprim_type)
+                              unsigned num_raster_vertices_per_prim)
 {
    lower_fs_barycentric_state state = {
       .dynamic_rasterization_samples = gfx_state->dynamic_rasterization_samples,
       .num_rasterization_samples = gfx_state->ms.rasterization_samples,
-      .vgt_outprim_type = vgt_outprim_type,
+      .num_raster_vertices_per_prim = num_raster_vertices_per_prim,
    };
 
    return nir_shader_intrinsics_pass(shader, lower_load_barycentric_coord, nir_metadata_none, &state);

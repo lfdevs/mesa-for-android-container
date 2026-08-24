@@ -143,9 +143,7 @@ spec@arb_es2_compatibility@texwrap formats bordercolor,Fail
 spec@arb_es2_compatibility@texwrap formats bordercolor@GL_RGB565- border color only,Fail
 spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled,Fail
 spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled@GL_RGB565- swizzled- border color only,Fail
-spec@arb_fragment_program@fp-fragment-position,Crash
 spec@arb_fragment_program@fp-indirections2,Fail
-spec@arb_fragment_program@sparse-samplers,Crash
 
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_depth24_stencil8,Crash
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit stencil gl_stencil_index1,Crash
@@ -406,9 +404,6 @@ spec@nv_conditional_render@vertex_array,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-lines,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-triangles,Fail
 
-# segfault
-spec@sgis_generate_mipmap@gen-nonzero-unit,Crash
-
 spec@!opengl 1.0@gl-1.0-blend-func,Fail
 
 spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
@@ -549,9 +544,6 @@ spec@!opengl 1.2@texwrap 3d bordercolor@GL_RGBA8- border color only,Fail
 spec@!opengl 1.2@texwrap 3d proj bordercolor,Fail
 spec@!opengl 1.2@texwrap 3d proj bordercolor@GL_RGBA8- projected- border color only,Fail
 
-# segfault
-spec@!opengl 1.2@tex-skipped-unit,Crash
-
 spec@!opengl 1.2@two-sided-lighting-separate-specular,Fail
 spec@!opengl 1.3@tex3d-depth1,Fail
 spec@!opengl 1.3@tex-border-1,Fail
@@ -634,13 +626,12 @@ spec@glsl-1.10@execution@variable-indexing@fs-input-array-float-index-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-input-array-vec2-index-rd,Fail
 
 # uprev Piglit in Mesa
-shaders@glsl-vs-texturematrix-1,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 3: Expected blue pixel in center,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 4: Expected blue pixel in center,Fail
 spec@!opengl 1.1@push-pop-color-material,Fail
+spec@arb_fragment_program@sparse-samplers,Fail
 spec@ext_framebuffer_object@fbo-readpixels-depth-formats,Fail
 spec@glsl-1.10@execution@built-in-functions@vs-sign-vec4,Fail
-spec@nv_half_float@attribs-half-float,Fail
 
 # Nightly run expectations update
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component,Fail
@@ -658,7 +649,6 @@ hiz@hiz-stencil-read-window-depth1,Fail
 shaders@glsl-bug-22603,Fail
 shaders@glsl-fs-fragcoord-zw-ortho,Fail
 spec@!opengl 1.0@gl-1.0-drawpixels-stencil-test,Fail
-spec@!opengl 1.0@gl-1.0-scissor-many,Fail
 spec@!opengl 1.1@copyteximage 1d,Fail
 spec@!opengl 1.1@copyteximage 2d,Fail
 spec@!opengl 1.1@depthstencil-default_fb-blit,Fail
@@ -757,8 +747,6 @@ spec@arb_pixel_buffer_object@fbo-pbo-readpixels-small@GL_DEPTH_COMPONENT16-GL_DE
 spec@arb_pixel_buffer_object@fbo-pbo-readpixels-small@GL_DEPTH_COMPONENT24-GL_DEPTH_COMPONENT,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-01,Fail
 spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-04,Fail
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 3d,Fail
-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 3d,Fail
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture() 2drectshadow,Fail
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drectshadow,Fail
 spec@arb_vertex_program@z-write,Fail
@@ -823,36 +811,21 @@ spec@ext_texture_array@copyteximage 1d_array,Crash
 spec@ext_texture_array@copyteximage 1d_array samples=2,Crash
 spec@ext_texture_array@copyteximage 1d_array samples=4,Crash
 spec@ext_texture_swizzle@depth_texture_mode_and_swizzle,Fail
-spec@glsl-1.10@execution@built-in-functions@fs-op-selection-bool-bvec4-bvec4,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d-04,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow1d-bias,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow1dproj,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow1dproj-bias,Fail
 spec@glsl-1.10@glsl-fs-discard-only,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 1d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 1dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 2d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 3d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() cube,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 1d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 1dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 2d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture(bias) 3d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1d_projvec4,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 1dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2d_projvec4,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj 3d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2d,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2d_projvec4,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 2dshadow,Fail
-spec@glsl-1.20@execution@tex-miplevel-selection gl2:textureproj(bias) 3d,Fail
 
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve depthstencil,Crash
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_resolve small depthstencil,Crash
 spec@ext_packed_depth_stencil@fbo-blit-d24s8,Crash
+spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 vbo gl_line_strip,Fail

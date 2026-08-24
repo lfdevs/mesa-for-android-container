@@ -1,6 +1,6 @@
 [wrap-file]
 directory = pest_meta-2.8.0
-source_url = https://crates.io/api/v1/crates/pest_meta/2.8.0/download
+source_url = https://static.crates.io/crates/pest_meta/2.8.0/download
 source_filename = pest_meta-2.8.0.tar.gz
 source_hash = 7f9f832470494906d1fca5329f8ab5791cc60beb230c74815dff541cbd2b5ca0
 patch_directory = pest_meta-2-rs

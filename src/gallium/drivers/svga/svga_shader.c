@@ -1005,9 +1005,12 @@ svga_compile_shader(struct svga_context *svga,
 
    *out_variant = variant;
 
-   /* insert variant at head of linked list */
-   variant->next = shader->variants;
-   shader->variants = variant;
+   /* Do this in compile_passthrough_vs since it is not original vs */
+   if (!key->vs.passthrough) {
+      /* insert variant at head of linked list */
+      variant->next = shader->variants;
+      shader->variants = variant;
+   }
 
    return PIPE_OK;
 }

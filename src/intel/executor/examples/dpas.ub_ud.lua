@@ -21,9 +21,13 @@ local C = matrix.new(M, N, 0)
 
 -- Calculate A * B + C.  A and B are UB values, C and the result
 -- are UD values.
-local buf = execute {
+local buf = alloc(M * N, { fill = 0 })
+
+execute {
   src =
-    [[]]
+    [[@param autoswsb
+
+]]
     .. gen.mov_grf("ub", 10, A:to_row_major())
 
     -- For `src1`, the source representing the B matrix, DPAS expects
@@ -39,17 +43,17 @@ local buf = execute {
 
     .. (devinfo.ver >= 20 and [[
 
-    dpas.8x8 (16) r40:ud r30:ud r20:ub r10:ub {A@1,$1}
+    dpas.8x8 (16) r40:ud r30:ud r20:ub r10:ub
     @syncnop
 
     ]] or [[
 
-    dpas.8x8 (8) r40:ud r30:ud r20:ub r10:ub {A@1,$1}
+    dpas.8x8 (8) r40:ud r30:ud r20:ub r10:ub
     @syncnop
 
     ]])
 
-    .. gen.write_grfs(40, 8)
+    .. gen.write_grfs(40, 8, "buf0")
     .. [[
 
     @eot
@@ -57,5 +61,5 @@ local buf = execute {
     ]],
 }
 
-r = matrix.from_row_major_buffer(M, N, buf)
+local r = matrix.from_row_major_buffer(M, N, buf:read(M * N))
 r:print()

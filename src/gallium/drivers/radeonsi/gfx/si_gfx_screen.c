@@ -272,7 +272,7 @@ static bool enable_mesh_shader(struct si_screen *sscreen)
       !(sscreen->info.userq_ip_mask & BITFIELD_BIT(AMD_IP_GFX)) &&
       /* don't support LLVM */
       aco_is_gpu_supported(&sscreen->info) &&
-      !(sscreen->debug_flags & DBG(USE_LLVM));
+      !(sscreen->shader_debug_flags & DBG(USE_LLVM));
 }
 
 static bool si_alu_to_scalar_packed_math_filter(const nir_instr *instr, const void *data)
@@ -886,6 +886,17 @@ bool si_init_gfx_screen(struct si_screen *sscreen) {
       sscreen->info.use_display_dcc_with_retile_blit = false;
    }
 
+   if (sscreen->debug_flags & DBG(SAFE)) {
+      sscreen->options.inline_uniforms = false;
+      sscreen->options.zerovram = true;
+   }
+   if (sscreen->debug_flags & DBG(SAFER)) {
+      sscreen->shader_debug_flags |= DBG(NO_OPT_VARIANT);
+      sscreen->shader_debug_flags |= DBG(CHECK_IR);
+      sscreen->options.clamp_div_by_zero = true;
+      sscreen->options.tc_max_cpu_storage_size = 0;
+   }
+
    /* Using the environment variable doesn't enable PAIRS packets for simplicity. */
    if ((sscreen->debug_flags & DBG(SHADOW_REGS)) &&
        !(sscreen->info.userq_ip_mask & (1 << AMD_IP_GFX)))
@@ -1115,6 +1126,14 @@ bool si_init_gfx_screen(struct si_screen *sscreen) {
                                   PIPE_USAGE_DEFAULT,
                                   sscreen->info.total_attribute_pos_prim_ring_size,
                                   2 * 1024 * 1024);
+
+      if (!sscreen->attribute_pos_prim_ring) {
+         si_destroy_perfcounters(sscreen);
+         si_destroy_shader_cache(sscreen);
+         FREE(sscreen->nir_options);
+         glsl_type_singleton_decref();
+         return false;
+      }
    }
 
    ac_print_nonshadowed_regs(sscreen->info.gfx_level, sscreen->info.family);

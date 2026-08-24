@@ -99,8 +99,8 @@ vk_common_CreateRenderPass(VkDevice _device,
 
    const VkRenderPassMultiviewCreateInfo *multiview_info = NULL;
    const VkRenderPassInputAttachmentAspectCreateInfo *aspect_info = NULL;
-   vk_foreach_struct_const(ext, pCreateInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pCreateInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO:
          aspect_info = (const VkRenderPassInputAttachmentAspectCreateInfo *)ext;
          /* We don't care about this information */
@@ -115,7 +115,7 @@ vk_common_CreateRenderPass(VkDevice _device,
          break;
 
       default:
-         mesa_logd("%s: ignored VkStructureType %u\n", __func__, ext->sType);
+         mesa_logd("%s: ignored VkStructureType %u\n", __func__, sType);
          break;
       }
    }

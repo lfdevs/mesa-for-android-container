@@ -49,6 +49,7 @@ enum radv_ud_index {
    AC_UD_CS_TASK_RING_OFFSETS,
    AC_UD_CS_TASK_DRAW_ID,
    AC_UD_CS_TASK_IB,
+   AC_UD_CS_STATE,
    AC_UD_CS_MAX_UD,
    AC_UD_GS_MAX_UD,
    AC_UD_TCS_OFFCHIP_LAYOUT = AC_UD_VS_MAX_UD,
@@ -86,6 +87,9 @@ struct radv_shader_args {
    struct ac_arg task_state;
    /* User data 2/3 (0/1 on GFX11+). same as ring_offsets but for task shaders. */
    struct ac_arg task_ring_offsets;
+
+   /* Compute shaders */
+   struct ac_arg cs_state;
 
    /* NGG */
    struct ac_arg ngg_state;

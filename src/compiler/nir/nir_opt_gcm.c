@@ -79,6 +79,14 @@ struct gcm_state {
 
    bool progress;
 
+   /* If false, texture instructions are kept inside loops that exceed the
+    * large-loop threshold (MAX_LOOP_INSTRUCTIONS) instead of being hoisted
+    * out.  Hoisting a texel out of a large loop extends its result's live
+    * range across the whole loop, which can raise register pressure enough
+    * to lower dispatch width or occupancy.
+    */
+   bool hoist_tex_from_loops;
+
    /* The list of non-pinned instructions.  As we do the late scheduling,
     * we pull non-pinned instructions out of their blocks and place them in
     * this list.  This saves us from having linked-list problems when we go
@@ -513,6 +521,11 @@ set_block_for_loop_instr(struct gcm_state *state, nir_instr *instr,
     * where the total loop instruction count is less than
     * MAX_LOOP_INSTRUCTIONS.
     *
+    * Hoisting texture instructions out of a large loop extends the texel
+    * results' live ranges across the whole loop, which can raise register
+    * pressure enough to lower dispatch width or occupancy. The
+    * hoist_tex_from_loops parameter lets a caller keep them in the loop.
+    *
     * TODO: figure out some more heuristics to allow more to be moved out of
     * loops.
     */
@@ -520,7 +533,7 @@ set_block_for_loop_instr(struct gcm_state *state, nir_instr *instr,
       return true;
 
    if (instr->type == nir_instr_type_load_const ||
-       instr->type == nir_instr_type_tex ||
+       (state->hoist_tex_from_loops && instr->type == nir_instr_type_tex) ||
        (instr->type == nir_instr_type_intrinsic &&
         nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_resource_intel))
       return true;
@@ -798,7 +811,8 @@ weak_gvn(const nir_instr *a, const nir_instr *b)
 }
 
 static bool
-opt_gcm_impl(nir_shader *shader, nir_function_impl *impl, bool value_number)
+opt_gcm_impl(nir_shader *shader, nir_function_impl *impl, bool value_number,
+             bool hoist_tex_from_loops)
 {
    nir_metadata_require(impl, nir_metadata_block_index |
                               nir_metadata_dominance |
@@ -817,6 +831,7 @@ opt_gcm_impl(nir_shader *shader, nir_function_impl *impl, bool value_number)
    state.impl = impl;
    state.instr = NULL;
    state.progress = false;
+   state.hoist_tex_from_loops = hoist_tex_from_loops;
    exec_list_make_empty(&state.instrs);
    state.blocks = rzalloc_array(NULL, struct gcm_block_info, impl->num_blocks);
 
@@ -844,7 +859,7 @@ opt_gcm_impl(nir_shader *shader, nir_function_impl *impl, bool value_number)
       if (instr->pass_flags & GCM_INSTR_PINNED)
          continue;
 
-      if (nir_instr_set_add_or_rewrite(&gvn_set, instr,
+      if (nir_instr_set_add_or_rewrite(&gvn_set, instr, NULL, NULL,
                                        value_number ? NULL : weak_gvn)) {
          state.progress = true;
          nir_instr_remove(instr);
@@ -878,12 +893,13 @@ opt_gcm_impl(nir_shader *shader, nir_function_impl *impl, bool value_number)
 }
 
 bool
-nir_opt_gcm(nir_shader *shader, bool value_number)
+nir_opt_gcm(nir_shader *shader, bool value_number, bool hoist_tex_from_loops)
 {
    bool progress = false;
 
    nir_foreach_function_impl(impl, shader) {
-      progress |= opt_gcm_impl(shader, impl, value_number);
+      progress |= opt_gcm_impl(shader, impl, value_number,
+                               hoist_tex_from_loops);
    }
 
    return progress;

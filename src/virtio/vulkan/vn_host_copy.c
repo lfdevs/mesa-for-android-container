@@ -5,8 +5,8 @@
 
 #include "vn_common.h"
 
-#include "venus-protocol/vn_protocol_driver_host_copy.h"
 #include "vk_format.h"
+#include "vn_protocol_driver_host_copy.h"
 
 #include "vn_device.h"
 
@@ -17,8 +17,26 @@ vn_TransitionImageLayout(VkDevice device,
 {
    struct vn_device *dev = vn_device_from_handle(device);
 
-   vn_async_vkTransitionImageLayout(dev->primary_ring, device,
-                                    transitionCount, pTransitions);
+   for (uint32_t i = 0; i < transitionCount; i++) {
+      const VkHostImageLayoutTransitionInfo *info = &pTransitions[i];
+      VkHostImageLayoutTransitionInfo local_info;
+      if (VN_PRESENT_SRC_INTERNAL_LAYOUT != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+         const bool fix_old_layout =
+            info->oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+         const bool fix_new_layout =
+            info->newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+         if (fix_old_layout || fix_new_layout) {
+            local_info = *info;
+            info = &local_info;
+         }
+         if (fix_old_layout)
+            local_info.oldLayout = VN_PRESENT_SRC_INTERNAL_LAYOUT;
+         if (fix_new_layout)
+            local_info.newLayout = VN_PRESENT_SRC_INTERNAL_LAYOUT;
+      }
+
+      vn_async_vkTransitionImageLayout(dev->primary_ring, device, 1, info);
+   }
 
    return VK_SUCCESS;
 }
@@ -28,6 +46,22 @@ vn_CopyImageToImage(VkDevice device,
                     const VkCopyImageToImageInfo *pCopyImageToImageInfo)
 {
    struct vn_device *dev = vn_device_from_handle(device);
+
+   VkCopyImageToImageInfo local_info;
+   if (VN_PRESENT_SRC_INTERNAL_LAYOUT != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+      const bool fix_src_layout = pCopyImageToImageInfo->srcImageLayout ==
+                                  VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+      const bool fix_dst_layout = pCopyImageToImageInfo->dstImageLayout ==
+                                  VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+      if (fix_src_layout || fix_dst_layout) {
+         local_info = *pCopyImageToImageInfo;
+         pCopyImageToImageInfo = &local_info;
+      }
+      if (fix_src_layout)
+         local_info.srcImageLayout = VN_PRESENT_SRC_INTERNAL_LAYOUT;
+      if (fix_dst_layout)
+         local_info.dstImageLayout = VN_PRESENT_SRC_INTERNAL_LAYOUT;
+   }
 
    vn_async_vkCopyImageToImage(dev->primary_ring, device,
                                pCopyImageToImageInfo);
@@ -138,11 +172,16 @@ vn_CopyImageToMemory(VkDevice device,
                                regions[i].memoryImageHeight,
                                regions[i].imageExtent);
 
+      VkImageLayout src_layout = info->srcImageLayout;
+      if (VN_PRESENT_SRC_INTERNAL_LAYOUT != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
+          src_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+         src_layout = VN_PRESENT_SRC_INTERNAL_LAYOUT;
+
       const VkCopyImageToMemoryInfoMESA local_info = {
          .sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_MEMORY_INFO_MESA,
          .flags = info->flags,
          .srcImage = info->srcImage,
-         .srcImageLayout = info->srcImageLayout,
+         .srcImageLayout = src_layout,
          .memoryRowLength = regions[i].memoryRowLength,
          .memoryImageHeight = regions[i].memoryImageHeight,
          .imageSubresource = regions[i].imageSubresource,
@@ -197,11 +236,16 @@ vn_CopyMemoryToImage(VkDevice device,
       };
    }
 
+   VkImageLayout dst_layout = info->dstImageLayout;
+   if (VN_PRESENT_SRC_INTERNAL_LAYOUT != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
+       dst_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+      dst_layout = VN_PRESENT_SRC_INTERNAL_LAYOUT;
+
    const VkCopyMemoryToImageInfoMESA local_info = {
       .sType = VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INFO_MESA,
       .flags = info->flags,
       .dstImage = info->dstImage,
-      .dstImageLayout = info->dstImageLayout,
+      .dstImageLayout = dst_layout,
       .regionCount = info->regionCount,
       .pRegions = local_regions,
    };

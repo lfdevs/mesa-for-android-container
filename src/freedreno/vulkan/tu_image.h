@@ -43,14 +43,39 @@ struct tu_image
    /* Maximum width/height of tiles for use with this image, or ~0 if no constraints. */
    uint32_t max_tile_w_constraint_fdm;
    uint32_t max_tile_h_constraint_fdm;
+
+   /* Identity of the image for RP hashing and analysis, per
+    * tu_image_id_mode. 0 means no identity was assigned and must never
+    * appear on an image that reaches a render pass.
+    */
+   uint64_t id;
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(tu_image, vk.base, VkImage, VK_OBJECT_TYPE_IMAGE)
+
+enum tu_image_id_mode {
+   /* Temporaries for memory-requirement queries: no identity, must never
+    * reach a render pass.
+    */
+   TU_IMAGE_ID_NONE,
+   /* Real images: unique monotonic identity, stable across replays of the
+    * same API call sequence.
+    */
+   TU_IMAGE_ID_ASSIGN,
+   /* Driver-internal scratch attachments (MSRTSS): a shared constant
+    * identity, so that RP hashes don't churn when the scratch images are
+    * reinitialized per framebuffer or per vkCmdBeginRendering.
+    */
+   TU_IMAGE_ID_INTERNAL,
+};
+
+#define TU_IMAGE_ID_INTERNAL_ID UINT64_MAX
 
 template <chip CHIP>
 VkResult
 tu_image_init(struct tu_device *device, struct tu_image *image,
               const VkImageCreateInfo *pCreateInfo, uint64_t modifier,
-              const VkSubresourceLayout *plane_layouts);
+              const VkSubresourceLayout *plane_layouts,
+              enum tu_image_id_mode id_mode);
 
 struct tu_image_view
 {

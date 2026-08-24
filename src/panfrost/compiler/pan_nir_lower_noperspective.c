@@ -4,7 +4,6 @@
  */
 
 #include "compiler/nir/nir_builder.h"
-#include "bi_opcodes.h"
 #include "pan_nir.h"
 
 /* Mali only provides instructions to fetch varyings with either flat or
@@ -48,34 +47,6 @@ find_pos_store(nir_function_impl *impl)
    }
 
    return NULL;
-}
-
-static bool
-is_noperspective_load(nir_intrinsic_instr* intrin)
-{
-   if (intrin->intrinsic != nir_intrinsic_load_interpolated_input)
-      return false;
-
-   nir_intrinsic_instr *bary_instr = nir_src_as_intrinsic(intrin->src[0]);
-   assert(bary_instr);
-
-   return nir_intrinsic_interp_mode(bary_instr) == INTERP_MODE_NOPERSPECTIVE;
-}
-
-static bool
-has_noperspective_load(nir_function_impl *impl)
-{
-   /* nir_lower_io_vars_to_temporaries ersures all loads are in the first block */
-   nir_block *block = nir_start_block(impl);
-   nir_foreach_instr(instr, block) {
-      if (instr->type != nir_instr_type_intrinsic)
-         continue;
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-
-      if (is_noperspective_load(intrin))
-         return true;
-   }
-   return false;
 }
 
 static nir_def *
@@ -124,30 +95,6 @@ lower_noperspective_vs(nir_builder *b, nir_intrinsic_instr *intrin,
       nir_bcsel(b, is_noperspective, noperspective_value, old_value);
 
    nir_src_rewrite(&intrin->src[0], new_value);
-
-   return true;
-}
-
-/**
- * Multiply all noperspective varying loads by gl_FragCoord.w
- */
-static bool
-lower_noperspective_fs(nir_builder *b, nir_intrinsic_instr *intrin,
-                       void *data)
-{
-   if (!is_noperspective_load(intrin))
-      return false;
-
-   b->cursor = nir_after_instr(&intrin->instr);
-
-   nir_def *bary = intrin->src[0].ssa;
-   nir_def *fragcoord_w =
-      nir_load_var_special_pan(b, 1, bary, .flags = BI_VARYING_NAME_FRAG_W);
-   if (intrin->def.bit_size == 16)
-      fragcoord_w = nir_f2f16(b, fragcoord_w);
-
-   nir_def *new_value = nir_fmul(b, &intrin->def, fragcoord_w);
-   nir_def_rewrite_uses_after(&intrin->def, new_value);
 
    return true;
 }
@@ -210,24 +157,5 @@ pan_nir_lower_noperspective_vs(nir_shader *shader)
                               nir_metadata_loop_analysis,
                               (void *)&state);
 
-   return true;
-}
-
-bool
-pan_nir_lower_noperspective_fs(nir_shader *shader,
-                               uint32_t *noperspective_varyings)
-{
-   assert(shader->info.stage == MESA_SHADER_FRAGMENT);
-
-   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
-
-   if (!has_noperspective_load(impl))
-      return false;
-
-   nir_shader_intrinsics_pass(shader, lower_noperspective_fs,
-                              nir_metadata_control_flow, NULL);
-
-   *noperspective_varyings =
-         pan_nir_collect_noperspective_varyings_fs(shader);
    return true;
 }

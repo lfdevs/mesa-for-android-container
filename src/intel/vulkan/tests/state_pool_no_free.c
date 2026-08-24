@@ -55,7 +55,8 @@ static void *alloc_states(void *_job)
 
 static void run_test()
 {
-   struct anv_physical_device physical_device = { };
+   struct anv_instance instance = {};
+   struct anv_physical_device physical_device = { .instance = &instance };
    struct anv_device device = {};
    struct anv_state_pool state_pool;
    const uint32_t _1Gb = 1024 * 1024 * 1024;

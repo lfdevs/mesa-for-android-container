@@ -382,7 +382,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       <bitfield name="param" low="2" high="17" type="uint"/>
       <bitfield name="payload_size" low="0" high="1" type="uint"/>
    </reg32>
-   <reg32 offset="0x39" name="NPU_SET_OP_SCALAR">
+   <reg32 offset="0x27" name="NPU_SET_OP_SCALAR">
       <bitfield name="param" low="2" high="17" type="uint"/>
       <bitfield name="payload_size" low="0" high="1" type="uint"/>
    </reg32>

@@ -1,70 +1,42 @@
-cl_khr_subgroup_rotate on radeonsi
-cl_khr_subgroup_rotate on iris
-VK_EXT_shader_uniform_buffer_unsized_array on panvk
-VK_KHR_shader_constant_data on RADV
-VK_EXT_dynamic_rendering_unused_attachments on panvk
-protectedMemory support on RADV/GFX10+ and VEGA10
-VK_KHR_performance_query on RADV/GFX11
-VK_EXT_conservative_rasterization on panvk
-shaderImageGatherExtended on pvr
-static C++ stdlib required on rusticl to workaround applications using their own C++ stdlib
-VK_EXT_pipeline_protected_access on RADV
-VK_EXT_extended_dynamic_state3 on panvk
-GL_ARB_texture_query_lod on panfrost/v9+
-VK_KHR_maintenance11 on RADV
-OpenCL 3.1 support for rusticl on asahi, iris, radeonsi, llvmpipe and zink
-VK_KHR_workgroup_memory_explicit_layout on pvr
-VK_KHR_maintenance5 on pvr
-VK_KHR_calibrated_timestamps on hasvk
-VK_KHR_present_id on pvr
-VK_KHR_present_wait on pvr
-VK_KHR_present_id2 on hasvk
-VK_KHR_present_wait2 on hasvk
-VK_KHR_shader_fma on RADV
-VK_EXT_shader_split_barrier on RADV/GFX12
-VK_KHR_shader_fma on nvk
-Support for G1-Ultra, G1-Premium and G1-Pro GPUs on Panfrost and PanVK
-VK_EXT_shader_atomic_float on nvk
-VK_{KHR,EXT}_index_type_uint8 on pvr
-VK_EXT_debug_marker in vulkan runtime
-VK_EXT_mesh_shader on NVK
-VK_KHR_device_fault on RADV
-VK_EXT_present_timing now also on wsi/x11
-VK_EXT_present_timing on hasvk
-VK_GOOGLE_display_timing for KHR_display (and opt-in for x11, wayland) on anv, hasvk, hk, nvk, panvk, pvr, radv, tu, v3dv
-VK_KHR_shader_abort on RADV
-VK_KHR_shader_fma on panvk
-VK_NV_shader_atomic_float16_vector on NVK
-VK_KHR_compute_shader_derivatives on panvk
-VK_EXT_shader_subgroup_ballot on pvr
-VK_EXT_shader_subgroup_vote on pvr
-VK_KHR_shader_subgroup_rotate on pvr
-VK_KHR_shader_subgroup_uniform_control_flow on pvr
-VK_EXT_subgroup_size_control on pvr
-VK_EXT_rasterization_order_attachment_access on panvk
-VK_ARM_rasterization_order_attachment_access on panvk
-GL_OES_texture_float on etnaviv/HALF_FLOAT
-GL_ARB_texture_float on etnaviv/HALF_FLOAT
-VK_NVX_binary_import on NVK
-VK_EXT_image_sliced_view_of_3d on panvk
-VK_EXT_shader_tile_image on panvk
-VK_KHR_internally_synchronized_queues on panvk
-VK_KHR_workgroup_memory_explicit_layout on panvk
-VK_EXT_device_memory_report on pvr
-VK_EXT_descriptor_heap enabled by default on anv, RADV
-VK_EXT_device_address_binding_report on panvk
-VK_EXT_multisampled_render_to_single_sampled on RADV/Android
-VK_KHR_shader_fma on anv
-VK_KHR_extended_flags on RADV
-VK_EXT_display_surface_counter on pvr
-VK_EXT_display_control on pvr
-VK_EXT_direct_mode_display on pvr
-VK_KHR_surface_maintenance1 on pvr
-VK_EXT_surface_maintenance1 on pvr
-VK_KHR_swapchain_maintenance1 on pvr
-VK_EXT_swapchain_maintenance1 on pvr
-VK_EXT_swapchain_colorspace on pvr
-VK_EXT_acquire_drm_display on pvr
-VK_KHR_unified_image_layouts on pvr
-VK_KHR_shader_quad_control on v3dv
-VK_KHR_shader_subgroup_rotate on v3dv
+VK_IMG_filter_linear_2d on pvr
+VK_KHR_maintenance7 on pvr
+Vulkan 1.3 on panvk/v6-7
+VK_KHR_maintenance4 on panvk/v6-7
+VK_KHR_maintenance5 on panvk/v6-7
+VK_KHR_maintenance7 on panvk/v6-7
+VK_KHR_maintenance8 on panvk/v6-7
+VK_KHR_shader_float_controls2 on panvk/v6-7
+VK_KHR_shader_subgroup_extended_types on panvk/v6-7
+VK_EXT_subgroup_size_control on panvk/v6-7
+VK_ARM_shader_core_builtins on panvk/v6-7
+VK_ARM_shader_core_properties on panvk/v6-7
+VK_ARM_scheduling_controls on panvk/v6-7
+shaderCoreBuiltins on panvk/v6-7
+schedulingControls on panvk/v6-7
+VK_KHR_synchronization2 on pvr
+VK_KHR_copy_memory_indirect on panvk
+VK_KHR_maintenance6 on panvk/v6-7
+VK_KHR_spirv_1_4 on panvk/v6-7
+VK_EXT_device_memory_report on v3dv
+shaderUniformBufferArrayDynamicIndexing on pvr
+shaderStorageBufferArrayDynamicIndexing on pvr
+shaderSampledImageArrayDynamicIndexing on pvr
+shaderStorageImageArrayDynamicIndexing on pvr
+shaderInputAttachmentArrayDynamicIndexing on pvr
+shaderUniformTexelBufferArrayDynamicIndexing on pvr
+shaderStorageTexelBufferArrayDynamicIndexing on pvr
+VK_KHR_video_encode_feedback2 on RADV
+VK_EXT_global_priority on pvr
+VK_EXT_global_priority_query on pvr
+VK_KHR_global_priority on pvr
+VK_KHR_cooperative_matrix on panvk
+Support for Mali G68 GPU on Panfrost
+cl_ext_float_atomics on iris, llvmpipe and zink
+cl_khr_semaphore on iris
+cl_khr_external_semaphore on iris
+cl_khr_external_semaphore_sync_fd on iris
+VK_EXT_inline_uniform_block on pvr
+VK_KHR_shader_fma on pvr
+fragmentStoresAndAtomics on pvr
+VK_EXT_cooperative_matrix_maintenance1 on radv, lavapipe
+VK_KHR_device_address_commands on nvk

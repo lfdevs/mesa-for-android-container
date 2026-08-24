@@ -544,6 +544,13 @@ lower_ray_query_intrinsic(nir_builder *b,
    }
 }
 
+static nir_def *
+load_subgroup_size(nir_builder *b)
+{
+   unsigned imm_size = brw_nir_api_subgroup_size(b->shader, 0);
+   return imm_size ? nir_imm_int(b, imm_size) : nir_load_subgroup_size(b);
+}
+
 static void
 lower_ray_query_impl(nir_function_impl *impl, struct lowering_state *state)
 {
@@ -557,7 +564,7 @@ lower_ray_query_impl(nir_function_impl *impl, struct lowering_state *state)
       b,
       nir_iand(b,
                nir_ige_imm(b, nir_load_subgroup_invocation(b), 16),
-               nir_ieq_imm(b, nir_load_subgroup_size(b), 32)),
+               nir_ieq_imm(b, load_subgroup_size(b), 32)),
       nir_iadd_imm(
          b, rq_globals_base,
          align(4 * RT_DISPATCH_GLOBALS_length(state->devinfo), 64)),

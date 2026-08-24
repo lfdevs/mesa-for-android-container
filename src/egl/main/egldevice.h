@@ -66,6 +66,7 @@ enum _egl_device_extension {
    _EGL_DEVICE_DRM_RENDER_NODE,
    _EGL_DEVICE_QUERY_NAME,
    _EGL_DEVICE_PERSISTENT_ID,
+   _EGL_DEVICE_TYPE,
 };
 
 typedef enum _egl_device_extension _EGLDeviceExtension;

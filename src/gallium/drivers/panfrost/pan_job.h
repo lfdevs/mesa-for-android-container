@@ -127,6 +127,11 @@ struct panfrost_batch {
       uint64_t psiz;
    } varyings;
 
+   /* FS SRT entry holding a single constant buffer for fullscreen-draw
+    * texcoord varyings on PAN_TABLE_ATTRIBUTE_BUFFER.
+    */
+   uint64_t fullscreen_texcoord_buf;
+
    /* Index array */
    uint64_t indices;
 

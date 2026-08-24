@@ -54,8 +54,8 @@
     - .austriancoder-ci-tron
   variables:
     CI_TRON__B2C_DISKLESS_IMAGESTORE_PLATFORM: linux/arm/v7
-    CI_TRON_KERNEL__URL: '$KERNEL_IMAGE_BASE/armhf/zImage'
-    CI_TRON_DTB__0__URL: '$KERNEL_IMAGE_BASE/armhf/imx6q-cubox-i.dtb'
+    CI_TRON_KERNEL__URL: '$KERNEL_IMAGE_BASE/arm32/zImage'
+    CI_TRON_DTB__0__URL: '$KERNEL_IMAGE_BASE/arm32/imx6q-cubox-i.dtb'
     VIVANTE_MODEL_TAG: "vivante:model:2000"
     VIVANTE_REVISION_TAG: "vivante:revision:5108"
     GPU_VERSION: "etnaviv-gc2000-r5108"
@@ -93,8 +93,8 @@
   variables:
     FDO_CI_CONCURRENT: 4
     CI_TRON__B2C_DISKLESS_IMAGESTORE_PLATFORM: linux/arm/v7
-    CI_TRON_KERNEL__URL: '$KERNEL_IMAGE_BASE/armhf/zImage'
-    CI_TRON_DTB__0__URL: '$KERNEL_IMAGE_BASE/armhf/imx6qp-nitrogen6_max.dtb'
+    CI_TRON_KERNEL__URL: '$KERNEL_IMAGE_BASE/arm32/zImage'
+    CI_TRON_DTB__0__URL: '$KERNEL_IMAGE_BASE/arm32/imx6qp-nitrogen6_max.dtb'
     VIVANTE_MODEL_TAG: "vivante:model:3000"
     VIVANTE_REVISION_TAG: "vivante:revision:5450"
     GPU_VERSION: "etnaviv-gc3000-r5450"

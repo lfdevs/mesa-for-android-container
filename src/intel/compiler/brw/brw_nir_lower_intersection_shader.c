@@ -114,6 +114,44 @@ lower_any_hit_for_intersection(nir_shader *any_hit)
    return impl;
 }
 
+/* Returns true if block is nested inside a loop. */
+static bool
+block_is_in_loop(nir_block *block)
+{
+   for (nir_cf_node *node = block->cf_node.parent; node != NULL;
+        node = node->parent) {
+      if (node->type == nir_cf_node_loop) {
+         return true;
+      }
+   }
+
+   return false;
+}
+
+static bool
+has_multiple_report_ray_intersection(nir_function_impl *impl)
+{
+   bool found_report_ray_isec = false;
+
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+         if (intrin->intrinsic == nir_intrinsic_report_ray_intersection) {
+            /* A single call in a loop may execute multiple times. */
+            if (found_report_ray_isec || block_is_in_loop(block))
+               return true;
+
+            found_report_ray_isec = true;
+         }
+      }
+   }
+
+   return false;
+}
+
 static void
 build_accept_ray(nir_builder *b,
                  const struct intel_device_info *devinfo)
@@ -128,6 +166,39 @@ build_accept_ray(nir_builder *b,
    nir_accept_ray_intersection(b);
 }
 
+static bool
+shader_uses_hit_attrib(const nir_shader *shader)
+{
+   if (shader == NULL)
+      return false;
+
+   nir_foreach_variable_with_modes(var, shader, nir_var_ray_hit_attrib) {
+      return true;
+   }
+
+   return false;
+}
+
+static bool
+any_hit_has_reject_or_terminate(nir_shader *shader)
+{
+   nir_foreach_function_impl(impl, shader) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+            if (intrin->intrinsic == nir_intrinsic_ignore_ray_intersection ||
+                intrin->intrinsic == nir_intrinsic_terminate_ray)
+               return true;
+         }
+      }
+   }
+
+   return false;
+}
+
 bool
 brw_nir_lower_intersection_shader(nir_shader *intersection,
                                   const nir_shader *any_hit,
@@ -137,14 +208,20 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
 
    nir_function_impl *any_hit_impl = NULL;
    struct hash_table *any_hit_var_remap = NULL;
+   bool ahs_has_reject_or_terminate = false;
    if (any_hit) {
       nir_shader *any_hit_tmp = nir_shader_clone(dead_ctx, any_hit);
+      ahs_has_reject_or_terminate = any_hit_has_reject_or_terminate(any_hit_tmp);
       NIR_PASS(_, any_hit_tmp, nir_opt_dce);
       any_hit_impl = lower_any_hit_for_intersection(any_hit_tmp);
       any_hit_var_remap = _mesa_pointer_hash_table_create(dead_ctx);
    }
 
    nir_function_impl *impl = nir_shader_get_entrypoint(intersection);
+
+   const bool hit_attrib_used = shader_uses_hit_attrib(intersection);
+   const bool multiple_report_calls =
+      has_multiple_report_ray_intersection(impl);
 
    nir_builder build = nir_builder_at(nir_before_impl(impl));
    nir_builder *b = &build;
@@ -188,7 +265,11 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
                struct brw_nir_rt_mem_hit_defs hit_in = {};
                brw_nir_rt_load_mem_hit(b, &hit_in, false, devinfo);
 
-               nir_def *max_t = ray_def.t_far;
+               /* hit_in.t is initialized to ray_def.t_far when the tracing
+                * starts, and will be kept up to date as closer hits are
+                * accepted.
+                */
+               nir_def *max_t = hit_in.t;
 
                /* bool commit_tmp = false; */
                nir_variable *commit_tmp =
@@ -216,7 +297,13 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
                      nir_pop_if(b, NULL);
                   }
 
-                  nir_push_if(b, nir_load_var(b, commit_tmp));
+                  /* An any-hit shader that cannot reject or terminate, the
+                   * candidate hit is always accepted.
+                   */
+                  nir_def *condition = !ahs_has_reject_or_terminate ?
+                                       nir_imm_true(b) :
+                                       nir_load_var(b, commit_tmp);
+                  nir_push_if(b, condition);
                   {
                      nir_store_var(b, commit, nir_imm_true(b), 0x1);
 
@@ -245,13 +332,29 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
                          * gl_HitKindEXT that uses more than 24bits.
                          */
                         nir_def *hit_kind_24b = nir_iand_imm(b, hit_kind, 0xffffff);
-                        nir_store_global(b, nir_vec2(b, nir_fmin(b, hit_t, hit_in.t),
+                        nir_store_global(b, nir_vec2(b, hit_t,
                                                      nir_ior(b, hit_group_index_0, hit_kind_24b)),
                                          t_addr);
 
                      } else {
-                        nir_store_global(b, nir_vec2(b, nir_fmin(b, hit_t, hit_in.t), hit_kind),
+                        nir_store_global(b, nir_vec2(b, hit_t, hit_kind),
                                          t_addr);
+                     }
+
+                     /* Now that the hit is accepted, copy the HitAttribute
+                      * data from the pending region to the committed one that
+                      * the closest-hit shader will see.
+                      */
+                     if (hit_attrib_used) {
+                        nir_def *potential_hit_attrib_addr =
+                           brw_nir_rt_hit_attrib_data_addr(b, false, devinfo);
+                        nir_def *committed_hit_attrib_addr =
+                           brw_nir_rt_hit_attrib_data_addr(b, true, devinfo);
+
+                        brw_nir_memcpy_global(b,
+                                              committed_hit_attrib_addr, 64,
+                                              potential_hit_attrib_addr, 64,
+                                              BRW_RT_SIZEOF_HIT_ATTRIB_DATA);
                      }
 
                      /* There may be multiple reportIntersection() calls in
@@ -259,13 +362,15 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
                       * accept the hit now. The lowering of
                       * accept_ray_intersection will handle the rest.
                       */
-                     nir_def *terminate = nir_test_mask(b, nir_load_ray_flags(b),
-                                                        BRW_RT_RAY_FLAG_TERMINATE_ON_FIRST_HIT);
-                     nir_push_if(b, terminate);
-                     {
-                        build_accept_ray(b, devinfo);
+                     if (multiple_report_calls) {
+                        nir_def *terminate = nir_test_mask(b, nir_load_ray_flags(b),
+                                                           BRW_RT_RAY_FLAG_TERMINATE_ON_FIRST_HIT);
+                        nir_push_if(b, terminate);
+                        {
+                           build_accept_ray(b, devinfo);
+                        }
+                        nir_pop_if(b, NULL);
                      }
-                     nir_pop_if(b, NULL);
                   }
                   nir_pop_if(b, NULL);
                }

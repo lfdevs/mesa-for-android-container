@@ -2622,10 +2622,10 @@ _mesa_parse_arb_program(struct gl_context *ctx, GLenum target, const GLubyte *st
 
    inst = state->inst_head;
    for (i = 0; i < state->prog->arb.NumInstructions; i++) {
-      struct asm_instruction *const temp = inst->next;
+      struct asm_instruction *const next_inst = inst->next;
 
       state->prog->arb.Instructions[i] = inst->Base;
-      inst = temp;
+      inst = next_inst;
    }
 
    /* Finally, tag on an OPCODE_END instruction */

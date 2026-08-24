@@ -857,10 +857,10 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
    if (result != VK_SUCCESS)
       return result;
 
-   vk_foreach_struct(ext, caps->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, caps->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_SURFACE_PROTECTED_CAPABILITIES_KHR: {
-         VkSurfaceProtectedCapabilitiesKHR *protected = (void *)ext;
+         VkSurfaceProtectedCapabilitiesKHR *protected = ext;
          protected->supportsProtected =
             wsi_device->supports_protected[VK_ICD_WSI_PLATFORM_XCB];
          break;
@@ -868,7 +868,7 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
 
       case VK_STRUCTURE_TYPE_SURFACE_PRESENT_SCALING_CAPABILITIES_KHR: {
          /* Unsupported. */
-         VkSurfacePresentScalingCapabilitiesKHR *scaling = (void *)ext;
+         VkSurfacePresentScalingCapabilitiesKHR *scaling = ext;
          scaling->supportedPresentScaling = 0;
          scaling->supportedPresentGravityX = 0;
          scaling->supportedPresentGravityY = 0;
@@ -879,7 +879,7 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
 
       case VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_COMPATIBILITY_KHR: {
          /* All present modes are compatible with each other. */
-         VkSurfacePresentModeCompatibilityKHR *compat = (void *)ext;
+         VkSurfacePresentModeCompatibilityKHR *compat = ext;
          if (compat->pPresentModes) {
             assert(present_mode);
             VK_OUTARRAY_MAKE_TYPED(VkPresentModeKHR, modes, compat->pPresentModes, &compat->presentModeCount);
@@ -907,21 +907,21 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
       }
 
       case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_PRESENT_ID_2_KHR: {
-         VkSurfaceCapabilitiesPresentId2KHR *pid2 = (void *)ext;
+         VkSurfaceCapabilitiesPresentId2KHR *pid2 = ext;
 
          pid2->presentId2Supported = VK_TRUE;
          break;
       }
 
       case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_PRESENT_WAIT_2_KHR: {
-         VkSurfaceCapabilitiesPresentWait2KHR *pwait2 = (void *)ext;
+         VkSurfaceCapabilitiesPresentWait2KHR *pwait2 = ext;
 
          pwait2->presentWait2Supported = VK_TRUE;
          break;
       }
 
       case VK_STRUCTURE_TYPE_PRESENT_TIMING_SURFACE_CAPABILITIES_EXT: {
-         VkPresentTimingSurfaceCapabilitiesEXT *wait = (void *)ext;
+         VkPresentTimingSurfaceCapabilitiesEXT *wait = ext;
 
          xcb_connection_t *conn = x11_surface_get_connection(icd_surface);
          struct wsi_x11_connection *wsi_conn = wsi_x11_get_connection(wsi_device, conn);
@@ -1385,14 +1385,13 @@ static void x11_present_update_refresh_cycle_estimate(struct x11_swapchain *swap
 
             /* Our refresh rates are only estimates, so expect some deviation (+/- 1us). */
             wsi_swapchain_present_timing_update_refresh_rate(&swapchain->base, refresh_ns, refresh_ns, 1000);
-         } else if (!flip) {
+         } else if (!flip || !swapchain->base.wsi->enable_adaptive_sync) {
             /* If we're not flipping, we're not getting VRR. If MSC estimate is unstable for whatever reason, fallback to randr query. */
             wsi_swapchain_present_timing_update_refresh_rate(&swapchain->base, randr_refresh_ns, randr_refresh_ns, 0);
          } else {
             /* If we have enabled adaptive sync, and we're seeing highly irregular MSC values, we assume
              * we're driving the display VRR. */
-            uint64_t refresh_interval = swapchain->base.wsi->enable_adaptive_sync ? UINT64_MAX : 0;
-            wsi_swapchain_present_timing_update_refresh_rate(&swapchain->base, randr_refresh_ns, refresh_interval, 0);
+            wsi_swapchain_present_timing_update_refresh_rate(&swapchain->base, randr_refresh_ns, UINT64_MAX, 0);
          }
       }
    }
@@ -2431,8 +2430,9 @@ x11_present_compute_target_msc(struct x11_swapchain *chain,
        * Effectively, we will need to adjust the report UST up if we somehow end up seeing a timestamp too early.
        * The relative refresh will feed off this adjustment in a tight loop, so this should be pretty solid
        * for both VRR and FRR. Present timing can only be used with FIFO modes, i.e. we will not overwrite this
-       * until the present is actually complete. */
-      chain->next_present_ust_lower_bound = target_ns / 1000;
+       * until the present is actually complete.  Skip the assignment if we are definitely FRR on a vblank-less setup. */
+      if (chain->base.wsi->enable_adaptive_sync || !chain->has_reliable_msc)
+         chain->next_present_ust_lower_bound = target_ns / 1000;
 
       /* We also need to pull back the sleep a bit to account for X.org roundtrip delays.
        * If we sleep until targetTime we will most certainly introduce a lot of jitter.

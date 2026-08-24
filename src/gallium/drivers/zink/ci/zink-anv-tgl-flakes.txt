@@ -54,14 +54,12 @@ glx@glx_ext_no_config_context@no fbconfig
 spec@ext_timer_query@time-elapsed
 
 # ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/53978300
-spec@!opengl 2.0@occlusion-query-discard
 spec@arb_shader_storage_buffer_object@max-ssbo-size@fs
 spec@arb_shader_storage_buffer_object@max-ssbo-size@fsexceed
 spec@arb_shader_storage_buffer_object@max-ssbo-size@vs
 spec@arb_shader_storage_buffer_object@max-ssbo-size@vsexceed
 
 # uprev Piglit in Mesa
-spec@!opengl 1.1@depthstencil-default_fb-blit samples=16
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=6
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=8
 spec@arb_query_buffer_object@.*CPU_READ_BEFORE.*
@@ -111,5 +109,3 @@ KHR-GL46.transform_feedback2.transform_feedback2_states
 KHR-GLES3.transform_feedback2.transform_feedback2_states
 
 KHR-GLES31.shaders.layout_location.isampler_2d
-multisample-dEQP-GLES3.functional.occlusion_query.depth_write_depth_clear_stencil_clear
-spec@arb_occlusion_query@occlusion_query_meta_fragments

@@ -2034,7 +2034,7 @@ iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
    } else if (modifier == I915_FORMAT_MOD_4_TILED_LNL_CCS) {
       bo->real.heap = IRIS_HEAP_SYSTEM_MEMORY_UNCACHED_COMPRESSED_SCANOUT;
    }  else {
-      assert(bufmgr->devinfo.ver <= 20 || !isl_drm_modifier_has_aux(modifier));
+      assert(bufmgr->devinfo.ver < 20 || !isl_drm_modifier_has_aux(modifier));
    }
 
    if (INTEL_DEBUG(DEBUG_CAPTURE_ALL))

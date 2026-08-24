@@ -112,55 +112,21 @@
 #define ANV_DESCRIPTOR_SET_DESCRIPTORS        (UINT8_MAX - 1)
 #define ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS   UINT8_MAX
 
-struct anv_push_constants {
-   /** Push constant data provided by the client through vkPushConstants */
-   uint8_t client_data[MAX_PUSH_CONSTANTS_SIZE];
+enum anv_shader_binding_mode {
+   ANV_SHADER_BINDING_MODE_UNKNOWN,
+   ANV_SHADER_BINDING_MODE_LEGACY,
+   ANV_SHADER_BINDING_MODE_LEGACY_INDIRECT,
+   ANV_SHADER_BINDING_MODE_BUFFER,
+   ANV_SHADER_BINDING_MODE_HEAP,
+};
 
-#define ANV_DESCRIPTOR_SET_DYNAMIC_INDEX_MASK ((uint32_t)ANV_UBO_ALIGNMENT - 1)
-#define ANV_DESCRIPTOR_SET_OFFSET_MASK        (~(uint32_t)(ANV_UBO_ALIGNMENT - 1))
-
-   /**
-    * Base offsets for descriptor sets from
+struct anv_drv_push_data {
+   /** Ray query globals
     *
-    * The offset has different meaning depending on a number of factors :
-    *
-    *    - with descriptor sets (direct or indirect), this relative
-    *      pdevice->va.descriptor_pool
-    *
-    *    - with descriptor buffers on DG2+, relative
-    *      device->va.descriptor_buffer_pool
-    *
-    *    - with descriptor buffers prior to DG2, relative the programmed value
-    *      in STATE_BASE_ADDRESS::BindlessSurfaceStateBaseAddress
+    * Pointer to a couple of RT_DISPATCH_GLOBALS structures (see
+    * genX(cmd_buffer_ray_query_globals))
     */
-   uint32_t desc_surface_offsets[MAX_SETS];
-
-   /**
-    * Base offsets for descriptor sets from
-    */
-   uint32_t desc_sampler_offsets[MAX_SETS];
-
-   /** Dynamic offsets for dynamic UBOs and SSBOs */
-   uint32_t dynamic_offsets[MAX_DYNAMIC_BUFFERS];
-
-   union {
-      /** Surface buffer base offset
-       *
-       * Only used prior to DG2 with descriptor buffers.
-       *
-       * (surfaces_base_offset + desc_offsets[set_index]) is relative to
-       * device->va.descriptor_buffer_pool and can be used to compute a 64bit
-       * address to the descriptor buffer (using load_desc_set_address_intel).
-       */
-      uint32_t surfaces_base_offset;
-
-      /** Ray query globals
-       *
-       * Pointer to a couple of RT_DISPATCH_GLOBALS structures (see
-       * genX(cmd_buffer_ray_query_globals))
-       */
-      uint64_t ray_query_globals;
-   };
+   uint64_t ray_query_globals;
 
    union {
       struct {
@@ -171,7 +137,7 @@ struct anv_push_constants {
          uint32_t tess_config;
 
          /** Robust access pushed registers. */
-         uint8_t push_reg_mask[MESA_SHADER_STAGES][4];
+         uint8_t push_reg_mask[MESA_SHADER_FRAGMENT + 1][4];
 
          /** Wa_18019110168
           * bits  4:0 : provoking vertex value
@@ -192,19 +158,123 @@ struct anv_push_constants {
          /** gl_NumWorkgroups */
          uint32_t num_workgroups[3];
 
-         uint32_t unaligned_invocations_x;
-
-         /** Subgroup ID
+         /** Unaligned invocation lane disabling
           *
-          * This is never set by software but is implicitly filled out when
-          * uploading the push constants for compute shaders.
-          *
-          * This *MUST* be the last field of the anv_push_constants structure.
+          * See anv_nir_lower_unaligned_dispatch()
           */
-         uint32_t subgroup_id;
+         uint32_t unaligned_invocations_x;
       } cs;
    };
 };
+
+struct anv_binding_heap_data {
+   /** Base offset of the surface descriptors */
+   uint32_t surfaces_offset;
+
+   /** Base offset of the sampler descriptors */
+   uint32_t samplers_offset;
+
+   /** Surface buffer base offset
+    *
+    * Only used prior to DG2.
+    *
+    * (surfaces_base_offset + desc_offsets[set_index]) is relative to
+    * device->va.descriptor_buffer_pool and can be used to compute a 64bit
+    * address to the descriptor buffer (using load_desc_set_address_intel).
+    */
+   uint32_t surfaces_base_offset;
+};
+
+struct anv_binding_buffer_data {
+   /**
+    * Base offsets for descriptor sets :
+    *
+    * The surface offset has different meaning depending on a number of
+    * factors :
+    *
+    *    - with descriptor buffers on DG2+, relative
+    *      device->va.descriptor_buffer_pool
+    *
+    *    - with descriptor buffers prior to DG2, relative the programmed value
+    *      in STATE_BASE_ADDRESS::BindlessSurfaceStateBaseAddress
+    *
+    * The sampler offset is relative to device->va.dynamic_state_pool.
+    */
+   struct {
+      uint32_t surfaces_offset;
+      uint32_t samplers_offset;
+   } sets[MAX_SETS];
+
+   /** Surface buffer base offset
+    *
+    * Only used prior to DG2.
+    *
+    * (surfaces_base_offset + desc_offsets[set_index]) is relative to
+    * device->va.descriptor_buffer_pool and can be used to compute a 64bit
+    * address to the descriptor buffer (using load_desc_set_address_intel).
+    */
+   uint32_t surfaces_base_offset;
+};
+
+struct anv_binding_legacy_data {
+#define ANV_DESCRIPTOR_SET_DYNAMIC_INDEX_MASK ((uint32_t)ANV_UBO_ALIGNMENT - 1)
+#define ANV_DESCRIPTOR_SET_OFFSET_MASK        (~(uint32_t)(ANV_UBO_ALIGNMENT - 1))
+
+   /**
+    * Base offsets for descriptor sets from
+    *
+    * The surface offset has different meaning depending on a number of
+    * factors :
+    *
+    *    - with descriptor sets (direct or indirect), this relative
+    *      pdevice->va.descriptor_pool
+    *
+    *    - with descriptor buffers on DG2+, relative
+    *      device->va.descriptor_buffer_pool
+    *
+    * The sampler offset is relative to device->va.dynamic_state_pool.
+    */
+   struct {
+      uint32_t surfaces_offset;
+      uint32_t samplers_offset;
+   } sets[MAX_SETS];
+
+   /** Dynamic offsets for dynamic UBOs and SSBOs */
+   uint32_t dynamic_offsets[MAX_DYNAMIC_BUFFERS];
+};
+
+struct anv_push_constants {
+   /** Push constant data provided by the client through vkPushConstants */
+   uint8_t client_data[MAX_PUSH_CONSTANTS_SIZE];
+
+   struct anv_drv_push_data drv_data;
+
+   union {
+      struct anv_binding_legacy_data legacy;
+      struct anv_binding_buffer_data buffer;
+      struct anv_binding_heap_data   heap;
+   };
+
+   /** Subgroup ID
+    *
+    * This is never set by software but is implicitly filled out when
+    * uploading the push constants for compute shaders on pre Gfx12.5 HW.
+    *
+    * This *MUST* be the last field of the anv_push_constants structure.
+    */
+   uint32_t subgroup_id;
+};
+
+#define anv_push_constants_size(mode) (                          \
+      ((mode) == ANV_SHADER_BINDING_MODE_LEGACY ||               \
+       (mode) == ANV_SHADER_BINDING_MODE_LEGACY_INDIRECT) ?      \
+      (offsetof(struct anv_push_constants, legacy) +             \
+       sizeof(struct anv_binding_legacy_data)) :                 \
+      (mode) == ANV_SHADER_BINDING_MODE_BUFFER ?                 \
+      (offsetof(struct anv_push_constants, buffer) +             \
+       sizeof(struct anv_binding_buffer_data)) :                 \
+      (offsetof(struct anv_push_constants, heap) +               \
+       sizeof(struct anv_binding_heap_data)))
 
 #define ANV_DRIVER_PUSH_CONSTANTS_SIZE (sizeof(struct anv_push_constants) - MAX_PUSH_CONSTANTS_SIZE)
 

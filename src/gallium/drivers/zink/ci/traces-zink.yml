@@ -50,13 +50,13 @@ traces:
 
   blender/blender-demo-ellie_pose.trace:
     gl-zink-anv-adl:
-      checksum: 0098bb7945cf985524358f1becd7dc96
+      checksum: c0b433fa9f758e3161af2bab57fbbdf4
     gl-zink-anv-tgl:
-      checksum: 0098bb7945cf985524358f1becd7dc96
+      checksum: c0b433fa9f758e3161af2bab57fbbdf4
     zink-radv-vangogh:
-      checksum: 04050fd3b0285aedfe6b139d3a900fc5
+      checksum: 78035aeafe1c8e7ddc72ae78f21807ec
     zink-radv-gfx1201:
-      checksum: 04050fd3b0285aedfe6b139d3a900fc5
+      checksum: 78035aeafe1c8e7ddc72ae78f21807ec
 
   glxgears/glxgears-2-v2.trace:
     gl-zink-anv-adl:
@@ -132,9 +132,9 @@ traces:
       checksum: c4ae80a143de76e137e5dd406586a459
       text: Different rendering from iris, but still looks correct (common result with this trace)
     zink-radv-vangogh:
-      checksum: 9ced84dc92fd3748e43888403b1474c8
+      checksum: 00ca21f3a459555080b6e7f1bfee4fde
     zink-radv-gfx1201:
-      checksum: 9ced84dc92fd3748e43888403b1474c8
+      checksum: 00ca21f3a459555080b6e7f1bfee4fde
 
   gputest/plot3d-v2.trace:
     gl-zink-anv-adl:
@@ -371,15 +371,9 @@ traces:
     gl-zink-anv-tgl:
       checksum: 7789205e8b4d160dc81e3684f0627a38
     zink-radv-vangogh:
-      # checksum: b7393d5d8c0aa09485880ccd6310fed8
-      # checksum: 8697a6c6d4f360bfdc008d6a30588799
-      text: oscillates between the two checksums above
-      label: [skip, flakes]
+      checksum: b7393d5d8c0aa09485880ccd6310fed8
     zink-radv-gfx1201:
-      # checksum: b7393d5d8c0aa09485880ccd6310fed8
-      # checksum: 870de613d477af42e9b3f81a081d4e7f
-      text: oscillates between the two checksums above
-      label: [skip, flakes]
+      checksum: b7393d5d8c0aa09485880ccd6310fed8
 
   unvanquished/unvanquished-ultra.trace:
     gl-zink-anv-adl:
@@ -387,15 +381,9 @@ traces:
     gl-zink-anv-tgl:
       checksum: 7791755c957b55bfc5d30befe1e1f20d
     zink-radv-vangogh:
-      # checksum: 9df8f5c18d8dfc09530071dedcf87120
-      # checksum: b6d277fe54db66c7651c9f847146cb73
-      text: oscillates between the two checksums above
-      label: [skip, flakes]
+      checksum: 9df8f5c18d8dfc09530071dedcf87120
     zink-radv-gfx1201:
-      # checksum: 08f44ba93a13220f5e6db3a00e6449ea
-      # checksum: 5078d9c5d272fa231da4d960c90baead
-      text: oscillates between the two checksums above
-      label: [skip, flakes]
+      checksum: 9df8f5c18d8dfc09530071dedcf87120
 
   valve/counterstrike-v2.trace:
     gl-zink-anv-adl:
@@ -407,9 +395,9 @@ traces:
       checksum: 148ec1105f5f14c90cb756a178cef264
       text: note that this trace is stable on freedreno
     zink-radv-vangogh:
-      checksum: 38649d137f8f530d354406bc1ffd6257
+      checksum: b22a3f74b7f10dad2959fb26c61bbb12
     zink-radv-gfx1201:
-      checksum: 38649d137f8f530d354406bc1ffd6257
+      checksum: b22a3f74b7f10dad2959fb26c61bbb12
 
   valve/counterstrike-source-v2.trace:
     gl-zink-anv-adl:

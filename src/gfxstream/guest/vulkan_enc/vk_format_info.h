@@ -39,6 +39,9 @@ static inline VkFormat vk_format_from_fourcc(unsigned fourcc_format) {
     switch (fourcc_format) {
         case DRM_FORMAT_R8:
             return VK_FORMAT_R8_UNORM;
+        case DRM_FORMAT_ARGB8888:
+        case DRM_FORMAT_XRGB8888:
+            return VK_FORMAT_B8G8R8A8_UNORM;
         case DRM_FORMAT_ABGR8888:
             return VK_FORMAT_R8G8B8A8_UNORM;
         case DRM_FORMAT_XBGR8888:
@@ -74,6 +77,8 @@ static inline unsigned android_format_from_vk(VkFormat vk_format) {
             return AHARDWAREBUFFER_FORMAT_R8_UNORM;
         case VK_FORMAT_R8G8B8A8_UNORM:
             return AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
+        case VK_FORMAT_B8G8R8A8_UNORM:
+            return AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM;
         case VK_FORMAT_R8G8B8_UNORM:
             return AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM;
         case VK_FORMAT_R5G6B5_UNORM_PACK16:

@@ -337,6 +337,10 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
 
    u_trace_init(&ctx->trace, &ctx->ds.trace_context);
 
+   /* Reset timestamp command tracking */
+   ctx->last_timestamp_cmd = NULL;
+   ctx->last_timestamp_cmd_cdw = UINT32_MAX;
+
    if (unlikely(radeon_uses_secure_bos(ctx->ws))) {
       is_secure = ctx->ws->cs_is_secure(&ctx->gfx_cs);
 

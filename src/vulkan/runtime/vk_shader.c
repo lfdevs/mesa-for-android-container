@@ -297,6 +297,28 @@ struct set_layouts {
    struct vk_descriptor_set_layout *set_layouts[MESA_VK_MAX_DESCRIPTOR_SETS];
 };
 
+static VkShaderCreateFlagsEXT
+extend_create_flags(VkShaderCreateFlagBitsEXT flags,
+                    uint32_t set_count,
+                    struct set_layouts *set_layouts)
+{
+   if (!(flags & VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT)) {
+      for (uint32_t i = 0; i < set_count; i++) {
+         if (set_layouts->set_layouts[i] == NULL)
+            continue;
+
+         flags |=
+            (set_layouts->set_layouts[i]->flags &
+             VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) ?
+            VK_SHADER_CREATE_DESCRIPTOR_BUFFER_BIT_MESA :
+            VK_SHADER_CREATE_DESCRIPTOR_LEGACY_BIT_MESA;
+         break;
+      }
+   }
+
+   return flags;
+}
+
 static void
 vk_shader_compile_info_init(struct vk_shader_compile_info *info,
                             struct set_layouts *set_layouts,
@@ -312,7 +334,8 @@ vk_shader_compile_info_init(struct vk_shader_compile_info *info,
 
    *info = (struct vk_shader_compile_info) {
       .stage = nir->info.stage,
-      .flags = vk_info->flags,
+      .flags = extend_create_flags(vk_info->flags,
+                                   vk_info->setLayoutCount, set_layouts),
       .next_stage_mask = vk_info->nextStage,
       .nir = nir,
       .robustness = rs,

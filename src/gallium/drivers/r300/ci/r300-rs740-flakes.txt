@@ -1,18 +1,5 @@
-# Uninitialized reads in FS, https://gitlab.freedesktop.org/mesa/mesa/-/issues/12047
-spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0
-spec@glsl-1.10@execution@fs-frontfacing-ternary-vec4-neg-1.0-1.0
-spec@glsl-1.20@execution@glsl-fs-frontfacing-not
-
 dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.17
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.35
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.88
-dEQP-GLES2.functional.fragment_ops.random.77
 dEQP-GLES2.functional.fragment_ops.scissor.contained_point
-
-shaders@glsl-max-varyings
-shaders@glsl-vs-point-size
-
-spec@!opengl 1.2@tex3d-maxsize
 
 glx@glx-buffer-age
 glx@glx-multithread-clearbuffer

@@ -73,7 +73,7 @@ rc_find_free_temporary(struct radeon_compiler *c)
 struct rc_instruction *
 rc_alloc_instruction(struct radeon_compiler *c)
 {
-   struct rc_instruction *inst = memory_pool_malloc(&c->Pool, sizeof(struct rc_instruction));
+   struct rc_instruction *inst = linear_alloc(c->Pool, struct rc_instruction);
 
    memset(inst, 0, sizeof(struct rc_instruction));
 

@@ -204,25 +204,30 @@ encode(a, format_ab)
 encode(b, format_ab)
 encode(c, format_cd)
 
-local buf = execute {
+local output_size = 8 * exec_size
+local buf = alloc(output_size, { fill = 0 })
+
+execute {
   src =
-    [[]]
+    [[@param autoswsb
+
+]]
     .. gen.mov_grf(format_ab, 10, a:to_row_major())
     .. gen.mov_grf(format_ab, 20, b:to_interleaved_row_major(packing_factor))
     .. gen.mov_grf(format_cd, 30, c:to_row_major())
     .. string.format([[
 
-    dpas.8x8 (%d) r40:%s r30:%s r20:%s r10:%s {A@1,$1}
+    dpas.8x8 (%d) r40:%s r30:%s r20:%s r10:%s
     @syncnop
 
     ]], exec_size, format_cd, format_cd, format_ab, format_ab)
-    .. gen.write_grfs(40, 8)
+    .. gen.write_grfs(40, 8, "buf0")
     .. [[
     @eot
     ]],
 }
 
-local d = matrix.from_row_major_buffer(8, exec_size, buf)
+local d = matrix.from_row_major_buffer(8, exec_size, buf:read(output_size))
 
 local d_print_fmt = nil
 if string.find(format_cd, "f") then

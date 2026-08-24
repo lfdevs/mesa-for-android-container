@@ -630,8 +630,8 @@ vk_rasterization_state_init(struct vk_rasterization_state *rs,
    }
    rs->line.width = rs_info->lineWidth;
 
-   vk_foreach_struct_const(ext, rs_info->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, rs_info->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT: {
          const VkPipelineRasterizationConservativeStateCreateInfoEXT *rcs_info =
             (const VkPipelineRasterizationConservativeStateCreateInfoEXT *)ext;

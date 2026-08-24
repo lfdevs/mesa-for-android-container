@@ -12,6 +12,13 @@ executor_includes = [
   inc_intel,
 ]
 
+executor_manual_h = custom_target(
+  'executor_manual.h',
+  input: 'executor.1',
+  output: 'executor_manual.h',
+  command: [prog_python, files_xxd, '@INPUT@', '@OUTPUT@', '--name', 'executor_manual'],
+)
+
 executor_hw_libs = []
 foreach v: ['90', '110', '120', '125', '200', '300', '350']
   executor_hw_libs += static_library(
@@ -37,6 +44,9 @@ executor = executable(
   [
     'executor_main.c',
     'executor_macros.c',
+    executor_manual_h,
+    # TODO: Move slice.h into a proper common place.
+    '../mda/slice.c',
   ],
   dependencies: [
     dep_libdrm,

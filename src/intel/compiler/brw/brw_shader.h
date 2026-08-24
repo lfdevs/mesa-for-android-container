@@ -140,11 +140,15 @@ public:
    /** Byte-offset for the next available spot in the scratch space buffer. */
    unsigned last_scratch;
 
+   /** Byte-offset for the next logical, non-reused spill slot. */
+   unsigned last_logical_scratch;
+
    brw_reg frag_depth;
    brw_reg frag_stencil;
    brw_reg sample_mask;
    brw_reg outputs[VARYING_SLOT_MAX];
    brw_reg dual_src_output;
+   brw_reg subgroup_barrier_index;
    /* This includes HW thread payload + push constants + URB(after brw_assign_xs_urb_setup()) */
    int first_non_payload_grf;
 
@@ -240,7 +244,15 @@ public:
    } inst_arena;
 };
 
-void brw_print_instructions(const brw_shader &s, FILE *file = stderr);
+enum brw_print_flags {
+   BRW_PRINT_DEFS         = 1 << 0,
+   BRW_PRINT_BLOCKS       = 1 << 1,
+   BRW_PRINT_REG_PRESSURE = 1 << 2,
+};
+
+void brw_print_instructions(const brw_shader &s, FILE *file = stderr,
+                            unsigned flags = BRW_PRINT_DEFS | BRW_PRINT_BLOCKS |
+                                             BRW_PRINT_REG_PRESSURE);
 
 void brw_print_instruction(const brw_shader &s, const brw_inst *inst,
                            FILE *file = stderr,

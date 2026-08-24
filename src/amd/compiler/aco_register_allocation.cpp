@@ -782,17 +782,17 @@ add_subdword_definition(Program* program, aco_ptr<Instruction>& instr, PhysReg r
 }
 
 void
-adjust_max_used_regs(ra_ctx& ctx, RegClass rc, unsigned reg)
+adjust_max_used_regs(ra_ctx& ctx, RegClass rc, PhysReg reg)
 {
    uint16_t max_addressible_sgpr = ctx.limit.sgpr;
-   unsigned size = rc.size();
+   unsigned num = DIV_ROUND_UP(reg.reg_b + rc.bytes(), 4);
    if (rc.type() == RegType::vgpr) {
       assert(reg >= 256);
-      uint16_t hi = reg - 256 + size - 1;
+      uint16_t hi = num - 256 - 1;
       assert(hi <= 255);
       ctx.max_used_vgpr = std::max(ctx.max_used_vgpr, hi);
-   } else if (reg + rc.size() <= max_addressible_sgpr) {
-      uint16_t hi = reg + size - 1;
+   } else if (num <= max_addressible_sgpr) {
+      uint16_t hi = num - 1;
       ctx.max_used_sgpr = std::max(ctx.max_used_sgpr, std::min(hi, max_addressible_sgpr));
    }
 }
@@ -1038,7 +1038,7 @@ get_reg_simple(ra_ctx& ctx, const RegisterFile& reg_file, DefInfo info,
             if (reg_found) {
                PhysReg res{entry.first};
                res.reg_b += i;
-               adjust_max_used_regs(ctx, rc, entry.first);
+               adjust_max_used_regs(ctx, rc, res);
                best.emplace(res, BITSET_TEST(ctx.preserved, entry.first));
                return best;
             }
@@ -2226,8 +2226,8 @@ handle_pseudo(ra_ctx& ctx, const RegisterFile& reg_file, Instruction* instr)
          ;
    }
 
-   adjust_max_used_regs(ctx, s1, reg);
    instr->pseudo().scratch_sgpr = PhysReg{(unsigned)reg};
+   adjust_max_used_regs(ctx, s1, instr->pseudo().scratch_sgpr);
 }
 
 bool

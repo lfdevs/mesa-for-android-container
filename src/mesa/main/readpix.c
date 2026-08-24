@@ -1153,8 +1153,8 @@ read_pixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format,
        * integer-valued or both non-integer-valued.
        */
       if (ctx->Extensions.EXT_texture_integer && _mesa_is_color_format(format)) {
-         const struct gl_renderbuffer *rb = ctx->ReadBuffer->_ColorReadBuffer;
-         const GLboolean srcInteger = _mesa_is_format_integer_color(rb->Format);
+         const struct gl_renderbuffer *crb = ctx->ReadBuffer->_ColorReadBuffer;
+         const GLboolean srcInteger = _mesa_is_format_integer_color(crb->Format);
          const GLboolean dstInteger = _mesa_is_enum_format_integer(format);
          if (dstInteger != srcInteger) {
             _mesa_error(ctx, GL_INVALID_OPERATION,

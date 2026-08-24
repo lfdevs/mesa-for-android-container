@@ -82,6 +82,9 @@ util_framebuffer_state_equal(const struct pipe_framebuffer_state *dst,
    if (dst->pls_enabled != src->pls_enabled)
       return false;
 
+   if (dst->downscale_cbufs != src->downscale_cbufs)
+      return false;
+
    return true;
 }
 
@@ -115,6 +118,7 @@ util_copy_framebuffer_state(struct pipe_framebuffer_state *dst,
 
       dst->nr_cbufs = src->nr_cbufs;
       dst->pls_enabled = src->pls_enabled;
+      dst->downscale_cbufs = src->downscale_cbufs;
 
       dst->viewmask = src->viewmask;
       pipe_resource_reference(&dst->zsbuf.texture, src->zsbuf.texture);

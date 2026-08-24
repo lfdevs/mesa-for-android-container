@@ -60,6 +60,33 @@ lower_sysvals_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void * data)
       return false;
    }
 
+   b->cursor = nir_before_instr(&intrin->instr);
+
+   if (b->shader->info.io_lowered) {
+      nir_alu_type nir_type = nir_get_nir_type_for_glsl_type(type);
+      unsigned num_components = glsl_get_vector_elements(type);
+      nir_def *def;
+
+      if (glsl_type_is_float(type)) {
+         nir_def *baryc =
+            nir_load_barycentric_pixel(b, 32,
+                                       .interp_mode = INTERP_MODE_SMOOTH);
+
+         def = nir_load_interpolated_input(b, num_components, 32, baryc,
+                                           nir_imm_int(b, 0),
+                                           .dest_type = nir_type,
+                                           .io_semantics.location = slot);
+      } else {
+         def = nir_load_input(b, num_components, 32,
+                              nir_imm_int(b, 0),
+                              .dest_type = nir_type,
+                              .io_semantics.location = slot);
+      }
+
+      nir_def_replace(&intrin->def, def);
+      return true;
+   }
+
    nir_variable *var =
       nir_get_variable_with_location(b->shader, nir_var_shader_in,
                                      slot, type);
@@ -67,7 +94,6 @@ lower_sysvals_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void * data)
        glsl_type_is_integer(type))
       var->data.interpolation = INTERP_MODE_FLAT;
 
-   b->cursor = nir_before_instr(&intrin->instr);
    nir_def *val = nir_load_var(b, var);
    nir_def_replace(&intrin->def, val);
 

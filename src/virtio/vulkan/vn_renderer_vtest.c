@@ -79,7 +79,8 @@ vtest_connect_socket(struct vn_instance *instance, const char *path)
 
    sock = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
    if (sock < 0) {
-      vn_log(instance, "failed to create a socket");
+      if (VN_DEBUG(INIT))
+         vn_log(instance, "failed to create a socket");
       return -1;
    }
 
@@ -88,7 +89,10 @@ vtest_connect_socket(struct vn_instance *instance, const char *path)
    memcpy(un.sun_path, path, strlen(path));
 
    if (connect(sock, (struct sockaddr *)&un, sizeof(un)) == -1) {
-      vn_log(instance, "failed to connect to %s: %s", path, strerror(errno));
+      if (VN_DEBUG(INIT)) {
+         vn_log(instance, "failed to connect to %s: %s", path,
+                strerror(errno));
+      }
       close(sock);
       return -1;
    }
@@ -99,8 +103,9 @@ vtest_connect_socket(struct vn_instance *instance, const char *path)
 static void
 vtest_read(struct vtest *vtest, void *buf, size_t size)
 {
+   char *ptr = buf;
    do {
-      const ssize_t ret = read(vtest->sock_fd, buf, size);
+      const ssize_t ret = read(vtest->sock_fd, ptr, size);
       if (unlikely(ret < 0)) {
          vn_log(vtest->instance,
                 "lost connection to rendering server on %zu read %zi %d",
@@ -108,7 +113,7 @@ vtest_read(struct vtest *vtest, void *buf, size_t size)
          abort();
       }
 
-      buf += ret;
+      ptr += ret;
       size -= ret;
    } while (size);
 }
@@ -147,8 +152,9 @@ vtest_receive_fd(struct vtest *vtest)
 static void
 vtest_write(struct vtest *vtest, const void *buf, size_t size)
 {
+   const char *ptr = buf;
    do {
-      const ssize_t ret = write(vtest->sock_fd, buf, size);
+      const ssize_t ret = write(vtest->sock_fd, ptr, size);
       if (unlikely(ret < 0)) {
          vn_log(vtest->instance,
                 "lost connection to rendering server on %zu write %zi %d",
@@ -156,7 +162,7 @@ vtest_write(struct vtest *vtest, const void *buf, size_t size)
          abort();
       }
 
-      buf += ret;
+      ptr += ret;
       size -= ret;
    } while (size);
 }
@@ -282,7 +288,7 @@ vtest_vcmd_get_capset(struct vtest *vtest,
    size_t read_size = (vtest_hdr[VTEST_CMD_LEN] - 1) * 4;
    if (capset_size >= read_size) {
       vtest_read(vtest, capset, read_size);
-      memset(capset + read_size, 0, capset_size - read_size);
+      memset((char *)capset + read_size, 0, capset_size - read_size);
    } else {
       vtest_read(vtest, capset, capset_size);
 
@@ -564,12 +570,10 @@ vtest_sync_read(struct vn_renderer *renderer,
 }
 
 static VkResult
-vtest_sync_reset(struct vn_renderer *renderer,
-                 struct vn_renderer_sync *sync,
-                 uint64_t initial_val)
+vtest_sync_reset(struct vn_renderer *renderer, struct vn_renderer_sync *sync)
 {
    /* same as write */
-   return vtest_sync_write(renderer, sync, initial_val);
+   return vtest_sync_write(renderer, sync, 0);
 }
 
 static void
@@ -589,7 +593,6 @@ vtest_sync_destroy(struct vn_renderer *renderer,
 static VkResult
 vtest_sync_create(struct vn_renderer *renderer,
                   uint64_t initial_val,
-                  uint32_t flags,
                   struct vn_renderer_sync **out_sync)
 {
    struct vtest *vtest = (struct vtest *)renderer;
@@ -831,22 +834,12 @@ sync_wait_poll(int fd, int poll_timeout)
    return ret ? VK_SUCCESS : VK_TIMEOUT;
 }
 
-static int
-timeout_to_poll_timeout(uint64_t timeout)
-{
-   const uint64_t ns_per_ms = 1000000;
-   const uint64_t ms = (timeout + ns_per_ms - 1) / ns_per_ms;
-   if (!ms && timeout)
-      return -1;
-   return ms <= INT_MAX ? ms : -1;
-}
-
 static VkResult
 vtest_wait(struct vn_renderer *renderer, const struct vn_renderer_wait *wait)
 {
    struct vtest *vtest = (struct vtest *)renderer;
    const uint32_t flags = wait->wait_any ? VCMD_SYNC_WAIT_FLAG_ANY : 0;
-   const int poll_timeout = timeout_to_poll_timeout(wait->timeout);
+   const int poll_timeout = vn_timeout_to_poll_timeout(wait->timeout);
 
    /*
     * vtest_vcmd_sync_wait (and some other sync commands) is executed after
@@ -895,6 +888,7 @@ vtest_init_renderer_info(struct vtest *vtest)
 
    info->has_dma_buf_import = false;
    info->has_external_sync = false;
+   info->has_timeline_sync = !VN_PERF(NO_TIMELINE_SYNC);
    info->has_implicit_fencing = false;
 
    const struct virgl_renderer_capset_venus *capset = &vtest->capset.data;
@@ -995,6 +989,11 @@ vtest_init(struct vtest *vtest)
    util_sparse_array_init(&vtest->bo_array, sizeof(struct vtest_bo), 1024);
 
    mtx_init(&vtest->sock_mutex, mtx_plain);
+
+   /* disallow VTEST_DEFAULT_SOCKET_NAME on vtest fallback */
+   if (!VN_DEBUG(VTEST) && !socket_name)
+      return VK_ERROR_INITIALIZATION_FAILED;
+
    vtest->sock_fd = vtest_connect_socket(
       vtest->instance, socket_name ? socket_name : VTEST_DEFAULT_SOCKET_NAME);
    if (vtest->sock_fd < 0)
@@ -1073,6 +1072,9 @@ vn_renderer_create_vtest(struct vn_instance *instance,
    }
 
    *renderer = &vtest->base;
+
+   if (VN_DEBUG(INIT))
+      vn_log(vtest->instance, "vtest backend initialized");
 
    return VK_SUCCESS;
 }

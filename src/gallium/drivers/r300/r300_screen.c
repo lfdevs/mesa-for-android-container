@@ -217,8 +217,8 @@ util_format_is_rgba1010102_variant(const struct util_format_description *desc)
    return true;
 }
 
-static bool r300_is_blending_supported(struct r300_screen *rscreen,
-                                       enum pipe_format format)
+bool r300_is_blending_supported(struct r300_screen *rscreen,
+                                enum pipe_format format)
 {
     int c;
     const struct util_format_description *desc =
@@ -497,6 +497,9 @@ static void r300_init_screen_caps(struct r300_screen* r300screen)
 
    caps->texture_transfer_modes = PIPE_TEXTURE_TRANSFER_BLIT;
 
+   caps->max_texture_upload_memory_budget =
+      MIN2(16 * 1024, r300screen->info.gart_size_kb / 8) * 1024;
+
    caps->min_map_buffer_alignment = R300_BUFFER_ALIGNMENT;
 
    caps->constant_buffer_offset_alignment = 16;
@@ -546,10 +549,14 @@ static void r300_init_screen_caps(struct r300_screen* r300screen)
 
    caps->max_vertex_attrib_stride = 2048;
 
-   caps->max_varyings = 10;
+   /* R500 can use two color interpolators for generic varyings. */
+   caps->max_varyings = is_r500 ? 10 : 8;
 
    caps->prefer_imm_arrays_as_constbuf = false;
 
+   caps->device_type = r300screen->caps.has_hardware_tcl
+       ? PIPE_DEVICE_TYPE_DISCRETE_GPU
+       : PIPE_DEVICE_TYPE_INTEGRATED_GPU;
    caps->vendor_id = 0x1002;
    caps->device_id = r300screen->info.pci_id;
    caps->video_memory = r300screen->info.vram_size_kb >> 10;
@@ -651,7 +658,8 @@ static void r300_query_memory_info(struct pipe_screen *pscreen,
 }
 
 struct pipe_screen* r300_screen_create(struct radeon_winsys *rws,
-                                       const struct pipe_screen_config *config)
+                                       const struct pipe_screen_config *config,
+                                       UNUSED uint64_t debug_flags)
 {
     struct r300_screen *r300screen = CALLOC_STRUCT(r300_screen);
 

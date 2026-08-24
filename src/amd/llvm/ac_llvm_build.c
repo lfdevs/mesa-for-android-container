@@ -455,31 +455,15 @@ LLVMValueRef ac_build_shader_clock(struct ac_llvm_context *ctx, mesa_scope scope
 
 LLVMValueRef ac_build_ballot(struct ac_llvm_context *ctx, LLVMValueRef value)
 {
-   const char *name;
+   const char *name = ctx->wave_size == 64 ? "llvm.amdgcn.ballot.i64" : "llvm.amdgcn.ballot.i32";
 
-   if (LLVMTypeOf(value) == ctx->i1)
-      value = LLVMBuildZExt(ctx->builder, value, ctx->i32, "");
-
-   if (ctx->wave_size == 64)
-      name = "llvm.amdgcn.icmp.i64.i32";
-   else
-      name = "llvm.amdgcn.icmp.i32.i32";
-
-   LLVMValueRef args[3] = {value, ctx->i32_0, LLVMConstInt(ctx->i32, LLVMIntNE, 0)};
-
-   /* We currently have no other way to prevent LLVM from lifting the icmp
-    * calls to a dominating basic block.
-    */
-   ac_build_optimization_barrier(ctx, &args[0], false);
-
-   args[0] = ac_to_integer(ctx, args[0]);
-
-   return ac_build_intrinsic(ctx, name, ctx->iN_wavemask, args, 3, 0);
+   assert(LLVMTypeOf(value) == ctx->i1);
+   return ac_build_intrinsic(ctx, name, ctx->iN_wavemask, &value, 1, 0);
 }
 
 LLVMValueRef ac_build_vote_all(struct ac_llvm_context *ctx, LLVMValueRef value)
 {
-   LLVMValueRef active_set = ac_build_ballot(ctx, ctx->i32_1);
+   LLVMValueRef active_set = ac_build_ballot(ctx, ctx->i1true);
    LLVMValueRef vote_set = ac_build_ballot(ctx, value);
    return LLVMBuildICmp(ctx->builder, LLVMIntEQ, vote_set, active_set, "");
 }
@@ -3151,7 +3135,6 @@ LLVMValueRef ac_build_inclusive_scan(struct ac_llvm_context *ctx, LLVMValueRef s
 
    if (LLVMTypeOf(src) == ctx->i1 && op == nir_op_iadd) {
       LLVMBuilderRef builder = ctx->builder;
-      src = LLVMBuildZExt(builder, src, ctx->i32, "");
       result = ac_build_ballot(ctx, src);
       result = ac_build_mbcnt(ctx, result);
       result = LLVMBuildAdd(builder, result, src, "");
@@ -3173,11 +3156,8 @@ LLVMValueRef ac_build_exclusive_scan(struct ac_llvm_context *ctx, LLVMValueRef s
    LLVMValueRef result;
 
    if (LLVMTypeOf(src) == ctx->i1 && op == nir_op_iadd) {
-      LLVMBuilderRef builder = ctx->builder;
-      src = LLVMBuildZExt(builder, src, ctx->i32, "");
       result = ac_build_ballot(ctx, src);
-      result = ac_build_mbcnt(ctx, result);
-      return result;
+      return ac_build_mbcnt(ctx, result);
    }
 
    ac_build_optimization_barrier(ctx, &src, false);

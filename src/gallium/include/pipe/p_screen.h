@@ -443,6 +443,19 @@ struct pipe_screen {
                                   struct pipe_fence_handle *fence);
 
    /**
+    * Wait for multiple fences to be signaled.
+    *
+    * \param fences     array of fence handles to wait on
+    * \param num_fences number of fences in the array
+    * \param wait_all   if true, wait for all fences; if false, wait for any
+    * \return index of the first signaled fence, or -1 on failure
+    */
+   int (*fence_wait_multiple)(struct pipe_screen *screen,
+                              struct pipe_fence_handle **fences,
+                              unsigned num_fences,
+                              bool wait_all);
+
+   /**
     * Create a fence from an Win32 handle.
     *
     * This is used for importing a foreign/external fence handle.

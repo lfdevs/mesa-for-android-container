@@ -13,6 +13,8 @@
 
 void radv_gather_unused_args(struct radv_ray_tracing_stage_info *info, nir_shader *nir);
 
+void radv_nir_init_cps_function(nir_function *function, bool uses_descriptor_heap);
+
 void radv_nir_lower_rt_abi_cps(nir_shader *shader, const struct radv_shader_info *info, bool resume_shader,
                                const struct radv_compiler_info *compiler_info,
                                struct radv_ray_tracing_pipeline *pipeline, bool has_position_fetch,

@@ -22,6 +22,7 @@ dEQP-GLES31.functional.texture.gather.offset.min_required_offset.2d.rgba8i.size_
 
 glx@glx-buffer-age
 glx@glx-buffer-age vblank_mode=0
+glx@glx-make-current
 glx@glx-multi-context-ib-1
 glx@glx-multithread-clearbuffer
 glx@glx-multithread-texture

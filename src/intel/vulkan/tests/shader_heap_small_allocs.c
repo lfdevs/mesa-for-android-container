@@ -11,7 +11,8 @@ void shader_heap_small_allocs_hi(void);
 
 static void shader_heap_small_allocs(bool high)
 {
-   struct anv_physical_device physical_device = {};
+   struct anv_instance instance = {};
+   struct anv_physical_device physical_device = { .instance = &instance };
    struct anv_device device = {};
    struct anv_shader_heap heap;
 

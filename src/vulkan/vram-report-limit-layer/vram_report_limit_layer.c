@@ -307,8 +307,8 @@ instance_data_unmap_physical_devices(
 static VkLayerInstanceCreateInfo *
 get_instance_chain_info(const VkInstanceCreateInfo *pCreateInfo)
 {
-   vk_foreach_struct_const (item, pCreateInfo->pNext) {
-      if (item->sType == VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO &&
+   vk_foreach_struct_const (sType, item, pCreateInfo->pNext) {
+      if (sType == VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO &&
           ((VkLayerInstanceCreateInfo *)item)->function == VK_LAYER_LINK_INFO)
          return (VkLayerInstanceCreateInfo *)item;
    }

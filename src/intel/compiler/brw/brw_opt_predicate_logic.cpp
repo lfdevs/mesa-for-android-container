@@ -241,6 +241,10 @@ try_predicated_cmp(brw_shader &s, const brw_live_variables &live_vars,
                                         farther.inst->exec_size);
    }
 
+   unsigned flags_written = logic_inst->flags_written(s.devinfo);
+   if ((farther_flags & flags_written) != flags_written)
+      return false;
+
    /* If farther does not already write flags, there must be no readers of the flags
     * that it will write.
     *
@@ -271,8 +275,7 @@ try_predicated_cmp(brw_shader &s, const brw_live_variables &live_vars,
       flags_read_between(logic_inst, NULL, s.devinfo) |
       live_vars.block_data[logic_inst->block->num].flag_liveout[0];
 
-   if (flags_read_after_inst & (nearer_flags &
-                                ~logic_inst->flags_written(s.devinfo)))
+   if (flags_read_after_inst & (nearer_flags & ~flags_written))
       return false;
 
    /* It is safe to eliminate the logic operation. Perform the following

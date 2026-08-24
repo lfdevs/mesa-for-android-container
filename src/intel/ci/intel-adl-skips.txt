@@ -1,0 +1,17 @@
+# random timeouts or very long running tests
+program@execute@builtin@builtin-float-acos-1.0.generated
+program@execute@builtin@builtin-float-atan-1.0.generated
+program@execute@builtin@builtin-float-atan2pi-1.0.generate
+program@execute@builtin@builtin-float-atanpi-1.0.generated
+program@execute@builtin@builtin-float-cbrt-1.0.generated
+program@execute@builtin@builtin-float-cospi-1.0.generated
+program@execute@builtin@builtin-float-lgamma-1.0.generated
+program@execute@builtin@builtin-float-lgamma_r-1.0.generated
+program@execute@builtin@builtin-float-log1p-1.0.generate
+program@execute@builtin@builtin-float-sincos-1.0.generated
+program@execute@builtin@builtin-float-sinh-1.0.generated
+program@execute@builtin@builtin-float-sinpi-1.0.generated
+program@execute@builtin@builtin-float-tanh-1.0.generated
+program@execute@builtin@builtin-shuffle2-double-ulong
+program@execute@builtin@builtin-shuffle2-long-ulong
+program@execute@builtin@builtin-shuffle2-ulong-ulong

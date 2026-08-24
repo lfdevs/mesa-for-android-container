@@ -616,8 +616,8 @@ get_addr_regs_from_waves(Program* program, uint16_t waves)
 
    uint16_t vgprs = program->dev.physical_vgprs / waves;
    vgprs = vgprs / program->dev.vgpr_alloc_granule * program->dev.vgpr_alloc_granule;
-   vgprs -= program->config->num_shared_vgprs / 2;
    vgprs = std::min(vgprs, program->dev.vgpr_limit);
+   vgprs -= program->config->num_shared_vgprs / 2;
    return RegisterDemand(vgprs, sgprs);
 }
 

@@ -73,10 +73,10 @@ get_pipeline(struct radv_device *device, const struct radv_image_view *src_iview
 
    memset(&key, 0, sizeof(key));
    key.type = RADV_META_OBJECT_KEY_BLIT;
-   key.aspects = src_image->vk.aspects;
+   key.aspects = aspect;
    key.image_type = src_image->vk.image_type;
 
-   if (src_image->vk.aspects == VK_IMAGE_ASPECT_COLOR_BIT)
+   if (aspect == VK_IMAGE_ASPECT_COLOR_BIT)
       key.format = dst_image->vk.format;
 
    VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
@@ -288,7 +288,7 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_i
    };
 
    VkRenderingAttachmentInfo color_att;
-   if (src_image->vk.aspects == VK_IMAGE_ASPECT_COLOR_BIT) {
+   if (src_iview->vk.aspects == VK_IMAGE_ASPECT_COLOR_BIT) {
       color_att = (VkRenderingAttachmentInfo){
          .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
          .imageView = radv_image_view_to_handle(dst_iview),
@@ -301,7 +301,7 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_i
    }
 
    VkRenderingAttachmentInfo depth_att;
-   if (src_image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
+   if (src_iview->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
       depth_att = (VkRenderingAttachmentInfo){
          .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
          .imageView = radv_image_view_to_handle(dst_iview),
@@ -313,7 +313,7 @@ meta_emit_blit(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_i
    }
 
    VkRenderingAttachmentInfo stencil_att;
-   if (src_image->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
+   if (src_iview->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
       stencil_att = (VkRenderingAttachmentInfo){
          .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
          .imageView = radv_image_view_to_handle(dst_iview),
@@ -411,9 +411,14 @@ blit_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkI
    if (src_image->vk.image_type == VK_IMAGE_TYPE_3D)
       depth_center_offset = 0.5 / (dst_end - dst_start) * (src_end - src_start);
 
+   unsigned src_layer_start = src_start;
+   int src_layer_step = 1;
+
    if (flip_z) {
       src_start = src_end;
       src_z_step *= -1;
+      src_layer_start = src_end - 1;
+      src_layer_step *= -1;
       depth_center_offset *= -1;
    }
 
@@ -465,7 +470,8 @@ blit_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkI
       const uint32_t dst_array_slice = dst_start + i;
 
       /* 3D images have just 1 layer */
-      const uint32_t src_array_slice = src_image->vk.image_type == VK_IMAGE_TYPE_3D ? 0 : src_start + i;
+      const uint32_t src_array_slice =
+         src_image->vk.image_type == VK_IMAGE_TYPE_3D ? 0 : src_layer_start + i * src_layer_step;
 
       const VkImageViewUsage2CreateInfoKHR dst_iview_usage_info = {
          .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
@@ -479,7 +485,7 @@ blit_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkI
                               .pNext = &dst_iview_usage_info,
                               .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                               .image = radv_image_to_handle(dst_image),
-                              .viewType = radv_meta_get_view_type(dst_image),
+                              .viewType = radv_meta_get_view_type(dst_image, true),
                               .format = dst_image->vk.format,
                               .subresourceRange = {.aspectMask = dst_res->aspectMask,
                                                    .baseMipLevel = dst_res->mipLevel,
@@ -500,7 +506,7 @@ blit_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *src_image, VkI
                               .pNext = &src_iview_usage_info,
                               .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                               .image = radv_image_to_handle(src_image),
-                              .viewType = radv_meta_get_view_type(src_image),
+                              .viewType = radv_meta_get_view_type(src_image, false),
                               .format = src_image->vk.format,
                               .subresourceRange = {.aspectMask = src_res->aspectMask,
                                                    .baseMipLevel = src_res->mipLevel,

@@ -124,17 +124,17 @@ vk_sampler_state_init(struct vk_sampler_state *state,
    state->reduction_mode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE;
    state->border_color_index = MESA_VK_MAX_CUSTOM_BORDER_COLOR;
 
-   vk_foreach_struct_const(ext, pCreateInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pCreateInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT: {
-         const VkSamplerBorderColorComponentMappingCreateInfoEXT *bccm_info = (void *)ext;
+         const VkSamplerBorderColorComponentMappingCreateInfoEXT *bccm_info = ext;
          state->border_color_component_mapping = bccm_info->components;
          state->image_view_is_srgb = bccm_info->srgb;
          break;
       }
 
       case VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT: {
-         const VkSamplerCustomBorderColorCreateInfoEXT *cbc_info = (void *)ext;
+         const VkSamplerCustomBorderColorCreateInfoEXT *cbc_info = ext;
          if (!vk_border_color_is_custom(pCreateInfo->borderColor))
             break;
 
@@ -145,13 +145,13 @@ vk_sampler_state_init(struct vk_sampler_state *state,
       }
 
       case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO: {
-         const VkSamplerReductionModeCreateInfo *rm_info = (void *)ext;
+         const VkSamplerReductionModeCreateInfo *rm_info = ext;
          state->reduction_mode = rm_info->reductionMode;
          break;
       }
 
       case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO: {
-         const VkSamplerYcbcrConversionInfo *yc_info = (void *)ext;
+         const VkSamplerYcbcrConversionInfo *yc_info = ext;
          VK_FROM_HANDLE(vk_ycbcr_conversion, conversion, yc_info->conversion);
 
          /* From the Vulkan 1.2.259 spec:
@@ -176,7 +176,7 @@ vk_sampler_state_init(struct vk_sampler_state *state,
       }
 
       case VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_INDEX_CREATE_INFO_EXT: {
-         const VkSamplerCustomBorderColorIndexCreateInfoEXT *bc_info = (void *)ext;
+         const VkSamplerCustomBorderColorIndexCreateInfoEXT *bc_info = ext;
          state->border_color_index = bc_info->index;
          break;
       }

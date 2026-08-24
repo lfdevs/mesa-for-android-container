@@ -116,6 +116,7 @@ struct ac_compiler_info {
    uint32_t min_wave64_vgpr_alloc;
    uint32_t max_vgpr_alloc;
    uint32_t wave64_vgpr_alloc_granularity;
+   uint32_t wave64_vgpr_encode_granularity;
 
    uint32_t lds_size_per_workgroup;
 
@@ -152,25 +153,47 @@ struct ac_compiler_info {
    /* Whether 3D textures, cubemap textures, border colors, and mipmapping are supported. (CDNA) */
    uint32_t has_3d_cube_border_color_mipmap : 1;
 
-   /* conformant_trunc_coord is equal to TA_CNTL2.TRUNCATE_COORD_MODE, which exists since gfx11.
+   /* conformant_trunc_coord is equal to TA_CNTL2.TRUNCATE_COORD_MODE, which exists since gfx11,
+    * but this privileged config register field may be initialized to 0 by the HW/FW, leading to
+    * non-conformant behavior in some cases.
     *
-    * If TA_CNTL2.TRUNCATE_COORD_MODE == 0, coordinate truncation is the same as gfx10 and older.
+    * If TA_CNTL2.TRUNCATE_COORD_MODE == 0, coordinate truncation is the same as gfx10 and older,
+    * where TRUNC_COORD == 0 is fully conformant with D3D10+ (also referred to as the legacy D3D12
+    * behavior), but it's impossible to make nearest filtering fully conformant with D3D9/GL/Vulkan.
+    * Partial conformance is possible by setting TRUNC_COORD == 1 in the sample descriptor if both
+    * the min or mag filters are nearest. If only one of them is nearest, we can't set TRUNC_COORD
+    * because it would also affect the linear filter, which would be incorrect. TRUNC_COORD also has
+    * to be cleared to 0 for nir_texop_tg4 in the shader in this mode, and the layer coordinate must
+    * be rounded using ALU in the shader if TRUNC_COORD == 1 because the HW truncates it too.
     *
-    * If TA_CNTL2.TRUNCATE_COORD_MODE == 1, coordinate truncation is adjusted to be D3D9/GL/Vulkan
-    * conformant if you also set TRUNC_COORD. Coordinate truncation uses D3D10+ behaviour if
-    * TRUNC_COORD is unset.
+    * If TA_CNTL2.TRUNCATE_COORD_MODE == 1, all of the issues above are fixed. TRUNC_COORD == 0 is
+    * the same, and TRUNC_COORD == 1 makes coordinate truncation D3D9/GL/Vulkan-conformant regardless
+    * of other sampler states because first the HW selects the filter (from either the min or mag
+    * filter) and then truncation is applied only if the selected filter is nearest. Additionally,
+    * nir_texop_tg4 no longer has to clear the TRUNC_COORD bit, and the shader no longer has to round
+    * the layer coordinate using ALU.
     *
-    * Behavior if TA_CNTL2.TRUNCATE_COORD_MODE == 1:
+    * Behavior if TA_CNTL2.TRUNCATE_COORD_MODE == 1 (always conformant, set TRUNC_COORD = is_d3d9_gl_vk):
     *    truncate_coord_xy = TRUNC_COORD && (xy_filter == Point && !gather);
     *    truncate_coord_z = TRUNC_COORD && (z_filter == Point);
     *    truncate_coord_layer = false;
     *
-    * Behavior if TA_CNTL2.TRUNCATE_COORD_MODE == 0:
+    * Behavior if TA_CNTL2.TRUNCATE_COORD_MODE == 0 (only correct for DX10+ if TRUNC_COORD == 0):
     *    truncate_coord_xy = TRUNC_COORD;
     *    truncate_coord_z = TRUNC_COORD;
     *    truncate_coord_layer = TRUNC_COORD;
     *
     * AnisoPoint is treated as Point.
+    *
+    * Newer versions of D3D12 were changed to require the D3D9/GL/Vulkan behavior, whose support is
+    * indicated by the feature option PointSamplingAddressesNeverRoundUp == true in D3D12. See:
+    * https://microsoft.github.io/DirectX-Specs/d3d/VulkanOn12.html#changing-the-spec-for-point-sampling-address-computations
+    * Note that this new D3D12 requirement cannot be satisfied by all gfx6-10.3 chips and any newer
+    * chips where TRUNCATE_COORD_MODE is initialized to 0.
+    *
+    * If TA_CNTL2.TRUNCATE_COORD_MODE == 0, it can be set to 1 on gfx11+ using UMR or in the kernel
+    * driver at boot to enable the conformant behavior, but it's unclear whether either setting
+    * persists across power gating. If not, the FW must reset it after power gating.
     */
    uint32_t conformant_trunc_coord : 1;
 

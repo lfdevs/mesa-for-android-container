@@ -44,6 +44,7 @@ u_init_pipe_screen_caps(struct pipe_screen *pscreen, int accel)
 
    caps->accelerated = accel;
    caps->graphics = true;
+   caps->fragment_shader_depth = true;
    caps->gl_clamp = true;
    caps->max_render_targets = true;
    caps->mixed_colorbuffer_formats = true;
@@ -82,6 +83,7 @@ u_init_pipe_screen_caps(struct pipe_screen *pscreen, int accel)
 
    caps->max_viewports = 1;
 
+   caps->device_type = accel ? PIPE_DEVICE_TYPE_UNKNOWN : PIPE_DEVICE_TYPE_CPU;
    caps->endianness = PIPE_ENDIAN_LITTLE;
 
    /* All new drivers should support persistent/coherent mappings. This CAP
@@ -129,6 +131,45 @@ u_init_pipe_screen_caps(struct pipe_screen *pscreen, int accel)
    caps->dest_surface_srgb_control = true;
 
    caps->max_varyings = 8;
+
+   /* Outputs that GL's MAX_*_OUTPUT_COMPONENTS limits don't apply to, because
+    * they get consumed by fixed-function hardware rather than taking up varying
+    * storage.  The pre-rasterization stages all feed the same fixed-function
+    * unit, so they share a mask.
+    *
+    * The clip and cull distances are in here even though in theory they should
+    * only be free when the FS doesn't read them.
+    *
+    * This is placed in caps rather than shader_caps because it lets us set a
+    * default here (drivers init their shader caps before
+    * u_init_pipe_screen_caps() is called).
+    */
+   caps->ignored_output_varyings[MESA_SHADER_VERTEX] =
+   caps->ignored_output_varyings[MESA_SHADER_TESS_EVAL] =
+   caps->ignored_output_varyings[MESA_SHADER_GEOMETRY] =
+   caps->ignored_output_varyings[MESA_SHADER_MESH] =
+      VARYING_BIT_POS |
+      VARYING_BIT_PSIZ |
+      VARYING_BIT_CLIP_VERTEX |
+      VARYING_BIT_CLIP_DIST0 |
+      VARYING_BIT_CLIP_DIST1 |
+      VARYING_BIT_CULL_DIST0 |
+      VARYING_BIT_CULL_DIST1 |
+      VARYING_BIT_LAYER |
+      VARYING_BIT_VIEWPORT |
+      VARYING_BIT_VIEWPORT_MASK |
+      VARYING_BIT_PRIMITIVE_INDICES;
+
+   /* These are per-patch outputs that get recorded in outputs_written rather
+    * than patch_outputs_written, so they have to be excluded from the
+    * per-vertex count by hand.  Not hardware-dependent -- drivers shouldn't be
+    * overriding this one.
+    */
+   caps->ignored_output_varyings[MESA_SHADER_TESS_CTRL] =
+      VARYING_BIT_TESS_LEVEL_INNER |
+      VARYING_BIT_TESS_LEVEL_OUTER |
+      VARYING_BIT_BOUNDING_BOX0 |
+      VARYING_BIT_BOUNDING_BOX1;
 
    caps->throttle = true;
 

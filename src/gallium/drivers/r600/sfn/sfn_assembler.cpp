@@ -501,11 +501,6 @@ void
 AssemblerVisitor::visit(const IfInstr& instr)
 {
 
-   auto pred = instr.predicate();
-   auto [addr, dummy0, dummy1] = pred->indirect_addr();
-   assert(!dummy1);
-   assert(!addr);
-
    r600_bytecode_add_cfinst(&m_bc, CF_OP_JUMP);
    clear_states(sf_all);
 

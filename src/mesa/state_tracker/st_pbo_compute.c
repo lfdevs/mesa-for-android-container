@@ -1224,13 +1224,13 @@ copy_converted_buffer(struct gl_context * ctx,
 
       for (unsigned z = 0; z < depth; z++) {
          for (unsigned y = 0; y < height; y++) {
-            GLubyte *dst = _mesa_image_address(dim, pack, pixels,
-                                       width, height, format, type,
-                                       z, y, 0);
+            GLubyte *dstpx = _mesa_image_address(dim, pack, pixels,
+                                                 width, height, format, type,
+                                                 z, y, 0);
             GLubyte *srcpx = _mesa_image_address(dim, &packing, map,
                                                  width, height, format, type,
                                                  z, y, 0);
-            util_streaming_load_memcpy(dst, srcpx, util_format_get_stride(dst_format, width));
+            util_streaming_load_memcpy(dstpx, srcpx, util_format_get_stride(dst_format, width));
          }
       }
    } else {

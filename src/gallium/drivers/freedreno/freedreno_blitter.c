@@ -517,7 +517,7 @@ fd_resource_copy_region(struct pipe_context *pctx, struct pipe_resource *dst,
       info.dst.box.height = src_box->height;
       assert(info.dst.box.width >= 0);
       assert(info.dst.box.height >= 0);
-      info.dst.box.depth = 1;
+      info.dst.box.depth = src_box->depth;
       info.dst.format = dst->format;
       info.src.resource = src;
       info.src.level = src_level;

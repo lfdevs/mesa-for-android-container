@@ -231,6 +231,7 @@ enum ENUM_PACKED opcode {
    SHADER_OPCODE_INT_REMAINDER,
    SHADER_OPCODE_SIN,
    SHADER_OPCODE_COS,
+   SHADER_OPCODE_TANH,
 
    /**
     * A generic "send" opcode.  The first two sources are the message

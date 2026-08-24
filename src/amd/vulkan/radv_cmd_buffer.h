@@ -361,8 +361,6 @@ struct radv_cmd_state {
    struct radv_shader_object *shader_objs[MESA_VULKAN_SHADER_STAGES];
 
    uint32_t prefetch_L2_mask;
-   uint64_t vb_va;
-   unsigned vb_size;
 
    struct radv_graphics_pipeline *graphics_pipeline;
    struct radv_shader_part *emitted_vs_prolog;
@@ -433,6 +431,7 @@ struct radv_cmd_state {
 
    VkLineRasterizationModeEXT line_rast_mode;
    unsigned vgt_outprim_type;
+   unsigned guardband_raster_prim;
 
    uint32_t vtx_base_sgpr;
    uint8_t vtx_emit_num;
@@ -610,6 +609,9 @@ struct radv_cmd_buffer {
       struct rvcn_sq_var sq;
       struct rvcn_decode_buffer_s *decode_buffer;
       struct radv_enc_state enc;
+
+      uint32_t status_offset;
+      uint32_t statistics_offset;
       uint64_t feedback_query_va;
    } video;
 
@@ -853,7 +855,7 @@ struct radv_vbo_info {
 void radv_get_vbo_info(const struct radv_cmd_buffer *cmd_buffer, uint32_t vbo_idx, struct radv_vbo_info *vbo_info);
 
 void radv_emit_compute_shader(const struct radv_physical_device *pdev, struct radv_cmd_stream *cs,
-                              const struct radv_shader *shader);
+                              const struct radv_shader *shader, bool emit_cs_state);
 
 void radv_upload_indirect_descriptor_sets(struct radv_cmd_buffer *cmd_buffer,
                                           struct radv_descriptor_state *descriptors_state);

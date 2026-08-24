@@ -21,9 +21,13 @@
 void
 rc_init(struct radeon_compiler *c, const struct rc_regalloc_state *rs)
 {
+   const linear_opts pool_opts = {
+      .min_buffer_size = 8192,
+   };
+
    memset(c, 0, sizeof(*c));
 
-   memory_pool_init(&c->Pool);
+   c->Pool = linear_context_with_opts(NULL, &pool_opts);
    c->Program.Instructions.Prev = &c->Program.Instructions;
    c->Program.Instructions.Next = &c->Program.Instructions;
    c->Program.Instructions.U.I.Opcode = RC_OPCODE_ILLEGAL_OPCODE;
@@ -35,7 +39,7 @@ void
 rc_destroy(struct radeon_compiler *c)
 {
    rc_constants_destroy(&c->Program.Constants);
-   memory_pool_destroy(&c->Pool);
+   linear_free_context(c->Pool);
    free(c->ErrorMsg);
 }
 
@@ -141,85 +145,6 @@ rc_calculate_inputs_outputs(struct radeon_compiler *c)
             c->Program.OutputsWritten |= 1U << inst->U.I.DstReg.Index;
       }
    }
-}
-
-/**
- * Rewrite the program such that a given output is duplicated.
- */
-void
-rc_copy_output(struct radeon_compiler *c, unsigned output, unsigned dup_output)
-{
-   unsigned tempreg = rc_find_free_temporary(c);
-   struct rc_instruction *inst;
-   struct rc_instruction *insert_pos = c->Program.Instructions.Prev;
-   struct rc_instruction *last_write_inst = NULL;
-   unsigned branch_depth = 0;
-   unsigned loop_depth = 0;
-   bool emit_after_control_flow = false;
-   unsigned num_writes = 0;
-
-   for (inst = c->Program.Instructions.Next; inst != &c->Program.Instructions; inst = inst->Next) {
-      const struct rc_opcode_info *opcode = rc_get_opcode_info(inst->U.I.Opcode);
-
-      if (inst->U.I.Opcode == RC_OPCODE_BGNLOOP)
-         loop_depth++;
-      if (inst->U.I.Opcode == RC_OPCODE_IF)
-         branch_depth++;
-      if ((inst->U.I.Opcode == RC_OPCODE_ENDLOOP && loop_depth--) ||
-          (inst->U.I.Opcode == RC_OPCODE_ENDIF && branch_depth--))
-         if (emit_after_control_flow && loop_depth == 0 && branch_depth == 0) {
-            insert_pos = inst;
-            emit_after_control_flow = false;
-         }
-
-      if (opcode->HasDstReg) {
-         if (inst->U.I.DstReg.File == RC_FILE_OUTPUT && inst->U.I.DstReg.Index == output) {
-            num_writes++;
-            inst->U.I.DstReg.File = RC_FILE_TEMPORARY;
-            inst->U.I.DstReg.Index = tempreg;
-            insert_pos = inst;
-            last_write_inst = inst;
-            if (loop_depth != 0 && branch_depth != 0)
-               emit_after_control_flow = true;
-         }
-      }
-   }
-
-   /* If there is only a single write, just duplicate the whole instruction instead.
-    * We can do this even when the single write was is a control flow.
-    */
-   if (num_writes == 1) {
-      last_write_inst->U.I.DstReg.File = RC_FILE_OUTPUT;
-      last_write_inst->U.I.DstReg.Index = output;
-
-      inst = rc_insert_new_instruction(c, last_write_inst);
-      struct rc_instruction *prev = inst->Prev;
-      struct rc_instruction *next = inst->Next;
-      memcpy(inst, last_write_inst, sizeof(struct rc_instruction));
-      inst->Prev = prev;
-      inst->Next = next;
-      inst->U.I.DstReg.Index = dup_output;
-   } else {
-      inst = rc_insert_new_instruction(c, insert_pos);
-      inst->U.I.Opcode = RC_OPCODE_MOV;
-      inst->U.I.DstReg.File = RC_FILE_OUTPUT;
-      inst->U.I.DstReg.Index = output;
-
-      inst->U.I.SrcReg[0].File = RC_FILE_TEMPORARY;
-      inst->U.I.SrcReg[0].Index = tempreg;
-      inst->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_XYZW;
-
-      inst = rc_insert_new_instruction(c, inst);
-      inst->U.I.Opcode = RC_OPCODE_MOV;
-      inst->U.I.DstReg.File = RC_FILE_OUTPUT;
-      inst->U.I.DstReg.Index = dup_output;
-
-      inst->U.I.SrcReg[0].File = RC_FILE_TEMPORARY;
-      inst->U.I.SrcReg[0].Index = tempreg;
-      inst->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_XYZW;
-   }
-
-   c->Program.OutputsWritten |= 1U << dup_output;
 }
 
 /**

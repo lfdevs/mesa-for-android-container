@@ -472,13 +472,13 @@ radv_rt_nir_to_asm(const struct radv_compiler_info *compiler_info, struct radv_r
       radv_optimize_nir(temp_stage.nir, temp_stage.key.optimisations_disabled);
       radv_postprocess_nir(compiler_info, NULL, &temp_stage);
 
-      NIR_PASS(_, stage->nir, radv_nir_lower_call_abi, stage->info.wave_size);
-      NIR_PASS(_, stage->nir, nir_lower_global_vars_to_local);
-      NIR_PASS(_, stage->nir, nir_lower_vars_to_ssa);
-      NIR_PASS(_, stage->nir, nir_opt_copy_prop);
-      NIR_PASS(_, stage->nir, nir_opt_remove_phis);
-      if (!stage->key.optimisations_disabled && !radv_is_traversal_shader(stage->nir))
-         NIR_PASS(_, stage->nir, nir_minimize_call_live_states);
+      NIR_PASS(_, temp_stage.nir, radv_nir_lower_call_abi, stage->info.wave_size);
+      NIR_PASS(_, temp_stage.nir, nir_lower_global_vars_to_local);
+      NIR_PASS(_, temp_stage.nir, nir_lower_vars_to_ssa);
+      NIR_PASS(_, temp_stage.nir, nir_opt_copy_prop);
+      NIR_PASS(_, temp_stage.nir, nir_opt_remove_phis);
+      if (!stage->key.optimisations_disabled && !radv_is_traversal_shader(temp_stage.nir))
+         NIR_PASS(_, temp_stage.nir, nir_minimize_call_live_states);
 
       stage->info.nir_shared_size = MAX2(stage->info.nir_shared_size, temp_stage.info.nir_shared_size);
       if (stage_info && mode == RADV_RT_LOWERING_MODE_CPS)
@@ -766,6 +766,10 @@ radv_rt_compile_shaders(struct radv_device *device, struct vk_pipeline_cache *ca
          ++ahit_isec_stage_count;
    }
    inline_any_hit_shaders &= ahit_isec_stage_count < 20;
+   /* TODO: CPS mode could compile any-hit/isec shaders separately, but doing so would require moving the payload
+    * from scratch to registers and back.
+    */
+   inline_any_hit_shaders |= recursive_lowering_mode == RADV_RT_LOWERING_MODE_CPS;
    /* Monolithic pipelines always inline any-hit/isec shaders. */
    inline_any_hit_shaders |= raygen_lowering_mode == RADV_RT_LOWERING_MODE_MONOLITHIC && !raygen_imported;
 

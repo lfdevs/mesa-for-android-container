@@ -152,7 +152,7 @@ pipe_r300_create_screen(int fd, const struct pipe_screen_config *config)
 {
    struct radeon_winsys *rw;
 
-   rw = radeon_drm_winsys_create(fd, config, r300_screen_create);
+   rw = radeon_drm_winsys_create(fd, config, r300_screen_create, 0);
    return rw ? debug_screen_wrap(rw->screen) : NULL;
 }
 const driOptionDescription r300_driconf[] = {
@@ -173,7 +173,7 @@ pipe_r600_create_screen(int fd, const struct pipe_screen_config *config)
 {
    struct radeon_winsys *rw;
 
-   rw = radeon_drm_winsys_create(fd, config, r600_screen_create);
+   rw = radeon_drm_winsys_create(fd, config, r600_screen_create, 0);
    return rw ? debug_screen_wrap(rw->screen) : NULL;
 }
 DRM_DRIVER_DESCRIPTOR(r600, NULL, 0)

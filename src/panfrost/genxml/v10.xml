@@ -143,13 +143,15 @@
     <value name="VYUY10" value="45"/>
     <value name="Y10 UV10 422" value="46"/>
     <value name="Y10 UV10 420" value="47"/>
-    <value name="YUV16" value="48"/>
+    <!-- 48 reserved -->
     <value name="YUVA16" value="49"/>
     <value name="YUYV16" value="50"/>
     <value name="VYUY16" value="51"/>
     <value name="Y10X6 U10X6V10X6 422" value="52"/>
     <value name="Y16 UV16 422" value="53"/>
+    <!-- 54 reserved -->
     <value name="Y16 UV16 420" value="55"/>
+    <!-- 56-63 reserved -->
     <value name="RGB565" value="64"/>
     <value name="RGB5 A1 UNORM" value="65"/>
     <value name="A1 BGR5 UNORM" value="66"/>
@@ -165,10 +167,12 @@
     <value name="Z32" value="76"/>
     <value name="Z24X8 UNORM" value="77"/>
     <value name="X8Z24" value="78"/>
+    <!-- 79-80 reserved -->
     <value name="R32 FIXED" value="81"/>
     <value name="RG32 FIXED" value="82"/>
     <value name="RGB32 FIXED" value="83"/>
     <value name="RGBA32 FIXED" value="84"/>
+    <!-- 85-88 reserved -->
     <value name="R11F G11F B10F" value="89"/>
     <value name="B10F G11F R11F" value="90"/>
     <value name="R9F G9F B9F E5F" value="91"/>
@@ -177,12 +181,11 @@
     <!--- RGBA32F + snap to 2^-8, used for vertex writes -->
     <value name="Snap 4" value="94"/>
     <value name="Constant" value="95"/>
-    <!--- 96-98 reserved -->
+    <!-- 96-98 reserved -->
     <value name="R8 SNORM" value="99"/>
     <value name="R16 SNORM" value="100"/>
     <value name="R32 SNORM" value="101"/>
-    <!--- 102-105 reserved -->
-    <value name="RG4 SNORM" value="106"/>
+    <!-- 102-106 reserved -->
     <value name="RG8 SNORM" value="107"/>
     <value name="RG16 SNORM" value="108"/>
     <value name="RG32 SNORM" value="109"/>
@@ -190,9 +193,7 @@
     <value name="RGB8 SNORM" value="115"/>
     <value name="RGB16 SNORM" value="116"/>
     <value name="RGB32 SNORM" value="117"/>
-    <!-- 118-120 reserved -->
-    <value name="RGBA2 SNORM" value="121"/>
-    <value name="RGBA4 SNORM" value="122"/>
+    <!-- 118-122 reserved -->
     <value name="RGBA8 SNORM" value="123"/>
     <value name="RGBA16 SNORM" value="124"/>
     <value name="RGBA32 SNORM" value="125"/>
@@ -209,8 +210,7 @@
     <value name="RGB8UI" value="147"/>
     <value name="RGB16UI" value="148"/>
     <value name="RGB32UI" value="149"/>
-    <!-- 150-152 reserved -->
-    <value name="RGBA2UI" value="153"/>
+    <!-- 150-153 reserved -->
     <value name="RGBA4UI" value="154"/>
     <value name="RGBA8UI" value="155"/>
     <value name="RGBA16UI" value="156"/>
@@ -234,8 +234,7 @@
     <value name="RGB32 UNORM" value="181"/>
     <!-- 182 reserved -->
     <value name="RGB32F" value="183"/>
-    <!-- 184 reserved -->
-    <value name="RGBA2 UNORM" value="185"/>
+    <!-- 184-185 reserved -->
     <value name="RGBA4 UNORM" value="186"/>
     <value name="RGBA8 UNORM" value="187"/>
     <value name="RGBA16 UNORM" value="188"/>
@@ -261,8 +260,7 @@
     <value name="RGB32I" value="213"/>
     <!-- 214 reserved -->
     <value name="RGB16F" value="215"/>
-    <!-- 216 reserved -->
-    <value name="RGBA2I" value="217"/>
+    <!-- 216-217 reserved -->
     <value name="RGBA4I" value="218"/>
     <value name="RGBA8I" value="219"/>
     <value name="RGBA16I" value="220"/>
@@ -568,7 +566,8 @@
   </struct>
 
   <struct name="CS NOP" size="2">
-    <field name="Ignored" size="56" start="0" type="hex"/>
+    <field name="Metadata payload" size="48" start="0" type="hex"/>
+    <field name="Metadata type" size="8" start="48" type="hex"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="NOP"/>
   </struct>
 
@@ -925,6 +924,12 @@
     <value name="DCD0" value="57"/>
     <value name="DCD1" value="58"/>
     <value name="PRIMITIVE_SIZE" value="60"/>
+  </enum>
+
+  <enum name="FULLSCREEN SR">
+    <value name="TILER_CTX" value="40"/>
+    <value name="SCISSOR_BOX" value="42"/>
+    <value name="TILER_FLAGS" value="56"/>
   </enum>
 
   <enum name="FRAGMENT SR">
@@ -1799,6 +1804,11 @@
     <value name="256" value="1"/>
   </enum>
 
+  <enum name="RT Downscale">
+    <value name="None" value="0"/>
+    <value name="2x" value="1"/>
+  </enum>
+
   <struct name="RT Clear">
     <field name="Color 0" size="32" start="0:0" type="uint"/>
     <field name="Color 1" size="32" start="1:0" type="uint"/>
@@ -1820,6 +1830,7 @@
     <field name="sRGB" size="1" start="1:14" type="bool"/>
     <field name="Dithering Enable" size="1" start="1:15" type="bool"/>
     <field name="Swizzle" size="12" start="1:16" type="Component Swizzle"/>
+    <field name="Downscale Mode" size="2" start="1:29" type="RT Downscale"/>
     <field name="Clean Tile Write Enable" size="1" start="1:31" type="bool"/>
     <field name="Writeback buffer" size="128" start="8:0" type="RT Buffer"/>
     <field name="Clear" size="128" start="12:0" type="RT Clear"/>
@@ -1866,6 +1877,7 @@
     <field name="sRGB" size="1" start="1:14" type="bool"/>
     <field name="Dithering Enable" size="1" start="1:15" type="bool"/>
     <field name="Swizzle" size="12" start="1:16" type="Component Swizzle"/>
+    <field name="Downscale Mode" size="2" start="1:29" type="RT Downscale"/>
     <!-- Must be set if either one of the effective tile size dimension is
          smaller than the AFBC superblock dimension. -->
     <field name="Clean Tile Write Enable" size="1" start="1:31" type="bool"/>
@@ -1926,6 +1938,7 @@
     <field name="sRGB" size="1" start="1:14" type="bool"/>
     <field name="Dithering Enable" size="1" start="1:15" type="bool"/>
     <field name="Swizzle" size="12" start="1:16" type="Component Swizzle"/>
+    <field name="Downscale Mode" size="2" start="1:29" type="RT Downscale"/>
     <field name="Clean Tile Write Enable" size="1" start="1:31" type="bool"/>
     <field name="AFRC Block Size" size="4" start="2:4" type="AFRC Block Size"/>
     <field name="AFRC Format" size="8" start="2:8" type="AFRC Format"/>
@@ -2107,10 +2120,8 @@
   <struct name="Vertex Array" size="3">
     <field name="Packet" size="1" start="0:0" type="bool"/>
 
-    <!-- Written by hardware in packet mode -->
+    <!-- Written by hardware in RUN_IDVS malloc mode -->
     <field name="Pointer" size="58" start="0:6" type="address" modifier="shr(6)"/>
-
-    <!-- Written by hardware, leave zero -->
     <field name="Vertex packet stride" size="16" start="2:0" type="uint"/>
     <field name="Vertex attribute stride" size="16" start="2:16" type="uint"/>
   </struct>

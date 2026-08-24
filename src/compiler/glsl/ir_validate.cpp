@@ -517,6 +517,7 @@ ir_validate::visit_leave(ir_expression *ir)
    case ir_unop_cos:
    case ir_unop_asin:
    case ir_unop_acos:
+   case ir_unop_tanh:
    case ir_unop_dFdx:
    case ir_unop_dFdx_coarse:
    case ir_unop_dFdx_fine:

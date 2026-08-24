@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <assert.h>
 #include <inttypes.h>
 #include <stdio.h>
 
@@ -98,4 +99,41 @@ _mesa_trace_format_array(char *buf, size_t buflen,
       snprintf(buf + pos, buflen - pos, ", ... %zu of %zu]", shown, n);
    else
       snprintf(buf + pos, buflen - pos, "]");
+}
+
+void
+_mesa_trace_format_bitfield_group(char *buf, size_t buflen,
+                                  const char *enum_names[],
+                                  const unsigned enum_values[],
+                                  size_t num_enums,
+                                  unsigned mask)
+{
+   if (mask == 0) {
+      snprintf(buf, buflen, "0");
+      return;
+   }
+
+   size_t pos = 0;
+   int w;
+
+   for (size_t i = 0; i < num_enums; ++i) {
+      unsigned val = enum_values[i];
+      assert(val != 0);
+      if ((mask & val) != val)
+         continue;
+
+      w = snprintf(buf + pos, buflen - pos, "%sGL_%s",
+                   pos > 0 ? " | " : "", enum_names[i]);
+      if (w < 0 || (size_t)w >= buflen - pos)
+         return;
+      pos += w;
+
+      mask &= ~val;
+   }
+
+   if (mask != 0) {
+      /* report remaining, unknown bits */
+      snprintf(buf + pos, buflen - pos, "%s0x%x",
+               pos > 0 ? " | " : "", mask);
+   }
 }

@@ -94,14 +94,12 @@ pan_print_varying_layout(FILE *f, nir_shader *s,
 
 struct slot_info {
    nir_alu_type type;
-   bool any_highp;
    unsigned count;
    unsigned index;
 };
 
 struct walk_varyings_data {
    struct slot_info *slots;
-   bool trust_varying_flat_highp_types;
 };
 
 static bool
@@ -146,22 +144,26 @@ walk_varyings(UNUSED nir_builder *b, nir_instr *instr, void *data)
 
    nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
 
-   if (sem.no_varying)
+   /* nir_opt_varyings (called in the GL linker) marks clip distance VS outputs
+    * as no_varying but nir_lower_clip_fs actually uses them.
+    */
+   bool is_clip_dist_vs_output = is_store &&
+      (sem.location == VARYING_SLOT_CLIP_DIST0 ||
+       sem.location == VARYING_SLOT_CLIP_DIST1);
+
+   if (sem.no_varying && !is_clip_dist_vs_output)
       return false;
 
    nir_alu_type base_type = nir_alu_type_get_base_type(type);
    unsigned size = nir_alu_type_get_type_size(type);
    assert(base_type & (nir_type_int | nir_type_uint | nir_type_float));
 
-   bool untrusted_type = !wv_data->trust_varying_flat_highp_types &&
-                         sem.location >= VARYING_SLOT_VAR0 &&
-                         !sem.medium_precision &&
-                         !b->shader->info.separate_shader;
+   bool untrusted_type = sem.location >= VARYING_SLOT_VAR0;
    if (untrusted_type) {
       /* Don't trust the type, varying_opts might have smashed everything
        * onto floats.  Replace all flat varyings with ints and smooth varyings
        * with floats, only exception is 16-bit flat varyings that should be
-       * stored/loaded as ints as the hardware cannot encode 16-bit flat ints.
+       * stored/loaded as floats as the hardware cannot encode 16-bit flat ints.
        * Read docs/drivers/panfrost/varyings.rst for details.
        */
       bool is_flat = intr->intrinsic != nir_intrinsic_load_interpolated_input;
@@ -172,6 +174,8 @@ walk_varyings(UNUSED nir_builder *b, nir_instr *instr, void *data)
       else
          nir_intrinsic_set_dest_type(intr, type);
    }
+   /* 16-bit ints are NEVER supported right now */
+   assert(type != nir_type_int16 && type != nir_type_uint16);
 
    /* Count currently contains the number of components accessed by this
     * intrinsics. However, we may be accessing a fractional location,
@@ -187,15 +191,22 @@ walk_varyings(UNUSED nir_builder *b, nir_instr *instr, void *data)
       unsigned index = pan_res_handle_get_index(nir_intrinsic_base(intr)) + offset;
 
       if (slots[location].type) {
-         assert(slots[location].type == type);
+         if (slots[location].type != type) {
+            /* Types can disagree if varying_opts back-propagates partially.
+             * Good news is, when it does that we know that it's surely flat,
+             * we can smash it into ints.  But we need to make the bit-size
+             * agree too so we are wasting a bit of bandwidth.
+             */
+            unsigned orig_len = nir_alu_type_get_type_size(slots[location].type);
+            unsigned new_len = nir_alu_type_get_type_size(type);
+
+            slots[location].type = nir_type_uint | MAX2(orig_len, new_len);
+         }
          assert(slots[location].index == index);
       } else {
          slots[location].type = type;
          slots[location].index = index;
       }
-
-      if (size == 32 && !sem.medium_precision)
-         slots[location].any_highp = true;
 
       slots[location].count = MAX2(slots[location].count, count);
    }
@@ -337,9 +348,7 @@ hw_varying_slot(unsigned arch, mesa_shader_stage stage, gl_varying_slot slot)
 
 void
 pan_varying_collect_formats(struct pan_varying_layout *layout, nir_shader *nir,
-                            uint64_t gpu_id,
-                            bool trust_varying_flat_highp_types,
-                            bool lower_mediump)
+                            uint64_t gpu_id)
 {
    assert(nir->info.stage == MESA_SHADER_VERTEX ||
           nir->info.stage == MESA_SHADER_FRAGMENT);
@@ -348,7 +357,6 @@ pan_varying_collect_formats(struct pan_varying_layout *layout, nir_shader *nir,
    struct slot_info slots[64] = {0};
    struct walk_varyings_data wv_data = {
       .slots = slots,
-      .trust_varying_flat_highp_types = trust_varying_flat_highp_types,
    };
 
    nir_shader_instructions_pass(nir, walk_varyings, nir_metadata_all, &wv_data);
@@ -374,22 +382,6 @@ pan_varying_collect_formats(struct pan_varying_layout *layout, nir_shader *nir,
       } else {
          nir_alu_type type = nir_alu_type_get_base_type(slots[i].type);
          unsigned bit_size = nir_alu_type_get_type_size(slots[i].type);
-
-         /* The Vulkan spec requires types to match across all uses of a
-          * location but doesn't actually require RelaxedPrecision to match
-          * for the whole location.  So we can only apply mediump if every use
-          * of the location is mediump.
-          * Don't lower mediump integers, it has no measured impact and causes
-          * lots of bugs due to gallium shenanigans.
-          * Also allow the client to remove mediump lowering and keep the
-          * original types
-          */
-         bool can_lower_size = lower_mediump &&
-                               bit_size == 32 &&
-                               type == nir_type_float &&
-                               !slots[i].any_highp;
-         if (can_lower_size)
-            bit_size = 16;
 
          layout->slots[idx] = (struct pan_varying_slot){
             .location = i,

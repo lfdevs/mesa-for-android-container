@@ -20,6 +20,7 @@ files_ethosu = files(
   'ethosu_ml.c',
   'ethosu_sched.c',
   'ethosu_sched_u85.c',
+  'ethosu_weight_cache.c',
 )
 
 libethosu = static_library(

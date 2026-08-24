@@ -173,6 +173,7 @@ poly_unroll_geometry(global uint32_t *out_draw,
                      uint32_t out_index_size_B,
                      uint32_t restart_index,
                      uint32_t flatshade_first,
+                     uint32_t emulate_flatshade_last,
                      enum mesa_prim mode,
                      local void *scratch)
 {
@@ -229,7 +230,9 @@ poly_unroll_geometry(global uint32_t *out_draw,
                                                   vtx, subprims);
             uint offset = needle + id;
 
-            uint x = ((out_prims_base + i) * per_prim) + vtx;
+            uint vtx_out = poly_output_vertex_id_for_topology(
+               mode, flatshade_first, emulate_flatshade_last, vtx);
+            uint x = ((out_prims_base + i) * per_prim) + vtx_out;
             uint y = poly_load_index(in_ptr, in_range_el, offset,
                                      in_index_size_B);
 
@@ -259,7 +262,7 @@ poly_unroll_restart(global uint32_t *out_draw,
 {
    poly_unroll_geometry(out_draw, heap, in_draw, index_buffer,
                         index_buffer_range_el, index_size_B, index_size_B,
-                        restart_index, flatshade_first, mode, scratch);
+                        restart_index, flatshade_first, false, mode, scratch);
 }
 
 static inline uint32_t

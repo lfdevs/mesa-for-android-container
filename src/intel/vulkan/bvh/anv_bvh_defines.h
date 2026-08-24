@@ -68,7 +68,10 @@ struct anv_accel_struct_header {
 
    uint32_t instance_leaves_offset;
 
-   uint32_t padding[42];
+   /* Copy of the root node's box flags */
+   uint32_t root_flags;
+
+   uint32_t padding[41];
 };
 
 /* Mixed internal node with type per child */
@@ -164,10 +167,8 @@ struct anv_internal_node {
     */
    uint8_t node_type;
 
-   /* Note: This is not a real field, it's unused byte padding, which is not
-    * required to be MBZ. We're just using it to store the child count.
-    */
-   uint8_t child_count;
+   /* MBZ */
+   uint8_t pad;
 
    /* 2^exp_x is the size of the grid in x dimension */
    int8_t exp_x;
@@ -330,6 +331,8 @@ struct anv_instance_leaf {
 | Parent - child map            |
 |-------------------------------| bvh_layout.leaf_block_map_offset
 | Leaf block offset map         |
+|-------------------------------| bvh_layout.parent_child_count_map_offset
+| Parent child count map        |
 |-------------------------------|
 | padding to align to           |
 | 64 bytes boundary             | bvh_layout.size
@@ -354,6 +357,9 @@ struct bvh_layout {
 
    /* This map stores BVH block index for each leaf id (IR ID) */
    uint64_t leaf_block_map_offset;
+
+   /* This map stores how many valid children the parent has. */
+   uint64_t parent_child_count_map_offset;
 
    /* Total size = bvh_offset + leaves + internal_nodes (assuming there's no
     * internal node collpased)
@@ -384,13 +390,14 @@ struct update_args {
    uint32_t output_bvh_offset;
    VOID_REF parent_child_map;
    VOID_REF leaf_block_offset_map;
+   VOID_REF parent_child_count_map;
 
    vk_bvh_geometry_data geom_data;
 };
 
-#define ANV_ENCODE_BUILD_FLAGS (ANV_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE)
+#define ANV_ENCODE_BUILD_FLAGS (VK_BUILD_FLAG_HAS_QUADS | ANV_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE)
 
-struct encode_args {
+struct anv_batch_args {
    /* Address within the IR BVH, marking the start of leaves/internal nodes. */
    VOID_REF intermediate_bvh;
 
@@ -407,6 +414,17 @@ struct encode_args {
 
    VOID_REF parent_child_map;
    VOID_REF leaf_block_offset_map;
+   VOID_REF parent_child_count_map;
+};
+
+#ifdef VULKAN
+TYPE(anv_batch_args, 4);
+#endif
+
+struct encode_args {
+   REF(anv_batch_args) batch_args;
+   uint32_t batch_offset;
+   uint32_t start_node_offset;
 };
 
 struct header_args {

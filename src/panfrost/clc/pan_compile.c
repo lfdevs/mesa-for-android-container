@@ -166,9 +166,10 @@ load_sysval_from_push_const(nir_builder *b, unsigned offset, unsigned bit_size,
 }
 
 static bool
-lower_sysvals(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *_data)
+lower_sysvals(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
    const nir_shader *shader = b->shader;
+   uint8_t *num_workgroups_mask = data;
 
    unsigned num_comps = intr->def.num_components;
    unsigned bit_size = intr->def.bit_size;
@@ -189,6 +190,7 @@ lower_sysvals(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *_data)
       break;
 
    case nir_intrinsic_load_num_workgroups:
+      *num_workgroups_mask |= nir_def_components_read(&intr->def);
       val = load_sysval_from_push_const(
          b, offsetof(struct bifrost_precompiled_kernel_sysvals, num_workgroups),
          bit_size, num_comps);
@@ -348,6 +350,11 @@ main(int argc, const char **argv)
 
       nir_precomp_print_layout_struct(fp_h, &opt, libfunc);
 
+      struct nir_precomp_layout layout =
+         nir_precomp_derive_layout(&opt, libfunc);
+      unsigned fau_reserved =
+         DIV_ROUND_UP(BIFROST_PRECOMPILED_KERNEL_ARGS_OFFSET + layout.size_B, 4);
+
       for (unsigned v = 0; v < nr_vars; ++v) {
          nir_shader *s = nir_precompiled_build_variant(
             libfunc, MESA_SHADER_COMPUTE, v, get_compiler_options(target_arch),
@@ -367,6 +374,7 @@ main(int argc, const char **argv)
          struct pan_compile_inputs inputs = {
             .gpu_id = target_gpu_id,
             .gpu_variant = 0,
+            .fau.reserved = fau_reserved,
          };
 
          nir_link_shader_functions(s, nir);
@@ -444,8 +452,10 @@ main(int argc, const char **argv)
 
          pan_postprocess_nir(s, &inputs, &shader_info);
 
+         uint8_t num_workgroups_mask = 0;
          NIR_PASS(_, s, nir_shader_intrinsics_pass, lower_sysvals,
-                  nir_metadata_control_flow, NULL);
+                  nir_metadata_control_flow, &num_workgroups_mask);
+         shader_info.cs.precomp_num_workgroups_mask = num_workgroups_mask;
 
          nir_shader *clone = nir_shader_clone(NULL, s);
 
@@ -454,7 +464,7 @@ main(int argc, const char **argv)
 
          pan_shader_compile(clone, &inputs, &shader_binary, &shader_info);
 
-         assert(shader_info.push.count * 4 <=
+         assert(shader_info.fau.count * 4 <=
                    BIFROST_PRECOMPILED_KERNEL_ARGS_SIZE &&
                 "Too many kernel arguments!");
 

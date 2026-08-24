@@ -30,6 +30,7 @@
 #include "util/glheader.h"
 #include "main/context.h"
 
+#include "main/fog.h"
 #include "main/macros.h"
 #include "main/state.h"
 #include "main/texenvprogram.h"
@@ -79,6 +80,7 @@ struct state_key {
    GLuint nr_enabled_units:4;
    GLuint separate_specular:1;
    GLuint fog_mode:2;          /**< FOG_x */
+   GLuint fog_distance_abs:1;  /**< fog coord is abs(Ze) (EYE_PLANE_ABSOLUTE) */
    GLuint inputs_available:12;
    GLuint num_draw_buffers:4;
 
@@ -303,6 +305,12 @@ static GLuint make_state_key( struct gl_context *ctx,  struct state_key *key )
 
    /* _NEW_FOG */
    key->fog_mode = ctx->Fog._PackedEnabledMode;
+
+   /* The fixed-function vertex program stores the signed eye-space Z in
+    * gl_FogFragCoord; take its absolute value per fragment for the
+    * GL_EYE_PLANE_ABSOLUTE_NV distance mode (the default).
+    */
+   key->fog_distance_abs = _mesa_fog_coord_needs_deferred_abs(ctx);
 
    /* _NEW_BUFFERS */
    key->num_draw_buffers = ctx->DrawBuffer->_NumColorDrawBuffers;
@@ -964,7 +972,8 @@ create_new_program(struct gl_context *ctx, struct state_key *key,
    nir_validate_shader(b.shader, "after generating ff-fragment shader");
 
    if (key->fog_mode) {
-      NIR_PASS(_, b.shader, st_nir_lower_fog, key->fog_mode, p.state_params,
+      NIR_PASS(_, b.shader, st_nir_lower_fog, key->fog_mode,
+               key->fog_distance_abs, p.state_params,
                ctx->Const.PackedDriverUniformStorage);
    }
 

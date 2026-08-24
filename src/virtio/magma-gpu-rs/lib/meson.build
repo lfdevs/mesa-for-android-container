@@ -34,7 +34,7 @@ dep_zerocopy = dependency('zerocopy',
 dep_magma_gpu_rs = [dep_cfg_if, dep_thiserror, dep_remain, dep_zerocopy,
                  dep_log]
 
-supported_systems = ['linux', 'windows', 'darwin', 'macos']
+supported_systems = ['android', 'linux', 'windows', 'darwin', 'macos']
 supported_host_machine = host_machine.system() in supported_systems
 
 if supported_host_machine

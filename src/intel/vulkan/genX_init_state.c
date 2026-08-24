@@ -155,25 +155,12 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
       ptr.SliceHashTableStatePointer = device->slice_hash.offset;
    }
 
-   /* TODO: Figure out FCV support for other platforms
-    * Testing indicates that FCV is broken gfx125.
-    * Let's disable FCV for now till we figure out what's wrong.
-    *
-    * Alternatively, it can be toggled off via drirc option 'anv_disable_fcv'.
-    *
-    * Ref: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9987
-    * Ref: https://gitlab.freedesktop.org/mesa/mesa/-/issues/10318
-    * Ref: https://gitlab.freedesktop.org/mesa/mesa/-/issues/10795
-    * Ref: Internal issue 1480 about Unreal Engine 5.1
-    */
    anv_batch_emit(batch, GENX(3DSTATE_3D_MODE), mode) {
       mode.SliceHashingTableEnable = true;
       mode.SliceHashingTableEnableMask = true;
       mode.CrossSliceHashingMode = (util_bitcount(ppipe_mask1) > 1 ?
 				    hashing32x32 : NormalMode);
       mode.CrossSliceHashingModeMask = -1;
-      mode.FastClearOptimizationEnable = !device->physical->disable_fcv;
-      mode.FastClearOptimizationEnableMask = !device->physical->disable_fcv;
    }
 #endif
 }
@@ -354,7 +341,7 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
    if (ANV_SUPPORT_RT && device->info->has_ray_tracing) {
       anv_batch_emit(batch, GENX(3DSTATE_BTD), btd) {
          uint32_t dispatch_timeout_counter =
-            device->physical->instance->drirc.perf.rt_dispatch_timeout;
+            device->physical->drirc.perf.rt_dispatch_timeout;
          uint32_t clamped_timeout_counter =
             genX(anv_get_btd_dispatch_timeout_counter)(dispatch_timeout_counter);
 #if GFX_VERx10 >= 200
@@ -404,7 +391,7 @@ static VkResult
 init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
 {
    struct anv_device *device = queue->device;
-   const struct anv_instance *instance = device->physical->instance;
+   const struct anv_physical_device *pdevice = device->physical;
    UNUSED const struct intel_device_info *devinfo = queue->device->info;
 
    struct anv_async_submit *submit;
@@ -671,7 +658,7 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
     *
     * This is only safe on kernels with context isolation support.
     */
-   assert(device->physical->info.has_context_isolation);
+   assert(pdevice->info.has_context_isolation);
    anv_batch_write_reg(batch, GENX(CS_DEBUG_MODE2), csdm2) {
       csdm2.CONSTANT_BUFFERAddressOffsetDisable = true;
       csdm2.CONSTANT_BUFFERAddressOffsetDisableMask = true;
@@ -745,7 +732,7 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
 
 #if GFX_VER >= 11
    if (device->info->kmd_type == INTEL_KMD_TYPE_I915 &&
-       !device->physical->rt_change_needs_flush) {
+       !pdevice->rt_change_needs_flush) {
       /* Bspec Register_ChickenbitforCommonSliceRegister3 section:
        *
        *    "If this bit is enabled, RCC uses BTP+BTI as address tag in its
@@ -784,7 +771,7 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
    }
 #endif
 
-   if (instance->drirc.perf.disable_push_const_alloc) {
+   if (pdevice->drirc.perf.disable_push_const_alloc) {
       genX(batch_emit_push_constants_alloc)(
          batch, device,
          VK_SHADER_STAGE_VERTEX_BIT |
@@ -1194,6 +1181,20 @@ genX(emit_l3_config)(struct anv_batch *batch,
 #endif /* GFX_VER < 20 */
 }
 
+static const VkSampleLocationEXT *
+sample_locations(const struct vk_sample_locations_state *sl, unsigned samples)
+{
+   /* We don't do 1x MSAA, and we can't support custom sample
+    * positions without MSAA, so always program the default for this
+    * case.
+    */
+   if (sl && sl->per_pixel == samples && samples > 1) {
+      return sl->locations;
+   } else {
+      return vk_standard_sample_locations_state(samples)->locations;
+   }
+}
+
 void
 genX(emit_sample_pattern)(struct anv_batch *batch,
                           const struct vk_sample_locations_state *sl)
@@ -1222,47 +1223,10 @@ genX(emit_sample_pattern)(struct anv_batch *batch,
        * lit sample and that it's the same for all samples in a pixel; they
        * have no requirement that it be the one closest to center.
        */
-      for (uint32_t i = 1; i <= 16; i *= 2) {
-         switch (i) {
-         case VK_SAMPLE_COUNT_1_BIT:
-            /* We don't do 1x MSAA, and we can't support custom sample
-             * positions without MSAA, so always program the default for this
-             * case.
-             */
-            INTEL_SAMPLE_POS_1X(sp._1xSample);
-            break;
-         case VK_SAMPLE_COUNT_2_BIT:
-            if (sl && sl->per_pixel == i) {
-               INTEL_SAMPLE_POS_2X_ARRAY(sp._2xSample, sl->locations);
-            } else {
-               INTEL_SAMPLE_POS_2X(sp._2xSample);
-            }
-            break;
-         case VK_SAMPLE_COUNT_4_BIT:
-            if (sl && sl->per_pixel == i) {
-               INTEL_SAMPLE_POS_4X_ARRAY(sp._4xSample, sl->locations);
-            } else {
-               INTEL_SAMPLE_POS_4X(sp._4xSample);
-            }
-            break;
-         case VK_SAMPLE_COUNT_8_BIT:
-            if (sl && sl->per_pixel == i) {
-               INTEL_SAMPLE_POS_8X_ARRAY(sp._8xSample, sl->locations);
-            } else {
-               INTEL_SAMPLE_POS_8X(sp._8xSample);
-            }
-            break;
-         case VK_SAMPLE_COUNT_16_BIT:
-            if (sl && sl->per_pixel == i) {
-               INTEL_SAMPLE_POS_16X_ARRAY(sp._16xSample, sl->locations);
-            } else {
-               INTEL_SAMPLE_POS_16X(sp._16xSample);
-            }
-            break;
-         default:
-            UNREACHABLE("Invalid sample count");
-         }
-      }
+      INTEL_SAMPLE_POS_1X_ARRAY(sp._1xSample, sample_locations(sl, 1));
+      INTEL_SAMPLE_POS_2X_ARRAY(sp._2xSample, sample_locations(sl, 2));
+      INTEL_SAMPLE_POS_4X_ARRAY(sp._4xSample, sample_locations(sl, 4));
+      INTEL_SAMPLE_POS_8X_ARRAY(sp._8xSample, sample_locations(sl, 8));
    }
 }
 
@@ -1344,7 +1308,7 @@ genX(emit_sampler_state)(const struct anv_device *device,
                          uint32_t border_color_offset,
                          struct anv_sampler_state *state)
 {
-   const struct anv_instance *instance = device->physical->instance;
+   const struct anv_physical_device *pdevice = device->physical;
    const bool seamless_cube =
       !(vk_state->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);
 
@@ -1362,7 +1326,7 @@ genX(emit_sampler_state)(const struct anv_device *device,
       const VkFilter mag_filter = plane_has_chroma ?
          vk_state->ycbcr_conversion.chroma_filter : vk_state->mag_filter;
       const bool force_addr_rounding =
-         instance->drirc.debug.force_filter_addr_rounding;
+         pdevice->drirc.debug.force_filter_addr_rounding;
       const bool enable_min_filter_addr_rounding =
          force_addr_rounding || min_filter != VK_FILTER_NEAREST;
       const bool enable_mag_filter_addr_rounding =

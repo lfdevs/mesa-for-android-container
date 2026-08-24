@@ -47,17 +47,17 @@ vk_device_memory_create(struct vk_device *device,
    mem->size = pAllocateInfo->allocationSize;
    mem->memory_type_index = pAllocateInfo->memoryTypeIndex;
 
-   vk_foreach_struct_const(ext, pAllocateInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pAllocateInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO: {
-         const VkExportMemoryAllocateInfo *export_info = (void *)ext;
+         const VkExportMemoryAllocateInfo *export_info = ext;
          mem->export_handle_types = export_info->handleTypes;
          break;
       }
 
       case VK_STRUCTURE_TYPE_IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID: {
 #if defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26
-         const VkImportAndroidHardwareBufferInfoANDROID *ahb_info = (void *)ext;
+         const VkImportAndroidHardwareBufferInfoANDROID *ahb_info = ext;
 
          assert(mem->import_handle_type == 0);
          mem->import_handle_type =
@@ -84,7 +84,7 @@ vk_device_memory_create(struct vk_device *device,
       }
 
       case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR: {
-         const VkImportMemoryFdInfoKHR *fd_info = (void *)ext;
+         const VkImportMemoryFdInfoKHR *fd_info = ext;
          if (fd_info->handleType) {
             assert(fd_info->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT ||
                    fd_info->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
@@ -95,7 +95,7 @@ vk_device_memory_create(struct vk_device *device,
       }
 
       case VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT: {
-         const VkImportMemoryHostPointerInfoEXT *host_ptr_info = (void *)ext;
+         const VkImportMemoryHostPointerInfoEXT *host_ptr_info = ext;
          if (host_ptr_info->handleType) {
             assert(host_ptr_info->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT ||
                    host_ptr_info->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT);
@@ -109,7 +109,7 @@ vk_device_memory_create(struct vk_device *device,
 
       case VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR: {
 #ifdef VK_USE_PLATFORM_WIN32_KHR
-         const VkImportMemoryWin32HandleInfoKHR *w32h_info = (void *)ext;
+         const VkImportMemoryWin32HandleInfoKHR *w32h_info = ext;
          if (w32h_info->handleType) {
             assert(w32h_info->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT ||
                    w32h_info->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT ||
@@ -127,7 +127,7 @@ vk_device_memory_create(struct vk_device *device,
       }
 
       case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO: {
-         const VkMemoryAllocateFlagsInfo *flags_info = (void *)ext;
+         const VkMemoryAllocateFlagsInfo *flags_info = ext;
          mem->alloc_flags = flags_info->flags;
          break;
       }

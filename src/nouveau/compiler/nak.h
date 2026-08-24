@@ -109,6 +109,7 @@ const extern struct nak_constant_offset_info nak_const_offsets_turing_graphics;
 #define NAK_CAN_PRINTF true
 #endif
 
+void nak_lower_nir_before_linking(nir_shader *nir, const struct nak_compiler *nak);
 void nak_postprocess_nir(nir_shader *nir, const struct nak_compiler *nak,
                          nir_variable_mode robust2_modes,
                          const struct nak_fs_key *fs_key,
@@ -298,6 +299,8 @@ struct nak_qmd_info {
    uint32_t global_size[3];
 
    uint32_t num_cbufs;
+   uint16_t dependence_counter;
+   uint16_t hw_dependence_counter;
    struct nak_qmd_cbuf cbufs[8];
 };
 
@@ -311,6 +314,15 @@ void nak_fill_qmd(const struct nv_device_info *dev,
                   const struct nak_shader_info *info,
                   const struct nak_qmd_info *qmd_info,
                   void *qmd_out, size_t qmd_size);
+void nak_set_dependent_qmd(const struct nv_device_info *dev, void *qmd,
+                           size_t qmd_size, uint64_t dependent_qmd_addr,
+                           bool schedule);
+void nak_set_invalidate_cache(const struct nv_device_info *dev, void *qmd,
+                              size_t qmd_size,
+                              bool texture_header, bool texture_samplers,
+                              bool texture_data,
+                              bool instruction_cache,
+                              bool shader_data, bool shader_constants);
 
 struct nak_qmd_dispatch_size_layout {
    uint16_t x_start, x_end;

@@ -1,4 +1,3 @@
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_4.offset_0.count_2.long_stride.graphics,Fail
 dEQP-VK.image.swapchain_mutable.direct.2d.b8g8r8a8_srgb_b8g8r8a8_unorm_clear_copy_format_list,Fail
 dEQP-VK.image.swapchain_mutable.direct.2d.b8g8r8a8_srgb_b8g8r8a8_unorm_copy_copy_format_list,Fail
 dEQP-VK.image.swapchain_mutable.direct.2d.b8g8r8a8_srgb_b8g8r8a8_unorm_draw_copy_format_list,Fail
@@ -269,22 +268,6 @@ dEQP-VK.pipeline.shader_object_linked_binary.pipeline_cache.robustness2.storage,
 dEQP-VK.pipeline.shader_object_linked_spirv.pipeline_cache.robustness2.storage,Fail
 dEQP-VK.pipeline.shader_object_unlinked_binary.pipeline_cache.robustness2.storage,Fail
 dEQP-VK.pipeline.shader_object_unlinked_spirv.pipeline_cache.robustness2.storage,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_none.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_none.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_none.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_none.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_none.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_none.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.float_controls,Fail
 dEQP-VK.wsi.direct.colorspace.basic,Fail
 dEQP-VK.wsi.direct.colorspace.extensions,Fail
 dEQP-VK.wsi.direct.colorspace.hdr,Fail
@@ -3794,15 +3777,28 @@ dEQP-VK.wsi.direct.swapchain.simulate_oom.min_image_count,Fail
 dEQP-VK.wsi.direct.swapchain.simulate_oom.pre_transform,Fail
 dEQP-VK.wsi.direct.swapchain.simulate_oom.present_mode,Fail
 
-# Nightly run expectations update
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_12.offset_0.count_2.normal_stride.graphics,Fail
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_12.offset_0.count_63.long_stride.graphics,Fail
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_12.offset_0.count_63.normal_stride.graphics,Fail
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_12.offset_4.count_1.normal_stride.graphics,Fail
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_12.offset_4.count_2.long_stride.graphics,Fail
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_12.offset_4.count_2.normal_stride.graphics,Fail
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_12.offset_4.count_63.long_stride.graphics,Fail
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_4.offset_0.count_1.long_stride.graphics,Fail
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_4.offset_0.count_1.normal_stride.graphics,Fail
-dEQP-VK.api.copy_and_blit.copy_memory_indirect.size_4.offset_0.count_63.normal_stride.graphics,Fail
+# VKCTS 1.4.5.3 -> 1.4.6.1 uprev
+dEQP-VK.compute.pipeline.cooperative_matrix.op_constant_null.null_a,Crash
+dEQP-VK.compute.pipeline.cooperative_matrix.op_constant_null.null_b,Crash
+dEQP-VK.compute.pipeline.cooperative_matrix.op_constant_null.null_c,Crash
+dEQP-VK.compute.pipeline.cooperative_matrix.op_constant_null.null_r,Crash
+dEQP-VK.compute.shader_object_binary.cooperative_matrix.op_constant_null.null_a,Crash
+dEQP-VK.compute.shader_object_binary.cooperative_matrix.op_constant_null.null_b,Crash
+dEQP-VK.compute.shader_object_binary.cooperative_matrix.op_constant_null.null_c,Crash
+dEQP-VK.compute.shader_object_binary.cooperative_matrix.op_constant_null.null_r,Crash
+dEQP-VK.compute.shader_object_spirv.cooperative_matrix.op_constant_null.null_a,Crash
+dEQP-VK.compute.shader_object_spirv.cooperative_matrix.op_constant_null.null_b,Crash
+dEQP-VK.compute.shader_object_spirv.cooperative_matrix.op_constant_null.null_c,Crash
+dEQP-VK.compute.shader_object_spirv.cooperative_matrix.op_constant_null.null_r,Crash
+dEQP-VK.renderpasses.dynamic_rendering.partial_secondary_cmd_buff.local_read.interaction_with_shader_object,Fail
+dEQP-VK.renderpasses.dynamic_rendering.partial_secondary_cmd_buff.local_read.remap_single_attachment_shader_object,Fail
+dEQP-VK.wsi.direct.present_timing.basic.large_queue_size,Fail
+dEQP-VK.wsi.direct.present_timing.time_domain.calibration.clock_monotonic,Fail
+dEQP-VK.wsi.direct.present_timing.time_domain.calibration.clock_monotonic_raw,Fail
+dEQP-VK.wsi.direct.present_timing.time_domain.calibration.device,Fail
+dEQP-VK.wsi.direct.present_timing.time_domain.calibration.present_stage_local,Fail
+dEQP-VK.wsi.direct.present_timing.time_domain.calibration.query_performance_counter,Fail
+dEQP-VK.wsi.direct.present_timing.time_domain.calibration.swapchain_local,Fail
+dEQP-VK.wsi.direct.present_timing.time_domain.properties.properties,Fail
 
+dEQP-VK.api.fill_and_update_buffer.dedicated_alloc.fill_buffer_vk_whole_size_device_address,Crash

@@ -9,43 +9,62 @@
 #include "nir_builder.h"
 #include "util/helpers.h"
 
-/* This is regular load_ssbo with special handling for sparse buffers. Normally, sparse buffer
+static void
+store_buffer(nir_builder *b, const union ac_cs_clear_copy_buffer_key *const key,
+             nir_def *store_val, nir_def *buf, nir_def *offset,
+             const enum gl_access_qualifier access)
+{
+   nir_store_ssbo(b, store_val, buf, offset,
+                  .access = access);
+}
+
+static nir_def *
+load_buffer(nir_builder *b, const union ac_cs_clear_copy_buffer_key *const key,
+            const unsigned num_components, const unsigned bit_size, nir_def *buf,
+            nir_def *offset, const enum gl_access_qualifier access, const unsigned align_mul,
+            const unsigned align_offset)
+{
+   return nir_load_ssbo(b, num_components, bit_size, buf, offset,
+                        .access = access,
+                        .align_mul = align_mul,
+                        .align_offset = align_offset);
+}
+
+/* Same as load_buffer with special handling for sparse buffers. Normally, sparse buffer
  * loads return 0 for all components if a sparse load starts on a non-resident page, crosses
  * the page boundary, and ends on a resident page. For copy_buffer, we want it to return 0 only
  * for the portion of the load that's non-resident, and load values for the portion that's
  * resident. The workaround is to scalarize such loads and disallow vectorization.
  */
 static nir_def *
-load_ssbo_sparse(nir_builder *b, unsigned num_components, unsigned bit_size, nir_def *buf,
-                 nir_def *offset, struct _nir_load_ssbo_indices params, bool sparse)
+load_buffer_sparse(nir_builder *b, const union ac_cs_clear_copy_buffer_key *const key,
+                   const unsigned num_components, const unsigned bit_size, nir_def *buf,
+                   nir_def *offset, const enum gl_access_qualifier access, const unsigned align_mul,
+                   const unsigned align_offset, const bool sparse)
 {
    if (sparse && num_components > 1) {
       nir_def *vec[NIR_MAX_VEC_COMPONENTS];
 
       /* Split the vector load into scalar loads. */
       for (unsigned i = 0; i < num_components; i++) {
-         unsigned elem_offset = i * bit_size / 8;
-         unsigned align_offset = (params.align_offset + elem_offset) % params.align_mul;
+         const unsigned elem_offset = i * bit_size / 8;
+         const unsigned split_align_offset = (align_offset + elem_offset) % align_mul;
+         const enum gl_access_qualifier split_access = access | ACCESS_KEEP_SCALAR;
+         nir_def *const split_offset = nir_iadd_imm(b, offset, elem_offset);
 
-         vec[i] = nir_load_ssbo(b, 1, bit_size, buf,
-                                nir_iadd_imm(b, offset, elem_offset),
-                                .access = params.access | ACCESS_KEEP_SCALAR,
-                                .align_mul = params.align_mul,
-                                .align_offset = align_offset);
+         vec[i] = load_buffer(b, key, 1, bit_size, buf, split_offset, split_access, align_mul, split_align_offset);
       }
+
       return nir_vec(b, vec, num_components);
-   } else {
-      return nir_load_ssbo(b, num_components, bit_size, buf, offset,
-                           .access = params.access,
-                           .align_mul = params.align_mul,
-                           .align_offset = params.align_offset);
    }
+
+   return load_buffer(b, key, num_components, bit_size, buf, offset, access, align_mul, align_offset);
 }
 
 /* Create a compute shader implementing clear_buffer or copy_buffer. */
 nir_shader *
-ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
-                               union ac_cs_clear_copy_buffer_key *key)
+ac_create_clear_copy_buffer_cs(const struct ac_cs_clear_copy_buffer_options *const options,
+                               const union ac_cs_clear_copy_buffer_key *const key)
 {
    if (options->print_key) {
       fprintf(stderr, "Internal shader: dma\n");
@@ -62,14 +81,28 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
 
    assert(key->dwords_per_thread && key->dwords_per_thread <= 4);
 
-   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options->nir_options,
-                                                  "clear_copy_buffer_cs");
+   nir_builder b =
+      nir_builder_init_simple_shader(
+         MESA_SHADER_COMPUTE,
+         options->nir_options,
+         "%s%s%s_buffer_cs_dw%u_srcao_%u_dstao_%u_dstltb_%u_dststua_%u_hst_%u",
+         key->is_clear ? "clear" : "copy",
+         key->clear_value_size_is_12 ? "12" : "",
+         key->src_scalarize_for_sparse ? "_sparse" : "",
+         key->dwords_per_thread,
+         key->src_align_offset,
+         key->dst_align_offset,
+         key->dst_last_thread_bytes,
+         key->dst_single_thread_unaligned,
+         key->has_start_thread);
+
    b.shader->info.workgroup_size[0] = 64;
    b.shader->info.workgroup_size[1] = 1;
    b.shader->info.workgroup_size[2] = 1;
    b.shader->info.num_ssbos = key->is_clear ? 1 : 2;
    b.shader->info.cs.user_data_components_amd = 0;
 
+   unsigned clear_value_user_data_index = b.shader->info.cs.user_data_components_amd;
    if (key->is_clear) {
       b.shader->info.cs.user_data_components_amd +=
          key->clear_value_size_is_12 ? 3 : key->dwords_per_thread;
@@ -85,6 +118,7 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
       b.shader->info.cs.user_data_components_amd++;
 
    nir_def *thread_id = ac_get_global_ids(&b, 1, 32);
+   nir_def *user_data = nir_load_user_data_amd(&b);
 
    /* If the clear/copy area is unaligned, we launched extra threads at the beginning to make it
     * aligned. Skip those threads here.
@@ -92,9 +126,10 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
    nir_if *if_positive = NULL;
    if (key->has_start_thread) {
       nir_def *start_thread =
-         nir_channel(&b, nir_load_user_data_amd(&b), start_thread_user_data_index);
+         nir_channel(&b, user_data, start_thread_user_data_index);
       thread_id = nir_isub(&b, thread_id, start_thread);
       if_positive = nir_push_if(&b, nir_ige_imm(&b, thread_id, 0));
+      if_positive->control = nir_selection_control_divergent_always_taken;
    }
 
    /* Convert the global thread ID into bytes. */
@@ -102,7 +137,7 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
    nir_def *value;
 
    if (key->is_clear) {
-      value = nir_trim_vector(&b, nir_load_user_data_amd(&b), key->dwords_per_thread);
+      value = nir_extract_bits(&b, &user_data, 1, clear_value_user_data_index * 32, key->dwords_per_thread, 32);
 
       /* We store 4 dwords per thread, but the clear value has 3 dwords. Swizzle it to 4 dwords.
        * Storing 4 dwords per thread is faster even when the ALU cost is worse.
@@ -145,6 +180,7 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
       unsigned num_comps = key->dwords_per_thread * 4 / alignment;
       nir_if *if_first_thread = NULL;
       nir_def *value0 = NULL;
+      nir_def *src_buf = nir_imm_int(&b, 0);
 
       if (realign_offset < 0) {
          /* if src_align_offset is less than dst_align_offset, realign_offset is
@@ -162,12 +198,8 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
             while (!nir_num_components_valid(num_inbounds_comps))
                num_inbounds_comps = util_next_power_of_two(num_inbounds_comps);
 
-            value0 = load_ssbo_sparse(&b, num_inbounds_comps, bit_size, nir_imm_int(&b, 0), offset,
-                                      (struct _nir_load_ssbo_indices){
-                                         .access = ACCESS_RESTRICT,
-                                         .align_mul = 4,
-                                         .align_offset = 0
-                                      }, key->src_scalarize_for_sparse);
+            value0 = load_buffer_sparse(&b, key, num_inbounds_comps, bit_size, src_buf, offset,
+                                        ACCESS_RESTRICT, 4, 0, key->src_scalarize_for_sparse);
 
             /* Add the components that we didn't load as undef. */
             nir_def *comps[16];
@@ -183,15 +215,9 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
          nir_push_else(&b, if_first_thread);
       }
 
-      value = load_ssbo_sparse(&b, num_comps, bit_size, nir_imm_int(&b, 0),
-                               nir_iadd_imm(&b, offset, realign_offset),
-                               (struct _nir_load_ssbo_indices){
-                                  .access = ACCESS_RESTRICT,
-                                  .align_mul = 4,
-                                  .align_offset = (unsigned)realign_offset % 4
-                               }, key->src_scalarize_for_sparse);
 
-
+      value = load_buffer_sparse(&b, key, num_comps, bit_size, src_buf, nir_iadd_imm(&b, offset, realign_offset),
+                                 ACCESS_RESTRICT, 4, (unsigned)realign_offset % 4, key->src_scalarize_for_sparse);
       if (if_first_thread) {
          nir_pop_if(&b, if_first_thread);
          value = nir_if_phi(&b, value0, value);
@@ -216,42 +242,42 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
        * written by splitting it into 8-bit and 16-bit stores.
        */
       if (key->dst_align_offset) {
-          if_first_thread = nir_push_if(&b, nir_ieq_imm(&b, thread_id, 0));
-          {
-             unsigned local_offset = key->dst_align_offset;
-             nir_def *first_dword = nir_channel(&b, value, local_offset / 4);
+         if_first_thread = nir_push_if(&b, nir_ieq_imm(&b, thread_id, 0));
+         {
+            unsigned local_offset = key->dst_align_offset;
+            nir_def *first_dword = nir_channel(&b, value, local_offset / 4);
 
-             if (local_offset % 2 == 1) {
-                nir_store_ssbo(&b, nir_channel(&b, nir_unpack_32_4x8(&b, first_dword), local_offset % 4),
-                               dst_buf, nir_iadd_imm_nuw(&b, offset, local_offset),
-                               .access = ACCESS_RESTRICT);
-                local_offset++;
-             }
+            if (local_offset % 2 == 1) {
+               store_buffer(&b, key, nir_channel(&b, nir_unpack_32_4x8(&b, first_dword), local_offset % 4),
+                            dst_buf, nir_iadd_imm_nuw(&b, offset, local_offset),
+                            ACCESS_RESTRICT);
+               local_offset++;
+            }
 
-             if (local_offset % 4 == 2) {
-                nir_store_ssbo(&b, nir_unpack_32_2x16_split_y(&b, first_dword), dst_buf,
-                               nir_iadd_imm_nuw(&b, offset, local_offset),
-                               .access = ACCESS_RESTRICT);
-                local_offset += 2;
-             }
+            if (local_offset % 4 == 2) {
+               store_buffer(&b, key, nir_unpack_32_2x16_split_y(&b, first_dword), dst_buf,
+                            nir_iadd_imm_nuw(&b, offset, local_offset),
+                            ACCESS_RESTRICT);
+               local_offset += 2;
+            }
 
-             assert(local_offset % 4 == 0);
-             unsigned num_dw_remaining = key->dwords_per_thread - local_offset / 4;
+            assert(local_offset % 4 == 0);
+            unsigned num_dw_remaining = key->dwords_per_thread - local_offset / 4;
 
-             if (num_dw_remaining) {
-                nir_def *dwords =
-                   nir_channels(&b, value, BITFIELD_RANGE(local_offset / 4, num_dw_remaining));
+            if (num_dw_remaining) {
+               nir_def *dwords =
+                  nir_channels(&b, value, BITFIELD_RANGE(local_offset / 4, num_dw_remaining));
 
-                nir_store_ssbo(&b, dwords, dst_buf, nir_iadd_imm_nuw(&b, offset, local_offset),
-                               .access = ACCESS_RESTRICT);
-             }
-          }
-          nir_push_else(&b, if_first_thread);
+               store_buffer(&b, key, dwords, dst_buf, nir_iadd_imm_nuw(&b, offset, local_offset),
+                            ACCESS_RESTRICT);
+            }
+         }
+         nir_push_else(&b, if_first_thread);
       }
 
       if (key->dst_last_thread_bytes) {
          nir_def *last_thread_id =
-            nir_channel(&b, nir_load_user_data_amd(&b), last_thread_user_data_index);
+            nir_channel(&b, user_data, last_thread_user_data_index);
 
          if_last_thread = nir_push_if(&b, nir_ieq(&b, thread_id, last_thread_id));
          {
@@ -261,26 +287,26 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
             nir_def *last_dword = nir_channel(&b, value, num_dwords);
 
             if (num_dwords) {
-               nir_def *dwords = nir_channels(&b, value, BITFIELD_MASK(num_dwords));
-               nir_store_ssbo(&b, dwords, dst_buf, offset, .access = ACCESS_RESTRICT);
+               nir_def *dwords = nir_channels(&b, value, nir_component_mask(num_dwords));
+               store_buffer(&b, key, dwords, dst_buf, offset, ACCESS_RESTRICT);
             }
 
             if (write_short) {
-               nir_store_ssbo(&b, nir_u2u16(&b, last_dword), dst_buf,
-                              nir_iadd_imm_nuw(&b, offset, num_dwords * 4),
-                              .access = ACCESS_RESTRICT);
+               store_buffer(&b, key, nir_u2u16(&b, last_dword), dst_buf,
+                            nir_iadd_imm_nuw(&b, offset, num_dwords * 4),
+                            ACCESS_RESTRICT);
             }
 
             if (write_byte) {
-               nir_store_ssbo(&b, nir_channel(&b, nir_unpack_32_4x8(&b, last_dword), write_short * 2),
-                              dst_buf, nir_iadd_imm_nuw(&b, offset, num_dwords * 4 + write_short * 2),
-                              .access = ACCESS_RESTRICT);
+               store_buffer(&b, key, nir_channel(&b, nir_unpack_32_4x8(&b, last_dword), write_short * 2),
+                            dst_buf, nir_iadd_imm_nuw(&b, offset, num_dwords * 4 + write_short * 2),
+                            ACCESS_RESTRICT);
             }
          }
          nir_push_else(&b, if_last_thread);
       }
 
-      nir_store_ssbo(&b, value, dst_buf, offset, .access = ACCESS_RESTRICT);
+      store_buffer(&b, key, value, dst_buf, offset, ACCESS_RESTRICT);
 
       if (if_last_thread)
          nir_pop_if(&b, if_last_thread);
@@ -299,14 +325,14 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
          if (local_offset % 2 == 1 || remaining == 1) {
             /* 1-byte store. */
             nir_def *src_dword4x8 = nir_unpack_32_4x8(&b, src_dword);
-            nir_store_ssbo(&b, nir_channel(&b, src_dword4x8, local_offset % 4), dst_buf,
-                           nir_iadd_imm_nuw(&b, offset, local_offset), .access = ACCESS_RESTRICT);
+            store_buffer(&b, key, nir_channel(&b, src_dword4x8, local_offset % 4), dst_buf,
+                         nir_iadd_imm_nuw(&b, offset, local_offset), ACCESS_RESTRICT);
             local_offset++;
          } else if (local_offset % 4 == 2 || remaining == 2 || remaining == 3) {
             /* 2-byte store. */
             nir_def *src_dword2x16 = nir_unpack_32_2x16(&b, src_dword);
-            nir_store_ssbo(&b, nir_channel(&b, src_dword2x16, (local_offset / 2) % 2), dst_buf,
-                           nir_iadd_imm_nuw(&b, offset, local_offset), .access = ACCESS_RESTRICT);
+            store_buffer(&b, key, nir_channel(&b, src_dword2x16, (local_offset / 2) % 2), dst_buf,
+                         nir_iadd_imm_nuw(&b, offset, local_offset), ACCESS_RESTRICT);
             local_offset += 2;
          } else {
             /* 1-N dwords. */
@@ -314,9 +340,9 @@ ac_create_clear_copy_buffer_cs(struct ac_cs_clear_copy_buffer_options *options,
             assert(dw_size);
             assert(local_offset % 4 == 0);
 
-            nir_store_ssbo(&b, nir_channels(&b, value, BITFIELD_RANGE(local_offset / 4, dw_size)),
-                           dst_buf, nir_iadd_imm_nuw(&b, offset, local_offset),
-                           .access = ACCESS_RESTRICT);
+            store_buffer(&b, key, nir_channels(&b, value, BITFIELD_RANGE(local_offset / 4, dw_size)),
+                         dst_buf, nir_iadd_imm_nuw(&b, offset, local_offset),
+                         ACCESS_RESTRICT);
             local_offset += dw_size * 4;
          }
       }
@@ -534,9 +560,9 @@ ac_prepare_cs_clear_copy_buffer(const struct ac_cs_clear_copy_buffer_options *op
       return false; /* invalid value */
    }
 
-   unsigned dst_align_offset = info->dst_offset % (dwords_per_thread * 4);
-   unsigned dst_offset_bound = info->dst_offset - dst_align_offset;
-   unsigned src_align_offset = is_copy ? info->src_offset % 4 : 0;
+   uint64_t dst_align_offset = info->dst_offset % (dwords_per_thread * 4);
+   uint64_t dst_offset_bound = info->dst_offset - dst_align_offset;
+   uint64_t src_align_offset = is_copy ? info->src_offset % 4 : 0;
    unsigned num_user_data_terms = 0;
 
    /* Set the clear value in user data SGPRs. */
@@ -544,26 +570,31 @@ ac_prepare_cs_clear_copy_buffer(const struct ac_cs_clear_copy_buffer_options *op
       assert(clear_value_size >= 4 && clear_value_size <= 16 &&
              (clear_value_size == 12 || util_is_power_of_two_or_zero(clear_value_size)));
 
+      /* Put clear data after previous user_data contents. */
+      const unsigned clear_user_data_offset = num_user_data_terms * 4;
+
       /* Since the clear value may start on an unaligned offset and we just pass user SGPRs
        * to dword stores as-is, we need to byte-shift the clear value to that offset and
        * replicate it because 1 invocation stores up to 4 dwords from user SGPRs regardless of
        * the clear value size.
        */
-      num_user_data_terms = clear_value_size == 12 ? 3 : dwords_per_thread;
-      unsigned user_data_size = num_user_data_terms * 4;
+      const unsigned num_clear_user_data_terms = clear_value_size == 12 ? 3 : dwords_per_thread;
+      const unsigned clear_user_data_size = num_clear_user_data_terms * 4;
 
-      memcpy(out->user_data,
+      memcpy((uint8_t *)out->user_data + clear_user_data_offset,
              (uint8_t*)clear_value + clear_value_size - dst_align_offset % clear_value_size,
              dst_align_offset % clear_value_size);
       unsigned offset = dst_align_offset % clear_value_size;
 
-      while (offset + clear_value_size <= user_data_size) {
-         memcpy((uint8_t*)out->user_data + offset, clear_value, clear_value_size);
+      while (offset + clear_value_size <= clear_user_data_size) {
+         memcpy((uint8_t*)out->user_data + clear_user_data_offset + offset, clear_value, clear_value_size);
          offset += clear_value_size;
       }
 
-      if (offset < user_data_size)
-         memcpy((uint8_t*)out->user_data + offset, clear_value, user_data_size - offset);
+      if (offset < clear_user_data_size)
+         memcpy((uint8_t*)out->user_data + clear_user_data_offset + offset, clear_value, clear_user_data_size - offset);
+
+      num_user_data_terms += num_clear_user_data_terms;
    }
 
    out->shader_key.key = 0;
@@ -587,7 +618,7 @@ ac_prepare_cs_clear_copy_buffer(const struct ac_cs_clear_copy_buffer_options *op
    out->shader_key.src_align_offset = src_align_offset;
    out->shader_key.dst_align_offset = dst_align_offset;
 
-   if ((dst_align_offset + info->size) % 4)
+   if ((dst_align_offset + info->size) % (dwords_per_thread * 4))
       out->shader_key.dst_last_thread_bytes = (dst_align_offset + info->size) % (dwords_per_thread * 4);
 
    unsigned num_threads = DIV_ROUND_UP(dst_align_offset + info->size, dwords_per_thread * 4);

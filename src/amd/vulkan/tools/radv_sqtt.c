@@ -419,7 +419,7 @@ radv_sqtt_init(struct radv_device *device)
    if (!radv_sqtt_init_queue_event(device))
       return false;
 
-   if (!radv_device_acquire_performance_counters(device))
+   if (radv_device_acquire_performance_counters(device, 1000000000ull /* 1s */) != VK_SUCCESS)
       return false;
 
    ac_sqtt_init(sqtt);

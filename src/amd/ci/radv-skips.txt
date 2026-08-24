@@ -12,8 +12,20 @@ dEQP-VK.synchronization2.internally_synchronized_queues.*wsi*
 # These tests require PCIe atomics, causing random hangs
 dEQP-VK.video.synchronization.*.basic.event.*
 
-# These tests hang when running in parallel (border color on compute queues).
+# These tests hang when running in parallel (custom border color on compute
+# queues). They are now undefined per the Vulkan spec but a workaround might be
+# needed to make them fail instead.
 dEQP-VK.pipeline.*.sampler.*_compute
+dEQP-VK.binding_model.descriptor_buffer.*.capture_replay.compute_comp_.*_custom_border_color
+dEQP-VK.binding_model.descriptor_heap.concurrent_queues.compute.sampler_custom_border
+dEQP-VK.binding_model.descriptor_heap.concurrent_queues.raygen.sampler_custom_border
+dEQP-VK.binding_model.descriptor_heap.basic.compute.sampler_custom_border
+dEQP-VK.binding_model.descriptor_heap.basic.raygen.sampler_custom_border
 
 # These tests cause segmentation fault: https://github.com/KhronosGroup/VK-GL-CTS/issues/603
 dEQP-VK.api.image_compression_control.swapchain.direct.*
+
+# Skip these two RT tests on all generations (although only RDNA2 GPUs seem to
+# hang) until the issue is resolved: https://gitlab.freedesktop.org/mesa/mesa/-/work_items/16027
+dEQP-VK.ray_tracing_pipeline.misc.maxrtinvocations_AABB
+dEQP-VK.ray_tracing_pipeline.misc.maxrtinvocations_tri

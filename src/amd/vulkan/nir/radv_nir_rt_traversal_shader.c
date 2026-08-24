@@ -976,6 +976,7 @@ handle_candidate_triangle(nir_builder *b, struct radv_triangle_intersection *int
          }
          params[RT_ARG_PUSH_CONSTANTS] = nir_load_rt_push_constants_amd(b);
          params[RT_ARG_SBT_DESCRIPTORS] = nir_load_sbt_base_amd(b);
+         params[RT_ARG_IS_COMPUTE_QUEUE] = nir_load_rt_is_compute_queue_amd(b);
          params[AHIT_ISEC_ARG_SHADER_RECORD_PTR] = sbt_data.shader_record_ptr;
          params[AHIT_ISEC_ARG_CULL_MASK_AND_FLAGS] = data->params->cull_mask_and_flags;
          params[AHIT_ISEC_ARG_SBT_INDEX] = sbt_idx;
@@ -1133,6 +1134,7 @@ handle_candidate_aabb(nir_builder *b, struct radv_leaf_intersection *intersectio
       }
       params[RT_ARG_PUSH_CONSTANTS] = nir_load_rt_push_constants_amd(b);
       params[RT_ARG_SBT_DESCRIPTORS] = nir_load_sbt_base_amd(b);
+      params[RT_ARG_IS_COMPUTE_QUEUE] = nir_load_rt_is_compute_queue_amd(b);
       params[AHIT_ISEC_ARG_SHADER_RECORD_PTR] = sbt_data.shader_record_ptr;
       params[AHIT_ISEC_ARG_CULL_MASK_AND_FLAGS] = data->params->cull_mask_and_flags;
       params[AHIT_ISEC_ARG_SBT_INDEX] = sbt_idx;

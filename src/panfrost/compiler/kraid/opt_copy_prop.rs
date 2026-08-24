@@ -47,12 +47,7 @@ impl WordCopies<'_> {
         assert!(!src.swizzle.is_word_swizzle());
         // For zero copies, get rid of source modifiers and trivialize swizzles
         if src.is_zero() {
-            src = match ssa.bits() {
-                8 => Src::imm_u8(0),
-                16 => Src::imm_u16(0),
-                32 => 0.into(),
-                _ => panic!("Invalid SSAValue bit size"),
-            };
+            src = Src::zero(ssa.bits());
         }
         self.copies.insert(ssa, WordCopy { src_type, src });
     }
@@ -69,6 +64,17 @@ impl WordCopies<'_> {
                             op.src.clone().word(w),
                             DataType::i(ssa.bits()),
                         );
+                    }
+                }
+            }
+            Op::IAdd(op) => {
+                if let DstRef::SSA(vec) = &op.dst.dst_ref {
+                    let ssa = vec[0];
+
+                    if op.srcs[0].is_zero() {
+                        self.add_copy(ssa, op.srcs[1].clone(), op.dst_type);
+                    } else if op.srcs[1].is_zero() {
+                        self.add_copy(ssa, op.srcs[0].clone(), op.dst_type);
                     }
                 }
             }
@@ -97,19 +103,18 @@ impl WordCopies<'_> {
                     }
                 }
             }
-            Op::ShiftLop(op) => {
+            Op::ShiftLop(op)
+                if op.shift_op == ShiftOp::None
+                    && op.logic_op == LogicOp::None =>
+            {
                 if let DstRef::SSA(vec) = &op.dst.dst_ref {
-                    debug_assert_eq!(vec.comps(), 1);
-                    let ssa = vec[0];
-
-                    if op.shift_op == ShiftOp::None
-                        && op.logic_op == LogicOp::None
-                    {
-                        let mut src = op.src0.clone();
+                    for w in 0..vec.comps() {
+                        let ssa = vec[usize::from(w)];
+                        let mut src = op.src0.clone().word(w);
                         if op.not_result {
                             src = src.bnot();
                         }
-                        self.add_copy(ssa, src, op.dst_type);
+                        self.add_copy(ssa, src, DataType::i(ssa.bits()));
                     }
                 }
             }
@@ -150,6 +155,27 @@ impl WordCopies<'_> {
         let src = &instr.srcs()[src_idx];
         if !self.model.op_src_supports_mod(&instr.op, src, src_mod) {
             // If the source modifier isn't supported, there's nothing we can do
+            return;
+        }
+
+        // Handle zero as a special case.  It'll never be supported as a swizzle
+        // by the HW op itself, so none of the cases below will work.  However,
+        // we can always use a Zero source.
+        if swizzle.is_zero() {
+            // Re-use the source's original swizzle because we don't know what
+            // a valid swizzle would be.
+            debug_assert!(self.model.op_src_supports_swizzle(
+                &instr.op,
+                src,
+                src.swizzle
+            ));
+            let new_src = Src {
+                src_ref: SrcRef::Zero,
+                swizzle: src.swizzle,
+                src_mod,
+                last_use: false,
+            };
+            instr.srcs_mut()[src_idx] = new_src;
             return;
         }
 
@@ -280,30 +306,19 @@ impl WordCopies<'_> {
                 return None;
             }
 
-            debug_assert!(src.swizzle.bytes_read(8) < (1 << 4));
-            let widen = if copy.src.swizzle.is_none() {
-                src.swizzle
-            } else if src.swizzle.is_byte_swizzle() {
-                // Byte swizzles can be composed directly
-                copy.src.swizzle.swizzle(src.swizzle)?
-            } else if src.swizzle == Swizzle::widen_s32(0) {
-                // Byte swizzles are sign-extended when used with a 64-bit
-                // source so if the 64-bit swizzle is widen_s32(0), we can
-                // just take the 32-bit swizzle verbatim
-                copy.src.swizzle
-            } else {
+            let Some(swizzle) = copy.src.swizzle.swizzle(src.swizzle) else {
                 return None;
             };
 
             let mut new_src = copy.src.clone();
-            new_src.swizzle = widen;
+            new_src.swizzle = swizzle;
             return Some(new_src);
         }
 
         // If we read multiple words, we must have a word or none swizzle
         let swiz_words = src.swizzle.as_words().unwrap();
 
-        let mut words = [Src::from(0), Src::from(0)];
+        let mut words = [Src::from(0_u32), Src::from(0_u32)];
         for i in 0..2 {
             if let Some(w) = swiz_words[i].word_idx() {
                 if let Some(copy) = self.copies.get(&src_vec[usize::from(w)]) {
@@ -322,9 +337,9 @@ impl WordCopies<'_> {
         }
         let words = words;
 
-        // Check if it's justa 64-bit zero
+        // Check if it's just a 64-bit zero
         if words[1].is_zero() && words[0].is_zero() {
-            return Some(0.into());
+            return Some(0_u32.into());
         }
 
         if src.swizzle.is_none() {
@@ -478,7 +493,7 @@ impl ByteCopy {
                     }
                 }
             }
-            SrcRef::Reg(_) => {
+            SrcRef::Reg(_) | SrcRef::Mem(_) => {
                 panic!("Must be run in SSA form");
             }
         }
@@ -729,6 +744,9 @@ impl ByteCopies<'_> {
         if !self.model.op_src_supports_swizzle(&instr.op, src, swizzle) {
             return;
         }
+
+        // This should have already been handled by the immediate case
+        debug_assert!(!swizzle.is_zero());
 
         let src = &mut instr.srcs_mut()[src_idx];
         src.src_ref = copy_src.src_ref;

@@ -83,6 +83,8 @@ typedef bool (*nir_tex_pass_cb)(struct nir_builder *,
                                 nir_tex_instr *, void *);
 typedef bool (*nir_phi_pass_cb)(struct nir_builder *,
                                 nir_phi_instr *, void *);
+typedef bool (*nir_deref_pass_cb)(struct nir_builder *,
+                                  nir_deref_instr *, void *);
 
 /**
  * Iterates over all the instructions in a NIR function and calls the given pass
@@ -264,6 +266,32 @@ nir_shader_phi_pass(nir_shader *shader,
       nir_foreach_block_safe(block, impl) {
          nir_foreach_phi_safe(phi, block) {
             func_progress |= pass(&b, phi, cb_data);
+         }
+      }
+
+      progress |= nir_progress(func_progress, impl, preserved);
+   }
+
+   return progress;
+}
+
+/* As above, but for derefs */
+static inline bool
+nir_shader_deref_pass(nir_shader *shader, nir_deref_pass_cb pass,
+                      nir_metadata preserved, void *cb_data)
+{
+   bool progress = false;
+
+   nir_foreach_function_impl(impl, shader) {
+      bool func_progress = false;
+      nir_builder b = nir_builder_create(impl);
+
+      nir_foreach_block_safe(block, impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type == nir_instr_type_deref) {
+               nir_deref_instr *deref = nir_instr_as_deref(instr);
+               func_progress |= pass(&b, deref, cb_data);
+            }
          }
       }
 
@@ -743,7 +771,7 @@ nir_mov_alu(nir_builder *build, nir_alu_src src, unsigned num_components)
  * but if it has to insert one to handle non-alu, it's return instead of NULL.
  */
 nir_def *
-nir_def_rewrite_uses_with_alu_src(nir_builder *build, nir_def *def, nir_alu_src src, unsigned num_components);
+nir_def_rewrite_uses_with_alu_src(nir_builder *build, nir_def *def, nir_alu_src src);
 
 /**
  * Construct a mov that reswizzles the source's components.
@@ -1977,6 +2005,15 @@ nir_store_deref(nir_builder *build, nir_deref_instr *deref,
                                (enum gl_access_qualifier)0);
 }
 
+static inline nir_def *
+nir_atomic_deref(nir_builder *build, unsigned bit_size,
+                 nir_deref_instr *deref,
+                 nir_def *value, nir_atomic_op op)
+{
+   return nir_deref_atomic(build, bit_size, &deref->def, value,
+                           (enum gl_access_qualifier)0, op);
+}
+
 static inline void
 nir_build_write_masked_store(nir_builder *b, nir_deref_instr *vec_deref,
                              nir_def *value, unsigned component)
@@ -2047,6 +2084,12 @@ nir_memcpy_deref(nir_builder *build, nir_deref_instr *dest,
 }
 
 static inline nir_def *
+nir_load_struct_field(nir_builder *build, nir_deref_instr *deref, int field)
+{
+   return nir_load_deref(build, nir_build_deref_struct(build, deref, field));
+}
+
+static inline nir_def *
 nir_load_var(nir_builder *build, nir_variable *var)
 {
    return nir_load_deref(build, nir_build_deref_var(build, var));
@@ -2057,6 +2100,14 @@ nir_store_var(nir_builder *build, nir_variable *var, nir_def *value,
               unsigned writemask)
 {
    nir_store_deref(build, nir_build_deref_var(build, var), value, writemask);
+}
+
+static inline nir_def *
+nir_atomic_var(nir_builder *build, nir_variable *var, nir_def *value,
+               nir_atomic_op op)
+{
+   return nir_atomic_deref(build, glsl_get_bit_size(var->type),
+                           nir_build_deref_var(build, var), value, op);
 }
 
 static inline void
@@ -2142,7 +2193,7 @@ nir_load_reg(nir_builder *b, nir_def *reg)
 }
 
 #undef nir_store_reg
-static inline void
+static inline nir_intrinsic_instr *
 nir_store_reg(nir_builder *b, nir_def *value, nir_def *reg)
 {
    ASSERTED nir_intrinsic_instr *decl = nir_reg_get_decl(reg);
@@ -2152,7 +2203,7 @@ nir_store_reg(nir_builder *b, nir_def *value, nir_def *reg)
    assert(value->num_components == num_components);
    assert(value->bit_size == bit_size);
 
-   nir_build_store_reg(b, value, reg);
+   return nir_build_store_reg(b, value, reg);
 }
 
 static inline nir_tex_src
@@ -2301,6 +2352,16 @@ nir_break_if(nir_builder *build, nir_def *cond)
    nir_if *nif = nir_push_if(build, cond);
    {
       nir_jump(build, nir_jump_break);
+   }
+   nir_pop_if(build, nif);
+}
+
+static inline void
+nir_halt_if(nir_builder *build, nir_def *cond)
+{
+   nir_if *nif = nir_push_if(build, cond);
+   {
+      nir_jump(build, nir_jump_halt);
    }
    nir_pop_if(build, nif);
 }

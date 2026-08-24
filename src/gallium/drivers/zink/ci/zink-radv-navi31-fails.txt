@@ -60,3 +60,7 @@ asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_red_rgtc1_format_
 asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_red_rgtc1_format_rgb,Fail
 asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_rg_rgtc2_format_bgr,Fail
 asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_rg_rgtc2_format_bgra,Fail
+
+# uprev Piglit in Mesa
+spec@arb_texture_view@tex-view,Fail
+vulkan@shaders@cmat-uniform-ctor,Fail

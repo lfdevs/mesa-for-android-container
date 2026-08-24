@@ -110,6 +110,30 @@ TEST_F(RegisterCoalesceTest, ChangingTemporaryCompoundRegisterNotChangesOriginal
    EXPECT_NO_PROGRESS(brw_opt_register_coalesce, bld);
 }
 
+TEST_F(RegisterCoalesceTest, OverlappingMultiRegMovLeavesHole)
+{
+   brw_builder bld = make_shader(MESA_SHADER_COMPUTE, 16);
+
+   brw_reg src = vgrf(bld, BRW_TYPE_F, 2);
+   brw_reg dst = vgrf(bld, BRW_TYPE_F, 2);
+   brw_reg result = vgrf(bld, BRW_TYPE_F, 2);
+
+   brw_reg one = brw_imm_f(1.0);
+   brw_reg two = brw_imm_f(2.0);
+
+   bld.MOV(src, one);
+   bld.MOV(byte_offset(src, 2 * REG_SIZE), two);
+
+   bld.MOV(byte_offset(dst, 2 * REG_SIZE), byte_offset(src, 2 * REG_SIZE));
+   bld.MOV(byte_offset(dst, REG_SIZE), byte_offset(src, REG_SIZE));
+
+   bld.ADD(result, dst, one);
+   bld.ADD(byte_offset(result, 2 * REG_SIZE),
+           byte_offset(dst, 2 * REG_SIZE), two);
+
+   EXPECT_NO_PROGRESS(brw_opt_register_coalesce, bld);
+}
+
 TEST_F(RegisterCoalesceTest, MovWithFlagRegisterWrite)
 {
    brw_builder bld = make_shader(MESA_SHADER_COMPUTE, 16);

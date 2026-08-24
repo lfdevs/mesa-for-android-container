@@ -35,20 +35,42 @@
 
 #include "v3d_query.h"
 
+/* Occlusion counters come in groups of 16 at consecutive 4-byte addresses,
+ * each group aligned to 1024 bytes.
+ */
+#define V3D_OQ_BO_SIZE          4096
+#define V3D_OQ_GROUP_SIZE       1024
+#define V3D_OQ_PER_GROUP        16
+#define V3D_OQ_SLOTS            ((V3D_OQ_BO_SIZE / V3D_OQ_GROUP_SIZE) * \
+                                 V3D_OQ_PER_GROUP)
+
 struct v3d_query_pipe
 {
         struct v3d_query base;
 
         enum pipe_query_type type;
         struct v3d_bo *bo;
-
-        uint32_t start, end;
         uint32_t result;
+
+        /* These are used for occlusion queries */
+        uint32_t oq_slot;
+        uint32_t oq_offset;
+
+        /* These are used for primitive queries */
+        uint32_t start, end;
 
         /* these fields are used for timestamp queries */
         uint64_t time_result;
         uint32_t sync[2];
 };
+
+static inline uint32_t
+v3d_oq_slot_offset(uint32_t slot)
+{
+        assert(slot < V3D_OQ_SLOTS);
+        return (slot / V3D_OQ_PER_GROUP) * V3D_OQ_GROUP_SIZE +
+               (slot % V3D_OQ_PER_GROUP) * 4;
+}
 
 static void
 v3d_destroy_query_pipe(struct v3d_context *v3d, struct v3d_query *query)
@@ -90,15 +112,29 @@ v3d_begin_query_pipe(struct v3d_context *v3d, struct v3d_query *query)
                 break;
         case PIPE_QUERY_OCCLUSION_COUNTER:
         case PIPE_QUERY_OCCLUSION_PREDICATE:
-        case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
-                v3d_bo_unreference(&pquery->bo);
-                pquery->bo = v3d_bo_alloc(v3d->screen, 4096, "query");
-                uint32_t *map = v3d_bo_map(pquery->bo);
-                *map = 0;
+        case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE: {
+                if (!pquery->bo || pquery->oq_slot == V3D_OQ_SLOTS) {
+                        v3d_bo_unreference(&pquery->bo);
+                        pquery->bo = v3d_bo_alloc(v3d->screen, V3D_OQ_BO_SIZE,
+                                                  "query");
+                        if (!pquery->bo)
+                                return false;
+                        pquery->oq_slot = 0;
+                }
+                pquery->oq_offset = v3d_oq_slot_offset(pquery->oq_slot++);
+
+                /* Unsynchronized map because we use a different offset every time,
+                 * so it would be unexpected for the same query offset to still be
+                 * in use on another job.
+                 */
+                uint32_t *map = v3d_bo_map_unsynchronized(pquery->bo);
+                map[pquery->oq_offset / 4] = 0;
 
                 v3d->current_oq = pquery->bo;
+                v3d->current_oq_offset = pquery->oq_offset;
                 v3d->dirty |= V3D_DIRTY_OQ;
                 break;
+        }
         case PIPE_QUERY_TIME_ELAPSED:
                 /* GL_TIME_ELAPSED​: Records the time that it takes for the GPU
                  * to execute all of the scoped commands.
@@ -230,12 +266,7 @@ v3d_get_query_result_pipe(struct v3d_context *v3d, struct v3d_query *query,
                 } else {
                         /* XXX: Sum up per-core values. */
                         uint32_t *map = v3d_bo_map(pquery->bo);
-                        pquery->result = *map;
-
-                        /* FIXME: we should move creation and destruction of
-                         * the BO for all queries to query create/destruction,
-                         * like we do with timestamps */
-                        v3d_bo_unreference(&pquery->bo);
+                        pquery->result = map[pquery->oq_offset / 4];
                 }
         }
 
@@ -286,9 +317,6 @@ v3d_create_query_pipe(struct v3d_context *v3d, unsigned query_type, unsigned ind
         pquery->type = query_type;
         query->funcs = &pipe_query_funcs;
 
-        /* FIXME: we should probably allocate BOs for occlusion queries here
-         * as well
-         */
         switch (pquery->type) {
         case PIPE_QUERY_TIMESTAMP:
         case PIPE_QUERY_TIME_ELAPSED:

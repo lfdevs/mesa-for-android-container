@@ -2557,11 +2557,47 @@ cs_match_end(struct cs_builder *b, struct cs_match *match)
         });                                                                    \
         !__default_defined; __default_defined = true)
 
+#define CS_DBG_STR_MAX_LEN 256
+#define CS_NOP_CHAR_COUNT  48 / 8
+
+enum cs_nop_type {
+   CS_NOP_TYPE_NOP = 0,
+   CS_NOP_TYPE_DBG_STR_START = 1,
+   CS_NOP_TYPE_DBG_STR_BUF = 2,
+};
+
 static inline void
-cs_nop(struct cs_builder *b)
+cs_nop(struct cs_builder *b, enum cs_nop_type type, uint64_t payload)
 {
-   cs_emit(b, NOP, I)
-      ;
+   assert(type != CS_NOP_TYPE_NOP || payload == 0);
+   assert((payload & BITFIELD64_RANGE(48, 12)) == 0);
+
+   cs_emit(b, NOP, I) {
+      I.metadata_payload = payload;
+      I.metadata_type = type;
+   }
+}
+
+/* Encode a string that is visible to dump/trace
+ * For formatting, see panvk_cmd_buffer.h:cs_debug_string */
+static inline void
+cs_dbg_str(struct cs_builder *b, const char *str)
+{
+   const uint32_t str_len = strlen(str);
+   assert(str_len < CS_DBG_STR_MAX_LEN);
+
+   cs_nop(b, CS_NOP_TYPE_DBG_STR_START, str_len);
+   const uint32_t buf_nops_len = DIV_ROUND_UP(str_len, CS_NOP_CHAR_COUNT);
+   for (uint32_t buf_nop_index = 0; buf_nop_index < buf_nops_len;
+        buf_nop_index++) {
+      const uint32_t slice_start = buf_nop_index * CS_NOP_CHAR_COUNT;
+      const uint32_t slice_end = MIN2(slice_start + CS_NOP_CHAR_COUNT, str_len);
+
+      uint64_t str_slice_payload = 0;
+      memcpy(&str_slice_payload, &str[slice_start], slice_end - slice_start);
+
+      cs_nop(b, CS_NOP_TYPE_DBG_STR_BUF, str_slice_payload);
+   }
 }
 
 struct cs_function_ctx {
@@ -2706,7 +2742,7 @@ cs_function_end(struct cs_builder *b,
 
    /* Fill the rest of the buffer with NOPs. */
    for (; num_instrs < padded_num_instrs; num_instrs++)
-      cs_nop(b);
+      cs_nop(b, CS_NOP_TYPE_NOP, 0);
 
    function->length = padded_num_instrs;
 }

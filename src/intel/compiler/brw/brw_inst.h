@@ -355,8 +355,14 @@ struct brw_fb_write_inst : brw_inst {
 };
 
 struct brw_scratch_inst : brw_inst {
-   /** Offset in scratch space for the load or store. */
+   /** Physical offset in scratch space for the load or store. */
    unsigned offset;
+
+   /**
+    * Scratch offset assuming no reuse between spilled values.  Used by later
+    * optimizations to identify dead spills and fills.
+    */
+   unsigned logical_offset;
 
    /**
     * Should a LSC transpose message be used for the fill?

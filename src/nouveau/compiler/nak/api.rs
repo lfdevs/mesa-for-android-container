@@ -101,12 +101,12 @@ impl GetDebugFlags for OnceLock<Debug> {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nak_should_print_nir() -> bool {
     DEBUG.print()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nak_debug_no_ugpr() -> bool {
     DEBUG.no_ugpr()
 }
@@ -197,7 +197,7 @@ fn nir_options(dev: &nv_device_info) -> nir_shader_compiler_options {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nak_compiler_create(
     dev: *const nv_device_info,
 ) -> *mut nak_compiler {
@@ -213,17 +213,17 @@ pub extern "C" fn nak_compiler_create(
     Box::into_raw(nak)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nak_compiler_destroy(nak: *mut nak_compiler) {
     unsafe { drop(Box::from_raw(nak)) };
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nak_debug_flags(_nak: *const nak_compiler) -> u64 {
     DEBUG.debug_flags().into()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nak_nir_options(
     nak: *const nak_compiler,
 ) -> *const nir_shader_compiler_options {
@@ -232,7 +232,7 @@ pub extern "C" fn nak_nir_options(
     &nak.nir_options
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nak_max_warps_per_sm(
     num_gprs: u32,
     nak: *const nak_compiler,
@@ -260,6 +260,7 @@ impl ShaderBin {
         let asm = CString::new(asm)
             .expect("NAK assembly has unexpected null characters");
 
+        let mut shared_mem = 0;
         let c_info = nak_shader_info {
             stage: match info.stage {
                 ShaderStageInfo::Compute(_) => MESA_SHADER_COMPUTE,
@@ -291,6 +292,7 @@ impl ShaderBin {
             crs_size: sm.crs_size(info.max_crs_depth),
             __bindgen_anon_1: match &info.stage {
                 ShaderStageInfo::Compute(cs_info) => {
+                    shared_mem = cs_info.smem_size;
                     nak_shader_info__bindgen_ty_1 {
                         cs: nak_shader_info__bindgen_ty_1__bindgen_ty_1 {
                             local_size: [
@@ -348,6 +350,7 @@ impl ShaderBin {
                     }
                 }
                 ShaderStageInfo::Task(task_info) => {
+                    shared_mem = task_info.smem_size;
                     nak_shader_info__bindgen_ty_1 {
                         task: nak_shader_info__bindgen_ty_1__bindgen_ty_5 {
                             local_size: task_info.local_size,
@@ -358,6 +361,7 @@ impl ShaderBin {
                     }
                 }
                 ShaderStageInfo::Mesh(mesh_info) => {
+                    shared_mem = mesh_info.smem_size;
                     nak_shader_info__bindgen_ty_1 {
                         mesh: nak_shader_info__bindgen_ty_1__bindgen_ty_4 {
                             gs_hdr: sph::encode_gs_mesh_header(
@@ -429,6 +433,7 @@ impl ShaderBin {
             eprintln!("Fills from reg: {}", c_info.num_fills_from_reg);
             eprintln!("Num GPRs: {}", c_info.num_gprs);
             eprintln!("SLM size: {}", c_info.slm_size);
+            eprintln!("Shared size: {shared_mem}");
 
             if c_info.stage != MESA_SHADER_COMPUTE {
                 eprint_hex("Header", &c_info.hdr);
@@ -463,7 +468,7 @@ impl std::ops::Deref for ShaderBin {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nak_shader_bin_destroy(bin: *mut nak_shader_bin) {
     unsafe {
         _ = Box::from_raw(bin as *mut ShaderBin);
@@ -554,7 +559,7 @@ fn nak_compile_shader_internal(
     Box::into_raw(bin) as *mut nak_shader_bin
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn nak_compile_shader(
     nir: *mut nir_shader,
     dump_asm: bool,

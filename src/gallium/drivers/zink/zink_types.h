@@ -263,6 +263,7 @@ enum zink_debug {
    ZINK_DEBUG_RPLOADS = (1<<21),
    ZINK_DEBUG_NOGENERAL = (1<<22),
    ZINK_DEBUG_RPSTORES = (1<<23),
+   ZINK_DEBUG_PERFINFO = (1<<24),
 };
 
 enum zink_pv_emulation_primitive {
@@ -1446,7 +1447,6 @@ struct zink_screen {
    uint8_t heap_map[ZINK_HEAP_MAX][VK_MAX_MEMORY_TYPES];  // mapping from zink heaps to memory type indices
    uint8_t heap_count[ZINK_HEAP_MAX];  // number of memory types per zink heap
    bool resizable_bar;
-   bool always_cached_upload;
 
    uint64_t total_video_mem;
    uint64_t clamp_video_mem;
@@ -2009,6 +2009,8 @@ struct zink_context {
    bool rp_tc_info_updated : 1;
    bool last_work_was_compute : 1;
    bool needs_transfer_sync : 1;
+   bool can_promote_depth_op : 1;
+   bool depth_op_promoted : 1;
 };
 
 static inline struct zink_context *

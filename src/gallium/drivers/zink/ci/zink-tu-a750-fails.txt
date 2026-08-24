@@ -6,10 +6,6 @@ dEQP-GLES3.functional.multisample.fbo_max_samples.stencil,Fail
 
 GTF-GL46.gtf30.GL3Tests.sgis_texture_lod.sgis_texture_lod_basic_lod_selection,Fail
 
-# Turnip has maxFragmentInputComponents = 124, while GL requires
-# gl_MaxFragmentInputComponents >= 128
-KHR-GL46.limits.max_fragment_input_components,Fail
-
 dEQP-GLES3.functional.shaders.matrix.inverse.dynamic.lowp_mat4_float_vertex,Fail
 dEQP-GLES3.functional.shaders.matrix.inverse.dynamic.mediump_mat4_float_vertex,Fail
 
@@ -57,8 +53,6 @@ spec@!opengl 3.2@gl-3.2-adj-prims cull-front pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims line cull-back pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims line cull-front pv-first,Fail
 spec@!opengl 3.2@gl-3.2-adj-prims pv-first,Fail
-spec@!opengl 3.2@minmax,Fail
-spec@!opengl 3.3@minmax,Fail
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
 spec@arb_gl_spirv@execution@uniform@atomic-uint-aoa-cs,Fail
 spec@arb_gl_spirv@execution@uniform@atomic-uint-array-cs,Fail
@@ -92,8 +86,6 @@ spec@arb_sample_shading@samplemask 4@1.000000 mask_in_one,Fail
 spec@arb_sample_shading@samplemask 4@noms mask_in_one,Fail
 spec@arb_sample_shading@samplemask 4@noms partition,Fail
 spec@arb_sample_shading@samplemask 4@sample mask_in_one,Fail
-spec@arb_shading_language_packing@execution@built-in-functions@fs-packhalf2x16,Fail
-spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16,Fail
 spec@arb_texture_rectangle@1-1-linear-texture,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance,Fail
@@ -124,12 +116,6 @@ spec@ext_external_objects@vk-image-overwrite@RGBA 8 UINT optimal: Failed to crea
 spec@ext_external_objects@vk-image-overwrite@RGBA 8 UNORM optimal: Failed to create texture from GL memory object.,Fail
 spec@ext_external_objects@vk-semaphores,Fail
 spec@ext_external_objects@vk-semaphores-2,Fail
-spec@ext_framebuffer_multisample@accuracy 2 srgb depthstencil linear,Fail
-spec@ext_framebuffer_multisample@accuracy 2 srgb depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy 4 srgb depthstencil linear,Fail
-spec@ext_framebuffer_multisample@accuracy 4 srgb depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil linear,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil,Fail
 spec@ext_framebuffer_multisample@alpha-to-coverage-dual-src-blend 2,Fail
 spec@ext_framebuffer_multisample@alpha-to-coverage-dual-src-blend 4,Fail
 spec@ext_framebuffer_multisample@alpha-to-coverage-no-draw-buffer-zero 2,Fail
@@ -146,21 +132,12 @@ spec@ext_transform_feedback@tessellation quad_strip wireframe,Fail
 spec@ext_transform_feedback@tessellation quads wireframe,Fail
 spec@ext_transform_feedback@tessellation triangle_fan flat_first,Fail
 spec@ext_transform_feedback@tessellation triangle_strip flat_first,Fail
-spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int16,Fail
-spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int8,Fail
 spec@glsl-1.30@execution@texelfetch fs sampler3d 1x129x9-98x129x9,Fail
 spec@glsl-1.30@execution@texelfetch fs sampler3d 98x1x9-98x129x9,Fail
-spec@glsl-1.50@built-in constants,Fail
-spec@glsl-1.50@built-in constants@gl_MaxFragmentInputComponents,Fail
 spec@glsl-1.50@execution@geometry@point-size-out,Fail
 spec@glsl-1.50@execution@geometry@primitive-id-restart gl_line_strip_adjacency other,Fail
 spec@glsl-1.50@execution@redeclare-pervertex-out-subset-gs,Fail
-spec@glsl-1.50@execution@variable-indexing@gs-output-array-vec4-index-wr,Fail
 
-spec@glsl-3.30@built-in constants,Fail
-spec@glsl-3.30@built-in constants@gl_MaxFragmentInputComponents,Fail
-spec@glsl-es-3.00@execution@built-in-functions@fs-packhalf2x16,Fail
-spec@glsl-es-3.00@execution@built-in-functions@vs-packhalf2x16,Fail
 spec@khr_texture_compression_astc@array-gl,Fail
 spec@khr_texture_compression_astc@array-gl@12x12 Block Dim,Fail
 spec@khr_texture_compression_astc@array-gl@5x5 Block Dim,Fail
@@ -193,7 +170,7 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
 
 # uprev Piglit in Mesa
-glx@glx-make-current,Fail
 spec@!opengl 1.1@large-tex,Fail
 spec@!opengl 1.1@large-tex@test_image_load_store,Fail
-
+spec@arb_texture_view@tex-view,Fail
+vulkan@shaders@cmat-uniform-ctor,Fail

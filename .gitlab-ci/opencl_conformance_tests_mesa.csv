@@ -1,0 +1,118 @@
+#
+# OpenCL Conformance Test Suite (quick version)
+# The quick version skips some long-running image tests, runs a shorter math test,
+# and does not run the conversion test.
+#
+
+# #########################################
+# Basic Information on the compute device
+# #########################################
+Compute Info,computeinfo/test_computeinfo
+
+# #########################################
+# Basic operation tests
+# #########################################
+Basic,basic/test_basic
+API,api/test_api
+Compiler,compiler/test_compiler
+
+# #########################################
+# Common mathematical functions
+# #########################################
+Common Functions,commonfns/test_commonfns
+Geometric Functions,geometrics/test_geometrics
+Relationals,relationals/test_relationals
+
+# #########################################
+# General operation
+# #########################################
+Thread Dimensions,thread_dimensions/test_thread_dimensions quick*
+#Multiple Device/Context,multiple_device_context/test_multiples
+Atomics,atomics/test_atomics
+Profiling,profiling/test_profiling
+Events,events/test_events
+#Allocations (single maximum),allocations/test_allocations single 5 all
+#Allocations (total maximum),allocations/test_allocations multiple 5 all
+Printf,printf/test_printf
+Device Partitioning,device_partition/test_device_partition
+
+# #########################################
+# Buffers and images
+# #########################################
+Buffers,buffers/test_buffers
+Images (API Info),images/clGetInfo/test_cl_get_info
+Images (Kernel Methods),images/kernel_image_methods/test_kernel_image_methods
+Images (Kernel 1D int),images/kernel_read_write/test_image_streams CL_FILTER_NEAREST int 1D 1Darray
+Images (Kernel 2D int),images/kernel_read_write/test_image_streams CL_FILTER_NEAREST int 2D 2Darray
+Images (Kernel 3D int),images/kernel_read_write/test_image_streams CL_FILTER_NEAREST int 3D
+Images (Kernel 1D uint),images/kernel_read_write/test_image_streams CL_FILTER_NEAREST uint 1D 1Darray
+Images (Kernel 2D uint),images/kernel_read_write/test_image_streams CL_FILTER_NEAREST uint 2D 2Darray
+Images (Kernel 3D uint),images/kernel_read_write/test_image_streams CL_FILTER_NEAREST uint 3D
+Images (Kernel 1D float),images/kernel_read_write/test_image_streams CL_FILTER_NEAREST float 1D 1Darray
+Images (Kernel 2D float),images/kernel_read_write/test_image_streams CL_FILTER_NEAREST float 2D 2Darray
+Images (Kernel 3D float),images/kernel_read_write/test_image_streams CL_FILTER_NEAREST float 3D
+Images (clCopyImage 1D),images/clCopyImage/test_cl_copy_images 1D 1DTo1Dbuffer 1Darray 1Dbuffer 1DbufferTo1D
+Images (clCopyImage 2D),images/clCopyImage/test_cl_copy_images 2D 2Darray 2Darrayto2D 2Darrayto3D 2Dto2Darray 2Dto3D
+Images (clCopyImage 3D),images/clCopyImage/test_cl_copy_images 3D 3Dto2D 3Dto2Darray
+Images (clReadWriteImage),images/clReadWriteImage/test_cl_read_write_images
+Images (clFillImage int),images/clFillImage/test_cl_fill_images int
+Images (clFillImage uint),images/clFillImage/test_cl_fill_images uint
+Images (clFillImage float),images/clFillImage/test_cl_fill_images float
+Images (Samplerless int),images/samplerlessReads/test_samplerless_reads int
+Images (Samplerless uint),images/samplerlessReads/test_samplerless_reads uint
+Images (Samplerless float),images/samplerlessReads/test_samplerless_reads float
+Mem (Host Flags),mem_host_flags/test_mem_host_flags
+
+# #########################################
+# CPU is required to pass linear and normalized image filtering
+# #########################################
+CL_DEVICE_TYPE_CPU, Images (Kernel CL_FILTER_LINEAR),images/kernel_read_write/test_image_streams CL_FILTER_LINEAR
+CL_DEVICE_TYPE_CPU, Images (Kernel CL_FILTER_LINEAR pitch),images/kernel_read_write/test_image_streams use_pitches CL_FILTER_LINEAR
+CL_DEVICE_TYPE_CPU, Images (Kernel CL_FILTER_LINEAR max size),images/kernel_read_write/test_image_streams max_images CL_FILTER_LINEAR
+
+# #########################################
+# OpenGL/CL interaction
+# #########################################
+# Crashes deqp-runner: https://gitlab.freedesktop.org/mesa/deqp-runner/-/work_items/83
+#OpenCL-GL Sharing,gl/test_gl
+
+# #########################################
+# Thorough math and conversions tests
+# #########################################
+Select,select/test_select -w
+#Conversions,conversions/test_conversions
+Contractions,contractions/test_contractions
+Math,math_brute_force/test_bruteforce -w
+Integer Ops,integer_ops/test_integer_ops integer_* quick_*
+Half Ops,half/test_half -w
+
+#####################################
+# OpenCL 2.0 tests
+#####################################
+C11 Atomics,c11_atomics/test_c11_atomics
+Execution Model,device_execution/test_device_execution
+Generic Address Space,generic_address_space/test_generic_address_space
+Non Uniform Work Groups,non_uniform_work_group/test_non_uniform_work_group
+Pipes,pipes/test_pipes
+SVM,SVM/test_svm
+Workgroups,workgroups/test_workgroups
+
+#####################################
+# OpenCL 2.1 tests
+#####################################
+Device timer,device_timer/test_device_timer
+SPIRV new,spirv_new/test_spirv_new
+
+#########################################
+# Extensions
+#########################################
+SPIR,spir/test_spir
+Mipmaps (Kernel),images/kernel_read_write/test_image_streams test_mipmaps CL_FILTER_NEAREST
+Mipmaps (clCopyImage),images/clCopyImage/test_cl_copy_images test_mipmaps
+Mipmaps (clReadWriteImage),images/clReadWriteImage/test_cl_read_write_images test_mipmaps
+Subgroups,subgroups/test_subgroups
+cl_ext_cxx_for_opencl,extensions/cl_ext_cxx_for_opencl/test_cl_ext_cxx_for_opencl
+cl_khr_semaphore,extensions/cl_khr_semaphore/test_cl_khr_semaphore
+cl_khr_command_buffer,extensions/cl_khr_command_buffer/test_cl_khr_command_buffer
+cl_khr_command_buffer_mutable_dispatch,extensions/cl_khr_command_buffer/cl_khr_command_buffer_mutable_dispatch/test_cl_khr_mutable_dispatch
+cl_khr_kernel_clock,extensions/cl_khr_kernel_clock/test_cl_khr_kernel_clock

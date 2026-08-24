@@ -857,6 +857,15 @@ enum isl_aux_usage {
     */
    ISL_AUX_USAGE_MCS_CCS,
 
+   /** Depth compression
+    *
+    * Introduced on Alchemist, this is similar to HIZ_CCS_WT but without the
+    * HiZ buffer.
+    *
+    * :invariant: The surface is a depth surface
+    */
+   ISL_AUX_USAGE_ZCS,
+
    /** Stencil compression
     *
     * Introduced on Tigerlake, this is similar to CCS_E only used to compress
@@ -2500,6 +2509,7 @@ isl_aux_usage_has_ccs(enum isl_aux_usage usage)
           usage == ISL_AUX_USAGE_CCS_E ||
           usage == ISL_AUX_USAGE_FCV_CCS_E ||
           usage == ISL_AUX_USAGE_MC ||
+          usage == ISL_AUX_USAGE_ZCS ||
           usage == ISL_AUX_USAGE_HIZ_CCS_WT ||
           usage == ISL_AUX_USAGE_HIZ_CCS ||
           usage == ISL_AUX_USAGE_MCS_CCS ||

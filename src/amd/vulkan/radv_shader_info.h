@@ -117,6 +117,7 @@ struct radv_shader_info {
    bool force_indirect_descriptors : 1;
    bool ngg_wave_id_en : 1;
    bool descriptor_heap : 1;
+   bool uses_sampler : 1;
 
    struct {
       uint64_t tcs_inputs_via_temp;
@@ -176,15 +177,15 @@ struct radv_shader_info {
       bool writes_z : 1;
       bool writes_stencil : 1;
       bool writes_sample_mask : 1;
-      bool writes_mrt0_alpha : 1;
+      bool writes_mrt0_alpha_to_mrtz : 1;
       bool mrt0_is_dual_src : 1;
-      bool exports_mrtz_via_epilog : 1;
       bool has_pcoord : 1;
       bool prim_id_input : 1;
       bool viewport_index_input : 1;
       bool can_discard : 1;
       bool early_fragment_test : 1;
       bool post_depth_coverage : 1;
+      bool uses_fbfetch_output : 1;
       uint8_t reads_frag_coord_mask;
       uint8_t depth_layout;
       bool reads_sample_mask_in : 1;
@@ -217,6 +218,7 @@ struct radv_shader_info {
       bool selects_frag_coord_xy_dynamically : 1;
       bool selects_quad_pos_dynamically : 1;
       bool selects_sample_mask_in_dynamically : 1;
+      bool selects_front_face_dynamically : 1;
 
       bool has_epilog : 1;
    } ps;

@@ -8,4 +8,6 @@ dEQP-VK.api.device_init.create_instance_device_intentional_alloc_fail.*
 
 # Nightly run expectations update
 dEQP-VK.ubo.random.all_shared_buffer.48
+dEQP-VK.ubo.random.16bit.nested_structs_arrays.0
+dEQP-VK.ubo.random.scalar.48
 

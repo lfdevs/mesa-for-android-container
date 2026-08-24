@@ -429,6 +429,7 @@ debian/arm32_test-gl:
   extends:
     - .use-debian/arm32_test-base
     - .container-builds-arm32
+    - .container-builds-opencl-cts
     - .export-container
   variables:
     MESA_IMAGE_TAG: &debian-arm32_test-gl ${DEBIAN_TEST_GL_TAG}

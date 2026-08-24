@@ -55,7 +55,6 @@
    .base.tex.swizzles[0 ... ELK_MAX_SAMPLERS - 1] = 0x688
 #define KEY_INIT()                                                        \
    .base.program_string_id = ish->program_id,                             \
-   .base.limit_trig_input_range = screen->driconf.limit_trig_input_range, \
    KEY_INIT_NO_ID()
 
 static void

@@ -42,6 +42,16 @@ struct brw_storage_format {
    uint32_t isl_formats[3];
 };
 
+struct brw_reg_set {
+   struct ra_regs *regs;
+
+   /**
+    * Array of the ra classes for the unaligned contiguous register
+    * block sizes used, indexed by register size.
+    */
+   struct ra_class *classes[REG_CLASS_COUNT];
+};
+
 struct brw_compiler {
    const struct intel_device_info *devinfo;
 
@@ -52,15 +62,8 @@ struct brw_compiler {
 
    struct brw_isa_info isa;
 
-   struct {
-      struct ra_regs *regs;
-
-      /**
-       * Array of the ra classes for the unaligned contiguous register
-       * block sizes used, indexed by register size.
-       */
-      struct ra_class *classes[REG_CLASS_COUNT];
-   } reg_set;
+   struct brw_reg_set reg_set;
+   struct brw_reg_set reg_set_debug;
 
    void (*shader_debug_log)(void *, unsigned *id, const char *str, ...) PRINTFLIKE(3, 4);
    void (*shader_perf_log)(void *, unsigned *id, const char *str, ...) PRINTFLIKE(3, 4);
@@ -72,6 +75,11 @@ struct brw_compiler {
     * This can negatively impact performance.
     */
    bool precise_trig;
+
+   /**
+    * Whether to limit sin/cos inputs to [-2pi, 2pi] to improve accuracy.
+    */
+   bool limit_trig_input_range;
 
    /**
     * Should DPAS instructions be lowered?
@@ -111,14 +119,6 @@ struct brw_compiler {
    int spilling_rate;
 
    /**
-    * Register file size
-    *
-    * Useful to calculate the amount of push data to deliver to a given
-    * shader.
-    */
-   unsigned register_file_size;
-
-   /**
     * We perform a quick register pressure estimate at the NIR level before
     * attempting backend compilation at various SIMD widths.  If the estimated
     * register pressure for a given SIMD width is beyond this threshold, we
@@ -138,6 +138,13 @@ struct brw_compiler {
     */
    uint32_t num_lowered_storage_formats;
    uint32_t *lowered_storage_formats;
+
+   /**
+    * Debug flag for forcing minimum number of threads per EU for shader.
+    * Can optionally only apply to shaders matching source hash.
+    */
+   uint32_t threads_per_eu_min;
+   uint64_t threads_per_eu_srchash;
 };
 
 #define brw_shader_debug_log(compiler, data, fmt, ... ) do {    \
@@ -231,16 +238,9 @@ struct brw_base_prog_key {
 
    enum intel_vue_layout vue_layout:2;
 
-   /**
-    * Apply workarounds for SIN and COS input range problems.
-    * This limits input range for SIN and COS to [-2p : 2p] to
-    * avoid precision issues.
-    */
-   bool limit_trig_input_range:1;
-
    enum brw_divergent_atomics_flags divergent_atomics_flags:2;
 
-   uint32_t padding:24;
+   uint32_t padding:25;
 };
 
 /**
@@ -302,7 +302,15 @@ struct brw_vs_prog_key {
     */
    bool no_vf_slot_compaction : 1;
 
-   uint32_t padding:30;
+   /** Percentage of the register file that should be used for the payload
+    *
+    * Limit the number of vector registers delivered to the payload by
+    * adjusting the VF input data delivered (it'll be fetch from the URB
+    * instead). Range [0, 100].
+    */
+   unsigned max_payload_percent : 8;
+
+   uint32_t padding:22;
 };
 
 /** The program key for Tessellation Control Shaders. */
@@ -404,7 +412,11 @@ struct brw_fs_prog_key {
 
    bool ignore_sample_mask_out:1;
    bool coarse_pixel:1;
-   unsigned pad:13;
+
+   /* Keep the SIMD32 variant even if the throughput model ties it. */
+   bool prefer_simd32:1;
+
+   unsigned pad:12;
 };
 
 static inline bool
@@ -469,8 +481,6 @@ struct brw_stage_prog_data {
     *
     *    (robust_ubo_ranges & (1 << j)) &&
     *    (i < push_reg_mask_param[j] * 16)
-    *
-    * brw_compiler::compact_params must be false if robust_ubo_ranges used
     */
    uint8_t robust_ubo_ranges;
    unsigned push_reg_mask_param;
@@ -503,12 +513,6 @@ struct brw_stage_prog_data {
 
    uint64_t source_hash;
 };
-
-/**
- * Convert a number of GRF registers used (grf_used in prog_data) into
- * a number of GRF register blocks supported by the hardware on PTL+.
- */
-unsigned ptl_register_blocks(unsigned grf_used);
 
 enum brw_pixel_shader_computed_depth_mode {
    BRW_PSCDEPTH_OFF   = 0, /* PS does not compute depth */
@@ -604,6 +608,11 @@ struct brw_fs_prog_data {
     * Shader is ran at the coarse pixel shading dispatch rate (3DSTATE_CPS).
     */
    bool coarse_pixel_dispatch;
+
+   /**
+    * Whether the shader was compiled with a preference for SIMD32.
+    */
+   bool prefer_simd32;
 
    /**
     * Shader writes the SampleMask and this is AND-ed with the API's
@@ -817,6 +826,9 @@ struct brw_cs_prog_data {
 
    /* True if shader has any sample operation */
    bool uses_sampler;
+
+   /* True if the shader was compiled with SIMD32 forced */
+   bool force_simd32;
 
    struct {
       struct brw_push_const_block cross_thread;
@@ -1265,8 +1277,6 @@ struct brw_compile_params {
 
    uint64_t debug_flag;
 
-   uint64_t source_hash;
-
    debug_archiver *archiver;
 };
 
@@ -1340,7 +1350,6 @@ struct brw_compile_fs_params {
    const struct intel_vue_map *vue_map;
    const struct brw_mue_map *mue_map;
 
-   bool allow_spilling;
    bool use_rep_send;
    uint8_t max_polygons;
 
@@ -1515,6 +1524,8 @@ brw_compute_sbe_per_primitive_urb_read(uint64_t inputs_read,
 #define BRW_TASK_MESH_PUSH_CONSTANTS_SIZE_DW \
    (BRW_TASK_MESH_INLINE_DATA_SIZE_DW - BRW_TASK_MESH_PUSH_CONSTANTS_START_DW)
 
+#define BRW_SRCHASH_EMPTY (uint64_t)-1
+
 /**
  * This enum is used as the base indice of the nir_load_topology_id_intel
  * intrinsic. This is used to return different values based on some aspect of
@@ -1532,6 +1543,22 @@ enum brw_topology_id
    /* A value composed of EU ID, thread ID & SIMD lane ID. */
    BRW_TOPOLOGY_ID_EU_THREAD_SIMD,
 };
+
+static inline unsigned
+intel_vrt_register_file_size(const struct intel_device_info *devinfo,
+                             unsigned size)
+{
+   if (devinfo->ver < 30)
+      return 128;
+
+   return MIN2(align(size, size > 192 ? 64 : 32), 256);
+}
+
+static inline unsigned
+intel_max_vrt_threads(const struct intel_device_info *devinfo, unsigned grfs)
+{
+   return devinfo->ver >= 30 ? MIN2(1024 / grfs, 10) : UINT32_MAX;
+}
 
 #ifdef __cplusplus
 } /* extern "C" */

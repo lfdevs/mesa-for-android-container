@@ -253,6 +253,18 @@ vk_command_buffer_get_record_result(struct vk_command_buffer *command_buffer)
 #define vk_command_buffer_has_error(command_buffer) \
    unlikely((command_buffer)->record_result != VK_SUCCESS)
 
+VkCopyDeviceMemoryInfoKHR
+vk_upgrade_copy_buffer2(const VkCopyBufferInfo2* pCopyBufferInfo,
+                        VkDeviceMemoryCopyKHR *regions);
+
+VkCopyDeviceMemoryImageInfoKHR
+vk_upgrade_copy_buffer_to_image2(const VkCopyBufferToImageInfo2* pCopyBufferToImageInfo,
+                                 VkDeviceMemoryImageCopyKHR* regions);
+
+VkCopyDeviceMemoryImageInfoKHR
+vk_upgrade_copy_image_to_buffer2(const VkCopyImageToBufferInfo2* pCopyImageToBufferInfo,
+                                 VkDeviceMemoryImageCopyKHR* regions);
+
 #ifdef __cplusplus
 }
 #endif

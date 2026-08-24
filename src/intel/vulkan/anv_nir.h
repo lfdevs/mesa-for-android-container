@@ -157,7 +157,7 @@ bool anv_nir_lower_unaligned_dispatch(nir_shader *shader);
 
 bool anv_nir_lower_resource_intel(nir_shader *shader,
                                   const struct anv_physical_device *device,
-                                  enum anv_descriptor_set_layout_type desc_type);
+                                  enum anv_shader_binding_mode binding_mode);
 
 bool anv_nir_add_base_work_group_id(nir_shader *shader);
 
@@ -178,6 +178,8 @@ uint32_t anv_nir_push_desc_ubo_fully_promoted(nir_shader *nir,
 void anv_apply_per_prim_attr_wa(struct nir_shader *ms_nir,
                                 struct nir_shader *fs_nir,
                                 struct anv_device *device);
+
+bool anv_nir_xe2_r11g11b10_atomic_swap_wa(nir_shader *nir);
 
 static inline bool
 anv_nir_is_promotable_ubo_binding(nir_src src)

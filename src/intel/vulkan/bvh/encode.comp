@@ -13,7 +13,8 @@ layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 #include "encode.h"
 
 #define READY_TO_WRITE(offset) ((offset) < VK_NULL_BVH_OFFSET)
-#define ASSIGNED_NODE_TO_ENCODE (gl_GlobalInvocationID.x < DEREF(args.header).ir_internal_node_count)
+#define ASSIGNED_NODE_TO_ENCODE ((gl_GlobalInvocationID.x + push_args.start_node_offset) \
+                                 < DEREF(args.header).ir_internal_node_count)
 
 /* Debugging helper: disable encoding by exiting early. Ensure compiler doesn't
  * dead code eliminate by comparing to value that should never evaluate as true.
@@ -26,8 +27,10 @@ layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 #define NODE_OFFSET(node) (OFFSET(args.intermediate_bvh, ir_id_to_offset(node)))
 
 layout(push_constant) uniform CONSTS {
-   encode_args args;
+   encode_args push_args;
 };
+anv_batch_args args = DEREF(INDEX(anv_batch_args, push_args.batch_args,
+                                  push_args.batch_offset + gl_GlobalInvocationID.y));
 
 void
 debug_dump(uint32_t offset, uint32_t value)
@@ -70,6 +73,18 @@ encode_leaf_node(uint32_t type, IR_NODE child, uint64_t dst_node, REF(anv_accel_
    switch (type) {
    case vk_ir_node_triangle: {
       vk_ir_triangle_node src = DEREF(REF(vk_ir_triangle_node)(src_node));
+
+      if (VK_TEST_BUILD_FLAG_HAS_QUADS) {
+         vk_ir_triangle_node_quad quad =
+            vk_ir_triangle_node_get_quad(REF(vk_ir_triangle_node)(src_node));
+         if (quad.triangle_id == VK_QUAD_TRIANGLE_ID_UNUSED) {
+            anv_encode_triangle(dst_node, src);
+         } else {
+            anv_encode_quad(dst_node, src, quad);
+         }
+         break;
+      }
+
       anv_encode_triangle(dst_node, src);
       break;
    }
@@ -188,11 +203,13 @@ encode_internal_node(uint32_t child, uint32_t child_block_offset_from_internal_n
          DEREF(dst_node).exp_z = exp_i8[2];
          DEREF(dst_node).node_mask = uint8_t(0xff);
          DEREF(dst_node).node_type = node_type;
+         DEREF(dst_node).pad = uint8_t(0);
 
-         /* Note: This is not a real field, it's unused byte padding, which is not
-          * required to be MBZ. We're just using it to store the child count.
-          */
-         DEREF(dst_node).child_count = uint8_t(child_count);
+         if (ANV_TEST_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE &&
+             args.parent_child_count_map != 0) {
+            DEREF(INDEX(uint8_t, args.parent_child_count_map, bvh_block_offset)) =
+               uint8_t(child_count);
+         }
       }
 
       child_aabb = conservative_aabb(child_aabb);
@@ -335,33 +352,12 @@ main()
 {
    /* Each lane will process one vk_ir_node_internal. The root node is sitting
     * at the end of the IR BVH, and we let the lane with
-    * gl_GlobalInvocationID.x == 0 to take care of it. To improve performance,
-    * we remap globalID to reduce chances that the same HW thread will
-    * need to handle it's immediate children too, reducing latency. This hashing
-    * algorithm spreads handling of a node's children to other threads.
+    * gl_GlobalInvocationID.x == 0 to take care of it.
     */
-   uint32_t global_id_hash = (gl_GlobalInvocationID.x <
-                              (DEREF(args.header).ir_internal_node_count & ~0xFF))
-      ? (gl_GlobalInvocationID.x & 0xFFFFFF00)  |
-        ((gl_GlobalInvocationID.x & 0x0F) << 4) |
-        ((gl_GlobalInvocationID.x & 0xF0) >> 4)
-      : gl_GlobalInvocationID.x;
-   uint32_t global_id =
-      DEREF(args.header).ir_internal_node_count - 1 -
-      min(global_id_hash, DEREF(args.header).ir_internal_node_count - 1);
+   uint32_t global_id = DEREF(args.header).ir_internal_node_count -
+      (gl_GlobalInvocationID.x + push_args.start_node_offset + 1);
 
-   uint32_t intermediate_leaf_node_size;
-   switch (args.geometry_type) {
-   case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
-      intermediate_leaf_node_size = SIZEOF(vk_ir_triangle_node);
-      break;
-   case VK_GEOMETRY_TYPE_AABBS_KHR:
-      intermediate_leaf_node_size = SIZEOF(vk_ir_aabb_node);
-      break;
-   default: /* instances */
-      intermediate_leaf_node_size = SIZEOF(vk_ir_instance_node);
-      break;
-   }
+   uint32_t intermediate_leaf_node_size = vk_ir_node_size(args.geometry_type);
 
    /* Each invocation cluster encodes one internal node. */
    anv_cluster cluster;
@@ -377,7 +373,7 @@ main()
       INDEX(vk_ir_box_node, intermediate_internal_nodes, global_id);
    vk_ir_box_node src = DEREF(src_node);
 
-   bool is_root_node = gl_GlobalInvocationID.x == 0;
+   bool is_root_node = (gl_GlobalInvocationID.x + push_args.start_node_offset) == 0;
 
    REF(anv_accel_struct_header) header =
       REF(anv_accel_struct_header)(args.output_bvh - ANV_RT_BVH_HEADER_SIZE);
@@ -386,6 +382,7 @@ main()
       /* Tracks BLOCK where the next children should be encoded. */
       DEREF(args.header).dst_node_offset = 1;
       DEREF(header).instance_count = 0;
+      DEREF(header).root_flags = src.flags;
       if (ANV_TEST_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE && args.parent_child_map != 0) {
          DEREF(INDEX(uint32_t, args.parent_child_map, 0)) = VK_NULL_BVH_OFFSET;
       }
@@ -536,6 +533,18 @@ main()
                    */
                   DEREF(INDEX(uint32_t, args.leaf_block_offset_map, leaf_id)) =
                      (child_block != 0) ? child_block : VK_NULL_BVH_OFFSET;
+
+                  if (VK_TEST_BUILD_FLAG_HAS_QUADS && type == vk_ir_node_triangle) {
+                     vk_ir_triangle_node src = DEREF(REF(vk_ir_triangle_node)NODE_OFFSET(child));
+                     vk_ir_triangle_node_quad quad =
+                        vk_ir_triangle_node_get_quad(REF(vk_ir_triangle_node)NODE_OFFSET(child));
+                     if (quad.triangle_id != VK_QUAD_TRIANGLE_ID_UNUSED) {
+                        uint32_t merge_id = quad.triangle_id & 0x0fffffff;
+                        uint32_t merge_leaf_id = leaf_id - src.triangle_id + merge_id;
+                        DEREF(INDEX(uint32_t, args.leaf_block_offset_map, merge_leaf_id)) =
+                           VK_NULL_BVH_OFFSET;
+                     }
+                  }
                }
 
                /* Track each children's parent in the map. */

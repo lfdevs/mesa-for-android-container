@@ -712,6 +712,21 @@ gamma_file_view_radv::run()
    }
 
    ImGui::Begin("invocation", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
+   if (ImGui::BeginTable("invocation_info", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+      ImGui::TableNextColumnText("launch_id");
+      if (selected_dispatch && selected_invocation && !selected_invocation->offsets.empty()) {
+         const radv_packed_token_header *header =
+            (const radv_packed_token_header *)(history_data + selected_invocation->offsets[0]);
+         uint32_t x = header->launch_index % selected_dispatch->info->dimensions[0];
+         uint32_t y = (header->launch_index / selected_dispatch->info->dimensions[0]) % selected_dispatch->info->dimensions[1];
+         uint32_t z = header->launch_index / selected_dispatch->info->dimensions[0] / selected_dispatch->info->dimensions[1];
+         ImGui::TableNextColumnText("(%u, %u, %u)", x, y, z);
+      } else {
+         ImGui::TableNextColumnText("--");
+      }
+      ImGui::EndTable();
+   }
+   ImGui::BeginChild("traces");
    if (selected_invocation) {
       for (uint32_t i = 0; i < selected_invocation->offsets.size(); i++) {
          const radv_packed_token_header *header =
@@ -778,7 +793,7 @@ gamma_file_view_radv::run()
          }
       }
    }
-
+   ImGui::EndChild();
    ImGui::End();
 
    ImGui::Begin("ray history", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);

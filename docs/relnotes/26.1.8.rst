@@ -1,0 +1,231 @@
+Mesa 26.1.8 Release Notes / 2026-08-19
+======================================
+
+Mesa 26.1.8 is a bug fix release which fixes bugs found since the 26.1.7 release.
+
+Mesa 26.1.8 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 26.1.8 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: b320f65874fd9653ac6c0bd1616605387344e1247411a50c797b5f3fb9dc0b55  mesa-26.1.8.tar.xz
+    SHA512: eb3d46ae9aaba70fdd908486cef24041fec9264ddf586eaebbba65ce55e716d306ef9e91be83e742dfaec4dfc94105a5cd3a36b29bf56614febcbcf6c1f8b516  mesa-26.1.8.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- RadeonSI VA-API: vertical color discontinuity / split on YouTube (AV1/VP9) with RX 7900 XTX
+- Recording on AMD GPU using gpu-screen-recorder with VAAPI H.264 backend produces corrupted output since Mesa 26.0.0
+- V3D driver (Mesa) does not expose GL_EXT_shader_texture_lod, breaking raspberry Pi5 WebGL in Firefox (e.g. Google Maps with Street View)
+- [ANV][BMG] llama.cpp Flaky unit test results with latest Mesa﻿ on Arc B70 (Regression)
+- [meson] rust crate downloading for subbprojects blocked
+- [radv] Anisotropic filtering glitch in Wolfenstein II: The New Colossus
+- i915 GPU hang on Alder Lake-HX GT1 (8086:4688) with Mesa 26.2.0 OpenGL — works on   26.1.6
+- radeonsi: null-deref in validate_io() during glUseProgramStages on separable, SPIR-V-ingested program pipeline
+
+
+Changes
+-------
+
+Benjamin Cheng (3):
+
+- vtn: Mark Location decorated variables with explicit_location
+- glsl: Set location to -1 for SPIR-V built-ins
+- mesa/shader_query: Handle SPIR-V built-ins in validate_io
+
+Caio Oliveira (1):
+
+- brw: Fix scalar image coordinate payloads
+
+Christian Gmeiner (1):
+
+- etnaviv: drm: Do not return a stale fence fd
+
+Christoph Pillmayer (1):
+
+- pan/bi: Fix vector phis from spilling
+
+Connor Abbott (3):
+
+- tu: Add missing WFI to tu6_clear_lrz()
+- tu: Set MSM_SUBMIT_SYNCOBJ_* when there are only internal syncobjs
+- nir: Don't allow peephole_select on read_invocation
+
+Danylo Piliaiev (4):
+
+- tu: Fix condition for implicit dep of separate DS resolve
+- tu: Fix CmdSetRenderingInputAttachmentIndices with custom resolve
+- tu: Resuming dynamic rendering should re-emit attachments state
+- tu: Fix gmem not being disabled for some non-fb-space stages with sync2
+
+Dave Airlie (1):
+
+- mesa/get: fix luid size and driver callback.
+
+David Rosca (4):
+
+- radv/video: Fix out of bounds reads of AV1 tile params
+- radeonsi/mm: Use correct feedback size for VCE
+- radv/video: Fix AV1 decode qmatrix params
+- radeonsi/mm: Fix AV1 decode qmatrix params
+
+Dominique Belhachemi (1):
+
+- gallivm: orcjit: fix use-after-free in remove_jd() during exit
+
+Eric Engestrom (2):
+
+- docs: add sha sum for 26.1.7
+- .pick_status.json: Update to 6609a0e7a66288ee338e6ef0e5622d33923755e7
+
+Etaash Mathamsetty (1):
+
+- vulkan/wsi/wayland: Fix error handling for tearing control.
+
+Gyeyoung Baek (1):
+
+- pvr: fix sampler handle dereference with immutable samplers
+
+Hans-Kristian Arntzen (1):
+
+- radv: Prefer STRUCTURED OOB over STRUCTURED_OFFSET for texel buffers.
+
+JaeHoon Lee (1):
+
+- v3dv: report correct TMU spill and fill counts
+
+Jan Meisel (1):
+
+- nir/search: reset FP state for commutative match attempts
+
+Jianxun Zhang (3):
+
+- iris: Fix an assertion when importing dmabuf
+- anv: Refactor check on CCS modifiers
+- anv: Set dedicated_only feature bit for CCS modifiers
+
+Juan A. Suarez Romero (3):
+
+- v3d: fix data in get UBO size
+- broadcom/compiler: flip varyings replaced through COORD_REPLACE
+- broadcom/compiler: set full texture coordinates for sprite points
+
+Kajal Kajal (1):
+
+- rusticl: fix wrong destination offset in Image::copy_to_buffer
+
+Kenneth Graunke (1):
+
+- nir: Set info->fs.color_is_dual_source for DUAL_SRC_BLEND var locations
+
+Lars-Ivar Hesselberg Simonsen (1):
+
+- panvk/v10+: Fix unbound LD_ATTR.auto32
+
+Lionel Landwerlin (1):
+
+- anv: flush L1/L2 caches on end of command buffer
+
+Maaz Mombasawala (1):
+
+- svga: Remove erroneous else-if in surface_get_handle()
+
+Mel Henning (1):
+
+- subprojects: Use CDN URLs for crates.io
+
+Paul Grandperrin (2):
+
+- wsi/wayland: move wsi_wl_surface_get_present_modes() higher in file
+- wsi/wayland: send tearing hints when present mode changes to IMMEDIATE
+
+Pierre-Eric Pelloux-Prayer (5):
+
+- radeonsi: fix typo in barrier flag check
+- radeonsi/sqtt: fix barrier flags for <= gfx8
+- radeonsi: fix typo in descriptors bitmask
+- radeonsi: fix off-by-one cs shader indexing
+- radeonsi: fix AMD_DEBUG=usellvm usage
+
+Rob Clark (1):
+
+- Revert "freedreno: Don't re-bind global buffers"
+
+Robert Mader (3):
+
+- llvmpipe: Pass size to displaytarget_create_mapped()
+- kms-dri-sw: Use size and offset from whandle in create_mapped()
+- dri-sw: Use size and offset from whandle in create_mapped()
+
+Ryan Zhang (4):
+
+- panvk/utrace: add dynamic alloc for utrace clone buffer
+- panvk/utrace: skip clone copy when timestamp buffer allocation fails
+- panvk/utrace: guard delete_buffer against NULL on clone alloc failure
+- panvk/utrace: handle clone CS heap exhaustion gracefully
+
+Samuel Pitoiset (5):
+
+- radv: fix blitting for 2D array to 3D with a Z flip
+- radv: fix cmdbuf alignment with DGC when queues aren't enabled
+- radv: reset color remapping states when CmdBeginRendering() is called
+- radv: set radv_disable_aniso_single_level=true for Wolfenstein II: The New Colossus
+- radv/meta: fix using aspects for blits
+
+Sebastian Wick (4):
+
+- kms-dri-sw: Remove always-true whandle check and simplify control flow
+- kms-dri-sw: Handle drmPrimeFDToHandle errors in create_mapped()
+- kms-dri-sw: Move find_and_ref() to make it available to create_mapped()
+- kms-dri-sw: Deduplicate displaytargets by handle in create_mapped()
+
+Timur Kristóf (6):
+
+- ac/nir/clear_copy_buffer: Fix last thread byte count
+- aco/isel: Only allow first load to write the dst
+- radv: Use GL2_BYPASS flag for GFX preamble
+- radv: Use preemptable wait in gang preamble
+- radv: Use PFP for gang postamble wait and write
+- radv: Wait for L2 cache writeback on ACE for SDMA+ACE gangs
+
+Tupili Krishna Gowtham Reddy (1):
+
+- tu: Don't force R32_UINT when clearing MSAA E5B9G9R9 images
+
+Vandomas (1):
+
+- wsi/metal: fix memoryTypeIndex in image memory allocation
+
+Yi Ding (1):
+
+- panfrost: clear shader image mask on trailing unbinds
+
+Yiwei Zhang (1):
+
+- vulkan/android: undo forcing linear for mutable format
+
+Zhang, Jianxun (1):
+
+- anv: Require dedicated allocation query on scanout images from WSI
+
+mmes (1):
+
+- anv: fix upload of shader kernels spanning more than one heap BO

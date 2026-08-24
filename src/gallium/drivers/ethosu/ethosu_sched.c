@@ -17,13 +17,19 @@ _get_ifm_blocksize(struct ethosu_subgraph *subgraph, struct ethosu_operation *op
 {
    struct ethosu_ml_device *device = ethosu_ml_device(subgraph->base.device);
    struct ethosu_block ifm_block = {0};
+   int kernel_height = (operation->kernel.height - 1) *
+                       operation->kernel.dilation_y + 1;
+   int kernel_width = (operation->kernel.width - 1) *
+                      operation->kernel.dilation_x + 1;
 
    // IFM block height
-   int h = required_input_size(ofm_block.height, operation->kernel.stride_y, MIN2(operation->kernel.height, SUB_KERNEL_MAX.height));
+   int h = required_input_size(ofm_block.height, operation->kernel.stride_y,
+                               MIN2(kernel_height, SUB_KERNEL_MAX.height));
    h = align(h, device->ofm_ublock.height);
 
    // IFM block width
-   int w = required_input_size(ofm_block.width, operation->kernel.stride_x, MIN2(operation->kernel.width, SUB_KERNEL_MAX.width));
+   int w = required_input_size(ofm_block.width, operation->kernel.stride_x,
+                               MIN2(kernel_width, SUB_KERNEL_MAX.width));
    w = align(w, device->ofm_ublock.width);
 
    ifm_block.height = h;
@@ -33,6 +39,22 @@ _get_ifm_blocksize(struct ethosu_subgraph *subgraph, struct ethosu_operation *op
    return ifm_block;
 }
 
+static struct ethosu_block
+fit_block_for_ofm(struct ethosu_subgraph *subgraph,
+                  const struct ethosu_operation *operation,
+                  struct ethosu_block block)
+{
+   struct ethosu_ml_device *device =
+      ethosu_ml_device(subgraph->base.device);
+
+   /* Account for the actual accumulator height when selecting Conv1D blocks. */
+   if (operation->ofm.shape.height == 1 &&
+       operation->kernel.height == 1 &&
+       device->ofm_ublock.height == 2)
+      block.height = MIN2(block.height, operation->ofm.shape.height);
+
+   return block;
+}
 static bool
 try_block_config(struct ethosu_operation *operation, struct ethosu_block ofm_block, struct ethosu_block ifm_block, struct ethosu_shram_layout *layout)
 {
@@ -70,6 +92,34 @@ try_block_config(struct ethosu_operation *operation, struct ethosu_block ofm_blo
    return true;
 }
 
+static bool
+prefer_wide_pointwise_block(const struct ethosu_operation *operation,
+                            struct ethosu_block block,
+                            struct ethosu_block best_block)
+{
+   if (operation->type != ETHOSU_OPERATION_TYPE_CONVOLUTION ||
+       operation->kernel.depthwise || operation->kernel.width != 1 ||
+       operation->kernel.height != 1)
+      return false;
+
+   if (operation->ofm.tensor->layout != ETHOSU_LAYOUT_NHWC ||
+       operation->ofm.shape.depth % ARCH_SPLIT_DEPTH == 0)
+      return false;
+
+   if (best_block.width == 0)
+      return true;
+
+   unsigned block_widths = DIV_ROUND_UP(operation->ofm.shape.width,
+                                        block.width);
+   unsigned best_widths = DIV_ROUND_UP(operation->ofm.shape.width,
+                                       best_block.width);
+
+   if (block_widths != best_widths)
+      return block_widths < best_widths;
+
+   return block.height < best_block.height;
+}
+
 static struct ethosu_block_config
 find_block_config(struct ethosu_subgraph *subgraph, struct ethosu_operation *operation)
 {
@@ -82,6 +132,13 @@ find_block_config(struct ethosu_subgraph *subgraph, struct ethosu_operation *ope
    bool is_depthwise = operation->conv.depthwise;
    bool is_equal_depth = is_pooling || is_depthwise || operation->type == ETHOSU_OPERATION_TYPE_ELTWISE;
    bool is_convolution = operation->type == ETHOSU_OPERATION_TYPE_CONVOLUTION;
+   unsigned dilated_kernel_height =
+      (operation->kernel.height - 1) * operation->kernel.dilation_y + 1;
+   unsigned dilated_kernel_width =
+      (operation->kernel.width - 1) * operation->kernel.dilation_x + 1;
+   unsigned ifm_repeats =
+      DIV_ROUND_UP(dilated_kernel_width, SUB_KERNEL_MAX.width) *
+      DIV_ROUND_UP(dilated_kernel_height, SUB_KERNEL_MAX.height);
    float best_cost = FLT_MAX;
    float best_coverage = FLT_MAX;
 
@@ -126,6 +183,8 @@ find_block_config(struct ethosu_subgraph *subgraph, struct ethosu_operation *ope
             if (!is_equal_depth)
                ifm_block.depth = align(MIN2(operation->ifm.shape.depth, is_part_kernel ? 16 : 32), device->ifm_ublock.depth);
 
+            ofm_block = fit_block_for_ofm(subgraph, operation, ofm_block);
+
             // Try to fit the blocks in SHRAM
             struct ethosu_shram_layout layout = {0};
             if (try_block_config(operation, ofm_block, ifm_block, &layout)) {
@@ -142,7 +201,9 @@ find_block_config(struct ethosu_subgraph *subgraph, struct ethosu_operation *ope
                if (!is_depthwise)
                   weight_fetch *= blocks[2] * ofm_block.depth;
 
-               float ifm_fetch = ifm_block.width * ifm_block.height * operation->ifm.shape.depth * blocks[0] * blocks[1];
+               float ifm_fetch = ifm_block.width * ifm_block.height *
+                                 operation->ifm.shape.depth * ifm_repeats *
+                                 blocks[0] * blocks[1];
                if (!is_equal_depth)
                   ifm_fetch *= full_blocks.depth;
 
@@ -166,7 +227,12 @@ find_block_config(struct ethosu_subgraph *subgraph, struct ethosu_operation *ope
                      float coverage = (float)(operation->ifm.shape.width * operation->ifm.shape.height) /
                                       (float)MAX2(1, coverage_shape.width * coverage_shape.height);
 
-                     if (coverage < best_coverage) {
+                     if (prefer_wide_pointwise_block(operation, ofm_block,
+                                                     config.ofm_block)) {
+                        best_coverage = coverage;
+                        choose_this = true;
+                     } else if (coverage <= best_coverage && height <= 4 &&
+                                width <= 4) {
                         best_coverage = coverage;
                         choose_this = true;
                      }
@@ -202,6 +268,16 @@ find_block_config(struct ethosu_subgraph *subgraph, struct ethosu_operation *ope
    return config;
 }
 
+static bool
+block_config_is_valid(const struct ethosu_block_config *config)
+{
+   return config->ifm_block.width && config->ifm_block.height &&
+          config->ifm_block.depth && config->ofm_block.width &&
+          config->ofm_block.height && config->ofm_block.depth &&
+          config->ofm_ublock.width && config->ofm_ublock.height &&
+          config->ofm_ublock.depth;
+}
+
 void
 ethosu_sched_operation(struct ethosu_subgraph *subgraph, struct ethosu_operation *operation)
 {
@@ -211,4 +287,13 @@ ethosu_sched_operation(struct ethosu_subgraph *subgraph, struct ethosu_operation
       operation->block_config = find_block_config(subgraph, operation);
    else
       operation->block_config = find_block_config_u85(subgraph, operation);
+
+   if (!block_config_is_valid(&operation->block_config)) {
+      mesa_loge("ethosu: failed to find block configuration for operation "
+                "%u (IFM %ux%ux%u, OFM %ux%ux%u)", operation->type,
+                operation->ifm.shape.width, operation->ifm.shape.height,
+                operation->ifm.shape.depth, operation->ofm.shape.width,
+                operation->ofm.shape.height, operation->ofm.shape.depth);
+      subgraph->failed = true;
+   }
 }

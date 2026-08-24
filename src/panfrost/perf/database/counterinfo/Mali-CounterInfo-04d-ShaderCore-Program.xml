@@ -1,0 +1,2130 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2019-2026 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<CounterInfoList>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCoreActiveCy</MachineName>
+    <SourceName>EXEC_CORE_ACTIVE</SourceName>
+    <SourceAlias>TRIPIPE_ACTIVE</SourceAlias>
+    <StableID>230</StableID>
+    <HumanName>Execution core active cycles</HumanName>
+    <GroupName>Shader Core Cycles</GroupName>
+    <GroupHumanName>Execution core active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when the shader core is processing at least one
+      warp.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the shader core is
+      processing at least one warp. Note that this counter does not provide
+      detailed information about how the functional units are utilized inside
+      the shader core, but simply gives an indication that something was
+      running.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCoreUtil</MachineName>
+    <StableID>65579</StableID>
+    <HumanName>Execution core utilization</HumanName>
+    <GroupName>Shader Core Utilization</GroupName>
+    <GroupHumanName>Execution core utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The utilization of the programmable shader core.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the programmable
+      core, measuring cycles when the shader core contains at least one warp. A
+      low utilization here indicates lost performance, because there are spare
+      shader core cycles that are unused.
+
+      In some use cases an idle core is unavoidable. For example, a clear color
+      tile that contains no shaded geometry, or a shadow map that is resolved
+      entirely using early ZS depth updates.
+
+      Improve programmable core utilization by parallel processing of the
+      non-fragment and fragment queues, running overlapping workloads from
+      multiple render passes. Also aim to keep the FPK buffer utilization as
+      high as possible, ensuring constant forward-pressure on fragment shading.
+    </LongDescription>
+    <Equation>
+      (MaliCoreActiveCy / MaliConfigCoreCount / MaliGPUActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCoreUtil</MachineName>
+    <StableID>65579</StableID>
+    <HumanName>Execution core utilization</HumanName>
+    <GroupName>Shader Core Utilization</GroupName>
+    <GroupHumanName>Execution core utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The utilization of the programmable shader core.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the programmable
+      core, measuring cycles when the shader core contains at least one warp. A
+      low utilization here indicates lost performance, because there are spare
+      shader core cycles that are unused.
+
+      In some use cases an idle core is unavoidable. For example, a clear color
+      tile that contains no shaded geometry, or a shadow map that is resolved
+      entirely using early ZS depth updates.
+
+      Improve programmable core utilization by parallel processing of the GPU
+      work queues, running overlapping workloads from multiple render passes.
+      Also aim to keep the FPK buffer utilization as high as possible, ensuring
+      constant forward-pressure on fragment shading.
+    </LongDescription>
+    <Equation>
+      (MaliCoreActiveCy / MaliAnyActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliNonFragWarp</MachineName>
+    <SourceName>COMPUTE_WARPS</SourceName>
+    <SourceAlias>COMPUTE_THREADS</SourceAlias>
+    <StableID>228</StableID>
+    <HumanName>Non-fragment warps</HumanName>
+    <GroupName>Shader Warps</GroupName>
+    <GroupHumanName>Non-fragment warps</GroupHumanName>
+    <Units>warps</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of non-fragment warps created.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every created non-fragment warp. For this
+      GPU, a warp contains {{C::MaliGPUWarpSize.equation}} threads.
+
+      For compute shaders, to ensure full utilization of the warp capacity,
+      work groups must be a multiple of warp size.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliNonFragThread</MachineName>
+    <SourceName>COMPUTE_THREADS</SourceName>
+    <StableID>65591</StableID>
+    <HumanName>Non-fragment threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Non-fragment threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of non-fragment threads started.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of non-fragment threads started.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliNonFragThread</MachineName>
+    <StableID>65591</StableID>
+    <HumanName>Non-fragment threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Non-fragment threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of non-fragment threads started.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of non-fragment threads started.
+    </LongDescription>
+    <Equation>
+      MaliNonFragWarp * MaliGPUWarpSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliNonFragThread</MachineName>
+    <StableID>65591</StableID>
+    <HumanName>Non-fragment threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Non-fragment threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of non-fragment threads started.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of non-fragment threads started.
+
+      The expression is an approximation, based on the assumption that all
+      warps are fully populated with threads. The {{C::MaliCoreFullWarp}}
+      counter can give some indication of warp occupancy.
+    </LongDescription>
+    <Equation>
+      MaliNonFragWarp * MaliGPUWarpSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliDefVertWarp</MachineName>
+    <SourceName>DVS_WARPS</SourceName>
+    <StableID>366</StableID>
+    <HumanName>Deferred vertex warps</HumanName>
+    <GroupName>Shader Warps</GroupName>
+    <GroupHumanName>Deferred vertex warps</GroupHumanName>
+    <Units>warps</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of deferred vertex warps created.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every created deferred vertex warp. For this
+      GPU, a warp contains {{C::MaliGPUWarpSize.equation}} threads.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragWarp</MachineName>
+    <SourceName>FRAG_WARPS</SourceName>
+    <StableID>214</StableID>
+    <HumanName>Fragment warps</HumanName>
+    <GroupName>Shader Warps</GroupName>
+    <GroupHumanName>Fragment warps</GroupHumanName>
+    <Units>warps</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of fragment warps created.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every created fragment warp. For this GPU, a
+      warp contains {{C::MaliGPUWarpSize.equation}} threads.
+
+      Fragment warps are populated with fragment quads, where each quad
+      corresponds to a 2x2 fragment region from a single triangle. Threads in a
+      quad which correspond to a sample point outside of the triangle still
+      consume shader resource, which makes small triangles disproportionately
+      expensive.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragPrepassWarp</MachineName>
+    <SourceName>FRAG_WARPS_PRE_PASS</SourceName>
+    <StableID>381</StableID>
+    <HumanName>Fragment prepass warps</HumanName>
+    <GroupName>Shader Warps</GroupName>
+    <GroupHumanName>Fragment prepass warps</GroupHumanName>
+    <Units>warps</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of fragment prepass warps created.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every created fragment prepass warp. For this
+      GPU, a warp contains {{C::MaliGPUWarpSize.equation}} threads.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragPrepassWarpRate</MachineName>
+    <StableID>468</StableID>
+    <HumanName>Fragment prepass warp percentage</HumanName>
+    <GroupName>Fragment Prepass Properties</GroupName>
+    <GroupHumanName>Prepass warp rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of warps being processed by the fragment prepass.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of warps that are processed by the
+      fragment prepass relative to the main pass.
+
+      A high percentage here indicates a potential inefficiency. It can
+      indicate that a high percentage of draw calls require prepass shaders due
+      to use of shader-based alpha-testing or alpha-to-coverage. It can also
+      indicate that a high percentage of geometry is being culled by hidden
+      surface removal.
+    </LongDescription>
+    <Equation>
+      (MaliFragPrepassWarp / (MaliFragWarp - MaliFragPrepassWarp)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragThread</MachineName>
+    <SourceName>FRAG_THREADS</SourceName>
+    <StableID>65572</StableID>
+    <HumanName>Fragment threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Fragment threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of fragment threads started.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of fragment threads started.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragHelpThread</MachineName>
+    <SourceName>FRAG_DUMMY_THREADS</SourceName>
+    <StableID>627</StableID>
+    <HumanName>Fragment helper threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Fragment helper threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of fragment helper threads started.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of fragment helper threads started.
+
+      These threads correspond to fragment locations in a fragment quad that
+      have no sample coverage, but which are needed for mipmap selection.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragHelpThreadRate</MachineName>
+    <StableID>628</StableID>
+    <HumanName>Fragment helper thread percentage</HumanName>
+    <GroupName>Fragment Workload Properties</GroupName>
+    <GroupHumanName>Fragment helper thread rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of fragment threads that are helper threads.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of fragment threads that are
+      helper threads with no coverage. A high percentage can indicate that the
+      content has a high density of small triangles, which are expensive to
+      process. To avoid this, use mesh level-of-detail algorithms to select
+      simpler meshes as objects move further from the camera.
+    </LongDescription>
+    <Equation>
+      (MaliFragThread / MaliFragHelpThread) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragThread</MachineName>
+    <StableID>65572</StableID>
+    <HumanName>Fragment threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Fragment threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of fragment threads started.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of fragment threads started. This
+      expression is an approximation, based on the assumption that all warps
+      are fully populated with threads. The {{C::MaliFragPartWarp}} counter can
+      indicate how close this approximation is.
+    </LongDescription>
+    <Equation>
+      MaliFragWarp * MaliGPUWarpSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragThread</MachineName>
+    <StableID>65572</StableID>
+    <HumanName>Fragment threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Fragment threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of fragment threads started.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of fragment threads started. This
+      expression is an approximation, based on the assumption that all warps
+      are fully populated with threads. The {{C::MaliFragPartWarp}} and
+      {{C::MaliCoreFullWarp}} counters can give some indication of how close
+      this approximation is.
+    </LongDescription>
+    <Equation>
+      MaliFragWarp * MaliGPUWarpSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragThread</MachineName>
+    <StableID>65572</StableID>
+    <HumanName>Fragment threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Fragment threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of fragment threads started.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of fragment threads started. This
+      expressions an approximation, based on the assumption that all warps are
+      fully populated with threads. The {{C::MaliFragRastPartQd}} and
+      {{C::MaliCoreFullWarp}} counters can give some indication of how close
+      this approximation is.
+    </LongDescription>
+    <Equation>
+      MaliFragWarp * MaliGPUWarpSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragThread</MachineName>
+    <SourceName>FRAG_SHADER_THREADS</SourceName>
+    <StableID>65572</StableID>
+    <HumanName>Fragment threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Fragment threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of fragment threads started.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of fragment threads started. This
+      counter assumes all 4 lanes in a coarse quad are active, so this counter
+      includes helper threads and idle thread slots if a coarse quad has
+      partial coverage.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragThread</MachineName>
+    <SourceName>FRAG_SHADER_THREADS</SourceName>
+    <StableID>65572</StableID>
+    <HumanName>All fragment threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>All fragment threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of fragment threads started in the prepass and main pass.
+    </ShortDescription>
+    <LongDescription>
+      This counter defines the total number of fragment threads started,
+      including prepass and main pass threads. This counter assumes all 4 lanes
+      in a coarse quad are active, so this counter includes helper threads and
+      idle thread slots if a coarse quad has partial coverage.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragPrepassThread</MachineName>
+    <StableID>382</StableID>
+    <HumanName>Fragment prepass threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Fragment prepass threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of fragment threads started in the prepass.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of fragment threads started in the
+      prepass. This expression assumes all lanes in a warp are active.
+    </LongDescription>
+    <Equation>
+      MaliFragPrepassWarp * MaliGPUWarpSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragMainThread</MachineName>
+    <StableID>462</StableID>
+    <HumanName>Fragment main pass threads</HumanName>
+    <GroupName>Shader Threads</GroupName>
+    <GroupHumanName>Fragment main pass threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of fragment threads started in the main pass.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of fragment threads started in the
+      main pass. This expression assumes all lanes in a warp are active.
+    </LongDescription>
+    <Equation>
+      (MaliFragWarp - MaliFragPrepassWarp) * MaliGPUWarpSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCoreAllRegsWarp</MachineName>
+    <SourceName>WARP_REG_SIZE_64</SourceName>
+    <StableID>231</StableID>
+    <HumanName>Warps using more than 32 registers</HumanName>
+    <GroupName>Shader Warps</GroupName>
+    <GroupHumanName>All register warps</GroupHumanName>
+    <Units>warps</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of warps that require more than 32 registers.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every warp that requires more than 32
+      registers. Threads which require more than 32 registers consume two
+      thread slots in the register file, halving the number of threads that can
+      be concurrently active in the shader core.
+
+      Reduction in thread count can impact the ability of the shader core to
+      keep functional units busy, and means that performance is more likely to
+      be impacted by stalls caused by cache misses.
+
+      Aim to minimize the number of threads requiring more than 32 registers,
+      by using simpler shader programs and lower precision data types.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCoreAllRegsWarpRate</MachineName>
+    <StableID>65597</StableID>
+    <HumanName>All registers warp percentage</HumanName>
+    <GroupName>Shader Workload Properties</GroupName>
+    <GroupHumanName>All registers warp rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of warps that require more than 32 registers.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of warps that use more than 32
+      registers, requiring the full register allocation of 64 registers. Warps
+      that require more than 32 registers halve the peak thread occupancy of
+      the shader core, and can make shader performance more sensitive to cache
+      misses and memory stalls.
+    </LongDescription>
+    <Equation>
+      (MaliCoreAllRegsWarp / (MaliNonFragWarp + MaliFragWarp)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCoreFragWarpOcc</MachineName>
+    <StableID>320</StableID>
+    <HumanName>Fragment warp occupancy</HumanName>
+    <GroupName>Shader Workload Properties</GroupName>
+    <GroupHumanName>Fragment warp occupancy</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The thread occupancy of the fragment warps.
+    </ShortDescription>
+    <LongDescription>
+      This expression measures the thread occupancy of the fragment warps in
+      percent. Threads are counted as active if they are part of a coarse quad,
+      even if they have no sample coverage.
+    </LongDescription>
+    <Equation>
+      (MaliFragThread / (MaliFragWarp * MaliGPUWarpSize)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCoreFullWarp</MachineName>
+    <SourceName>FULL_QUAD_WARPS</SourceName>
+    <SourceAlias>FULL_WARPS</SourceAlias>
+    <StableID>232</StableID>
+    <HumanName>Full warps</HumanName>
+    <GroupName>Shader Warps</GroupName>
+    <GroupHumanName>Full warps</GroupHumanName>
+    <Units>warps</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of warps that have a full thread slot allocation.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every warp that has a full thread slot
+      allocation. Note that allocated thread slots might not contain a running
+      thread if the workload cannot fill the whole allocation.
+
+      If many warps are not fully allocated then performance is reduced. Fully
+      allocated warps are more likely if:
+
+      * Draw calls avoid late ZS dependency hazards.
+      * Draw calls use meshes with a low percentage of tiny primitives.
+      * Compute dispatches use work groups that are a multiple of warp size.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCoreFullWarpRate</MachineName>
+    <StableID>65598</StableID>
+    <HumanName>Full warp percentage</HumanName>
+    <GroupName>Shader Workload Properties</GroupName>
+    <GroupHumanName>Full warp rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of warps that have a full thread slot allocation.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of warps that have a full thread
+      slot allocation. Note that allocated thread slots might not contain a
+      running thread if the workload cannot fill the whole allocation.
+
+      If a high percentage of warps are not fully allocated then performance is
+      reduced. Fully allocated warps are more likely if:
+
+      * Draw calls avoid late ZS dependency hazards.
+      * Draw calls use meshes with a low percentage of tiny primitives.
+      * Compute dispatches use work groups that are a multiple of warp size.
+    </LongDescription>
+    <Equation>
+      (MaliCoreFullWarp / (MaliNonFragWarp + MaliFragWarp)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngInstr</MachineName>
+    <SourceName>EXEC_INSTR_COUNT</SourceName>
+    <SourceAlias>ARITH_WORDS</SourceAlias>
+    <StableID>234</StableID>
+    <HumanName>Arithmetic instruction issue cycles</HumanName>
+    <GroupName>ALU Instructions</GroupName>
+    <GroupHumanName>Executed instructions</GroupHumanName>
+    <Units>instructions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of instructions run per warp.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every instruction that the shader core
+      processes per warp. All instructions are single cycle issue.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngFMAInstr</MachineName>
+    <SourceName>EXEC_INSTR_FMA</SourceName>
+    <StableID>241</StableID>
+    <HumanName>Arithmetic FMA pipe instructions</HumanName>
+    <GroupName>ALU Instructions</GroupName>
+    <GroupHumanName>FMA pipe instructions</GroupHumanName>
+    <Units>instructions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of instructions issued to the FMA pipe.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every instruction issued to the fused
+      multiply-accumulate pipe.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngFMAPipeUtil</MachineName>
+    <StableID>65601</StableID>
+    <HumanName>FMA pipe utilization</HumanName>
+    <GroupName>ALU Utilization</GroupName>
+    <GroupHumanName>FMA pipe utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The utilization of the FMA pipe.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the fused multiply-accumulate pipeline
+      utilization.
+    </LongDescription>
+    <Equation>
+      (MaliEngFMAInstr / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngFMAPipeUtil</MachineName>
+    <StableID>65601</StableID>
+    <HumanName>FMA pipe utilization</HumanName>
+    <GroupName>ALU Utilization</GroupName>
+    <GroupHumanName>FMA pipe utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The utilization of the FMA pipe.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the fused multiply-accumulate pipeline
+      utilization.
+
+      This pipeline shares instruction issue slots with CVT and SFU
+      instructions, so it is not possible to achieve 100% utilization unless
+      the other pipelines are idle.
+    </LongDescription>
+    <Equation>
+      (MaliEngFMAInstr / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngFMAPipeUtil</MachineName>
+    <StableID>65601</StableID>
+    <HumanName>FMA pipe utilization</HumanName>
+    <GroupName>ALU Utilization</GroupName>
+    <GroupHumanName>FMA pipe utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The utilization of the FMA pipes.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the fused multiply-accumulate pipeline
+      utilization.
+
+      This pipeline shares instruction issue slots with CVT and SFU
+      instructions, so it is not possible to achieve 100% utilization unless
+      the other pipelines are idle.
+    </LongDescription>
+    <Equation>
+      (MaliEngFMAInstr / (2 * MaliCoreActiveCy)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngCVTInstr</MachineName>
+    <SourceName>EXEC_INSTR_CVT</SourceName>
+    <StableID>242</StableID>
+    <HumanName>Arithmetic CVT pipe instructions</HumanName>
+    <GroupName>ALU Instructions</GroupName>
+    <GroupHumanName>CVT pipe instructions</GroupHumanName>
+    <Units>instructions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of instructions issued to the CVT pipe.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every instruction issued to the convert pipe.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngCVTPipeUtil</MachineName>
+    <StableID>65602</StableID>
+    <HumanName>CVT pipe utilization</HumanName>
+    <GroupName>ALU Utilization</GroupName>
+    <GroupHumanName>CVT pipe utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      Defines the utilization of the CVT pipe.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the convert pipeline utilization.
+    </LongDescription>
+    <Equation>
+      (MaliEngCVTInstr / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngCVTPipeUtil</MachineName>
+    <StableID>65602</StableID>
+    <HumanName>CVT pipe utilization</HumanName>
+    <GroupName>ALU Utilization</GroupName>
+    <GroupHumanName>CVT pipe utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      Defines the utilization of the CVT pipe.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the convert pipeline utilization.
+
+      This pipeline shares instruction issue slots with FMA and SFU
+      instructions, so it is not possible to achieve 100% utilization unless
+      the other pipelines are idle.
+    </LongDescription>
+    <Equation>
+      (MaliEngCVTInstr / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngCVTPipeUtil</MachineName>
+    <StableID>65602</StableID>
+    <HumanName>CVT pipe utilization</HumanName>
+    <GroupName>ALU Utilization</GroupName>
+    <GroupHumanName>CVT pipe utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      Defines the utilization of the CVT pipes.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the convert pipeline utilization.
+
+      This pipeline shares instruction issue slots with FMA and SFU
+      instructions, so it is not possible to achieve 100% utilization unless
+      the other pipelines are idle.
+    </LongDescription>
+    <Equation>
+      (MaliEngCVTInstr / (2 * MaliCoreActiveCy)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngSFUInstr</MachineName>
+    <SourceName>EXEC_INSTR_SFU</SourceName>
+    <StableID>243</StableID>
+    <HumanName>Arithmetic SFU pipe instructions</HumanName>
+    <GroupName>ALU Instructions</GroupName>
+    <GroupHumanName>SFU pipe instructions</GroupHumanName>
+    <Units>instructions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of instructions issued to the SFU pipe.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every instruction issued to the special
+      functions unit pipe.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngSFUPipeUtil</MachineName>
+    <StableID>65603</StableID>
+    <HumanName>SFU pipe utilization</HumanName>
+    <GroupName>ALU Utilization</GroupName>
+    <GroupHumanName>SFU pipe utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The utilization of the SFU pipe.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the special functions unit pipeline utilization.
+    </LongDescription>
+    <Equation>
+      ((MaliEngSFUInstr * 4) / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngSFUPipeUtil</MachineName>
+    <StableID>65603</StableID>
+    <HumanName>SFU pipe utilization</HumanName>
+    <GroupName>ALU Utilization</GroupName>
+    <GroupHumanName>SFU pipe utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The utilization of the SFU pipe.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the special functions unit pipeline utilization.
+
+      This pipeline shares instruction issue slots with CVT and SFU
+      instructions, so it is not possible to achieve 100% utilization unless
+      the other pipelines are idle.
+    </LongDescription>
+    <Equation>
+      ((MaliEngSFUInstr * 4) / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngArithInstr</MachineName>
+    <StableID>65668</StableID>
+    <HumanName>Arithmetic instruction issue cycles</HumanName>
+    <GroupName>ALU Instructions</GroupName>
+    <GroupHumanName>Executed instructions</GroupHumanName>
+    <Units>instructions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The total number of instructions issued to the FMA, CVT, and SFU pipes.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of total instructions issued to any of
+      the arithmetic pipe types.
+    </LongDescription>
+    <Equation>
+      MaliEngFMAInstr + MaliEngCVTInstr + MaliEngSFUInstr
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngDivergedInstr</MachineName>
+    <SourceName>EXEC_INSTR_DIVERGED</SourceName>
+    <StableID>235</StableID>
+    <HumanName>Diverged instructions</HumanName>
+    <GroupName>ALU Instructions</GroupName>
+    <GroupHumanName>Diverged instructions</GroupHumanName>
+    <Units>instructions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of instructions run per warp that have control flow
+      divergence.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every instruction the programmable core
+      processes per warp where there is control flow divergence across the
+      warp. Control flow divergence erodes arithmetic processing efficiency
+      because it implies some threads in the warp are idle because they did not
+      take the current control path through the code. Aim to minimize control
+      flow divergence when designing shader effects.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngDivergedInstrRate</MachineName>
+    <StableID>65599</StableID>
+    <HumanName>Warp divergence percentage</HumanName>
+    <GroupName>Shader Workload Properties</GroupName>
+    <GroupHumanName>Warp divergence rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of instructions that have control flow divergence across
+      the warp.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of instructions that have control
+      flow divergence across the warp.
+
+      Control flow divergence can reduce performance, because only some lanes
+      of the warp are active while diverged. Minimize divergence by using
+      warp-uniform branch decisions for conditional checks and loop limits.
+    </LongDescription>
+    <Equation>
+      (MaliEngDivergedInstr / MaliEngInstr) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngDivergedInstrRate</MachineName>
+    <StableID>65599</StableID>
+    <HumanName>Warp divergence percentage</HumanName>
+    <GroupName>Shader Workload Properties</GroupName>
+    <GroupHumanName>Warp divergence rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of instructions that have control flow divergence across
+      the warp.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of instructions that have control
+      flow divergence across the warp.
+    </LongDescription>
+    <Equation>
+      (MaliEngDivergedInstr / MaliEngArithInstr) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngSWBlendInstr</MachineName>
+    <SourceName>CALL_BLEND_SHADER</SourceName>
+    <StableID>247</StableID>
+    <HumanName>Blend shader instructions</HumanName>
+    <GroupName>ALU Instructions</GroupName>
+    <GroupHumanName>Blend shader instructions</GroupHumanName>
+    <Units>instructions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of blend shader invocations run.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every blend shader invocation run.
+
+      This counter increments per fetch unit, and so can increase by up to 4 in
+      a clock cycle.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngSWBlendRate</MachineName>
+    <StableID>65658</StableID>
+    <HumanName>Shader blend percentage</HumanName>
+    <GroupName>Shader Workload Properties</GroupName>
+    <GroupHumanName>Shader blend rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of fragments that use shader-based blending.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of fragments that use shader-based
+      blending, rather than the fixed-function blend path. These fragments are
+      caused by the application using color formats, or advanced blend
+      equations, which the fixed-function blend path does not support.
+
+      Vulkan shaders that use software blending do not show up in this data,
+      because the blend is inlined in to the main body of the shader program.
+    </LongDescription>
+    <Equation>
+      ((MaliEngSWBlendInstr * 2) / MaliFragWarp) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngSWBlendRate</MachineName>
+    <StableID>65658</StableID>
+    <HumanName>Shader blend percentage</HumanName>
+    <GroupName>Shader Workload Properties</GroupName>
+    <GroupHumanName>Shader blend rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of fragments that use shader-based blending.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of fragments that use shader-based
+      blending, rather than the fixed-function blend path. These fragments are
+      caused by the application using color formats, or advanced blend
+      equations, which the fixed-function blend path does not support.
+
+      Vulkan shaders that use software blending do not show up in this data,
+      because the blend is inlined in to the main body of the shader program.
+    </LongDescription>
+    <Equation>
+      ((MaliEngSWBlendInstr * 4) / MaliFragWarp) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngNarrowInstr</MachineName>
+    <SourceName>EXEC_INSTR_NARROW</SourceName>
+    <StableID>302</StableID>
+    <HumanName>Narrow arithmetic instructions</HumanName>
+    <GroupName>ALU Instructions</GroupName>
+    <GroupHumanName>Narrow instructions</GroupHumanName>
+    <Units>instructions</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of narrow arithmetic instructions.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every instruction that does 16-bit or
+      narrower calculations.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngSlot0IssueCy</MachineName>
+    <StableID>391</StableID>
+    <HumanName>Slot 0 arithmetic issue cycles</HumanName>
+    <GroupName>ALU Issues</GroupName>
+    <GroupHumanName>Slot 0 issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of arithmetic issue cycles to slot 0.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when issues an instruction
+      to issue slot 0.
+    </LongDescription>
+    <Equation>
+      (MaliEngFMAInstr + MaliEngCVTInstr + MaliEngSFUInstr) - MaliEngSlot1IssueCy
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngSlot1IssueCy</MachineName>
+    <SourceName>EXEC_INSTR_SLOT_1</SourceName>
+    <StableID>374</StableID>
+    <HumanName>Slot 1 arithmetic issue cycles</HumanName>
+    <GroupName>ALU Issues</GroupName>
+    <GroupHumanName>Slot 1 issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of arithmetic issue cycles to slot 1.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when issues an instruction
+      to issue slot 1.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngSlotAnyIssueCy</MachineName>
+    <SourceName>EXEC_ISSUE_SLOT_ANY</SourceName>
+    <StableID>375</StableID>
+    <HumanName>Any slot arithmetic issue cycles</HumanName>
+    <GroupName>ALU Issues</GroupName>
+    <GroupHumanName>Any slot issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of arithmetic issue cycles that issue to either issue slot.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when issues an instruction
+      to either arithmetic issue slot.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngNarrowInstrRate</MachineName>
+    <StableID>318</StableID>
+    <HumanName>Narrow arithmetic percentage</HumanName>
+    <GroupName>Shader Workload Properties</GroupName>
+    <GroupHumanName>Narrow arithmetic rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of arithmetic instructions that operate on 8/16-bit types.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of arithmetic instructions that
+      operate on 8/16-bit types. These are more energy efficient, and require
+      fewer registers for variable storage, than 32-bit operations.
+    </LongDescription>
+    <Equation>
+      (MaliEngNarrowInstr / MaliEngArithInstr) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngStarveCy</MachineName>
+    <SourceName>EXEC_INSTR_STARVING</SourceName>
+    <StableID>236</StableID>
+    <HumanName>Execution engine starvation cycles</HumanName>
+    <GroupName>Shader Core Stall Cycles</GroupName>
+    <GroupHumanName>Execution engine starvation</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when no new threads are available to run.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the programmable core
+      contains threads to run, and is ready to accept a new instruction, but no
+      new thread is available to run. This typically occurs when all threads
+      are blocked waiting for the result from an asynchronous processing
+      operation, such as a texture filtering operation or a data fetch from
+      memory.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngStarveCy</MachineName>
+    <SourceName>EXEC_STARVE_ARITH</SourceName>
+    <StableID>236</StableID>
+    <HumanName>Processing unit starvation cycles</HumanName>
+    <GroupName>Shader Core Stall Cycles</GroupName>
+    <GroupHumanName>Execution engine starvation</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when the processing unit is starved of work.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the processing unit is
+      starved of work because all warps are blocked on message dependencies or
+      instruction cache misses.
+
+      This counter increments per fetch unit, and so can increase by up to 4 in
+      a clock cycle.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngStarveICacheCy</MachineName>
+    <SourceName>EXEC_STARVE_ICACHE</SourceName>
+    <StableID>419</StableID>
+    <HumanName>Processing unit I-cache starvation cycles</HumanName>
+    <GroupName>Shader Core Stall Cycles</GroupName>
+    <GroupHumanName>Execution engine I-cache starvation</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when the processing unit is starved of work due to
+      I-cache misses.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when a fetch unit is starved of
+      work because of instruction cache misses.
+
+      This counter increments per fetch unit, and so can increase by up to 4 in
+      a clock cycle.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliEngICacheMiss</MachineName>
+    <SourceName>EXEC_ICACHE_MISS</SourceName>
+    <StableID>245</StableID>
+    <HumanName>Instruction cache misses</HumanName>
+    <GroupName>Instruction Cache</GroupName>
+    <GroupHumanName>I-cache misses</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of instruction cache misses.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every instruction cache miss.
+
+      Note that the instruction cache is shared across both processing units.
+      Unlike most processing unit counters this counter increments for cache
+      misses from both units.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Memory</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliALUIssueCy</MachineName>
+    <StableID>556</StableID>
+    <HumanName>Arithmetic unit issue cycles</HumanName>
+    <GroupName>ALU Cycles</GroupName>
+    <GroupHumanName>Arithmetic unit issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles the arithmetic unit was busy.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of cycles that the arithmetic unit was
+      busy processing work.
+    </LongDescription>
+    <Equation>
+      MaliEngInstr
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliALUIssueCy</MachineName>
+    <StableID>556</StableID>
+    <HumanName>Arithmetic unit issue cycles</HumanName>
+    <GroupName>ALU Cycles</GroupName>
+    <GroupHumanName>Arithmetic unit issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles the arithmetic unit was busy.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of cycles that the arithmetic unit was
+      busy processing work.
+    </LongDescription>
+    <Equation>
+      max(MaliEngFMAInstr, MaliEngCVTInstr, MaliEngSFUInstr * 4)
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliALUIssueCy</MachineName>
+    <StableID>556</StableID>
+    <HumanName>Arithmetic unit issue cycles</HumanName>
+    <GroupName>ALU Cycles</GroupName>
+    <GroupHumanName>Arithmetic unit issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles the arithmetic unit was busy.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of cycles that the arithmetic unit was
+      busy processing work.
+    </LongDescription>
+    <Equation>
+      max(MaliEngFMAInstr + MaliEngCVTInstr + MaliEngSFUInstr, MaliEngSFUInstr * 4)
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliALUIssueCy</MachineName>
+    <StableID>556</StableID>
+    <HumanName>Arithmetic unit issue cycles</HumanName>
+    <GroupName>ALU Cycles</GroupName>
+    <GroupHumanName>Arithmetic unit issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles the arithmetic unit was busy.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of cycles that the arithmetic unit was
+      busy processing work.
+    </LongDescription>
+    <Equation>
+      max(MaliEngCVTInstr + MaliEngSFUInstr + ((MaliEngFMAInstr - min(MaliEngFMAInstr, MaliEngCVTInstr + MaliEngSFUInstr)) / 2), MaliEngSFUInstr * 4)
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliALUIssueCy</MachineName>
+    <StableID>556</StableID>
+    <HumanName>Arithmetic unit issue cycles</HumanName>
+    <GroupName>ALU Cycles</GroupName>
+    <GroupHumanName>Arithmetic unit issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles the arithmetic unit was busy.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of cycles that the arithmetic unit was
+      busy processing work.
+    </LongDescription>
+    <Equation>
+      max(MaliEngSlot0IssueCy, MaliEngSlot1IssueCy, MaliEngSFUInstr * 4)
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliALUUtil</MachineName>
+    <StableID>65643</StableID>
+    <HumanName>Arithmetic unit utilization</HumanName>
+    <GroupName>Shader Core Unit Utilization</GroupName>
+    <GroupHumanName>Arithmetic unit utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage utilization of the arithmetic unit.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the arithmetic unit
+      in the programmable core.
+
+      The most effective technique for reducing arithmetic load is reducing the
+      complexity of your shader programs. Using narrower 8 and 16-bit data
+      types can also help, as it allows multiple operations to be processed in
+      parallel.
+    </LongDescription>
+    <Equation>
+      (MaliALUIssueCy / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+</CounterInfoList>

@@ -185,6 +185,21 @@ panfrost-g610-piglit:arm64:
     HWCI_START_WESTON: 1
     LAVA_TAGS: 4gb
 
+panfrost-g610-opencl-cts-quick:arm64:
+  extends:
+    - .lava-arm64-test-gl
+    - .panfrost-panthor-gl-manual-rules
+    - .panfrost-test
+    - .test-opencl-cts
+    - .lava-rk3588-rock-5b:arm64
+  rules:
+    - !reference [.panfrost-panthor-gl-manual-rules, rules]
+    - !reference [.rusticl-manual-rules, rules]
+  timeout: 2h
+  variables:
+    DEQP_SUITE: panfrost-g610-opencl-cts-quick
+    LAVA_TAGS: 4gb
+
 panfrost-g610-vk:arm64:
   parallel: 4
   extends:
@@ -220,9 +235,12 @@ panfrost-g610-vk-asan:arm64:
     PANVK_DEBUG: "sync,cs,coherent_before_cached"
     DEQP_SUITE: panfrost-g610-vk-asan
     LAVA_TAGS: at-least-8gb
+    # Limit the number of runners this job can run on to one to prevent it
+    # from monopolising all five "at-least-8gb" RK3588 runners.
+    RUNNER_TAG: mesa-ci-x86-64-lava-rk3588-rock-5b-serial
 
 panfrost-g925-vk:arm64:
-  parallel: 4
+  parallel: 2
   extends:
     - .lava-arm64-test-vk
     - .panfrost-test
@@ -235,6 +253,14 @@ panfrost-g925-vk:arm64:
     DEQP_SUITE: panfrost-g925-vk
     HWCI_START_WESTON: 1
     FDO_CI_CONCURRENT: 8  # We get OOMkills if we go too wide since VKCTS 1.4.5.3
+    DEQP_FRACTION: 2
+
+panfrost-g925-vk-full:arm64:
+  extends:
+    - panfrost-g925-vk:arm64
+    - .panfrost-vk-manual-panthor-rules
+  variables:
+    DEQP_FRACTION: 1
 
 panfrost-g925-angle:arm64:
   extends:
@@ -248,3 +274,27 @@ panfrost-g925-angle:arm64:
     DEQP_SUITE: panvk-angle
     # Disable max-fails feature in deqp-runner since it seems to be broken in this specific job
     DEQP_RUNNER_MAX_FAILS: null
+
+panfrost-g925-vk-kraid:arm64:
+  extends:
+    - .lava-arm64-test-vk
+    - .panfrost-test
+    - .lava-mt8196-rauru-navi-sku0:arm64
+    - .panfrost-vk-panthor-rules
+  variables:
+    DRIVER_NAME: panvk
+    MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
+    PANVK_DEBUG: "sync,cs,coherent_before_cached"
+    DEQP_SUITE: panvk-kraid
+    HWCI_START_WESTON: 1
+    FDO_CI_CONCURRENT: 8  # We get OOMkills if we go too wide since VKCTS 1.4.5.3
+    DEQP_FRACTION: 4
+    # Disable max-fails feature in deqp-runner since it seems to be broken in this specific job
+    DEQP_RUNNER_MAX_FAILS: null
+
+panfrost-g925-vk-kraid-full:arm64:
+  extends:
+    - panfrost-g925-vk-kraid:arm64
+    - .panfrost-vk-manual-panthor-rules
+  variables:
+    DEQP_FRACTION: 1

@@ -465,6 +465,7 @@
       <value name="YUV 4:4:4" value="2" />
       <value name="Y8_UNORM" value="3" />
       <value name="PLANAR_420_8" value="4" />
+      <value name="P010" value="13" />
     </field>
     <field name="Y Offset for U(Cb)" dword="2" bits="14:0" type="uint" />
     <field name="X Offset for U(Cb)" dword="2" bits="30:16" type="uint" />

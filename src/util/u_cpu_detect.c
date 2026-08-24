@@ -348,7 +348,7 @@ static inline uint64_t xgetbv(void)
    uint32_t eax, edx;
 
    __asm __volatile (
-     ".byte 0x0f, 0x01, 0xd0" // xgetbv isn't supported on gcc < 4.4
+     "xgetbv"
      : "=a"(eax),
        "=d"(edx)
      : "c"(0)

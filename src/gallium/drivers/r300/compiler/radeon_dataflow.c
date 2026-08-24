@@ -425,12 +425,12 @@ struct get_readers_callback_data {
 };
 
 static struct rc_reader *
-add_reader(struct memory_pool *pool, struct rc_reader_data *data, struct rc_instruction *inst,
+add_reader(linear_ctx *pool, struct rc_reader_data *data, struct rc_instruction *inst,
            unsigned int mask)
 {
    struct rc_reader *new;
-   memory_pool_array_reserve(pool, struct rc_reader, data->Readers, data->ReaderCount,
-                             data->ReadersReserved, 1);
+   rc_array_reserve(pool, struct rc_reader, data->Readers, data->ReaderCount,
+                    data->ReadersReserved, 1);
    new = &data->Readers[data->ReaderCount++];
    new->Inst = inst;
    new->WriteMask = mask;
@@ -438,15 +438,15 @@ add_reader(struct memory_pool *pool, struct rc_reader_data *data, struct rc_inst
 }
 
 static void
-add_reader_normal(struct memory_pool *pool, struct rc_reader_data *data,
-                  struct rc_instruction *inst, unsigned int mask, struct rc_src_register *src)
+add_reader_normal(linear_ctx *pool, struct rc_reader_data *data, struct rc_instruction *inst,
+                  unsigned int mask, struct rc_src_register *src)
 {
    struct rc_reader *new = add_reader(pool, data, inst, mask);
    new->U.I.Src = src;
 }
 
 static void
-add_reader_pair(struct memory_pool *pool, struct rc_reader_data *data, struct rc_instruction *inst,
+add_reader_pair(linear_ctx *pool, struct rc_reader_data *data, struct rc_instruction *inst,
                 unsigned int mask, struct rc_pair_instruction_arg *arg,
                 struct rc_pair_instruction_source *src)
 {
@@ -508,7 +508,7 @@ get_readers_pair_read_callback(void *userdata, struct rc_instruction *inst,
    if (d->ReaderData->ExitOnAbort && d->ReaderData->Abort)
       return;
 
-   add_reader_pair(&d->C->Pool, d->ReaderData, inst, shared_mask, arg, src);
+   add_reader_pair(d->C->Pool, d->ReaderData, inst, shared_mask, arg, src);
 }
 
 /**
@@ -534,7 +534,7 @@ get_readers_normal_read_callback(void *userdata, struct rc_instruction *inst,
    if (d->ReaderData->ExitOnAbort && d->ReaderData->Abort)
       return;
 
-   add_reader_normal(&d->C->Pool, d->ReaderData, inst, shared_mask, src);
+   add_reader_normal(d->C->Pool, d->ReaderData, inst, shared_mask, src);
 }
 
 /**

@@ -49,6 +49,7 @@ struct _egl_device {
    EGLBoolean EXT_device_drm_render_node;
    EGLBoolean EXT_device_query_name;
    EGLBoolean EXT_device_persistent_id;
+   EGLBoolean EXT_device_type;
 
 #ifdef HAVE_LIBDRM
    drmDevicePtr device;
@@ -108,9 +109,10 @@ _eglCheckDeviceHandle(EGLDeviceEXT device)
 
 _EGLDevice _eglSoftwareDevice = {
    /* TODO: EGL_EXT_device_drm support for KMS + llvmpipe */
-   .extensions = "EGL_MESA_device_software EGL_EXT_device_drm_render_node",
+   .extensions = "EGL_MESA_device_software EGL_EXT_device_drm_render_node EGL_EXT_device_type",
    .MESA_device_software = EGL_TRUE,
    .EXT_device_drm_render_node = EGL_TRUE,
+   .EXT_device_type = EGL_TRUE,
 };
 
 #ifdef HAVE_LIBDRM
@@ -162,7 +164,7 @@ _eglAddDRMDevice(drmDevicePtr device)
    if (supports_info_query)
       dev->extensions =
          "EGL_EXT_device_drm EGL_EXT_device_drm_render_node "
-         "EGL_EXT_device_query_name EGL_EXT_device_persistent_id";
+         "EGL_EXT_device_query_name EGL_EXT_device_persistent_id EGL_EXT_device_type";
    else
       dev->extensions = "EGL_EXT_device_drm EGL_EXT_device_drm_render_node";
    dev->EXT_device_drm = EGL_TRUE;
@@ -170,6 +172,7 @@ _eglAddDRMDevice(drmDevicePtr device)
    if (supports_info_query) {
       dev->EXT_device_query_name = EGL_TRUE;
       dev->EXT_device_persistent_id = EGL_TRUE;
+      dev->EXT_device_type = EGL_TRUE;
    }
    dev->device = device;
 
@@ -266,6 +269,8 @@ _eglDeviceSupports(_EGLDevice *dev, _EGLDeviceExtension ext)
       return dev->EXT_device_query_name;
    case _EGL_DEVICE_PERSISTENT_ID:
       return dev->EXT_device_persistent_id;
+   case _EGL_DEVICE_TYPE:
+      return dev->EXT_device_type;
    default:
       assert(0);
       return EGL_FALSE;
@@ -276,10 +281,28 @@ EGLBoolean
 _eglQueryDeviceAttribEXT(_EGLDevice *dev, EGLint attribute, EGLAttrib *value)
 {
    switch (attribute) {
-   default:
-      _eglError(EGL_BAD_ATTRIBUTE, "eglQueryDeviceAttribEXT");
-      return EGL_FALSE;
+   case EGL_DEVICE_TYPE_EXT:
+      if (!_eglDeviceSupports(dev, _EGL_DEVICE_TYPE))
+         break;
+      if (_eglDeviceSupports(dev, _EGL_DEVICE_SOFTWARE)) {
+         *value = EGL_DEVICE_TYPE_CPU_EXT;
+         return EGL_TRUE;
+      }
+#ifdef HAVE_LIBDRM
+      drmDevice *device = _eglDeviceDrm(dev);
+      const char *render_node = device->nodes[DRM_NODE_RENDER];
+      if (!_eglDriver.QueryDeviceInfo(render_node, &dev->device_info)) {
+         _eglError(EGL_BAD_DEVICE_EXT, "eglQueryDeviceAttribEXT");
+         return EGL_FALSE;
+      }
+      *value = dev->device_info.device_type;
+      return EGL_TRUE;
+#else
+      break;
+#endif
    }
+   _eglError(EGL_BAD_ATTRIBUTE, "eglQueryDeviceAttribEXT");
+   return EGL_FALSE;
 }
 
 EGLBoolean

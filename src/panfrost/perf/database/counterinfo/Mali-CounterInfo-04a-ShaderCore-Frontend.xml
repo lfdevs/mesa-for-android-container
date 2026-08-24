@@ -1,0 +1,1066 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2019-2026 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<CounterInfoList>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliAnyActiveCy</MachineName>
+    <SourceName>SHADER_CORE_ACTIVE</SourceName>
+    <StableID>207</StableID>
+    <HumanName>Any shader core workload active cycles</HumanName>
+    <GroupName>Shader Core Cycles</GroupName>
+    <GroupHumanName>Any workload active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when the shader core is processing either a
+      non-fragment workload or a fragment workload.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the shader core is
+      processing any type of workload, irrespective of which queue the workload
+      came from.
+
+      This counter is particularly useful in high-end GPU configurations where
+      it can indicate the shader core clock rate. This rate can be lower than
+      the GPU top-level clock rate.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliAnyUtil</MachineName>
+    <StableID>65596</StableID>
+    <HumanName>Shader core clock ratio</HumanName>
+    <GroupName>Shader Clock Ratio</GroupName>
+    <GroupHumanName>Shader core clock ratio</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      An estimate of shader core use relative to the GPU top-level clock.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage usage of the shader core, relative
+      to the top-level GPU clock.
+
+      To improve energy efficiency, some systems clock the shader cores at a
+      lower frequency than the GPU top-level components. In these systems, the
+      maximum achievable usage value is the clock ratio between the GPU
+      top-level clock and the shader clock. For example, a GPU with an 800MHz
+      top-level clock and a 400MHz shader clock can achieve a maximum usage of
+      50%.
+    </LongDescription>
+    <Equation>
+      (MaliAnyActiveCy / MaliConfigCoreCount / MaliGPUActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliNonFragActiveCy</MachineName>
+    <SourceName>COMPUTE_ACTIVE</SourceName>
+    <StableID>226</StableID>
+    <HumanName>Shader core non-fragment active cycles</HumanName>
+    <GroupName>Shader Core Cycles</GroupName>
+    <GroupHumanName>Non-fragment active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when the shader core is processing some non-fragment
+      workload.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the shader core is
+      processing some non-fragment workload. Active processing includes any
+      cycle that non-fragment work is queued in the fixed-function front-end or
+      programmable core.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliNonFragUtil</MachineName>
+    <StableID>65589</StableID>
+    <HumanName>Shader core non-fragment utilization</HumanName>
+    <GroupName>Shader Core Utilization</GroupName>
+    <GroupHumanName>Non-fragment utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The utilization of the shader core non-fragment path.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the shader core
+      non-fragment path. This counter measures any cycle that a non-fragment
+      workload is active in the fixed-function front-end or programmable core.
+    </LongDescription>
+    <Equation>
+      (MaliNonFragActiveCy / MaliConfigCoreCount / MaliGPUActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliNonFragUtil</MachineName>
+    <StableID>65589</StableID>
+    <HumanName>Shader core non-fragment utilization</HumanName>
+    <GroupName>Shader Core Utilization</GroupName>
+    <GroupHumanName>Non-fragment utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The utilization of the shader core non-fragment path.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the shader core
+      non-fragment path. This counter measures any cycle that a non-fragment
+      workload is active in the fixed-function front-end or programmable core.
+    </LongDescription>
+    <Equation>
+      (MaliNonFragActiveCy / MaliAnyActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliNonFragTask</MachineName>
+    <SourceName>COMPUTE_TASKS</SourceName>
+    <StableID>227</StableID>
+    <HumanName>Non-fragment core tasks</HumanName>
+    <GroupName>Shader Core Tasks</GroupName>
+    <GroupHumanName>Non-fragment tasks</GroupHumanName>
+    <Units>tasks</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of non-fragment tasks issued to the shader core.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every non-fragment task issued to the shader
+      core. The size of these tasks is variable.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Compute</GroupName>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCompOrBinningActiveCy</MachineName>
+    <SourceName>COMPUTE_ACTIVE</SourceName>
+    <StableID>472</StableID>
+    <HumanName>Shader core compute or binning phase active cycles</HumanName>
+    <GroupName>Shader Core Cycles</GroupName>
+    <GroupHumanName>Compute or binning phase active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when the shader core is processing some compute or
+      binning phase workload.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the shader core is
+      processing some compute or binning phase workload. Active processing
+      includes any cycle that compute or binning work is queued in the
+      fixed-function front-end or programmable core.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCompOrBinningUtil</MachineName>
+    <StableID>473</StableID>
+    <HumanName>Shader core Compute or binning phase utilization</HumanName>
+    <GroupName>Shader Core Utilization</GroupName>
+    <GroupHumanName>Compute or binning phase utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The utilization of the shader core compute or binning phase path.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the shader core
+      compute or binning phase path. This counter measures any cycle that a
+      compute or binning phase workload is active in the fixed-function
+      front-end or programmable core.
+    </LongDescription>
+    <Equation>
+      (MaliCompOrBinningActiveCy / MaliAnyActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+        <GroupName>Compute</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliCompOrBinningTask</MachineName>
+    <SourceName>COMPUTE_TASKS</SourceName>
+    <StableID>384</StableID>
+    <HumanName>Non-main phase core tasks</HumanName>
+    <GroupName>Shader Core Tasks</GroupName>
+    <GroupHumanName>Non-main phase tasks</GroupHumanName>
+    <Units>tasks</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced system</Visibility>
+    <ShortDescription>
+      The number of non-main phase tasks issued to the shader core.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every non-main phase task issued to the
+      shader core. The size of these tasks is variable.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Compute</GroupName>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragActiveCy</MachineName>
+    <SourceName>FRAG_ACTIVE</SourceName>
+    <StableID>196</StableID>
+    <HumanName>Shader core fragment active cycles</HumanName>
+    <GroupName>Shader Core Cycles</GroupName>
+    <GroupHumanName>Fragment active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when the shader core is processing a fragment
+      workload.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the shader core is
+      processing some fragment workload. Active processing includes any cycle
+      that fragment work is running anywhere in the fixed-function front-end,
+      fixed-function back-end, or programmable core.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragUtil</MachineName>
+    <StableID>65567</StableID>
+    <HumanName>Shader core fragment utilization</HumanName>
+    <GroupName>Shader Core Utilization</GroupName>
+    <GroupHumanName>Fragment utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The utilization of the shader core fragment path.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the shader core
+      fragment path. This counter measures any cycle that a fragment workload
+      is active in the fixed-function front-end, fixed-function back-end, or
+      programmable core.
+    </LongDescription>
+    <Equation>
+      (MaliFragActiveCy / MaliConfigCoreCount / MaliGPUActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragUtil</MachineName>
+    <StableID>65567</StableID>
+    <HumanName>Shader core fragment utilization</HumanName>
+    <GroupName>Shader Core Utilization</GroupName>
+    <GroupHumanName>Fragment utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The utilization of the shader core fragment path.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the shader core
+      fragment path. This counter measures any cycle that a fragment workload
+      is active in the fixed-function front-end, fixed-function back-end, or
+      programmable core.
+    </LongDescription>
+    <Equation>
+      (MaliFragActiveCy / MaliAnyActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliMainActiveCy</MachineName>
+    <SourceName>FRAG_ACTIVE</SourceName>
+    <StableID>469</StableID>
+    <HumanName>Shader core main phase active cycles</HumanName>
+    <GroupName>Shader Core Cycles</GroupName>
+    <GroupHumanName>Main phase active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when the shader core is processing a main phase
+      workload.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the shader core is
+      processing some main phase workload. Active processing includes any cycle
+      that fragment work is running anywhere in the fixed-function front-end,
+      fixed-function back-end, or programmable core.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliMainUtil</MachineName>
+    <StableID>470</StableID>
+    <HumanName>Shader core main phase utilization</HumanName>
+    <GroupName>Shader Core Utilization</GroupName>
+    <GroupHumanName>Main phase utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The utilization of the shader core main phase path.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the shader core
+      main phase path. This counter measures any cycle that a main phase
+      workload is active in the fixed-function front-end, fixed-function
+      back-end, or programmable core.
+    </LongDescription>
+    <Equation>
+      (MaliMainActiveCy / MaliAnyActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragStagingActiveCy</MachineName>
+    <SourceName>FRAG_FPK_ACTIVE</SourceName>
+    <StableID>212</StableID>
+    <HumanName>Fragment shading staging buffer active cycles</HumanName>
+    <GroupName>Shader Core Cycles</GroupName>
+    <GroupHumanName>Fragment staging buffer active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when at least one quad is waiting in the fragment
+      shading staging buffer.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the fragment shading
+      staging buffer contains at least one quad waiting to be shaded. If this
+      buffer completely drains, a fragment warp cannot be spawned when space
+      for new threads becomes available in the shader core. Keeping this
+      counter high indicates that the fragment front-end is not a bottleneck,
+      and is successfully keeping forward-pressure on fragment shading.
+
+      You can experience reduced performance when the shader core runs below
+      full thread thread occupancy, because the shader core functional units
+      run out of work to process.
+
+      Possible causes for this buffer draining include:
+
+      * Tiles which contain dense geometry that takes longer to rasterize than
+        fragment shade, meaning that the staging buffer drains faster than it
+        fills.
+      * Tiles which contain dense geometry where a high proportion is killed by
+        early ZS or hidden surface removal, meaning that few rasterized quads
+        enter the staging buffer.
+      * Tiles contain layers with complex depth and stencil interactions,
+        causing a layer to stall at early ZS waiting for an older layer to
+        complete late ZS.
+      * Tiles which contain no geometry, meaning that there are no quads to
+        shade, which is common in depth shadow maps for tiles that contain no
+        shadow casters.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragStagingUtil</MachineName>
+    <StableID>65569</StableID>
+    <HumanName>Fragment shading staging buffer utilization</HumanName>
+    <GroupName>Shader Core Utilization</GroupName>
+    <GroupHumanName>Fragment staging buffer utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of fragment cycles when at least one quad is waiting in
+      the fragment shading staging buffer
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of fragment cycles when the
+      fragment shading staging buffer contains at least one quad waiting to be
+      shaded. If this buffer completely drains, a fragment warp cannot be
+      spawned when space for new threads becomes available in the shader core.
+      Keeping this counter high indicates that the fragment front-end is not a
+      bottleneck, and is successfully keeping forward-pressure on fragment
+      shading.
+
+      You can experience reduced performance when the shader core runs below
+      full thread thread occupancy, because the shader core functional units
+      run out of work to process.
+
+      Possible causes for this buffer draining include:
+
+      * Tiles which contain dense geometry that takes longer to rasterize than
+        fragment shade, meaning that the staging buffer drains faster than it
+        fills.
+      * Tiles which contain dense geometry where a high proportion is killed by
+        early ZS or hidden surface removal, meaning that few rasterized quads
+        enter the staging buffer.
+      * Tiles contain layers with complex depth and stencil interactions,
+        causing a layer to stall at early ZS waiting for an older layer to
+        complete late ZS.
+      * Tiles which contain no geometry, meaning that there are no quads to
+        shade, which is common in depth shadow maps for tiles that contain no
+        shadow casters.
+    </LongDescription>
+    <Equation>
+      (MaliFragStagingActiveCy / MaliFragActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragStagingUtil</MachineName>
+    <StableID>65569</StableID>
+    <HumanName>Fragment shading staging buffer utilization</HumanName>
+    <GroupName>Shader Core Utilization</GroupName>
+    <GroupHumanName>Fragment staging buffer utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of fragment cycles when at least one quad is waiting in
+      the fragment shading staging buffer
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of fragment cycles when the
+      fragment shading staging buffer contains at least one quad waiting to be
+      shaded. If this buffer completely drains, a fragment warp cannot be
+      spawned when space for new threads becomes available in the shader core.
+      Keeping this counter high indicates that the fragment front-end is not a
+      bottleneck, and is successfully keeping forward-pressure on fragment
+      shading.
+
+      You can experience reduced performance when the shader core runs below
+      full thread thread occupancy, because the shader core functional units
+      run out of work to process.
+
+      Possible causes for this buffer draining include:
+
+      * Tiles which contain dense geometry that takes longer to rasterize than
+        fragment shade, meaning that the staging buffer drains faster than it
+        fills.
+      * Tiles which contain dense geometry where a high proportion is killed by
+        early ZS or hidden surface removal, meaning that few rasterized quads
+        enter the staging buffer.
+      * Tiles contain layers with complex depth and stencil interactions,
+        causing a layer to stall at early ZS waiting for an older layer to
+        complete late ZS.
+      * Tiles which contain no geometry, meaning that there are no quads to
+        shade, which is common in depth shadow maps for tiles that contain no
+        shadow casters.
+    </LongDescription>
+    <Equation>
+      (MaliFragStagingActiveCy / MaliMainActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragTile</MachineName>
+    <SourceName>FRAG_PTILES</SourceName>
+    <StableID>223</StableID>
+    <HumanName>Tiles</HumanName>
+    <GroupName>Fragment Tiles</GroupName>
+    <GroupHumanName>Tiles</GroupHumanName>
+    <Units>tiles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of tiles processed by the shader core.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every tile processed by the shader core. Note
+      that tiles are normally {{C::MaliGPUTileSize.equation}} x
+      {{C::MaliGPUTileSize.equation}} pixels but can vary depending on
+      per-pixel storage requirements and the tile buffer size of the current
+      GPU.
+
+      This GPU supports full size tiles when using up to and including
+      {{C::MaliGPUMaxPixelStorage.equation}} bits per pixel of color storage.
+      Pixel storage requirements depend on the number of color attachments,
+      their data format, and the number of multi-sampling samples per pixel.
+
+      The most accurate way to get the total pixel count rendered by the
+      application is to use the {{C::MaliFragQueueTask}} counter, because it
+      always counts {{C::MaliFragQueueTaskSize.equation}} x
+      {{C::MaliFragQueueTaskSize.equation}} pixel regions.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragTile</MachineName>
+    <SourceName>FRAG_PTILES</SourceName>
+    <StableID>223</StableID>
+    <HumanName>Tiles</HumanName>
+    <GroupName>Fragment Tiles</GroupName>
+    <GroupHumanName>Tiles</GroupHumanName>
+    <Units>tiles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of tiles processed by the shader core.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every tile processed by the shader core. Note
+      that tiles are normally {{C::MaliGPUTileSize.equation}} x
+      {{C::MaliGPUTileSize.equation}} pixels but can vary depending on
+      per-pixel storage requirements and the tile buffer size of the current
+      GPU.
+
+      This GPU supports full size tiles when using up to and including
+      {{C::MaliGPUMaxPixelStorage.equation}} bits per pixel of color storage.
+      Pixel storage requirements depend on the number of color attachments,
+      their data format, and the number of multi-sampling samples per pixel.
+
+      The most accurate way to get the total pixel count rendered by the
+      application is to use the {{C::MaliFragQueueTask}} counter, because it
+      always counts {{C::MaliFragQueueTaskSize.equation}} x
+      {{C::MaliFragQueueTaskSize.equation}} pixel regions.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragTile</MachineName>
+    <SourceName>FRAG_PTILES</SourceName>
+    <StableID>223</StableID>
+    <HumanName>Tiles</HumanName>
+    <GroupName>Fragment Tiles</GroupName>
+    <GroupHumanName>Tiles</GroupHumanName>
+    <Units>tiles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of tiles processed by the shader core.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every tile processed by the shader core. Note
+      that tiles are normally {{C::MaliGPUTileSize.equation}} x
+      {{C::MaliGPUTileSize.equation}} pixels but can vary depending on
+      per-pixel storage requirements and the tile buffer size of the current
+      GPU.
+
+      This GPU supports full size tiles when using up to and including
+      {{C::MaliGPUMaxPixelStorage.equation}} bits per pixel of color storage.
+      Pixel storage requirements depend on the number of color attachments,
+      their data format, and the number of multi-sampling samples per pixel.
+
+      The most accurate way to get the total pixel count rendered by the
+      application is to use the {{C::MaliMainQueueTask}} counter, because it
+      always counts {{C::MaliMainQueueTaskSize.equation}} x
+      {{C::MaliMainQueueTaskSize.equation}} pixel regions.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragTileKill</MachineName>
+    <SourceName>FRAG_TRANS_ELIM</SourceName>
+    <StableID>224</StableID>
+    <HumanName>Killed unchanged tiles</HumanName>
+    <GroupName>Fragment Tiles</GroupName>
+    <GroupHumanName>Killed unchanged tiles</GroupHumanName>
+    <Units>tiles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of tiles killed by transaction elimination.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every 16x16 pixel tile or tile sub-region
+      killed by a transaction elimination CRC check, where the data is the same
+      as the content already stored in memory.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragTileKillRate</MachineName>
+    <StableID>65586</StableID>
+    <HumanName>Unchanged tile kill percentage</HumanName>
+    <GroupName>Fragment Workload Properties</GroupName>
+    <GroupHumanName>Unchanged tile kill rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of tiles that are killed by transaction elimination.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of tiles that are killed by the
+      transaction elimination CRC check because the content of a tile matches
+      the content already stored in memory.
+
+      A high percentage of tile writes being killed indicates that a
+      significant part of the framebuffer is static from frame to frame.
+      Consider using scissor rectangles to reduce the area that is redrawn. To
+      help manage the partial frame updates for window surfaces consider using
+      the EGL extensions such as:
+
+      * EGL_KHR_partial_update
+      * EGL_EXT_swap_buffers_with_damage
+    </LongDescription>
+    <Equation>
+      (MaliFragTileKill / MaliFragTile) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragTileKillRate</MachineName>
+    <StableID>65586</StableID>
+    <HumanName>Unchanged tile kill percentage</HumanName>
+    <GroupName>Fragment Workload Properties</GroupName>
+    <GroupHumanName>Unchanged tile kill rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of tiles that are killed by transaction elimination.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of tiles that are killed by the
+      transaction elimination CRC check because the content of a tile matches
+      the content already stored in memory.
+
+      A high percentage of tile writes being killed indicates that a
+      significant part of the framebuffer is static from frame to frame.
+      Consider using scissor rectangles to reduce the area that is redrawn. To
+      help manage the partial frame updates for window surfaces consider using
+      the EGL extensions such as:
+
+      * EGL_KHR_partial_update
+      * EGL_EXT_swap_buffers_with_damage
+    </LongDescription>
+    <Equation>
+      (MaliFragTileKill / (4 * MaliFragTile)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragMainPassStallCy</MachineName>
+    <SourceName>FRAG_MAIN_PASS_STALLED_BY_PRE_PASS</SourceName>
+    <StableID>383</StableID>
+    <HumanName>Fragment main pass stall cycles</HumanName>
+    <GroupName>Shader Core Stall Cycles</GroupName>
+    <GroupHumanName>Fragment main pass stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when the fragment main pass is stalled waiting for
+      prepass results.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when a fragment main pass
+      cannot start because it is waiting for a fragment prepass hidden surface
+      removal result.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliFragMainPassStallRate</MachineName>
+    <StableID>463</StableID>
+    <HumanName>Fragment main pass stall percentage</HumanName>
+    <GroupName>Fragment Prepass Properties</GroupName>
+    <GroupHumanName>Main pass stall rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of cycles when the fragment main pass is stalled by the
+      fragment prepass.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of cycles when the fragment main
+      pass is stalled waiting for the fragment prepass hidden surface removal
+      to complete.
+
+      A high percentage here indicates that the fragment prepass is a
+      bottleneck. This can be caused by a high amount of geometry or a high
+      number of primitives needing prepass shading.
+    </LongDescription>
+    <Equation>
+      (MaliFragMainPassStallCy / MaliMainActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Fragments</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+</CounterInfoList>

@@ -2574,6 +2574,38 @@
     <src lane="26">B</src>
   </ins>
 
+  <group name="MMUL" title="Cooperative matrix multiply" dests="1" unit="FMA">
+    <ins name="MMUL.v4s8">
+      <opcode>
+        <op val="0x100" start="48" mask="0x1FF"/>
+      </opcode>
+    </ins>
+    <ins name="MMUL.v4u8">
+      <opcode>
+        <op val="0x101" start="48" mask="0x1FF"/>
+      </opcode>
+    </ins>
+    <ins name="MMUL.f32">
+      <opcode>
+        <op val="0x102" start="48" mask="0x1FF"/>
+      </opcode>
+    </ins>
+    <ins name="MMUL.v2f16">
+      <opcode>
+        <op val="0x103" start="48" mask="0x1FF"/>
+      </opcode>
+    </ins>
+    <desc>
+      4x4 cooperative matrix multiply and accumulate, calculating
+      $A \cdot B + C$. The matrices are spread across the subgroup with one
+      element per lane. The destination register must differ from A and B
+      (it may reuse the accumulator C).
+    </desc>
+    <src>A</src>
+    <src>B</src>
+    <src>C</src>
+  </group>
+
   <group name="ISUB" title="Integer subtract" dests="1" unused="true" unit="CVT">
     <ins name="ISUB.u32">
       <opcode>

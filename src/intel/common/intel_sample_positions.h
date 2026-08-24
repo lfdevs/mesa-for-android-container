@@ -41,19 +41,6 @@ extern const struct intel_sample_position intel_sample_positions_4x[];
 extern const struct intel_sample_position intel_sample_positions_8x[];
 extern const struct intel_sample_position intel_sample_positions_16x[];
 
-static inline const struct intel_sample_position *
-intel_get_sample_positions(int samples)
-{
-   switch (samples) {
-   case 1: return intel_sample_positions_1x;
-   case 2: return intel_sample_positions_2x;
-   case 4: return intel_sample_positions_4x;
-   case 8: return intel_sample_positions_8x;
-   case 16: return intel_sample_positions_16x;
-   default: UNREACHABLE("Invalid sample count");
-   }
-}
-
 /* Examples:
  * in case of GFX_VER < 8:
  * INTEL_SAMPLE_POS_ELEM(ms.Sample, info->pSampleLocations, 0); expands to:
@@ -93,24 +80,6 @@ prefix##sample_idx##YOffset = CLAMP(arr[sample_idx].y, 0.0, 0.9375);
    INTEL_SAMPLE_POS_ELEM(prefix, arr, 6); \
    INTEL_SAMPLE_POS_ELEM(prefix, arr, 7);
 
-#define INTEL_SAMPLE_POS_16X_ARRAY(prefix, arr) \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 0); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 1); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 2); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 3); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 4); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 5); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 6); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 7); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 8); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 9); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 10); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 11); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 12); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 13); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 14); \
-   INTEL_SAMPLE_POS_ELEM(prefix, arr, 15);
-
 #define INTEL_SAMPLE_POS_1X(prefix) \
    INTEL_SAMPLE_POS_1X_ARRAY(prefix, intel_sample_positions_1x)
 
@@ -122,8 +91,5 @@ prefix##sample_idx##YOffset = CLAMP(arr[sample_idx].y, 0.0, 0.9375);
 
 #define INTEL_SAMPLE_POS_8X(prefix) \
    INTEL_SAMPLE_POS_8X_ARRAY(prefix, intel_sample_positions_8x)
-
-#define INTEL_SAMPLE_POS_16X(prefix) \
-   INTEL_SAMPLE_POS_16X_ARRAY(prefix, intel_sample_positions_16x)
 
 #endif /* INTEL_SAMPLE_POSITIONS_H */

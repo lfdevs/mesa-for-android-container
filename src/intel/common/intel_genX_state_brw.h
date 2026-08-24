@@ -30,6 +30,7 @@
 
 #include <stdbool.h>
 
+#include "common/intel_common.h"
 #include "dev/intel_device_info.h"
 #include "genxml/gen_macros.h"
 
@@ -121,12 +122,9 @@ intel_set_ps_dispatch_state(struct GENX(3DSTATE_PS) *ps,
     *     SIMD32 Dispatch must not be enabled for PER_PIXEL dispatch
     *     mode."
     *
-    * 16x MSAA only exists on Gfx9+, so we can skip this on Gfx8.
+    * 16x MSAA only exists on Gfx9+, we choose to not support it.
     */
-   if (GFX_VER >= 9 && GFX_VER < 20 && rasterization_samples == 16 && !prog_data->persample_dispatch) {
-      assert(enable_8 || enable_16);
-      enable_32 = false;
-   }
+   assert(rasterization_samples < 16);
 
    assert(enable_8 || enable_16 || enable_32 ||
           (GFX_VER >= 12 && dispatch_multi));

@@ -460,7 +460,7 @@ lower_round_even(nir_builder *b, nir_def *src)
 
    unsigned old_fp_math_ctrl = b->fp_math_ctrl;
    b->fp_math_ctrl |= nir_fp_exact;
-   nir_def *res = nir_fsub(b, nir_fadd(b, nir_fabs(b, src), two52), two52);
+   nir_def *res = nir_fsub(b, nir_fadd_rtne(b, nir_fabs(b, src), two52), two52);
    b->fp_math_ctrl = old_fp_math_ctrl;
 
    return nir_bcsel(b, nir_flt(b, nir_fabs(b, src), two52),

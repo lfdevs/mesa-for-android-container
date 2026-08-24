@@ -115,8 +115,11 @@ fdl6_format_swiz(enum pipe_format format, bool has_z24uint_s8uint,
          format_swiz[1] = PIPE_SWIZZLE_X;
          format_swiz[2] = PIPE_SWIZZLE_X;
          format_swiz[3] = PIPE_SWIZZLE_Y;
-      } else if (!util_format_has_alpha(format)) {
-         /* for rgbx, force A to 1.  Harmless for R/RG, where we already get 1. */
+      } else if (util_format_get_nr_components(format) >= 3 && !util_format_has_alpha(format)) {
+         /* For GL's RGB/RGBX, force A to 1. We can't do this on R/RG, because it breaks
+          * QCOM_image_processing filtering (where image component substitution
+          * happens before filtering).
+          */
          format_swiz[3] = PIPE_SWIZZLE_1;
       }
       break;

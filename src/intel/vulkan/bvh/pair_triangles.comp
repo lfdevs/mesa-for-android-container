@@ -1,0 +1,27 @@
+/*
+ * Copyright © 2026 Intel Corporation
+ * SPDX-License-Identifier: MIT
+ */
+
+#version 460
+
+/* Intel HW has limitation on second triangle index. HW has 16-bit wide offset
+ * from first triangle primID. If that exceeds, we can't club two triangles in
+ * to one quad.
+ */
+
+void
+driver_should_merge_primitives(inout bool should_merge, uint32_t t0_id,
+                               uint32_t t1_id)
+{
+   if (!should_merge)
+      return;
+
+   uint32_t id1 = t1_id & 0xfffffff;
+   uint32_t id_delta = (t0_id > id1) ? (t0_id - id1) : (id1 - t0_id);
+
+   if (id_delta > 0xFFFF)
+       should_merge = false;
+}
+
+#include "pair_triangles.h"

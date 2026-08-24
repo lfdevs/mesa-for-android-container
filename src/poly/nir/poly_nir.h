@@ -83,7 +83,7 @@ struct poly_passthrough_gs_key {
    /* Decomposed primitive */
    enum mesa_prim prim;
 
-   /* Transform feedback info. Must use hk_passthrough_gs_key_size to get the
+   /* Transform feedback info. Must use poly_passthrough_gs_key_size to get the
     * key size */
     nir_xfb_info xfb_info;
  };

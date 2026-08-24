@@ -1080,8 +1080,8 @@ print_draw_arrays(struct gl_context *ctx,
 
    GLbitfield mask = vao->Enabled;
    while (mask) {
-      const gl_vert_attrib i = u_bit_scan(&mask);
-      const struct gl_array_attributes *array = &vao->VertexAttrib[i];
+      const gl_vert_attrib vai = u_bit_scan(&mask);
+      const struct gl_array_attributes *array = &vao->VertexAttrib[vai];
 
       const struct gl_vertex_buffer_binding *binding =
          &vao->BufferBinding[array->BufferBindingIndex];
@@ -1089,7 +1089,7 @@ print_draw_arrays(struct gl_context *ctx,
 
       printf("attr %s: size %d stride %d  "
              "ptr %p  Bufobj %u\n",
-             gl_vert_attrib_name((gl_vert_attrib) i),
+             gl_vert_attrib_name((gl_vert_attrib) vai),
              array->Format.User.Size, binding->Stride,
              array->Ptr, bufObj ? bufObj->Name : 0);
 
@@ -2009,7 +2009,6 @@ _mesa_validated_multidrawelements(struct gl_context *ctx,
 {
    uintptr_t min_index_ptr, max_index_ptr;
    bool fallback = false;
-   int i;
 
    if (primcount == 0)
       return;
@@ -2018,7 +2017,7 @@ _mesa_validated_multidrawelements(struct gl_context *ctx,
 
    min_index_ptr = (uintptr_t) indices[0];
    max_index_ptr = 0;
-   for (i = 0; i < primcount; i++) {
+   for (int i = 0; i < primcount; i++) {
       if (count[i]) {
          min_index_ptr = MIN2(min_index_ptr, (uintptr_t) indices[i]);
          max_index_ptr = MAX2(max_index_ptr, (uintptr_t) indices[i] +
@@ -2033,7 +2032,7 @@ _mesa_validated_multidrawelements(struct gl_context *ctx,
     * the index/element size.
     */
    if (index_size_shift) {
-      for (i = 0; i < primcount; i++) {
+      for (int i = 0; i < primcount; i++) {
          if (count[i] &&
              (((uintptr_t)indices[i] - min_index_ptr) &
               ((1 << index_size_shift) - 1)) != 0) {

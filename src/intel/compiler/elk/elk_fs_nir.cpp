@@ -1165,7 +1165,11 @@ fs_nir_emit_alu(nir_to_elk_state &ntb, nir_alu_instr *instr,
       break;
 
    case nir_op_fadd:
-      if (nir_has_any_rounding_mode_enabled(execution_mode)) {
+   case nir_op_fadd_rtne:
+      if (instr->op == nir_op_fadd_rtne) {
+         bld.exec_all().emit(ELK_SHADER_OPCODE_RND_MODE, bld.null_reg_ud(),
+                             elk_imm_d(ELK_RND_MODE_RTNE));
+      } else if (nir_has_any_rounding_mode_enabled(execution_mode)) {
          elk_rnd_mode rnd =
             elk_rnd_mode_from_execution_mode(execution_mode);
          bld.exec_all().emit(ELK_SHADER_OPCODE_RND_MODE, bld.null_reg_ud(),

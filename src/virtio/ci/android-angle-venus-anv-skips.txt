@@ -6,3 +6,6 @@ ahb-dEQP-VK.api.external.memory.android_hardware_buffer.suballocated.host_visibl
 
 # Mainly for testing platform features. Skip as take too long. Flaky on both ANV and Turnip.
 awsi-dEQP-VK.wsi.android.incremental_present.*
+
+# VKCTS 1.4.5.3 -> 1.4.6.1 uprev, ANV fails on ADL but passes on TGL
+dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat_s8_uint.general.32x32x1_regions

@@ -83,6 +83,8 @@ lima_ioctl_gem_info(int fd, unsigned long request, void *arg)
    gem_info->va = bo->mem_addr;
    gem_info->offset = drm_shim_bo_get_mmap_offset(shim_fd, bo);
 
+   drm_shim_bo_put(bo);
+
    return 0;
 }
 

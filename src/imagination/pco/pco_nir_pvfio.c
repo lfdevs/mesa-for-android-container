@@ -34,15 +34,6 @@ struct pfo_state {
    /* Src for depth feedback (NULL if unused). */
    nir_def *depth_feedback_src;
 
-   nir_def *discard_cond_reg;
-   bool has_discards;
-
-   nir_intrinsic_instr *last_discard_store;
-
-   bool has_sample_check;
-
-   /* nir_instr *terminate; */
-
    pco_fs_data *fs; /** Fragment-specific data. */
 };
 
@@ -462,52 +453,17 @@ static bool lower_pfo(nir_builder *b, nir_intrinsic_instr *intr, void *cb_data)
 
       if (sem.location == FRAG_RESULT_DEPTH) {
          assert(!state->depth_feedback_src);
-         state->depth_feedback_src = nir_fsat(b, intr->src[0].ssa);
+         state->depth_feedback_src = intr->src[0].ssa;
 
          nir_instr_remove(&intr->instr);
          return true;
       }
 
-      if (sem.location == FRAG_RESULT_SAMPLE_MASK) {
-         nir_def *smp_msk =
-            nir_ishl(b, nir_imm_int(b, 1), nir_load_sample_id(b));
-
-         smp_msk = nir_iand(b, smp_msk, nir_load_sample_mask_in(b));
-         smp_msk = nir_iand(b, smp_msk, intr->src[0].ssa);
-         nir_def *cond = nir_ieq_imm(b, smp_msk, 0);
-
-         state->has_discards = true;
-         state->has_sample_check = true;
-         nir_def *val = nir_load_reg(b, state->discard_cond_reg);
-         val = nir_ior(b, val, cond);
-         state->last_discard_store =
-            nir_build_store_reg(b, val, state->discard_cond_reg);
-         nir_instr_remove(&intr->instr);
-         return true;
-      }
-
-      UNREACHABLE("");
+      UNREACHABLE("Unhandled fragment output location.");
    }
 
    case nir_intrinsic_load_output:
       return lower_pfo_load(b, intr, state);
-
-   case nir_intrinsic_demote:
-      state->has_discards = true;
-      state->last_discard_store =
-         nir_build_store_reg(b, nir_imm_true(b), state->discard_cond_reg);
-      nir_instr_remove(&intr->instr);
-      return true;
-
-   case nir_intrinsic_demote_if: {
-      state->has_discards = true;
-      nir_def *val = nir_load_reg(b, state->discard_cond_reg);
-      val = nir_ior(b, val, intr->src[0].ssa);
-      state->last_discard_store =
-         nir_build_store_reg(b, val, state->discard_cond_reg);
-      nir_instr_remove(&intr->instr);
-      return true;
-   }
 
    default:
       break;
@@ -516,18 +472,60 @@ static bool lower_pfo(nir_builder *b, nir_intrinsic_instr *intr, void *cb_data)
    return false;
 }
 
+static inline void insert_sample_check(nir_builder *b, nir_def *sample_mask_out)
+{
+   nir_def *mask = nir_ishl(b, nir_imm_int(b, 1), nir_load_sample_id(b));
+   mask = nir_iand(b, mask, nir_load_sample_mask_in(b));
+   if (sample_mask_out)
+      mask = nir_iand(b, mask, sample_mask_out);
+
+   nir_discard_if(b, nir_ieq_imm(b, mask, 0));
+}
+
+static bool lower_sample_mask_out(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *cb_data)
+{
+   b->cursor = nir_before_instr(&intr->instr);
+
+   if (intr->intrinsic != nir_intrinsic_store_output)
+      return false;
+
+   if (nir_intrinsic_io_semantics(intr).location != FRAG_RESULT_SAMPLE_MASK)
+      return false;
+
+   insert_sample_check(b, intr->src[0].ssa);
+   nir_instr_remove(&intr->instr);
+
+   return true;
+}
+
+bool pco_nir_lower_sample_mask_out(nir_shader *shader)
+{
+   bool progress = nir_shader_intrinsics_pass(shader, lower_sample_mask_out, nir_metadata_control_flow, NULL);
+   if (progress)
+      return true;
+
+   /* If the sample check isn't present, then add one ourselves. */
+   nir_builder b = nir_builder_at(
+      nir_before_block(nir_start_block(nir_shader_get_entrypoint(shader))));
+
+   insert_sample_check(&b, NULL);
+
+   return true;
+}
+
 static bool lower_isp_fb(nir_builder *b, struct pfo_state *state)
 {
-   bool has_depth_feedback = !!state->depth_feedback_src;
-   if (b->shader->info.writes_memory && !has_depth_feedback) {
-      nir_variable *var_pos = nir_get_variable_with_location(b->shader,
+   nir_shader *shader = b->shader;
+   if ((shader->info.writes_memory || state->fs->z_replicate != ~0u) &&
+       !state->depth_feedback_src) {
+      nir_variable *var_pos = nir_get_variable_with_location(shader,
                                                              nir_var_shader_in,
                                                              VARYING_SLOT_POS,
                                                              glsl_vec4_type());
       var_pos->data.interpolation = INTERP_MODE_NOPERSPECTIVE;
 
       b->cursor = nir_before_block(
-         nir_start_block(nir_shader_get_entrypoint(b->shader)));
+         nir_start_block(nir_shader_get_entrypoint(shader)));
 
       state->depth_feedback_src =
          nir_load_input(b,
@@ -540,24 +538,6 @@ static bool lower_isp_fb(nir_builder *b, struct pfo_state *state)
                            .location = VARYING_SLOT_POS,
                            .num_slots = 1,
                         });
-
-      has_depth_feedback = true;
-   }
-
-   if (!state->has_sample_check) {
-      b->cursor = nir_after_instr(&state->last_discard_store->instr);
-
-      nir_def *smp_msk = nir_ishl(b, nir_imm_int(b, 1), nir_load_sample_id(b));
-      smp_msk = nir_iand(b, smp_msk, nir_load_sample_mask_in(b));
-      nir_def *cond = nir_ieq_imm(b, smp_msk, 0);
-
-      nir_def *val = nir_load_reg(b, state->discard_cond_reg);
-      val = nir_ior(b, val, cond);
-      state->last_discard_store =
-         nir_build_store_reg(b, val, state->discard_cond_reg);
-
-      state->has_sample_check = true;
-      state->has_discards = true;
    }
 
    /* Insert isp feedback instruction before the first store,
@@ -568,18 +548,84 @@ static bool lower_isp_fb(nir_builder *b, struct pfo_state *state)
          &(*(nir_intrinsic_instr **)util_dynarray_begin(&state->stores))->instr);
    else
       b->cursor = nir_after_block(
-         nir_impl_last_block(nir_shader_get_entrypoint(b->shader)));
+         nir_impl_last_block(nir_shader_get_entrypoint(shader)));
 
    nir_def *undef = nir_undef(b, 1, 32);
 
-   nir_isp_feedback_pco(
-      b,
-      state->has_discards ? nir_i2b(b, nir_load_reg(b, state->discard_cond_reg))
-                          : undef,
-      has_depth_feedback ? state->depth_feedback_src : undef);
+   nir_def *discard_cond = nir_is_helper_invocation(b, 1);
 
-   state->fs->uses.discard = state->has_discards;
-   state->fs->uses.depth_feedback = has_depth_feedback;
+   /* Drop depth writes and discard cond if early fragment tests. */
+   if (shader->info.fs.early_fragment_tests) {
+      state->depth_feedback_src = NULL;
+      discard_cond = NULL;
+   } else if (state->depth_feedback_src) {
+      /* Clamp depth to [0..1] */
+      state->depth_feedback_src = nir_fsat(b, state->depth_feedback_src);
+   }
+
+   if (discard_cond || state->depth_feedback_src) {
+      nir_isp_feedback_pco(b,
+            discard_cond ? discard_cond : undef,
+            state->depth_feedback_src ? state->depth_feedback_src : undef);
+   }
+
+   state->fs->uses.discard = !!discard_cond;
+   state->fs->uses.depth_feedback = !!state->depth_feedback_src;
+
+   return true;
+}
+
+static void cond_disable_frag_store(nir_builder *b,
+                                    nir_intrinsic_instr *store,
+                                    nir_def *cond)
+{
+   b->cursor = nir_before_instr(&store->instr);
+
+   nir_src *input_src = &store->src[0];
+   nir_def *input = input_src->ssa;
+   nir_def *offset = store->src[1].ssa;
+
+   struct nir_io_semantics io_semantics = nir_intrinsic_io_semantics(store);
+   io_semantics.fb_fetch_output = true;
+
+   nir_def *prev_input =
+      nir_load_output(b,
+                      input->num_components,
+                      input->bit_size,
+                      offset,
+                      .base = nir_intrinsic_base(store),
+                      .range = nir_intrinsic_range(store),
+                      .component = nir_intrinsic_component(store),
+                      .dest_type = nir_intrinsic_src_type(store),
+                      .io_semantics = io_semantics);
+
+   nir_src_rewrite(input_src,
+                   nir_bcsel(b, cond, prev_input, input));
+}
+
+/* When early fragment testing is enabled, rather than using ISP feedback to
+ * suppress pixel writes, use the accumulated discard conditions (via
+ * is_helper_invocation) to disable the writes by selecting between the previous
+ * framebuffer values and the ones being written instead.
+ */
+static bool handle_early_frag(nir_shader *shader, struct pfo_state *state)
+{
+   if (!state->stores.size)
+      return false;
+
+   nir_builder b = nir_builder_create(nir_shader_get_entrypoint(shader));
+   b.cursor = nir_before_instr(
+      &(*(nir_intrinsic_instr **)util_dynarray_begin(&state->stores))->instr);
+
+   /* TODO: should this actually be emitted before every store rather than just
+    * after the first one? is_helper_invocation result is position-dependent (on
+    * discards)!
+    */
+   nir_def *is_helper = nir_is_helper_invocation(&b, 1);
+
+   util_dynarray_foreach (&state->stores, nir_intrinsic_instr *, store) {
+      cond_disable_frag_store(&b, *store, is_helper);
+   }
 
    return true;
 }
@@ -615,28 +661,7 @@ static bool z_replicate(nir_shader *shader, struct pfo_state *state)
                                      state->fs->z_replicate,
                                      glsl_float_type());
 
-   if (!state->depth_feedback_src) {
-      nir_variable *var_pos = nir_get_variable_with_location(shader,
-                                                             nir_var_shader_in,
-                                                             VARYING_SLOT_POS,
-                                                             glsl_vec4_type());
-      var_pos->data.interpolation = INTERP_MODE_NOPERSPECTIVE;
-
-      nir_builder b = nir_builder_at(
-         nir_before_block(nir_start_block(nir_shader_get_entrypoint(shader))));
-
-      state->depth_feedback_src =
-         nir_load_input(&b,
-                        1,
-                        32,
-                        nir_imm_int(&b, 0),
-                        .component = 2,
-                        .dest_type = nir_type_float32,
-                        .io_semantics = (nir_io_semantics){
-                           .location = VARYING_SLOT_POS,
-                           .num_slots = 1,
-                        });
-   }
+   assert(state->depth_feedback_src);
 
    nir_builder b = nir_builder_at(
       nir_after_block(nir_impl_last_block(nir_shader_get_entrypoint(shader))));
@@ -661,13 +686,9 @@ static bool lower_demote_samples(nir_builder *b,
       return false;
 
    b->cursor = nir_before_instr(&intr->instr);
-   nir_def *to_keep = nir_u2u32(b, nir_inot(b, intr->src[0].ssa));
-   nir_def *sample_mask = nir_load_savmsk_vm_pco(b);
-   nir_def *current_mask =
-      nir_ishl(b, nir_imm_int(b, 1), nir_load_sample_id(b));
-   nir_def *cond = nir_iand(b, to_keep, nir_iand(b, sample_mask, current_mask));
-   nir_demote_if(b, nir_ieq_imm(b, cond, 0));
 
+   nir_def *to_keep = nir_u2u32(b, nir_inot(b, intr->src[0].ssa));
+   insert_sample_check(b, to_keep);
    nir_instr_remove(&intr->instr);
 
    return true;
@@ -736,36 +757,6 @@ static bool lower_alpha_to_one(nir_builder *b,
    return true;
 }
 
-static bool is_load_sample_mask(const nir_instr *instr,
-                                UNUSED const void *cb_data)
-{
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   return intr->intrinsic == nir_intrinsic_load_sample_mask_in;
-}
-
-static bool lower_load_sample_mask(nir_builder *b,
-                                   nir_intrinsic_instr *intr,
-                                   UNUSED void *cb_data)
-{
-   if (intr->intrinsic != nir_intrinsic_load_sample_mask_in)
-      return false;
-
-   b->cursor = nir_before_instr(&intr->instr);
-
-   nir_def *smp_msk =
-      nir_ubitfield_extract_imm(b,
-                                nir_load_fs_meta_pco(b),
-                                PVR_FS_META_SAMPLE_MASK_OFFSET,
-                                PVR_FS_META_SAMPLE_MASK_LENGTH);
-   smp_msk = nir_iand(b, smp_msk, nir_load_savmsk_vm_pco(b));
-   nir_def_rewrite_uses(&intr->def, smp_msk);
-   nir_instr_remove(&intr->instr);
-   return true;
-}
-
 static bool lower_color_write_enable(nir_builder *b,
                                      nir_intrinsic_instr *intr,
                                      UNUSED void *cb_data)
@@ -777,18 +768,12 @@ static bool lower_color_write_enable(nir_builder *b,
    if (!(location >= FRAG_RESULT_DATA0 && location < FRAG_RESULT_MAX))
       return false;
 
-   nir_src *input_src = &intr->src[0];
-   nir_def *input = input_src->ssa;
-   nir_def *offset = intr->src[1].ssa;
-
    struct nir_io_semantics io_semantics = nir_intrinsic_io_semantics(intr);
    unsigned color_write_index = io_semantics.location - FRAG_RESULT_DATA0;
-   io_semantics.fb_fetch_output = true;
 
    b->cursor = nir_before_instr(&intr->instr);
 
-   /* TODO: nir op that returns bool based on whether a bit is set. */
-   nir_def *color_write_enabled = nir_ine_imm(
+   nir_def *color_write_disabled = nir_ieq_imm(
       b,
       nir_ubitfield_extract_imm(b,
                                 nir_load_fs_meta_pco(b),
@@ -797,20 +782,7 @@ static bool lower_color_write_enable(nir_builder *b,
                                 1u),
       0);
 
-   nir_def *prev_input =
-      nir_load_output(b,
-                      input->num_components,
-                      input->bit_size,
-                      offset,
-                      .base = nir_intrinsic_base(intr),
-                      .range = nir_intrinsic_range(intr),
-                      .component = nir_intrinsic_component(intr),
-                      .dest_type = nir_intrinsic_src_type(intr),
-                      .io_semantics = io_semantics);
-
-   nir_src_rewrite(input_src,
-                   nir_bcsel(b, color_write_enabled, input, prev_input));
-
+   cond_disable_frag_store(b, intr, color_write_disabled);
    return true;
 }
 
@@ -831,10 +803,7 @@ bool pco_nir_pfo(nir_shader *shader, pco_fs_data *fs)
 
    struct pfo_state state = {
       .fs = fs,
-      .discard_cond_reg = nir_decl_reg(&b, 1, 1, 0),
    };
-   state.last_discard_store =
-      nir_build_store_reg(&b, nir_imm_false(&b), state.discard_cond_reg);
 
    state.loads = UTIL_DYNARRAY_INIT;
    state.stores = UTIL_DYNARRAY_INIT;
@@ -869,15 +838,13 @@ bool pco_nir_pfo(nir_shader *shader, pco_fs_data *fs)
    if (!shader->info.internal)
       progress |= lower_isp_fb(&b, &state);
 
+   if (shader->info.fs.early_fragment_tests)
+      progress |= handle_early_frag(shader, &state);
+
    progress |= sink_outputs(shader, &state);
 
    if (!shader->info.internal)
       progress |= z_replicate(shader, &state);
-
-   progress |= nir_shader_intrinsics_pass(shader,
-                                          lower_load_sample_mask,
-                                          nir_metadata_control_flow,
-                                          NULL);
 
    util_dynarray_fini(&state.stores);
    util_dynarray_fini(&state.loads);
@@ -1090,13 +1057,37 @@ static bool lower_front_face(nir_builder *b, nir_intrinsic_instr *intr)
    return true;
 }
 
+static bool lower_sample_mask_in(nir_builder *b, nir_intrinsic_instr *intr)
+{
+   nir_def *mask =
+      nir_ubitfield_extract_imm(b,
+                                nir_load_fs_meta_pco(b),
+                                PVR_FS_META_SAMPLE_MASK_OFFSET,
+                                PVR_FS_META_SAMPLE_MASK_LENGTH);
+   mask = nir_iand(b, mask, nir_load_savmsk_vm_pco(b));
+   nir_def_rewrite_uses(&intr->def, mask);
+   nir_instr_remove(&intr->instr);
+   return true;
+}
+
 static bool
 lower_fs_intr(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *cb_data)
 {
+   b->cursor = nir_before_instr(&intr->instr);
+
    switch (intr->intrinsic) {
    case nir_intrinsic_load_front_face:
-      b->cursor = nir_before_instr(&intr->instr);
       return lower_front_face(b, intr);
+
+   case nir_intrinsic_load_sample_mask_in:
+      return lower_sample_mask_in(b, intr);
+
+   /* Drop these, already handled by nir_lower_is_helper_invocation. */
+   case nir_intrinsic_demote:
+   case nir_intrinsic_demote_if:
+      nir_instr_remove(&intr->instr);
+      return true;
+
    default:
       break;
    }
@@ -1301,6 +1292,33 @@ static nir_def *alu_iter(nir_builder *b,
    return result;
 }
 
+static nir_def *fs_is_single_sampled_covmsk(nir_builder *b)
+{
+   nir_def *msaa_samples = nir_bit_count(
+      b,
+      nir_u2u32(b, nir_alpha_to_coverage(b, nir_imm_float(b, 1.0f))));
+
+   return nir_ieq_imm(b, msaa_samples, 1);
+}
+
+static nir_def *fs_is_single_sampled_meta(nir_builder *b)
+{
+   return nir_ieq_imm(
+      b,
+      nir_ubitfield_extract_imm(b,
+                                nir_load_fs_meta_pco(b),
+                                PVR_FS_META_SAMPLE_SHADING,
+                                PVR_FS_META_SAMPLE_SHADING_LENGTH),
+      0);
+}
+
+/* TODO: revisit */
+static nir_def *fs_is_single_sampled(nir_builder *b)
+{
+   return b->shader->info.internal ? fs_is_single_sampled_covmsk(b)
+                                   : fs_is_single_sampled_meta(b);
+}
+
 static bool
 lower_sample_pos(nir_builder *b, nir_intrinsic_instr *intr, pco_fs_data *fs)
 {
@@ -1334,7 +1352,7 @@ lower_sample_pos(nir_builder *b, nir_intrinsic_instr *intr, pco_fs_data *fs)
    sample_location = nir_u2f32(b, sample_location);
    sample_location = nir_fdiv_imm(b, sample_location, 16.0f);
    sample_location = nir_bcsel(b,
-                               nir_ieq_imm(b, msaa_samples, 1),
+                               fs_is_single_sampled(b),
                                nir_imm_vec2(b, 0.5f, 0.5f),
                                sample_location);
 

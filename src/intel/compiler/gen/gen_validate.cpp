@@ -417,9 +417,18 @@ private:
    {
       assert(inst->opcode == GEN_OP_MATH);
 
+      if (inst->math.func == GEN_MATH_FDIV || inst->math.func == GEN_MATH_TANH) {
+         /* Same value as GEN_MATH_TANH but TANH is only supported in GFX35+
+          * while FDIV is only supported up to GFX12.5.
+          * TAHN don't require src1 while FDIV requries.
+          */
+         if (devinfo->verx10 >= 350)
+            return false;
+         return true;
+      }
+
       switch (inst->math.func) {
       case GEN_MATH_POW:
-      case GEN_MATH_FDIV:
       case GEN_MATH_INT_DIV_BOTH:
       case GEN_MATH_INT_DIV_QUOTIENT:
       case GEN_MATH_INT_DIV_REMAINDER:
@@ -435,6 +444,8 @@ private:
       case GEN_MATH_COS:
       case GEN_MATH_RSQRTM:
          return false;
+      default:
+         UNREACHABLE("unhandles math function");
       }
 
       return true;
@@ -542,8 +553,8 @@ private:
                   "AccWrControl is not present on Gfx20+.");
       }
 
-      /* TODO: Consider Large GRF for certain Xe platforms that support it. */
-      const unsigned max_grf = devinfo->ver >= 20 ? 256 : 128;
+      /* DG2-Xe2: 256 (Large GRF), Xe3: 256 (VRT) */
+      const unsigned max_grf = devinfo->verx10 >= 125 ? 256 : 128;
 
       if (gen_inst_has_dst(inst->opcode)) {
          ERROR_IF(!inst->dst.indirect &&
@@ -823,6 +834,14 @@ private:
    {
       if (gen_inst_is_send(inst))
          return;
+
+      if (inst->opcode == GEN_OP_MAD &&
+          (inst->dst.type == GEN_TYPE_D || inst->dst.type == GEN_TYPE_UD) &&
+          devinfo->ver >= 12 && devinfo->ver <= 30) {
+         ERROR_IF(inst->src[2].type != GEN_TYPE_W &&
+                  inst->src[2].type != GEN_TYPE_UW,
+                  "When destination of a MAD is DWord, src2 must be Word.");
+      }
 
       if (devinfo->ver >= 11) {
          if (num_sources == 3 && inst->opcode != GEN_OP_DPAS) {
@@ -1581,11 +1600,13 @@ private:
             const bool two_srcs =
                inst->math.func == GEN_MATH_INVM ||
                inst->math.func == GEN_MATH_POW ||
-               inst->math.func == GEN_MATH_FDIV;
+               (inst->math.func == GEN_MATH_FDIV && devinfo->verx10 < 350);
 
             ERROR_IF(devinfo->verx10 >= 125 &&
-                     (inst->math.func == GEN_MATH_POW ||
-                      inst->math.func == GEN_MATH_FDIV),
+                     inst->math.func == GEN_MATH_POW,
+                     "MATH POW and FDIV are not supported on Gfx12.5+.");
+            ERROR_IF(devinfo->verx10 >= 125 && devinfo->verx10 < 350 &&
+                     inst->math.func == GEN_MATH_FDIV,
                      "MATH POW and FDIV are not supported on Gfx12.5+.");
 
             if (ieee_macro && devinfo->verx10 >= 125) {
@@ -1865,6 +1886,34 @@ private:
       }
    }
 
+   bool
+   lsc_data_size_is_2d_block(enum lsc_data_size data_size) const
+   {
+      return data_size == LSC_DATA_SIZE_D8 ||
+             data_size == LSC_DATA_SIZE_D16 ||
+             data_size == LSC_DATA_SIZE_D32 ||
+             data_size == LSC_DATA_SIZE_D64;
+   }
+
+   void
+   lsc_2d_block_restrictions(const gen_lsc_desc &desc)
+   {
+      ERROR_IF(devinfo->ver < 20,
+               "LSC 2D block messages require Xe2+.");
+      ERROR_IF(inst->send.sfid != GEN_SFID_UGM &&
+               inst->send.sfid != GEN_SFID_TGM,
+               "LSC 2D block messages must use UGM or TGM.");
+
+      if (inst->send.sfid == GEN_SFID_UGM) {
+         ERROR_IF(desc.addr_type != LSC_ADDR_SURFTYPE_FLAT,
+                  "UGM 2D block messages require flat A64 addressing.");
+         ERROR_IF(!lsc_data_size_is_2d_block(desc.data_size),
+                  "UGM 2D block messages require d8, d16, d32, or d64 data size.");
+      }
+
+      /* TODO: Add TGM 2D block message restrictions. */
+   }
+
    void
    send_descriptor_restrictions()
    {
@@ -1914,10 +1963,18 @@ private:
          if (!devinfo->has_lsc)
             return;
 
-         ERROR_IF(lsc_opcode_has_transpose(lsc_msg_desc_opcode(devinfo, desc)) &&
-                  lsc_msg_desc_transpose(devinfo, desc) &&
-                  inst->exec_size != 1,
-                  "Transposed LSC vectors are restricted to exec_size=1.");
+         {
+            const gen_lsc_desc lsc_desc = gen_lsc_desc_decode(devinfo, desc);
+
+            if (lsc_opcode_is_2d_block(lsc_desc.op)) {
+               lsc_2d_block_restrictions(lsc_desc);
+               break;
+            }
+
+            ERROR_IF(lsc_opcode_has_transpose(lsc_desc.op) &&
+                     lsc_desc.transpose && inst->exec_size != 1,
+                     "Transposed LSC vectors are restricted to exec_size=1.");
+         }
          break;
 
       default:

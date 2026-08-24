@@ -95,7 +95,17 @@ bo_init_new_dmaheap(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
                        "DMA_HEAP_IOCTL_ALLOC failed (%s)", strerror(errno));
    }
 
-   return tu_bo_init_dmabuf(dev, out_bo, -1, TU_BO_ALLOC_NO_FLAGS, alloc.fd);
+   /* tu_bo_init_dmabuf() only borrows the fd: it keeps a dup of its own in
+    * bo->shared_fd, which is what kgsl_bo_finish() closes. That is correct for
+    * an imported dma-buf, whose fd belongs to the caller, but here the fd is
+    * ours and nobody else will ever drop it. Leaking it keeps the dma-buf
+    * alive after the BO is destroyed, so the memory is never reclaimed.
+    */
+   VkResult result =
+      tu_bo_init_dmabuf(dev, out_bo, -1, TU_BO_ALLOC_NO_FLAGS, alloc.fd);
+   close(alloc.fd);
+
+   return result;
 }
 
 static VkResult
@@ -116,7 +126,12 @@ bo_init_new_ion(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
                        "ION_IOC_NEW_ALLOC failed (%s)", strerror(errno));
    }
 
-   return tu_bo_init_dmabuf(dev, out_bo, -1, TU_BO_ALLOC_NO_FLAGS, alloc.fd);
+   /* See bo_init_new_dmaheap(): the fd is ours to close. */
+   VkResult result =
+      tu_bo_init_dmabuf(dev, out_bo, -1, TU_BO_ALLOC_NO_FLAGS, alloc.fd);
+   close(alloc.fd);
+
+   return result;
 }
 
 static VkResult
@@ -158,7 +173,12 @@ bo_init_new_ion_legacy(struct tu_device *dev, struct tu_bo **out_bo, uint64_t si
                        "ION_IOC_FREE failed (%s)", strerror(errno));
    }
 
-   return tu_bo_init_dmabuf(dev, out_bo, -1, TU_BO_ALLOC_NO_FLAGS, share.fd);
+   /* See bo_init_new_dmaheap(): the fd is ours to close. */
+   VkResult result =
+      tu_bo_init_dmabuf(dev, out_bo, -1, TU_BO_ALLOC_NO_FLAGS, share.fd);
+   close(share.fd);
+
+   return result;
 }
 
 static VkResult

@@ -102,7 +102,6 @@ st_get_sampler_views(struct st_context *st,
    GLbitfield texel_fetch_samplers = prog->info.textures_used_by_txf[0];
    GLbitfield free_slots = ~prog->SamplersUsed;
    GLbitfield external_samplers_used = prog->ExternalSamplersUsed;
-   GLuint unit;
    *extra_sampler_views = 0;
 
    if (samplers_used == 0x0 && old_max == 0)
@@ -113,7 +112,7 @@ st_get_sampler_views(struct st_context *st,
       (prog->shader_program ? prog->shader_program->GLSL_Version : 0) >= 130;
 
    /* loop over sampler units (aka tex image units) */
-   for (unit = 0; unit < num_textures; unit++) {
+   for (GLuint unit = 0; unit < num_textures; unit++) {
       unsigned bit = BITFIELD_BIT(unit);
 
       if (!(samplers_used & bit)) {

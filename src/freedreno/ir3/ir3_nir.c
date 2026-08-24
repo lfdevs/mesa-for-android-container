@@ -321,9 +321,9 @@ ir3_optimize_loop(struct ir3_compiler *compiler,
       if (gcm == -1)
          gcm = debug_get_num_option("GCM", 0);
       if (gcm == 1)
-         progress |= OPT(s, nir_opt_gcm, true);
+         progress |= OPT(s, nir_opt_gcm, true, true);
       else if (gcm == 2)
-         progress |= OPT(s, nir_opt_gcm, false);
+         progress |= OPT(s, nir_opt_gcm, false, true);
       nir_opt_peephole_select_options peephole_select_options = {
          .limit = 16,
          .indirect_load_ok = true,
@@ -594,7 +594,8 @@ lower_shader_clock(struct nir_builder *b, nir_intrinsic_instr *instr, void *data
    if (instr->intrinsic != nir_intrinsic_shader_clock)
       return false;
 
-   uint64_t uche_trap_base = *(uint64_t *)data;
+   struct ir3_compiler *compiler = data;
+   uint64_t uche_trap_base = compiler->options.uche_trap_base;
 
    b->cursor = nir_before_instr(&instr->instr);
    nir_def *clock, *undef;
@@ -603,11 +604,22 @@ lower_shader_clock(struct nir_builder *b, nir_intrinsic_instr *instr, void *data
    {
       /* ALWAYSON counter is mapped to this address. */
       nir_def *base_addr = nir_imm_int64(b, uche_trap_base);
-      /* Reading _LO first presumably latches _HI making the read atomic. */
-      nir_def *clock_lo =
-         nir_load_global_ir3(b, 1, 32, base_addr, nir_imm_int(b, 0));
-      nir_def *clock_hi =
-         nir_load_global_ir3(b, 1, 32, base_addr, nir_imm_int(b, 4));
+
+      nir_io_offset offset_lo =
+         ir3_nir_get_global_offset(b, compiler, nir_imm_int(b, 0), 2);
+      nir_io_offset offset_hi =
+         ir3_nir_get_global_offset(b, compiler, nir_imm_int(b, 1), 2);
+
+      /* Reading _LO first presumably latches _HI making the read atomic. Note
+       * that we mark the accesses volatile to prevent vectorization and
+       * reordering.
+       */
+      nir_def *clock_lo = nir_load_global_offset(
+         b, 1, 32, base_addr, offset_lo.def, .offset_shift = offset_lo.shift,
+         .access = ACCESS_VOLATILE);
+      nir_def *clock_hi = nir_load_global_offset(
+         b, 1, 32, base_addr, offset_hi.def, .offset_shift = offset_hi.shift,
+         .access = ACCESS_VOLATILE);
       clock = nir_vec2(b, clock_lo, clock_hi);
    }
    nir_push_else(b, NULL);
@@ -622,10 +634,10 @@ lower_shader_clock(struct nir_builder *b, nir_intrinsic_instr *instr, void *data
 }
 
 static bool
-ir3_nir_lower_shader_clock(nir_shader *shader, uint64_t uche_trap_base)
+ir3_nir_lower_shader_clock(nir_shader *shader, struct ir3_compiler *compiler)
 {
    return nir_shader_intrinsics_pass(shader, lower_shader_clock,
-                                     nir_metadata_none, &uche_trap_base);
+                                     nir_metadata_none, compiler);
 }
 
 static bool
@@ -776,7 +788,7 @@ ir3_finalize_nir(struct ir3_compiler *compiler,
    OPT(s, ir3_nir_lower_image_processing);
 
    if (compiler->gen >= 6) {
-      OPT(s, ir3_nir_lower_shader_clock, compiler->options.uche_trap_base);
+      OPT(s, ir3_nir_lower_shader_clock, compiler);
    }
 
    OPT(s, nir_lower_is_helper_invocation);
@@ -1041,7 +1053,7 @@ ir3_nir_post_finalize(struct ir3_shader *shader)
       nir_lower_subgroups_options options = {
             .subgroup_size = subgroup_size,
             .ballot_bit_size = 32,
-            .ballot_components = max_subgroup_size / 32,
+            .ballot_components = MAX2(1, max_subgroup_size / 32),
             .lower_to_scalar = true,
             .lower_vote_feq = true,
             .lower_vote_ieq = true,
@@ -1547,12 +1559,11 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so,
    nir_lower_mem_access_bit_sizes_options mem_bit_size_options = {
       .modes = nir_var_mem_constant | nir_var_mem_ubo |
                nir_var_mem_global | nir_var_mem_shared |
-               nir_var_function_temp | nir_var_mem_ssbo,
+               nir_var_function_temp | nir_var_mem_ssbo | nir_var_mem_global,
       .callback = ir3_mem_access_size_align,
    };
 
    progress |= OPT(s, nir_lower_mem_access_bit_sizes, &mem_bit_size_options);
-   progress |= OPT(s, ir3_nir_lower_64b_global);
    progress |= OPT(s, ir3_nir_lower_64b_undef);
    progress |= OPT(s, ir3_nir_lower_64b_image);
    progress |= OPT(s, nir_lower_int64);

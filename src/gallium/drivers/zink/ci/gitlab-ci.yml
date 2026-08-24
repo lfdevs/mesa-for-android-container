@@ -72,7 +72,7 @@ zink-anv-adl:
     FDO_CI_CONCURRENT: 6 # higher is too much, and leads to OOM
     # Xe regression in 6.19
     # https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/7584
-    KERNEL_TAG: "v6.17-mesa-ddf6"
+    KERNEL_TAG: "v6.17-mesa-e9d0"
   parallel: 4
 
 # Manual full run when you want to double-check the full status.

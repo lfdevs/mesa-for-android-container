@@ -51,67 +51,6 @@ ir3_nir_lower_64b_undef(nir_shader *shader)
 }
 
 /*
- * Lowering for load_global/store_global with 64b addresses to ir3 variants,
- * which have an additional arg that is a 32-bit offset to the 64-bit base
- * address.  It's stuffed with a 0 in this path currently, but other generators
- * of global loads in the backend will have nonzero values.
- */
-
-static bool
-lower_64b_global_filter(const nir_instr *instr, const void *unused)
-{
-   (void)unused;
-
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   switch (intr->intrinsic) {
-   case nir_intrinsic_load_global:
-   case nir_intrinsic_load_global_constant:
-   case nir_intrinsic_store_global:
-      return true;
-   default:
-      return false;
-   }
-}
-
-static nir_def *
-lower_64b_global(nir_builder *b, nir_instr *instr, void *unused)
-{
-   (void)unused;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   if (intr->intrinsic != nir_intrinsic_store_global) {
-      unsigned num_comp = nir_intrinsic_dest_components(intr);
-
-      /* load_global_constant is redundant and should be removed, because we can
-       * express the same thing with extra access flags, but for now translate
-       * it to load_global_ir3 with those extra flags.
-       */
-      enum gl_access_qualifier access = nir_intrinsic_access(intr);
-      if (intr->intrinsic == nir_intrinsic_load_global_constant)
-         access |= ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER;
-
-      return nir_load_global_ir3(b, num_comp, intr->def.bit_size,
-                                 intr->src[0].ssa, nir_imm_int(b, 0),
-                                 .access = access);
-   } else {
-      nir_store_global_ir3(b, intr->src[0].ssa, intr->src[1].ssa,
-                           nir_imm_int(b, 0));
-      return NIR_LOWER_INSTR_PROGRESS_REPLACE;
-   }
-}
-
-bool
-ir3_nir_lower_64b_global(nir_shader *shader)
-{
-   return nir_shader_lower_instructions(
-         shader, lower_64b_global_filter,
-         lower_64b_global, NULL);
-}
-
-/*
  * Lowering for 64b registers:
  * - @decl_reg -> split in two 32b ones
  * - @store_reg -> unpack_64_2x32_split_x/y and two separate stores
@@ -212,17 +151,20 @@ lower_64b_image_load(nir_builder *b, nir_intrinsic_instr *intr)
    nir_intrinsic_set_format(intr, PIPE_FORMAT_R32G32_UINT);
    nir_intrinsic_set_dest_type(intr, nir_type_uint32);
    unsigned ncomp = intr->num_components;
-   intr->num_components = 2;
-   intr->def.num_components = 2;
+   intr->num_components =
+      intr->intrinsic == nir_intrinsic_bindless_image_sparse_load ? 5 : 2;
+   intr->def.num_components = intr->num_components;
    intr->def.bit_size = 32;
 
    /* We only load the R component but the original load might need GBA as well,
     * return the default (0, 0, 1) values.
     */
    b->cursor = nir_after_instr(&intr->instr);
-   nir_def *val_r64 = nir_pack_64_2x32(b, &intr->def);
-   nir_def *vec[4] = {val_r64, nir_imm_int64(b, 0), nir_imm_int64(b, 0),
-                      nir_imm_int64(b, 1)};
+   nir_def *val_r64 = nir_pack_64_2x32(b, nir_trim_vector(b, &intr->def, 2));
+   nir_def *vec[5] = {val_r64, nir_imm_int64(b, 0), nir_imm_int64(b, 0),
+                      nir_imm_int64(b, 1), NULL};
+   if (intr->intrinsic == nir_intrinsic_bindless_image_sparse_load)
+      vec[4] = nir_u2u64(b, nir_channel(b, &intr->def, 4));
    assert(ncomp <= ARRAY_SIZE(vec));
    nir_def_rewrite_uses_after(&intr->def, nir_vec(b, vec, ncomp));
 }
@@ -245,6 +187,7 @@ lower_64b_image(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
    switch (intr->intrinsic) {
    case nir_intrinsic_bindless_image_load:
+   case nir_intrinsic_bindless_image_sparse_load:
    case nir_intrinsic_bindless_image_store: {
       enum pipe_format format = nir_intrinsic_format(intr);
       if (format != PIPE_FORMAT_R64_UINT && format != PIPE_FORMAT_R64_SINT) {
@@ -256,7 +199,8 @@ lower_64b_image(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       return false;
    }
 
-   if (intr->intrinsic == nir_intrinsic_bindless_image_load) {
+   if (intr->intrinsic == nir_intrinsic_bindless_image_load ||
+       intr->intrinsic == nir_intrinsic_bindless_image_sparse_load) {
       lower_64b_image_load(b, intr);
    } else {
       lower_64b_image_store(b, intr);

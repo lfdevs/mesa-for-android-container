@@ -21,6 +21,8 @@ struct pan_kmod_vm;
 
 unsigned pan_query_l2_slices(const struct pan_kmod_dev_props *props);
 
+unsigned pan_query_bus_width(const struct pan_kmod_dev_props *props);
+
 struct pan_tiler_features
 pan_query_tiler_features(const struct pan_kmod_dev_props *props);
 
@@ -28,8 +30,10 @@ unsigned pan_query_thread_tls_alloc(const struct pan_kmod_dev_props *props);
 
 uint32_t pan_query_compressed_formats(const struct pan_kmod_dev_props *props);
 
-unsigned pan_query_core_count(const struct pan_kmod_dev_props *props,
-                              unsigned *core_id_range);
+unsigned pan_query_core_count(const struct pan_kmod_dev_props *props);
+unsigned pan_query_core_id_range(const struct pan_kmod_dev_props *props);
+
+unsigned pan_query_perf_counter_per_block(const struct pan_kmod_dev_props *props);
 
 bool pan_query_afbc(const struct pan_kmod_dev_props *props);
 

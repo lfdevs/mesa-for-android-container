@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 use crate::ir::*;
-use crate::union_find::UnionFind;
 
 use compiler::bitset::BitSet;
+use compiler::union_find::UnionFind;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::cell::RefCell;
 use std::cmp::Reverse;

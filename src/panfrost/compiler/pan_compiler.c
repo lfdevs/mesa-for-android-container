@@ -4,6 +4,7 @@
  */
 
 #include "pan_compiler.h"
+#include "nir_xfb_info.h"
 #include "pan_nir.h"
 
 #include "bifrost/bi_debug.h"
@@ -12,6 +13,7 @@
 #include "bifrost/valhall/disassemble.h"
 #include "midgard/disassemble.h"
 #include "midgard/midgard_compile.h"
+#include "kraid/kraid.h"
 
 #include "panfrost/model/pan_model.h"
 
@@ -33,9 +35,97 @@ pan_want_debug_info(unsigned arch)
       return false;
 }
 
-const nir_shader_compiler_options *
-pan_get_nir_shader_compiler_options(unsigned arch, bool merge_wg)
+#ifdef WITH_PANFROST_RUST
+#define USE_KRAID_CS (1ull << 0)
+#define USE_KRAID_FS (1ull << 1)
+#define USE_KRAID_VS (1ull << 2)
+#define USE_KRAID_INTERNAL (1ull << 3)
+#define USE_KRAID_ALL 0xf
+
+static const struct debug_named_value pan_use_kraid_flags[] = {
+   { "cs", USE_KRAID_CS, "Use Kraid for compute shaders" },
+   { "fs", USE_KRAID_FS, "Use Kraid for fragment shaders" },
+   { "vs", USE_KRAID_VS, "Use Kraid for vertex shaders" },
+   { "internal", USE_KRAID_INTERNAL, "Use Kraid for internal shaders" },
+   { "all", USE_KRAID_ALL, "Use Kraid for all shader stages" },
+   DEBUG_NAMED_VALUE_END,
+};
+
+DEBUG_GET_ONCE_FLAGS_OPTION(use_kraid, "PAN_USE_KRAID",
+                            pan_use_kraid_flags, 0)
+#endif
+
+bool
+pan_use_kraid(unsigned arch, mesa_shader_stage stage, bool internal)
 {
+#ifdef WITH_PANFROST_RUST
+   if (arch < 9)
+      return false;
+
+   uint64_t use_kraid = debug_get_option_use_kraid();
+   if (internal && !(use_kraid & USE_KRAID_INTERNAL))
+      return false;
+
+   switch (stage) {
+   case MESA_SHADER_VERTEX:
+      return use_kraid & USE_KRAID_VS;
+   case MESA_SHADER_FRAGMENT:
+      return use_kraid & USE_KRAID_FS;
+   case MESA_SHADER_COMPUTE:
+   case MESA_SHADER_KERNEL:
+      return use_kraid & USE_KRAID_CS;
+   default:
+      return false;
+   }
+#else
+   return false;
+#endif
+}
+
+/**
+ * Returns a set of flags which may affect the output of the compiler, used
+ * to invalidate caches.  This should be passed into disk_cache_create()
+ * and may also be used with Vulkan pipeline caches or other shader caches
+ * to ensure environment variables are taken into account, even when shaders
+ * are pulled from the cache.
+ */
+uint32_t
+pan_get_compiler_flags(unsigned arch)
+{
+   if (arch >= 6) {
+#ifdef WITH_PANFROST_RUST
+      const uint32_t use_kraid = debug_get_option_use_kraid();
+      const uint32_t kraid_flags = kraid_get_compiler_flags();
+#else
+      const uint32_t use_kraid = 0, kraid_flags = 0;
+#endif
+      const uint32_t bi_flags = bifrost_get_compiler_flags();
+
+      assert(bi_flags <= (1ull << 18));
+      assert(use_kraid <= (1ull << 4));
+      assert(kraid_flags <= (1ull << 10));
+
+      return bi_flags | (use_kraid << 18) | (kraid_flags << 22);
+   } else {
+      return midgard_get_compiler_flags();
+   }
+}
+
+const nir_shader_compiler_options *
+pan_get_nir_shader_compiler_options(unsigned arch,
+                                    mesa_shader_stage stage,
+                                    bool merge_wg)
+{
+#ifdef WITH_PANFROST_RUST
+   /* Only return the Kraid options if we're also using it for internal
+    * shaders.  We have no internal/external flag here so we have to assume
+    * the worst case.  Kraid can generally handle Bifrost NIR but Bifrost
+    * can't handle Kraid NIR.
+    */
+   if (pan_use_kraid(arch, stage, false) && pan_use_kraid(arch, stage, true))
+      return kraid_get_nir_shader_compiler_options(arch, merge_wg);
+#endif
+
    switch (arch) {
    case 4:
    case 5:
@@ -137,16 +227,28 @@ pan_to_bytemask(unsigned bytes, unsigned mask)
 
 /* Could optimize with a better data structure if anyone cares, TODO: profile */
 unsigned
-pan_lookup_pushed_ubo(struct pan_ubo_push *push, unsigned ubo, unsigned offs)
+pan_lookup_pushed_ubo(const struct pan_fau_layout *fau,
+                      unsigned ubo, unsigned offs)
 {
-   struct pan_ubo_word word = {.ubo = ubo, .offset = offs};
+   struct pan_ubo_relocation word = {.ubo = ubo, .offset = offs};
 
-   for (unsigned i = 0; i < push->count; ++i) {
-      if (memcmp(push->words + i, &word, sizeof(word)) == 0)
+   pan_fau_foreach_reloc(fau, i) {
+      if (memcmp(fau->words + i, &word, sizeof(word)) == 0)
          return i;
    }
 
    UNREACHABLE("UBO not pushed");
+}
+
+int
+pan_lookup_pushed_imm(const struct pan_fau_layout *fau, uint32_t imm)
+{
+   pan_fau_foreach_imm(fau, i) {
+      if (fau->words[i].constant == imm)
+         return i;
+   }
+
+   return -1;
 }
 
 void
@@ -279,6 +381,139 @@ pan_shader_compile(nir_shader *s, struct pan_compile_inputs *inputs,
       midgard_compile_shader_nir(s, inputs, binary, info);
       pan_shader_update_info(info, s, inputs);
    }
+}
+
+static uint64_t
+pan_fixed_varying_mask(nir_shader *nir)
+{
+   uint64_t mask = 0;
+
+   assert(nir->info.stage == MESA_SHADER_FRAGMENT ||
+          nir->info.stage == MESA_SHADER_VERTEX);
+
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   assert(impl);
+
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
+         nir_variable_mode modes = nir_var_shader_in | nir_var_shader_out;
+         nir_variable_mode mode;
+         nir_intrinsic_instr *intr = nir_get_io_intrinsic(instr, modes, &mode);
+         if (!intr)
+            continue;
+
+         bool is_varying = !(nir->info.stage == MESA_SHADER_VERTEX &&
+                             mode == nir_var_shader_in) &&
+                           !(nir->info.stage == MESA_SHADER_FRAGMENT &&
+                             mode == nir_var_shader_out);
+
+         nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
+
+         if (!is_varying || sem.location < VARYING_SLOT_VAR0)
+            continue;
+
+         nir_alu_type type = nir_intrinsic_has_src_type(intr) ?
+            nir_intrinsic_src_type(intr) : nir_intrinsic_dest_type(intr);
+         bool is_float = nir_alu_type_get_base_type(type) == nir_type_float;
+
+         /* Only lower mediump floats, they must agree on ALL load/stores */
+         if (!(sem.medium_precision && is_float)) {
+            mask |= BITFIELD64_RANGE(sem.location, sem.num_slots);
+         }
+      }
+   }
+
+   return mask;
+}
+
+static bool
+clear_flat_mediump_io_flag(struct nir_builder *b, nir_intrinsic_instr *intr,
+                           void *data)
+{
+   /* The mediump flag must be preserved for XFB, we can remove it for all other
+    * flat IO.  It is still useful for interpolated input because of
+    * pan_nir_fuse_io_16.
+    */
+   bool is_flat = intr->intrinsic == nir_intrinsic_load_input ||
+                  (intr->intrinsic == nir_intrinsic_store_output &&
+                   b->shader->info.stage == MESA_SHADER_VERTEX);
+
+   if (nir_intrinsic_has_io_semantics(intr) &&
+       !nir_instr_xfb_write_mask(intr) && is_flat) {
+      nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
+
+      if (sem.medium_precision) {
+         sem.medium_precision = 0;
+         nir_intrinsic_set_io_semantics(intr, sem);
+         return true;
+      }
+   }
+   return false;
+}
+
+static bool
+is_mediump_varying_instr(const nir_intrinsic_instr *intr, const void *data)
+{
+   if (!nir_intrinsic_has_io_semantics(intr))
+      return false;
+
+   nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
+   uint64_t loc_mask = *(uint64_t *)data;
+
+   if (sem.location < VARYING_SLOT_VAR0 || sem.location > VARYING_SLOT_VAR31)
+      return false;
+
+   return loc_mask & BITFIELD64_RANGE(sem.location, sem.num_slots);
+}
+
+/* Lower VS/FS varyings early for linked shader, this permits us to do crazy
+ * compactions in nir_opt_varyings (and might save us from lots of bugs).
+ * Used by lower_mediump_io
+ */
+void
+pan_nir_lower_mediump_io(nir_shader *nir)
+{
+   /* I don't want to get headaches, XFB gets slowed down */
+   if (nir->info.prev_stage_has_xfb ||
+       nir->info.has_transform_feedback_varyings)
+      return;
+
+   nir_variable_mode modes = 0;
+
+   switch (nir->info.stage) {
+   case MESA_SHADER_VERTEX:
+      modes = nir_var_shader_out;
+      break;
+   case MESA_SHADER_FRAGMENT:
+      modes = nir_var_shader_in;
+      break;
+   default:
+      assert(!"Unsupported shader");
+      return;
+   }
+
+   uint64_t lower_mask = ~pan_fixed_varying_mask(nir);
+
+   /* nir_opt_varyings can see thorugh vecs but not through f2f16 of vecs, i.e.
+    * it can see a vec2(x, 1.0) but not through f2f16(vec2(x, 1.0)), if we
+    * scalarize it will only see f2f16(x) and f2f16(1.0).  nir_opt_varyings will
+    * scalarize IO internally anyways.
+    */
+   NIR_PASS(_, nir, nir_lower_io_to_scalar, modes, is_mediump_varying_instr,
+            &lower_mask);
+
+   NIR_PASS(_, nir, nir_lower_mediump_io, modes, lower_mask, false);
+
+   NIR_PASS(_, nir, nir_opt_cse);
+   NIR_PASS(_, nir, nir_opt_constant_folding);
+
+   /* By shrinking vectors we help nir_opt_varyings DCE unused FS loads even
+    * in the VS, it also helps collect a smaller varying layout in the future
+    */
+   NIR_PASS(_, nir, nir_opt_shrink_vectors, false);
+
+   NIR_PASS(_, nir, nir_shader_intrinsics_pass,
+            clear_flat_mediump_io_flag, nir_metadata_all, NULL);
 }
 
 void

@@ -15,7 +15,6 @@
 #define NVK_MAX_DYNAMIC_BUFFERS 64
 #define NVK_MAX_RTS 8
 #define NVK_MAX_SAMPLES 8
-#define NVK_MIN_SSBO_ALIGNMENT 16
 #define NVK_MIN_TEXEL_BUFFER_ALIGNMENT 16
 #define NVK_MIN_UBO_ALIGNMENT 64
 #define NVK_MAX_VIEWPORTS 16
@@ -46,12 +45,9 @@
 #define NVK_HW_ROOT_TABLE_FIRST_CB 24
 #define NVK_HW_ROOT_TABLE_COUNT 8
 
+#define NVK_TEXTURE_HEADER_SIZE (8 * 4)
+
 /* Device Generated Commands */
 #define NVK_DGC_ALIGN 0x100
-
-struct nvk_addr_range {
-   uint64_t addr;
-   uint64_t range;
-};
 
 #endif

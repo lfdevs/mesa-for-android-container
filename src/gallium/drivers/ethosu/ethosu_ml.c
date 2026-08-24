@@ -128,7 +128,24 @@ ethosu_ml_operation_supported(struct pipe_ml_device *pdevice,
 
    switch (operation->type) {
    case PIPE_ML_OPERATION_TYPE_FULLY_CONNECTED: {
-      supported = true;
+      struct pipe_tensor *input = operation->input_tensors[0];
+      struct pipe_tensor *output = operation->output_tensors[0];
+      struct pipe_tensor *weight = operation->fcon.weight_tensor;
+      uint64_t input_size;
+      uint64_t output_size;
+
+      if (!weight || input->dims[0] != output->dims[0] ||
+          weight->dims[0] != 1 || weight->dims[1] != 1 ||
+          !weight->dims[2] || !weight->dims[3])
+         break;
+
+      input_size = (uint64_t)input->dims[1] * input->dims[2] *
+                   input->dims[3];
+      output_size = (uint64_t)output->dims[1] * output->dims[2] *
+                    output->dims[3];
+      supported = input_size % weight->dims[3] == 0 &&
+                  output_size == input_size / weight->dims[3] *
+                                    weight->dims[2];
       break;
    }
    case PIPE_ML_OPERATION_TYPE_CONVOLUTION: {
@@ -205,7 +222,37 @@ ethosu_ml_subgraph_create(struct pipe_ml_device *pdevice,
 
    ethosu_lower_graph(subgraph, poperations, count);
 
+   if (subgraph->failed) {
+      util_dynarray_foreach (&subgraph->operations,
+                             struct ethosu_operation, operation) {
+         free(operation->kernel.scales);
+         free(operation->kernel.zero_points);
+      }
+      util_dynarray_fini(&subgraph->operations);
+      free(subgraph->cmd0_state);
+      free(subgraph->cmd1_state);
+      free(subgraph->cmd0_valid);
+      free(subgraph->cmd1_valid);
+      ethosu_ml_subgraph_destroy(pdevice, &subgraph->base);
+      return NULL;
+   }
+
    ethosu_emit_cmdstream(subgraph);
+
+   if (subgraph->failed) {
+      util_dynarray_foreach (&subgraph->operations,
+                             struct ethosu_operation, operation) {
+         free(operation->kernel.scales);
+         free(operation->kernel.zero_points);
+      }
+      util_dynarray_fini(&subgraph->operations);
+      free(subgraph->cmd0_state);
+      free(subgraph->cmd1_state);
+      free(subgraph->cmd0_valid);
+      free(subgraph->cmd1_valid);
+      ethosu_ml_subgraph_destroy(pdevice, &subgraph->base);
+      return NULL;
+   }
 
    util_dynarray_foreach (&subgraph->operations, struct ethosu_operation, operation) {
       free(operation->kernel.scales);
@@ -270,7 +317,7 @@ ethosu_ml_subgraph_serialize(struct pipe_ml_device *pdevice,
    return buffer;
 }
 
-static void
+static bool
 prepare_for_submission(struct ethosu_subgraph *subgraph,
                        struct pipe_context *pcontext)
 {
@@ -292,7 +339,13 @@ prepare_for_submission(struct ethosu_subgraph *subgraph,
 
       ret = drmIoctl(screen->fd, DRM_IOCTL_ETHOSU_CMDSTREAM_BO_CREATE,
                      &cmd_bo_create);
-      assert(ret == 0);
+      if (ret) {
+         mesa_loge("ethosu: failed to create command stream BO "
+                   "(size=%" PRIu64 ", errno=%d: %s)",
+                   cmdstream_size, errno, strerror(errno));
+         subgraph->failed = true;
+         return false;
+      }
 
       free(subgraph->cmdstream);
       subgraph->cmdstream = NULL;
@@ -305,6 +358,14 @@ prepare_for_submission(struct ethosu_subgraph *subgraph,
       subgraph->coefs_rsrc = pipe_buffer_create(pcontext->screen, 0,
                                                 PIPE_USAGE_DEFAULT,
                                                 subgraph->coefs_used);
+      if (!subgraph->coefs_rsrc) {
+         mesa_loge("ethosu: failed to allocate coefficients BO "
+                   "(size=%u)",
+                   subgraph->coefs_used);
+         subgraph->failed = true;
+         return false;
+      }
+
       pipe_buffer_write(pcontext, subgraph->coefs_rsrc, 0,
                         subgraph->coefs_used, subgraph->coefs);
 
@@ -315,6 +376,12 @@ prepare_for_submission(struct ethosu_subgraph *subgraph,
          struct pipe_transfer *transfer_in;
          uint8_t *buf = pipe_buffer_map(pcontext, subgraph->coefs_rsrc,
                                         PIPE_MAP_READ, &transfer_in);
+         if (!buf) {
+            mesa_loge("ethosu: failed to map coefficients BO for dump");
+            subgraph->failed = true;
+            return false;
+         }
+
          ethosu_dump_buffer(buf, "coefs", 0, 0, 0,
                             pipe_buffer_size(subgraph->coefs_rsrc));
          pipe_buffer_unmap(pcontext, transfer_in);
@@ -342,6 +409,14 @@ prepare_for_submission(struct ethosu_subgraph *subgraph,
    subgraph->io_rsrc = pipe_buffer_create(pcontext->screen, 0,
                                           PIPE_USAGE_DEFAULT,
                                           subgraph->io_used);
+   if (!subgraph->io_rsrc) {
+      mesa_loge("ethosu: failed to allocate IO BO (size=%u)",
+                subgraph->io_used);
+      subgraph->failed = true;
+      return false;
+   }
+
+   return true;
 }
 
 struct pipe_ml_subgraph *
@@ -427,12 +502,25 @@ ethosu_ml_subgraph_invoke(struct pipe_context *pcontext,
    struct timespec start, end;
    int ret;
 
-   if (subgraph->io_rsrc == NULL)
-      prepare_for_submission(subgraph, pcontext);
+   if (subgraph->failed) {
+      mesa_loge("ethosu: skipping invoke for failed subgraph");
+      return;
+   }
+
+   if (subgraph->io_rsrc == NULL &&
+       !prepare_for_submission(subgraph, pcontext))
+      return;
 
    for (unsigned i = 0; i < inputs_count; i++) {
       struct ethosu_tensor *input = ethosu_find_tensor(subgraph, input_idxs[i]);
       assert(input);
+
+      if (!inputs[i]) {
+         mesa_loge("ethosu: input tensor %u has no data pointer",
+                   input_idxs[i]);
+         subgraph->failed = true;
+         return;
+      }
 
       if (DBG_ENABLED(ETHOSU_DBG_DUMP_BOS))
          ethosu_dump_buffer(inputs[i], "input", 0, 0, 0, input->size);
@@ -444,6 +532,12 @@ ethosu_ml_subgraph_invoke(struct pipe_context *pcontext,
       struct pipe_transfer *transfer_in;
       uint8_t *buf = pipe_buffer_map(pcontext, subgraph->io_rsrc,
                                      PIPE_MAP_READ, &transfer_in);
+      if (!buf) {
+         mesa_loge("ethosu: failed to map IO BO before submit");
+         subgraph->failed = true;
+         return;
+      }
+
       ethosu_dump_buffer(buf, "io-before", 0, 0, 0, pipe_buffer_size(subgraph->io_rsrc));
       pipe_buffer_unmap(pcontext, transfer_in);
    }
@@ -471,7 +565,12 @@ ethosu_ml_subgraph_invoke(struct pipe_context *pcontext,
       clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
    ret = drmIoctl(screen->fd, DRM_IOCTL_ETHOSU_SUBMIT, &submit);
-   assert(ret == 0);
+   if (ret) {
+      mesa_loge("ethosu: submit failed (errno=%d: %s)",
+                errno, strerror(errno));
+      subgraph->failed = true;
+      return;
+   }
 
    if (DBG_ENABLED(ETHOSU_DBG_MSGS)) {
       clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -480,8 +579,12 @@ ethosu_ml_subgraph_invoke(struct pipe_context *pcontext,
 
       /* Force a sync */
       struct pipe_transfer *transfer_in;
-      pipe_buffer_map(pcontext, subgraph->io_rsrc, PIPE_MAP_READ, &transfer_in);
-      pipe_buffer_unmap(pcontext, transfer_in);
+      void *ptr = pipe_buffer_map(pcontext, subgraph->io_rsrc,
+                                  PIPE_MAP_READ, &transfer_in);
+      if (ptr)
+         pipe_buffer_unmap(pcontext, transfer_in);
+      else
+         mesa_loge("ethosu: failed to map IO BO after submit");
 
       clock_gettime(CLOCK_MONOTONIC_RAW, &end);
       duration_ns = (long long)(end.tv_sec - start.tv_sec) * 1000000000LL + (end.tv_nsec - start.tv_nsec);
@@ -499,13 +602,32 @@ ethosu_ml_subgraph_read_outputs(struct pipe_context *pcontext,
    struct ethosu_subgraph *subgraph = (struct ethosu_subgraph *)(psubgraph);
    uint8_t **outputs = (uint8_t **)outputsv;
 
+   if (subgraph->failed || !subgraph->io_rsrc) {
+      mesa_loge("ethosu: skipping readback for failed subgraph");
+      return;
+   }
+
    for (int i = 0; i < outputs_count; i++) {
       struct ethosu_tensor *output = ethosu_find_tensor(subgraph, output_idxs[i]);
+      assert(output);
+
+      if (!outputs[i]) {
+         mesa_loge("ethosu: output tensor %u has no data pointer",
+                   output_idxs[i]);
+         subgraph->failed = true;
+         return;
+      }
 
       if (DBG_ENABLED(ETHOSU_DBG_DUMP_BOS)) {
          struct pipe_transfer *transfer_in;
          uint8_t *buf = pipe_buffer_map(pcontext, subgraph->io_rsrc,
                                         PIPE_MAP_READ, &transfer_in);
+         if (!buf) {
+            mesa_loge("ethosu: failed to map IO BO for readback");
+            subgraph->failed = true;
+            return;
+         }
+
          ethosu_dump_buffer(buf, "io-after", 0, 0, 0, pipe_buffer_size(subgraph->io_rsrc));
          pipe_buffer_unmap(pcontext, transfer_in);
       }
@@ -540,30 +662,30 @@ ethosu_ml_subgraph_destroy(struct pipe_ml_device *pdevice,
    struct ethosu_subgraph *subgraph = (struct ethosu_subgraph *)(psubgraph);
    struct ethosu_screen *screen = subgraph->screen;
 
-   if (subgraph->io_rsrc) {
-      /* Post-submission state: cleanup DRM resources */
+   if (subgraph->io_rsrc || subgraph->coefs_rsrc || subgraph->cmdstream_bo) {
+      /* Post-submission or partially prepared state: cleanup DRM resources. */
       struct drm_gem_close arg = {0};
       int ret;
 
       pipe_resource_reference(&subgraph->io_rsrc, NULL);
       pipe_resource_reference(&subgraph->coefs_rsrc, NULL);
 
-      if (subgraph->cmdstream_bo) {
+      if (subgraph->cmdstream_bo && screen) {
          arg.handle = subgraph->cmdstream_bo;
          ret = drmIoctl(screen->fd, DRM_IOCTL_GEM_CLOSE, &arg);
          assert(ret >= 0);
       }
-   } else {
-      /* Pre-submission state: cleanup raw buffers */
-      free(subgraph->cmdstream);
-      free(subgraph->coefs);
    }
+
+   free(subgraph->cmdstream);
+   free(subgraph->coefs);
 
    if (DBG_ENABLED(ETHOSU_DBG_DUMP_PERF)) {
       struct drm_ethosu_perfmon_destroy destroy = {
          .id = subgraph->perfmon_id,
       };
-      drmIoctl(screen->fd, DRM_IOCTL_ETHOSU_PERFMON_DESTROY, &destroy);
+      if (screen)
+         drmIoctl(screen->fd, DRM_IOCTL_ETHOSU_PERFMON_DESTROY, &destroy);
    }
 
    util_dynarray_fini(&subgraph->tensors);

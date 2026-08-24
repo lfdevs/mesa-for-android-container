@@ -56,6 +56,7 @@ radv_mutable_descriptor_type_size_alignment(const struct radv_device *device,
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
       case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
       case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
          size = RADV_BUFFER_DESC_SIZE;
          break;
       case VK_DESCRIPTOR_TYPE_SAMPLER:

@@ -30,6 +30,7 @@
 
 #include "perf/intel_perf.h"
 #include "perf/intel_perf_mdapi.h"
+#include "perf/intel_perf_metrics_library.h"
 
 #include "util/mesa-blake3.h"
 
@@ -162,6 +163,11 @@ VkResult anv_InitializePerformanceApiINTEL(
    if (!device->physical->perf)
       return VK_ERROR_EXTENSION_NOT_PRESENT;
 
+   if (!intel_perf_init_metrics_library(device->physical->perf, device->fd)) {
+      /* Do not use Metrics Library if it fails to initialize */
+      device->physical->perf->use_metrics_library = false;
+   }
+
    /* Not much to do here */
    return VK_SUCCESS;
 }
@@ -220,13 +226,11 @@ VkResult anv_AcquirePerformanceConfigurationINTEL(
    if (!config)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   if (!INTEL_DEBUG(DEBUG_NO_OACONFIG)) {
-      config->config_id = intel_perf_get_configuration_id(device->physical->perf,
-                                                          INTEL_PERF_QUERY_GUID_MDAPI);
-      if (config->config_id == 0) {
-         vk_object_free(&device->vk, NULL, config);
-         return VK_INCOMPLETE;
-      }
+   config->config_id = intel_perf_metrics_library_create_configuration(device->physical->perf);
+
+   if (config->config_id == 0) {
+      vk_object_free(&device->vk, NULL, config);
+      return VK_INCOMPLETE;
    }
 
    *pConfiguration = anv_performance_configuration_intel_to_handle(config);
@@ -241,8 +245,8 @@ VkResult anv_ReleasePerformanceConfigurationINTEL(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_performance_configuration_intel, config, _configuration);
 
-   if (!INTEL_DEBUG(DEBUG_NO_OACONFIG))
-      intel_perf_remove_configuration(device->physical->perf, device->fd, config->config_id);
+   if (!intel_perf_metrics_library_destroy_configuration(device->physical->perf, config->config_id))
+      vk_error(device, VK_ERROR_UNKNOWN);
 
    vk_object_free(&device->vk, NULL, config);
 
@@ -269,42 +273,22 @@ VkResult anv_QueueSetPerformanceConfigurationINTEL(
 {
    ANV_FROM_HANDLE(anv_queue, queue, _queue);
    ANV_FROM_HANDLE(anv_performance_configuration_intel, config, _configuration);
-   struct anv_device *device = queue->device;
-   VkResult result = VK_SUCCESS;
 
    vk_queue_lock(&queue->vk);
 
-   if (queue == anv_device_get_perf_queue(device)) {
-      if (!INTEL_DEBUG(DEBUG_NO_OACONFIG)) {
-         if (device->perf_fd < 0) {
-            device->perf_fd = anv_device_perf_open(device, queue, config->config_id);
-            if (device->perf_fd < 0)
-               result = VK_ERROR_INITIALIZATION_FAILED;
-         } else {
-            uint32_t context_or_exec_queue = anv_device_perf_get_queue_context_or_exec_queue_id(device->perf_queue);
-            int ret = intel_perf_stream_set_metrics_id(device->physical->perf,
-                                                       device->fd,
-                                                       device->perf_fd,
-                                                       context_or_exec_queue,
-                                                       config->config_id,
-                                                       &device->perf_timeline);
-            if (ret < 0)
-               result = vk_device_set_lost(&device->vk, "i915-perf config failed: %m");
-         }
-      }
-   } else {
-      result = vk_error(device, VK_ERROR_UNKNOWN);
-   }
+   queue->metrics_library_configuration = config->config_id;
 
    vk_queue_unlock(&queue->vk);
 
-   return result;
+   return VK_SUCCESS;
 }
 
 void anv_UninitializePerformanceApiINTEL(
     VkDevice                                    _device)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
+
+   intel_perf_deinit_metrics_library(device->physical->perf);
 
    anv_device_perf_close(device);
 }

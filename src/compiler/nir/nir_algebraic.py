@@ -830,9 +830,6 @@ class BitSizeValidator(object):
 
 _optimization_ids = itertools.count()
 
-condition_list = ['true']
-
-
 class SearchAndReplace(object):
     def __init__(self, transform, algebraic_pass):
         self.id = next(_optimization_ids)
@@ -849,9 +846,9 @@ class SearchAndReplace(object):
         else:
             self.test_status = TestStatus.PASS
 
-        if self.condition not in condition_list:
-            condition_list.append(self.condition)
-        self.condition_index = condition_list.index(self.condition)
+        if self.condition not in algebraic_pass.pattern_cond:
+            algebraic_pass.pattern_cond.append(self.condition)
+        self.condition_index = algebraic_pass.pattern_cond.index(self.condition)
 
         varset = VarSet()
         if isinstance(search, Expression):
@@ -1512,6 +1509,7 @@ class AlgebraicPass(object):
         self.pass_name = pass_name
         self.expression_cond = {}
         self.variable_cond = {}
+        self.pattern_cond = ['true']
         self.params = params
 
         error = False
@@ -1645,7 +1643,7 @@ class AlgebraicPass(object):
         return _algebraic_pass_template.render(pass_name=self.pass_name,
                                                xforms=self.xforms,
                                                opcode_xforms=self.opcode_xforms,
-                                               condition_list=condition_list,
+                                               condition_list=self.pattern_cond,
                                                automaton=self.automaton,
                                                expression_cond=sorted(
                                                    self.expression_cond.items(), key=lambda kv: kv[1]),
