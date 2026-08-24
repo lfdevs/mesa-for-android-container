@@ -52,6 +52,8 @@ struct ntv_info {
    bool broken_arbitary_type_const;
    bool has_demote_to_helper;
    bool is_native_vulkan; //ignore zink-isms
+   bool have_shader_viewport_index_layer;
+   bool have_shader_output_layer;
    struct {
       uint8_t flush_denorms:3; // 16, 32, 64
       uint8_t preserve_denorms:3; // 16, 32, 64

@@ -385,7 +385,7 @@ opt_shrink_vectors_intrinsic(nir_builder *b, nir_intrinsic_instr *instr,
    case nir_intrinsic_load_global_constant:
    case nir_intrinsic_load_kernel_input:
    case nir_intrinsic_load_scratch:
-   case nir_intrinsic_load_attribute_pan: {
+   case nir_intrinsic_load_attr_pan: {
       /* Must be a vectorized intrinsic that we can resize. */
       assert(instr->num_components != 0);
 
@@ -440,8 +440,8 @@ opt_shrink_vectors_load_const(nir_load_const_instr *instr)
 
    unsigned mask = nir_def_components_read(def);
 
-   /* If nothing was read, DCE.  If everything was read, early out. */
-   if (!mask || mask == nir_component_mask(def->num_components))
+   /* If nothing was read, DCE. */
+   if (!mask)
       return false;
 
    uint8_t reswizzle[NIR_MAX_VEC_COMPONENTS] = { 0 };

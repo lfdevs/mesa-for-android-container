@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2024 Broadcom. All Rights Reserved.
+ * Copyright (c) 2009-2026 Broadcom. All Rights Reserved.
  * The term “Broadcom” refers to Broadcom Inc.
  * and/or its subsidiaries.
  * SPDX-License-Identifier: MIT
@@ -309,37 +309,46 @@ vmw_drm_surface_get_handle(struct svga_winsys_screen *sws,
                            unsigned stride,
                            struct winsys_handle *whandle)
 {
-    struct vmw_winsys_screen *vws = vmw_winsys_screen(sws);
-    struct vmw_svga_winsys_surface *vsrf;
-    int ret;
+   struct vmw_winsys_screen *vws = vmw_winsys_screen(sws);
+   struct vmw_svga_winsys_surface *vsrf;
+   int ret = 0;
 
-    if (!surface)
-        return false;
+   if (!surface)
+      return false;
 
-    vsrf = vmw_svga_winsys_surface(surface);
-    whandle->handle = vsrf->sid;
-    whandle->stride = stride;
-    whandle->offset = 0;
-    whandle->modifier = DRM_FORMAT_MOD_LINEAR;
+   vsrf = vmw_svga_winsys_surface(surface);
+   whandle->handle = vsrf->sid;
+   whandle->stride = stride;
+   whandle->offset = 0;
+   whandle->modifier = DRM_FORMAT_MOD_LINEAR;
 
-    switch (whandle->type) {
-    case WINSYS_HANDLE_TYPE_SHARED:
-    case WINSYS_HANDLE_TYPE_KMS:
-       whandle->handle = vsrf->sid;
-       break;
-    case WINSYS_HANDLE_TYPE_FD:
-       ret = drmPrimeHandleToFD(vws->ioctl.drm_fd, vsrf->sid, DRM_CLOEXEC | DRM_RDWR,
-                                (int *)&whandle->handle);
-       if (ret) {
-          vmw_error("Failed to get file descriptor from prime.\n");
-          return false;
-       }
-       break;
-    default:
-       vmw_error("Attempt to export unsupported handle type %d.\n",
-                 whandle->type);
-       return false;
-    }
+   switch (whandle->type) {
+   case WINSYS_HANDLE_TYPE_SHARED:
+   case WINSYS_HANDLE_TYPE_KMS:
+      whandle->handle = vsrf->sid;
+      break;
+   case WINSYS_HANDLE_TYPE_FD:
+      if (vws->ioctl.have_drm_2_21 && vsrf->buf) {
+        struct vmw_region *region =
+           vmw_winsys_to_dma_buffer(vsrf->buf)->region;
+        ret = drmPrimeHandleToFD(vws->ioctl.drm_fd, region->handle,
+                                 DRM_CLOEXEC | DRM_RDWR,
+                                 (int *)&whandle->handle);
+      } else {
+        ret = drmPrimeHandleToFD(vws->ioctl.drm_fd, vsrf->sid,
+                                 DRM_CLOEXEC | DRM_RDWR,
+                                 (int *)&whandle->handle);
+      }
+      if (ret) {
+         vmw_error("Failed to get file descriptor from prime.\n");
+         return false;
+      }
+      break;
+   default:
+      vmw_error("Attempt to export unsupported handle type %d.\n",
+                whandle->type);
+      return false;
+   }
 
-    return true;
+   return true;
 }

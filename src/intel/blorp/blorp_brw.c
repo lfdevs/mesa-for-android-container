@@ -176,13 +176,19 @@ lower_load_uniform(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
    nir_def *value;
    if (b->shader->info.stage == MESA_SHADER_COMPUTE &&
        devinfo->verx10 >= 125) {
-      value = nir_load_shader_indirect_data_intel(
+      nir_def *push_addr =
+         nir_load_inline_data_intel(b, 1, 64, nir_imm_int(b, 0),
+                                    .base = 0, .range = 8);
+      value = nir_load_global_constant_uniform_block_intel(
          b,
          intrin->def.num_components,
          intrin->def.bit_size,
-         nir_iadd(b, nir_load_indirect_address_intel(b), intrin->src[0].ssa),
-         .base = nir_intrinsic_base(intrin),
-         .range = nir_intrinsic_range(intrin));
+         nir_iadd(b, push_addr,
+                  nir_iadd_imm(b,
+                               nir_u2u64(b, intrin->src[0].ssa),
+                               nir_intrinsic_base(intrin))),
+         .access = ACCESS_CAN_REORDER | ACCESS_NON_WRITEABLE,
+         .align_mul = 64);
    } else {
       value = nir_load_push_data_intel(b,
                                        intrin->def.num_components,

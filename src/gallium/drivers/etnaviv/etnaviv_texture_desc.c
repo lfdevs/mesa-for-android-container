@@ -71,6 +71,7 @@ struct etna_sampler_view_desc {
    struct pipe_resource *res;
    struct etna_reloc DESC_ADDR;
    struct etna_reloc DESC_ADDR_COMPANION;
+   union pipe_color_union border_color;    /* border color the descriptor was composed with */
    uint32_t composed_key;                  /* last composed variant key, ~0u = never/retry */
 
    struct etna_sampler_ts ts;
@@ -192,6 +193,8 @@ etna_texture_desc_fill(struct etna_context *ctx,
    DESC_SET(SLICE, res->levels[0].layer_stride);
    DESC_SET(3D_CONFIG, VIVS_TE_SAMPLER_3D_CONFIG_DEPTH(base_depth));
    DESC_SET(ASTC0, COND(astc, VIVS_NTE_SAMPLER_ASTC0_ASTC_FORMAT(format)) |
+                   COND(astc && util_format_is_srgb(sv->base.format),
+                        VIVS_NTE_SAMPLER_ASTC0_ASTC_SRGB) |
                    VIVS_NTE_SAMPLER_ASTC0_UNK8(0xc) |
                    VIVS_NTE_SAMPLER_ASTC0_UNK16(0xc) |
                    VIVS_NTE_SAMPLER_ASTC0_UNK24(0xc));
@@ -344,6 +347,7 @@ etna_sampler_hw_slot(struct etna_context *ctx, unsigned idx)
 
 #define ETNA_DESC_KEY_SEAMLESS     (1 << 0)
 #define ETNA_DESC_KEY_NATIVE_ORDER (1 << 1)
+#define ETNA_DESC_KEY_BORDER       (1 << 2)
 
 /* Compose the final descriptor(s) from the template and the current
  * dynamic state. Returns true if the descriptor address changed.
@@ -361,7 +365,17 @@ etna_sampler_view_desc_compose(struct etna_context *ctx,
    if (sv->native_format && res->shared && res->shared_native_order)
       key |= ETNA_DESC_KEY_NATIVE_ORDER;
 
-   if (key == sv->composed_key)
+   const bool use_border =
+      ss->base.wrap_s == PIPE_TEX_WRAP_CLAMP_TO_BORDER ||
+      ss->base.wrap_t == PIPE_TEX_WRAP_CLAMP_TO_BORDER ||
+      ss->base.wrap_r == PIPE_TEX_WRAP_CLAMP_TO_BORDER;
+
+   if (use_border)
+      key |= ETNA_DESC_KEY_BORDER;
+
+   if (key == sv->composed_key &&
+       (!use_border ||
+        !memcmp(&ss->base.border_color, &sv->border_color, sizeof(sv->border_color))))
       return false;
 
    if (sv->composed_key != ~0u)
@@ -397,6 +411,35 @@ etna_sampler_view_desc_compose(struct etna_context *ctx,
          VIVS_TE_SAMPLER_CONFIG0_FORMAT(sv->native_format);
    }
 
+   const float *bc = ss->base.border_color.f;
+   uint32_t packed, r, g, b, a;
+
+   if (util_format_is_depth_or_stencil(sv->base.format)) {
+      /* A depth texture stores the border depth quantized to the
+       * D16 or D24 storage precision as an integer in the B slot.
+       * Everything but Z16 is stored as D24 (depth in the low bits).
+       */
+      const enum pipe_format zfmt =
+         sv->base.format == PIPE_FORMAT_Z16_UNORM ? PIPE_FORMAT_Z16_UNORM
+                                                 : PIPE_FORMAT_Z24X8_UNORM;
+      packed = 0x01000000;
+      r = g = a = 0;
+      b = util_pack_z(zfmt, bc[0]);
+   } else {
+      packed = (float_to_ubyte(bc[3]) << 24) | (float_to_ubyte(bc[0]) << 16) |
+               (float_to_ubyte(bc[1]) << 8) | float_to_ubyte(bc[2]);
+      r = fui(bc[2]);
+      g = fui(bc[1]);
+      b = fui(bc[0]);
+      a = fui(bc[3]);
+   }
+
+   buf[TEXDESC_BORDER_COLOR >> 2] = packed;
+   buf[TEXDESC_BORDER_COLOR_R >> 2] = r;
+   buf[TEXDESC_BORDER_COLOR_G >> 2] = g;
+   buf[TEXDESC_BORDER_COLOR_B >> 2] = b;
+   buf[TEXDESC_BORDER_COLOR_A >> 2] = a;
+
    sv->DESC_ADDR.bo = etna_buffer_resource(sv->res)->bo;
    sv->DESC_ADDR.offset = offset;
    sv->DESC_ADDR.flags = ETNA_RELOC_READ;
@@ -414,6 +457,7 @@ etna_sampler_view_desc_compose(struct etna_context *ctx,
       sv->DESC_ADDR_COMPANION.flags = ETNA_RELOC_READ;
    }
 
+   memcpy(&sv->border_color, &ss->base.border_color, sizeof(sv->border_color));
    sv->composed_key = key;
    return true;
 }

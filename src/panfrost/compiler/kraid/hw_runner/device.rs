@@ -10,7 +10,7 @@ use kraid_hw_runner_bindings::*;
 use std::ffi::CStr;
 use std::ops::Range;
 use std::os::fd::{FromRawFd, OwnedFd};
-use std::os::raw::c_void;
+use std::os::raw::{c_ulong, c_void};
 use std::ptr::{NonNull, null, null_mut};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -103,7 +103,7 @@ impl Device {
         }
     }
 
-    unsafe fn io_ctl(&self, request: u64, arg: *mut c_void) -> i32 {
+    unsafe fn io_ctl(&self, request: c_ulong, arg: *mut c_void) -> i32 {
         unsafe { drmIoctl(self.fd(), request, arg) }
     }
 

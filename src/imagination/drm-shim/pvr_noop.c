@@ -429,6 +429,8 @@ pvr_ioctl_get_bo_mmap_offset(int fd, UNUSED unsigned long request, void *arg)
 
    args->offset = drm_shim_bo_get_mmap_offset(shim_fd, bo);
 
+   drm_shim_bo_put(bo);
+
    return 0;
 }
 

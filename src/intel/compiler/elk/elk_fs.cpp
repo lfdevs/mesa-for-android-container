@@ -6713,8 +6713,11 @@ elk_compile_fs(const struct elk_compiler *compiler,
                              v32->fail_msg);
       } else {
          const performance &perf = v32->performance_analysis.require();
+         bool force_simd32 =
+            intel_simd_overridden & (1 << MESA_SHADER_FRAGMENT);
 
-         if (!INTEL_DEBUG(DEBUG_DO32) && throughput >= perf.throughput) {
+
+         if (!force_simd32 && throughput >= perf.throughput) {
             elk_shader_perf_log(compiler, params->base.log_data,
                                 "SIMD32 shader inefficient\n");
          } else {

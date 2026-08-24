@@ -21,7 +21,7 @@ struct ctx {
 /*
  * Takes src, a linked list containing the element pivot in the middle, and dst
  * an empty list. Moves all elements up to and including pivot from src to dst,
- * leaving the rest in dst. Semantically equivalent to a loop of list_move but
+ * leaving the rest in src. Semantically equivalent to a loop of list_move but
  * O(1) time regardless of the position of pivot in the list.
  */
 static void
@@ -36,8 +36,6 @@ list_partition(struct list_head *src,
 
    /* src runs from pivot[1:] to end of src */
    src->next = pivot->next;
-   src->prev = src->prev;
-
    src->next->prev = src;
    pivot->next = dst;
 
@@ -46,10 +44,10 @@ list_partition(struct list_head *src,
 }
 
 /*
- * If the fragment shader halts, we need a halt target to run EOT. Try to pluck
- * out the last instruction and use it for EOT in the case where we are fully
- * halted. This breaks SSA dominance invariants but that's why this is a
- * post-RA, post-sched pass. Only SWSB has to deal with the resulting mess.
+ * We need the exit block to run EOT. Try to pluck out the last instruction and
+ * use it for EOT in the case where we are fully halted. This breaks SSA
+ * dominance invariants but that's why this is a post-RA, post-sched pass. Only
+ * SWSB has to deal with the resulting mess.
  *
  * If there is at least one lane that does not halt, the penultimate block will
  * execute filling out any registers required by the send. The only case where
@@ -67,10 +65,8 @@ list_partition(struct list_head *src,
  * a slight i-cache inflation and uglier asm.
  */
 static void
-insert_halt_target(jay_builder *b, struct ctx *ctx)
+setup_exit_block(jay_builder *b, struct ctx *ctx)
 {
-   jay_HALT_TARGET(b);
-
    jay_inst *send = jay_last_inst(jay_last_source_block(b->func));
    if ((send && send->op == JAY_OPCODE_SEND && jay_send_eot(send)) &&
        (jay_is_imm(send->src[0]) && jay_is_imm(send->src[1]))) {
@@ -97,7 +93,7 @@ insert_halt_target(jay_builder *b, struct ctx *ctx)
       uint64_t desc = brw_fb_write_desc(b->shader->devinfo, 0, op, true, false);
       uint64_t ex_desc = (1 << 20) /* null rt */;
 
-      send = jay_SEND(b, .sfid = GEN_SFID_RENDER_CACHE, .check_tdr = true,
+      send = jay_SEND(b, .sfid = GEN_SFID_RENDER_CACHE,
                       .msg_desc = desc | (ex_desc << 32), .nr_srcs = 1,
                       .srcs = &dummy, .type = JAY_TYPE_U32, .eot = true);
       send = jay_add_predicate(b, send, jay_negate(ctx->helper_flag));
@@ -110,17 +106,7 @@ process_block(struct ctx *ctx, jay_builder *b, jay_block *block)
    jay_foreach_inst_in_block_safe_rev(block, I) {
       b->cursor = jay_before_inst(I);
 
-      if (I->op == JAY_OPCODE_INIT_HELPERS) {
-         jay_NOT(b, ctx->helper_flag, I->src[0])->type = JAY_TYPE_U16;
-
-         if (!jay_is_null(I->src[1])) {
-            jay_def hi = ctx->helper_flag;
-            hi.hi = true;
-            jay_NOT(b, hi, I->src[1])->type = JAY_TYPE_U16;
-         }
-
-         jay_remove_instruction(I);
-      } else if (I->op == JAY_OPCODE_HALT) {
+      if (I->op == JAY_OPCODE_HALT) {
          ctx->halted = ctx->uses_terminate = true;
       } else if (I->op == JAY_OPCODE_DEMOTE) {
          enum gen_condition cond = I->conditional_mod;
@@ -163,32 +149,39 @@ process_block(struct ctx *ctx, jay_builder *b, jay_block *block)
             /* The split block either falls through or jumps to the exit */
             for (unsigned file = GPR; file <= UGPR; ++file) {
                jay_foreach_predecessor(block, pred, file) {
-                  jay_block **succs = jay_successors(*pred, file);
-                  unsigned idx = succs[0] == block ? 0 : 1;
-                  succs[idx] = split;
+                  jay_foreach_successor(*pred, succ, file) {
+                     if (block == *succ) {
+                        *succ = split;
+                        break;
+                     }
+                  }
                }
             }
-            typed_memcpy(&split->physical_preds, &block->physical_preds, 1);
-            typed_memcpy(&split->logical_preds, &block->logical_preds, 1);
-            util_dynarray_init(&block->physical_preds, block);
-            util_dynarray_init(&block->logical_preds, block);
+
+            util_dynarray_append_dynarray(jay_predecessors(split, UGPR),
+                                          jay_predecessors(block, UGPR));
+            util_dynarray_append_dynarray(jay_predecessors(split, GPR),
+                                          jay_predecessors(block, GPR));
+            util_dynarray_clear(jay_predecessors(block, UGPR));
+            util_dynarray_clear(jay_predecessors(block, GPR));
 
             jay_block_add_successor(split, block, GPR);
             jay_block_add_successor(split, jay_last_block(b->func), GPR);
             return;
          }
-      } else if (I->op == JAY_OPCODE_HELPER_SEL) {
-         jay_SEL(b, JAY_TYPE_U32, I->dst, I->src[0], I->src[1],
-                 ctx->helper_flag);
+      } else if (I->op == JAY_OPCODE_IS_HELPER) {
+         jay_inst *mov = jay_MOV(b, I->dst, ctx->helper_flag);
+         mov->uniform = true;
+         mov->type = jay_flag_type(b->func);
          jay_remove_instruction(I);
       } else if (I->op == JAY_OPCODE_SEND && jay_send_skip_helpers(I)) {
          if (jay_is_no_mask(I)) {
-            /* jay_assign_flags ensured this is free for us, see logic there */
-            jay_def t = jay_bare_reg(UFLAG, 0);
+            /* I->cond_flag has been reserved for our use */
             jay_inst *not = jay_NOT(b, jay_null(), ctx->helper_flag);
-            not->type = JAY_TYPE_U | b->shader->dispatch_width;
-            jay_set_conditional_mod(b, not, t, GEN_CONDITION_NE);
-            jay_add_predicate(b, I, t);
+            not->type = jay_flag_type(b->func);
+            not->uniform = true;
+            jay_set_conditional_mod(b, not, I->cond_flag, GEN_CONDITION_NE);
+            jay_add_predicate(b, I, I->cond_flag);
          } else {
             jay_add_predicate(b, I, jay_negate(ctx->helper_flag));
          }
@@ -201,21 +194,27 @@ process_block(struct ctx *ctx, jay_builder *b, jay_block *block)
 void
 jay_lower_helpers(jay_shader *shader)
 {
-   jay_function *entrypoint = jay_shader_get_entrypoint(shader);
-   jay_block *exit_block = jay_last_block(entrypoint);
+   jay_function *entry = jay_shader_get_entrypoint(shader);
+   jay_builder b = jay_init_builder(entry, jay_before_function(entry));
 
    /* By ABI with jay_assign_flags, the last flag is used to track helpers */
    assert(shader->helpers_tracked);
    unsigned helper_flag_no = jay_num_regs(shader, FLAG) - 1;
    struct ctx ctx = { .helper_flag = jay_bare_reg(FLAG, helper_flag_no) };
-   jay_builder b = jay_init_builder(entrypoint, jay_after_block(exit_block));
 
-   jay_foreach_block_rev(entrypoint, block) {
+   /* Initialize the helper flag sensibly based on the dispatch mask (sr0.2) */
+   jay_def sr0_2 = jay_scalar(J_ARF, GEN_ARF_STATE);
+   sr0_2.reg = 2;
+   jay_NOT(&b, ctx.helper_flag, sr0_2)->type = jay_flag_type(entry);
+
+   jay_foreach_block_rev(entry, block) {
       process_block(&ctx, &b, block);
    }
 
+   b.cursor = jay_after_block(jay_last_block(entry));
    if (ctx.halted) {
-      b.cursor = jay_after_block(exit_block);
-      insert_halt_target(&b, &ctx);
+      jay_HALT_TARGET(&b);
    }
+
+   setup_exit_block(&b, &ctx);
 }

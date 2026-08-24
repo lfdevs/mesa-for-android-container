@@ -109,10 +109,13 @@ write_image_sampler(const struct pvr_descriptor_set *set,
 
    struct pvr_combined_image_sampler_descriptor image_sampler_desc = { 0 };
 
-   VK_FROM_HANDLE(pvr_sampler, info_sampler, image_info->sampler);
-   struct pvr_sampler *sampler = binding->immutable_sampler_count
-                                    ? binding->immutable_samplers[elem]
-                                    : info_sampler;
+   struct pvr_sampler *sampler;
+   if (binding->immutable_sampler_count) {
+      sampler = binding->immutable_samplers[elem];
+   } else {
+      VK_FROM_HANDLE(pvr_sampler, info_sampler, image_info->sampler);
+      sampler = info_sampler;
+   }
 
    image_sampler_desc.sampler = sampler->descriptor;
 
@@ -240,6 +243,19 @@ write_buffer_view(const struct pvr_descriptor_set *set,
    memcpy(desc_mapping, &buffer_view_state, sizeof(buffer_view_state));
 }
 
+static void write_inline_uniform_block(
+   const struct pvr_descriptor_set *set,
+   const VkWriteDescriptorSetInlineUniformBlock *write_iub,
+   const struct pvr_descriptor_set_layout_binding *binding,
+   uint32_t elem)
+{
+   assert(binding->stride == 1);
+   const unsigned desc_offset = binding->offset + (elem * binding->stride);
+   void *desc_mapping = (uint8_t *)set->mapping + desc_offset;
+
+   memcpy(desc_mapping, write_iub->pData, write_iub->dataSize);
+}
+
 void PVR_PER_ARCH(descriptor_set_write_immutable_samplers)(
    struct pvr_descriptor_set_layout *layout,
    struct pvr_descriptor_set *set)
@@ -276,8 +292,18 @@ void PVR_PER_ARCH(UpdateDescriptorSets)(
       assert(write->dstBinding < layout->binding_count);
       binding = &layout->bindings[write->dstBinding];
 
-      vk_foreach_struct_const (ext, write->pNext) {
-         vk_debug_ignored_stype(ext->sType);
+      const VkWriteDescriptorSetInlineUniformBlock *write_iub = NULL;
+      vk_foreach_struct_const (sType, ext, write->pNext) {
+         switch (sType) {
+         case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK:
+            write_iub = (const VkWriteDescriptorSetInlineUniformBlock *)ext;
+            continue;
+
+         default:
+            break;
+         }
+
+         vk_debug_ignored_stype(sType);
       }
 
       if (!binding->stage_flags)
@@ -364,6 +390,14 @@ void PVR_PER_ARCH(UpdateDescriptorSets)(
          }
          break;
 
+      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
+         assert(write_iub);
+         write_inline_uniform_block(set,
+                                    write_iub,
+                                    binding,
+                                    write->dstArrayElement);
+         break;
+
       default:
          UNREACHABLE("");
       }
@@ -384,8 +418,8 @@ void PVR_PER_ARCH(UpdateDescriptorSets)(
       src_binding = &src_layout->bindings[copy->srcBinding];
       dst_binding = &dst_layout->bindings[copy->dstBinding];
 
-      vk_foreach_struct_const (ext, copy->pNext) {
-         vk_debug_ignored_stype(ext->sType);
+      vk_foreach_struct_const (sType, ext, copy->pNext) {
+         vk_debug_ignored_stype(sType);
       }
 
       assert(src_binding->stage_flags == dst_binding->stage_flags);
@@ -547,6 +581,17 @@ void PVR_PER_ARCH(UpdateDescriptorSetWithTemplate)(
                                    layout_binding,
                                    entry->array_element + j);
          }
+         break;
+
+      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
+         write_inline_uniform_block(
+            set,
+            &(const VkWriteDescriptorSetInlineUniformBlock){
+               .pData = data,
+               .dataSize = entry->array_count,
+            },
+            layout_binding,
+            entry->array_element);
          break;
 
       default:

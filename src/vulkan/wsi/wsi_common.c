@@ -2974,11 +2974,10 @@ wsi_common_create_swapchain_image(const struct wsi_device *wsi,
    assert(pCreateInfo->tiling == VK_IMAGE_TILING_OPTIMAL);
    assert(!(image_usage & ~chain->image_info.usage2.usage));
 
-   vk_foreach_struct_const(ext, pCreateInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pCreateInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO: {
-         const VkImageFormatListCreateInfo *iflci =
-            (const VkImageFormatListCreateInfo *)ext;
+         const VkImageFormatListCreateInfo *iflci = ext;
          const VkImageFormatListCreateInfo *swc_iflci =
             &chain->image_info.format_list;
 

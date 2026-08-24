@@ -1,0 +1,51 @@
+/*
+ * Copyright © 2026 Valve Corporation
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#version 460
+
+#include "vk_bvh_defines.h"
+#define VK_USED_BUILD_FLAGS VK_ID_PREFIX_SUM_BUILD_FLAGS
+#define VK_USE_PREFIX_SCAN
+#define VK_WORKGROUP_SIZE PAIR_TRIANGLES_WORKGROUP_SIZE
+#include "vk_bvh_helpers.h"
+
+layout(local_size_x = PAIR_TRIANGLES_WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform CONSTS {
+   id_prefix_sum_args args;
+};
+
+void
+main(void)
+{
+   uint32_t global_id = gl_GlobalInvocationID.x;
+   uint32_t active_leaf_count = DEREF(args.header).tmp_active_leaf_count;
+
+   key32_id_pair key32_id;
+   key64_id_pair key64_id;
+   uint32_t id = VK_BVH_INVALID_NODE;
+   if (global_id < active_leaf_count) {
+      if (VK_TEST_BUILD_FLAG_64BIT_KEYS) {
+         key64_id = DEREF(INDEX(key64_id_pair, args.src_ids, global_id));
+         id = key64_id.id;
+      } else {
+         key32_id = DEREF(INDEX(key32_id_pair, args.src_ids, global_id));
+         id = key32_id.id;
+      }
+   }
+
+   uint32_t dst_id_index = vk_prefix_scan(subgroupBallot(id != VK_BVH_INVALID_NODE), args.prefix_scan_partitions, global_id);
+
+   if (id != VK_BVH_INVALID_NODE) {
+      if (VK_TEST_BUILD_FLAG_64BIT_KEYS)
+         DEREF(INDEX(key64_id_pair, args.dst_ids, dst_id_index)) = key64_id;
+      else
+         DEREF(INDEX(key32_id_pair, args.dst_ids, dst_id_index)) = key32_id;
+   }
+
+   if (global_id == active_leaf_count - 1)
+      DEREF(args.header).active_leaf_count = id != VK_BVH_INVALID_NODE ? dst_id_index + 1 : dst_id_index;
+}

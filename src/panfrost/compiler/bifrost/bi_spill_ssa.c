@@ -417,7 +417,6 @@ insert_spill(bi_builder *b, struct spill_ctx *ctx, unsigned node)
 
       bi_memmov_to(b, mem, idx);
 
-      b->shader->spills++;
       /* We only need the extra registers reserved if we actually spilled
        * instead of just remat.
        */
@@ -441,7 +440,6 @@ insert_reload(struct spill_ctx *ctx, bi_block *block, bi_cursor cursor,
       remat_to(&b, idx, ctx, node);
    } else {
       bi_memmov_to(&b, idx, bi_index_as_mem(idx, ctx));
-      b.shader->fills++;
    }
 }
 

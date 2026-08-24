@@ -72,12 +72,8 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min,Fail
 
 
 # OpenCL below
-api@clgetcommandqueueinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
-api@clgetkernelarginfo,Fail
 api@cllinkprogram,Fail
-api@clsetkernelarg,Fail
-api@clsetkernelarg@Input checks,Fail
 program@bitcoin: phatk kernel,Crash
 program@execute@amdgcn-f32-inline-immediates,Fail
 program@execute@amdgcn-f32-inline-immediates@add integer 64,Fail
@@ -400,8 +396,6 @@ program@execute@clz-optimizations,Crash
 program@execute@float-convert_long,Fail
 program@execute@float-convert_long@convert_long(float),Fail
 program@execute@float-convert_long@convert_ulong(float),Fail
-program@execute@global-offset,Fail
-program@execute@global-offset@3d- input dependent,Fail
 program@execute@load-hi16,Crash
 program@execute@load-lo16,Crash
 program@execute@program-scope-arrays,Crash

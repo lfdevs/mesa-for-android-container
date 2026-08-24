@@ -40,3 +40,5 @@ afbcp-spec@ext_texture_srgb@multisample-formats 2 gl_ext_texture_srgb
 spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3
 spec@oes_egl_image_external_essl3@oes_egl_image_external_essl3@oes_egl_image_external_essl3_imageStore
 
+# See Mesa bug #15880 ("panfrost: incomplete glCopyPixels() with feedback loop")
+spec@!opengl 1.4@copy-pixels

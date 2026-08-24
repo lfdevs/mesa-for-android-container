@@ -512,7 +512,8 @@ jm_emit_vertex_job(struct panfrost_batch *batch,
 
 static void
 jm_emit_tiler_draw(struct mali_draw_packed *out, struct panfrost_batch *batch,
-                   bool fs_required, enum mesa_prim prim)
+                   bool fs_required, enum mesa_prim prim,
+                   struct pan_ptr *vertex_array)
 {
    struct panfrost_context *ctx = batch->ctx;
    struct pipe_rasterizer_state *rast = &ctx->rasterizer->base;
@@ -574,6 +575,13 @@ jm_emit_tiler_draw(struct mali_draw_packed *out, struct panfrost_batch *batch,
       cfg.flags_0.aligned_line_ends = !rast->line_rectangular;
 
       cfg.vertex_array.packet = true;
+      if (vertex_array) {
+         cfg.vertex_array.pointer = vertex_array->gpu;
+         cfg.vertex_array.vertex_packet_stride =
+            PAN_RUN_FULLSCREEN_PACKET_STRIDE;
+         cfg.vertex_array.vertex_attribute_stride =
+            PAN_RUN_FULLSCREEN_ATTRIB_STRIDE;
+      }
 
       cfg.minimum_z = batch->minimum_z;
       cfg.maximum_z = batch->maximum_z;
@@ -819,7 +827,7 @@ jm_emit_malloc_vertex_job(struct panfrost_batch *batch,
    }
 
    jm_emit_tiler_draw(pan_section_ptr(job, MALLOC_VERTEX_JOB, DRAW), batch,
-                      fs_required, u_reduced_prim(info->mode));
+                      fs_required, u_reduced_prim(info->mode), NULL);
 
    pan_section_pack(job, MALLOC_VERTEX_JOB, POSITION, cfg) {
       jm_emit_shader_env(batch, &cfg, MESA_SHADER_VERTEX,
@@ -867,7 +875,8 @@ jm_emit_tiler_job(struct panfrost_batch *batch,
       ;
 #endif
 
-   jm_emit_tiler_draw(pan_section_ptr(job, TILER_JOB, DRAW), batch, true, prim);
+   jm_emit_tiler_draw(pan_section_ptr(job, TILER_JOB, DRAW), batch, true,
+                      prim, NULL);
 
    panfrost_emit_primitive_size(ctx, prim == MESA_PRIM_POINTS,
                                 batch->varyings.psiz, prim_size);
@@ -1033,6 +1042,51 @@ GENX(jm_launch_draw_indirect)(struct panfrost_batch *batch,
                               const struct pipe_draw_indirect_info *indirect)
 {
    UNREACHABLE("draw indirect not implemented for jm");
+}
+
+void
+GENX(jm_launch_draw_fullscreen)(struct panfrost_batch *batch,
+                                enum blitter_attrib_type type,
+                                const struct blitter_attrib *attrib)
+{
+#if PAN_ARCH == 9
+   PAN_TRACE_FUNC(PAN_TRACE_GL_JM);
+
+   struct pan_ptr job, dcd, vertex_array;
+
+   job = pan_pool_alloc_desc(&batch->pool.base, FULLSCREEN_JOB);
+   if (!job.cpu) {
+      mesa_loge("jm_launch_draw failed");
+      return;
+   }
+
+   dcd = pan_pool_alloc_desc(&batch->pool.base, DRAW);
+   if (!dcd.cpu) {
+      mesa_loge("jm_launch_draw failed");
+      return;
+   }
+
+   vertex_array = panfrost_emit_fullscreen_vertex_array(batch, type, attrib);
+   jm_emit_tiler_draw(dcd.cpu, batch, true, u_reduced_prim(MESA_PRIM_QUADS),
+                      &vertex_array);
+
+   pan_section_pack(job.cpu, FULLSCREEN_JOB, PRIMITIVE, cfg) {
+      cfg.scissor_array_enable = false;
+   }
+   pan_section_pack(job.cpu, FULLSCREEN_JOB, DCD, cfg) {
+      cfg.address = dcd.gpu;
+   }
+   pan_section_pack(job.cpu, FULLSCREEN_JOB, TILER, cfg) {
+      cfg.address = jm_emit_tiler_desc(batch);
+   }
+   memcpy(pan_section_ptr(job.cpu, FULLSCREEN_JOB, SCISSOR), &batch->scissor,
+          pan_size(SCISSOR));
+
+   pan_jc_add_job(&batch->jm.jobs.vtc_jc, MALI_JOB_TYPE_FULLSCREEN, false,
+                  false, 0, 0, &job, false);
+#else
+   UNREACHABLE("draw fullscreen not available for arch < 9");
+#endif
 }
 
 void

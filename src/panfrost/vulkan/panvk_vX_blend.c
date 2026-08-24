@@ -92,6 +92,8 @@ get_blend_shader(struct panvk_device *dev,
       .gpu_id = pdev->kmod.dev->props.gpu_id,
       .gpu_variant = pdev->kmod.dev->props.gpu_variant,
       .is_blend = true,
+      /* Blend constants are loaded from the first four FAU words. */
+      .fau.reserved = 4,
    };
 
    pan_preprocess_nir(nir, inputs.gpu_id);

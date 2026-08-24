@@ -292,6 +292,50 @@ typedef enum {
    NIR_CMAT_REDUCE_2X2 = 1u << 2,
 } nir_cmat_reduce;
 
+typedef enum {
+   NIR_TENSOR_CLAMP_UNDEFINED = 0,
+   NIR_TENSOR_CLAMP_CONSTANT = 1,
+   NIR_TENSOR_CLAMP_EDGE = 2,
+   NIR_TENSOR_CLAMP_REPEAT = 3,
+   NIR_TENSOR_CLAMP_REPEAT_MIRRORED = 4,
+} nir_tensor_clamp_mode;
+
+typedef enum {
+   NIR_TENSOR_LAYOUT_BLOCKSIZE,
+   NIR_TENSOR_LAYOUT_LAYOUT_DIM,
+   NIR_TENSOR_LAYOUT_STRIDE,
+   NIR_TENSOR_LAYOUT_OFFSET,
+   NIR_TENSOR_LAYOUT_SPAN,
+   NIR_TENSOR_LAYOUT_CLAMP_VALUE,
+} nir_tensor_layout_fields;
+
+typedef enum {
+   NIR_TENSOR_VIEW_DIM,
+   NIR_TENSOR_VIEW_STRIDE,
+   NIR_TENSOR_VIEW_CLIP_ROW_OFFSET,
+   NIR_TENSOR_VIEW_CLIP_ROW_SPAN,
+   NIR_TENSOR_VIEW_CLIP_COL_OFFSET,
+   NIR_TENSOR_VIEW_CLIP_COL_SPAN,
+} nir_tensor_view_fields;
+
+#define NIR_TENSOR_VIEW_MAX_PERMUTATIONS 5
+
+/**
+ * tensor load cmat call information.
+ * view denotes if a tensor view is present
+ * the split row/col indexes are which group
+ * of rows or columns this operation is referring
+ * to.
+ */
+struct nir_cmat_tensor_load {
+   uint32_t tensor_view:1;
+   uint32_t split_row_index:15;
+   uint32_t view_has_dims:1;
+   uint32_t split_col_index:15;
+   uint8_t view_permutations[NIR_TENSOR_VIEW_MAX_PERMUTATIONS];
+   uint8_t layout_clamp_mode; /* nir_tensor_clamp_mode */
+};
+
 #define nir_const_value_to_array(arr, c, components, m) \
    do {                                                 \
       for (unsigned i = 0; i < components; ++i)         \
@@ -1983,7 +2027,9 @@ typedef struct nir_call_instr {
    nir_src params[];
 } nir_call_instr;
 
-#define NIR_CMAT_CALL_MAX_CONST_INDEX 1
+#define NIR_CMAT_CALL_MAX_CONST_INDEX 5
+#define NIR_CMAT_CALL_LAYOUT_OFFSET 0
+#define NIR_CMAT_CALL_DESC_OFFSET 3
 
 typedef enum {
    /*
@@ -2007,6 +2053,11 @@ typedef enum {
     * per-element dst, row offset, col offset, src
     */
    nir_cmat_call_op_per_element_op,
+   /*
+    * Cooperative matrix tensor load store
+    */
+   nir_cmat_call_op_tensor_load,
+   nir_cmat_call_op_tensor_store,
 } nir_cmat_call_op;
 
 typedef struct nir_cmat_call_instr {
@@ -2024,6 +2075,40 @@ typedef struct nir_cmat_call_instr {
 static inline nir_cmat_reduce nir_cmat_call_reduce_flags(nir_cmat_call_instr *call)
 {
    return (nir_cmat_reduce)call->const_index[0];
+}
+
+static inline struct nir_cmat_tensor_load nir_cmat_call_tensor_load_info(nir_cmat_call_instr *call)
+{
+   struct nir_cmat_tensor_load tl;
+   STATIC_ASSERT(sizeof(call->const_index[NIR_CMAT_CALL_LAYOUT_OFFSET]) * 3 == sizeof(tl));
+   memcpy(&tl, &call->const_index[NIR_CMAT_CALL_LAYOUT_OFFSET], sizeof(tl));
+   return tl;
+}
+
+static inline void nir_cmat_call_set_tensor_load_info(nir_cmat_call_instr *call, struct nir_cmat_tensor_load tl)
+{
+   STATIC_ASSERT(sizeof(call->const_index[NIR_CMAT_CALL_LAYOUT_OFFSET]) * 3 == sizeof(tl));
+   memcpy(&call->const_index[NIR_CMAT_CALL_LAYOUT_OFFSET], &tl, sizeof(tl));
+}
+
+static inline struct glsl_cmat_description nir_cmat_call_cmat_desc(nir_cmat_call_instr *call)
+{
+   struct glsl_cmat_description desc;
+   STATIC_ASSERT(sizeof(call->const_index[NIR_CMAT_CALL_DESC_OFFSET]) * 2 == sizeof(desc));
+   memcpy(&desc, &call->const_index[NIR_CMAT_CALL_DESC_OFFSET], sizeof(desc));
+   return desc;
+}
+
+static inline void nir_cmat_call_set_cmat_desc(nir_cmat_call_instr *call, struct glsl_cmat_description desc)
+{
+   STATIC_ASSERT(sizeof(call->const_index[NIR_CMAT_CALL_DESC_OFFSET]) * 2 == sizeof(desc));
+   memcpy(&call->const_index[NIR_CMAT_CALL_DESC_OFFSET], &desc, sizeof(desc));
+}
+
+static inline void nir_cmat_call_dup_cmat_desc(nir_cmat_call_instr *dest, nir_cmat_call_instr *src)
+{
+   STATIC_ASSERT(sizeof(src->const_index[NIR_CMAT_CALL_DESC_OFFSET]) * 2 == sizeof(struct glsl_cmat_description));
+   memcpy(&dest->const_index[NIR_CMAT_CALL_DESC_OFFSET], &src->const_index[NIR_CMAT_CALL_DESC_OFFSET], sizeof(struct glsl_cmat_description));
 }
 
 #include "nir_intrinsics.h"
@@ -2127,6 +2212,10 @@ typedef enum {
    /**
     * Identifies any subgroup-like operation whose behaviour depends on other
     * logical threads. This is incompatible with CAN_REORDER.
+    *
+    * It also indicates that the intrinsic can be CSE'ed if:
+    * - the active invocations don't change
+    * - the intrinsic has no access index or ACCESS_CAN_REORDER is set
     */
    NIR_INTRINSIC_SUBGROUP = BITFIELD_BIT(2),
 
@@ -4369,6 +4458,12 @@ nir_intrinsic_get_var(const nir_intrinsic_instr *intrin, unsigned i)
    return nir_deref_instr_get_variable(nir_src_as_deref(intrin->src[i]));
 }
 
+static inline nir_variable *
+nir_cmat_call_get_var(const nir_cmat_call_instr *call, unsigned i)
+{
+   return nir_deref_instr_get_variable(nir_src_as_deref(call->params[i]));
+}
+
 /*
  * After all functions are forcibly inlined, these passes remove redundant
  * functions from a shader and library respectively.
@@ -4852,6 +4947,18 @@ bool nir_foreach_phi_src_leaving_block(nir_block *instr,
 nir_const_value *nir_src_as_const_value(nir_src src);
 
 const char *nir_src_as_string(nir_src src);
+
+#define NIR_SRC_AS_SRC_(name)                                                  \
+   static inline nir_##name##_src *                                            \
+   nir_src_as_##name##_src(nir_src *src)                                       \
+   {                                                                           \
+      assert(src && nir_src_use_instr(src)->type == nir_instr_type_##name);    \
+      return container_of(src, nir_##name##_src, src);                         \
+   }
+
+NIR_SRC_AS_SRC_(alu);
+NIR_SRC_AS_SRC_(phi);
+NIR_SRC_AS_SRC_(tex);
 
 bool nir_src_is_always_uniform(nir_src src);
 bool nir_srcs_equal(nir_src src1, nir_src src2);
@@ -5480,6 +5587,7 @@ bool nir_inline_functions(nir_shader *shader);
 void nir_cleanup_functions(nir_shader *shader);
 bool nir_link_shader_functions(nir_shader *shader,
                                const nir_shader *link_shader);
+bool nir_shader_fully_linked(const nir_shader *shader);
 bool nir_lower_calls_to_builtins(nir_shader *s);
 
 void nir_find_inlinable_uniforms(nir_shader *shader);
@@ -5691,7 +5799,21 @@ bool nir_lower_io(nir_shader *shader,
 
 void nir_lower_io_passes(nir_shader *nir, bool renumber_vs_inputs);
 bool nir_io_add_intrinsic_xfb_info(nir_shader *nir);
-bool nir_lower_io_indirect_loads(nir_shader *nir, nir_variable_mode modes);
+
+typedef struct {
+   /* Address format of the store_global addresses. Must be a plain global
+    * format (nir_address_format_32bit_global or _64bit_global).
+    */
+   nir_address_format address_format;
+   /* Keep the lowered store_output intrinsics instead of removing them,
+    * for drivers that rasterize and capture in the same draw.
+    */
+   bool keep_outputs;
+} nir_lower_xfb_to_stores_options;
+
+bool nir_lower_xfb_to_stores(nir_shader *nir, const nir_lower_xfb_to_stores_options *options);
+bool nir_lower_io_indirect_loads(nir_shader *nir, nir_variable_mode modes,
+                                 bool lower_indirect_vertex_index);
 bool nir_remove_outputs(nir_shader *shader, mesa_shader_stage next_stage,
                         uint64_t remove_varying, uint64_t remove_sysval);
 
@@ -5757,6 +5879,12 @@ void nir_lower_explicit_io_instr(nir_builder *b,
 bool nir_lower_explicit_io(nir_shader *shader,
                            nir_variable_mode modes,
                            nir_address_format);
+
+bool nir_convert_address_format(nir_shader *shader, nir_variable_mode modes,
+                                nir_address_format from, nir_address_format to);
+nir_def *nir_build_convert_address_format(nir_builder *b, nir_def *addr,
+                                          nir_address_format from,
+                                          nir_address_format to);
 
 typedef enum {
    /* Use open-coded funnel shifts for each component. */
@@ -6860,7 +6988,8 @@ bool nir_opt_find_array_copies(nir_shader *shader);
 bool nir_def_is_frag_coord_z(nir_def *def);
 bool nir_opt_fragdepth(nir_shader *shader);
 
-bool nir_opt_gcm(nir_shader *shader, bool value_number);
+bool nir_opt_gcm(nir_shader *shader, bool value_number,
+                 bool hoist_tex_from_loops);
 
 bool nir_opt_generate_bfi(nir_shader *shader);
 
@@ -6920,6 +7049,15 @@ typedef enum {
    /* The following options only impact load_global/ubo/ssbo. */
    nir_move_only_convergent =          BITFIELD_BIT(30),
    nir_move_only_divergent =           BITFIELD_BIT(31),
+
+   nir_move_all =
+      nir_move_const_undef | nir_move_alu | nir_move_copies |
+      nir_move_comparisons | nir_move_tex_sample | nir_move_tex_load |
+      nir_move_tex_load_fragment_mask | nir_move_tex_lod | nir_move_tex_query |
+      nir_move_load_image | nir_move_load_image_fragment_mask |
+      nir_move_query_image | nir_move_load_input | nir_move_load_global |
+      nir_move_load_ubo | nir_move_load_ssbo | nir_move_load_uniform |
+      nir_move_load_buffer_amd | nir_move_load_frag_coord,
 } nir_move_options;
 
 bool nir_can_move_instr(nir_instr *instr, nir_move_options options);
@@ -7021,9 +7159,20 @@ bool nir_opt_uniform_atomics(nir_shader *shader, bool fs_atomics_predicated);
 bool nir_opt_uniform_subgroup(nir_shader *shader,
                               const nir_lower_subgroups_options *);
 
+typedef struct nir_opt_shared_vars_to_subgroup_options {
+   bool optimize_constant_access_to_uniform;
+   bool optimize_divergent_access_to_shuffle;
+
+   /* Whether workgroup ids are assigned in linear order inside
+    * the subgroups.
+    */
+   bool linear_workgroup_ids;
+   unsigned ballot_num_components;
+   unsigned ballot_size;
+} nir_opt_shared_vars_to_subgroup_options;
+
 bool nir_opt_shared_vars_to_subgroup(nir_shader *shader,
-                                     unsigned ballot_num_components,
-                                     unsigned ballot_size);
+                                     const nir_opt_shared_vars_to_subgroup_options *options);
 
 bool nir_opt_vectorize(nir_shader *shader, nir_vectorize_cb filter,
                        void *data);
@@ -7377,13 +7526,57 @@ typedef struct {
 void nir_gather_output_clipper_var_groups(nir_shader *nir,
                                           nir_output_clipper_var_groups *groups);
 
-bool nir_lower_cooperative_matrix_flexible_dimensions(nir_shader *shader, unsigned m_gran, unsigned n_gran, unsigned k_gran);
+struct nir_lower_coopmat_args {
+   unsigned m_gran;
+   unsigned n_gran;
+   unsigned k_gran;
+};
+
+bool nir_lower_cooperative_matrix_flexible_dimensions(nir_shader *shader,
+                                                      const struct nir_lower_coopmat_args *args);
 
 bool nir_unlower_io_to_vars(nir_shader *nir, bool keep_intrinsics);
 
 bool nir_opt_barycentric(nir_shader *shader, bool lower_sample_to_pos);
 
 bool nir_normalize_sin_cos(nir_shader *shader);
+
+/*
+ * Intermediate state for tensor addressing calculations.
+ * Drivers call the init for this with the call operation,
+ * then in a loop use it to calculate the tensor ptr.
+ */
+struct nir_calc_tensor_info {
+   nir_deref_instr *view;
+   nir_def *spans;
+   nir_def *strides;
+   nir_def *offsets;
+   nir_def *block_sizes;
+   nir_def *layout_dims;
+   nir_def *clamp_value;
+   nir_def *clip_row_offset;
+   nir_def *clip_col_offset;
+   nir_def *clip_row_span;
+   nir_def *clip_col_span;
+   nir_def *view_dims;
+   nir_def *view_strides;
+   uint32_t cols;
+   uint32_t row_imm_offset;
+   uint32_t col_imm_offset;
+   uint8_t view_permutations[NIR_TENSOR_VIEW_MAX_PERMUTATIONS];
+   bool view_has_dims;
+   struct glsl_cmat_description desc;
+   nir_tensor_clamp_mode clamp_mode;
+   nir_if *clipped_if;
+   nir_def *do_clamp;
+   nir_function *decode_fnptr;
+};
+
+void nir_calc_tensor_derefs_init(nir_builder *b, struct nir_calc_tensor_info *info,
+                                 nir_cmat_call_instr *call);
+nir_def *nir_calc_tensor_derefs(nir_builder *b, struct nir_calc_tensor_info *info,
+                                nir_def *row, nir_def *col,
+                                nir_deref_instr **iter_deref_p);
 
 #include "nir_inline_helpers.h"
 

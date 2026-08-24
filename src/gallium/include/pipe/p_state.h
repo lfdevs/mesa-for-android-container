@@ -440,8 +440,19 @@ struct pipe_framebuffer_state
 
    /** multiple color buffers for multiple render targets */
    uint8_t nr_cbufs;
+
    /** true if pixel local storage is enabled */
-   bool pls_enabled;
+   bool pls_enabled:1;
+
+   /**
+    * Additional color buffers aren't explicitly written by the fragment
+    * shader but are downscaled 2x from the previous color buffer. This is
+    * used by some GPUs to output multiple mipmaps at once.
+    */
+   bool downscale_cbufs:1;
+
+   uint8_t _pad:6;
+
    /** used for multiview */
    uint8_t viewmask;
    struct pipe_surface cbufs[PIPE_MAX_COLOR_BUFS];
@@ -1044,6 +1055,10 @@ struct pipe_tensor {
     * Whether the tensor contains data in INT8 or UINT8 format.
     */
    bool is_signed;
+   /**
+    * Whether the tensor is exported from the current ML subgraph.
+    */
+   bool is_external_output;
    uint8_t type_size;
 };
 
@@ -1143,6 +1158,12 @@ struct pipe_ml_operation
           * Whether this is a depthwise convolution.
           */
          bool depthwise;
+
+         /**
+          * Quantized activation clamp range for fused activations.
+          */
+         int activation_min;
+         int activation_max;
 
          /**
           * Whether this convolution has fused ReLU activation.

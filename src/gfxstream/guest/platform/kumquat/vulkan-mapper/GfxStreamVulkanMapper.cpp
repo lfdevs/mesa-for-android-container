@@ -257,7 +257,9 @@ int32_t GfxStreamVulkanMapper::map(struct VulkanMapperData* mapData) {
         L"",
     };
 
-#elif DETECT_OS_LINUX
+// Builds on Apple, but is not known to work there: MoltenVK does not implement
+// VK_KHR_external_memory_fd.
+#elif DETECT_OS_LINUX || DETECT_OS_APPLE
     VkExternalMemoryHandleTypeFlagBits flagBits;
     if (mapData->handleType == VIRTGPU_KUMQUAT_HANDLE_TYPE_MEM_DMABUF) {
         flagBits = (enum VkExternalMemoryHandleTypeFlagBits)(uint32_t(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT));

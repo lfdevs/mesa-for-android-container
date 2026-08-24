@@ -51,9 +51,10 @@ static inline void
 pan_shader_prepare_midgard_rsd(const struct pan_shader_info *info,
                                struct MALI_RENDERER_STATE *rsd)
 {
-   assert((info->push.count & 3) == 0);
+   unsigned push_count = info->fau.count;
+   assert((push_count & 3) == 0);
 
-   rsd->properties.uniform_count = info->push.count / 4;
+   rsd->properties.uniform_count = push_count / 4;
    rsd->properties.shader_has_side_effects = info->writes_global;
    rsd->properties.fp_mode = MALI_FP_MODE_GL_INF_NAN_ALLOWED;
 
@@ -137,7 +138,7 @@ static inline void
 pan_shader_prepare_bifrost_rsd(const struct pan_shader_info *info,
                                struct MALI_RENDERER_STATE *rsd)
 {
-   unsigned fau_count = DIV_ROUND_UP(info->push.count, 2);
+   unsigned fau_count = DIV_ROUND_UP(info->fau.count, 2);
    rsd->preload.uniform_count = fau_count;
 
 #if PAN_ARCH >= 7

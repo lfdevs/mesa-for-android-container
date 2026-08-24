@@ -1,0 +1,12 @@
+dEQP-GLES2.functional.fbo.render.recreate_depthbuffer.no_rebind_rbo_bgra_depth_component16
+dEQP-GLES2.functional.fbo.render.recreate_depthbuffer.no_rebind_tex2d_bgra_depth_component16
+dEQP-GLES2.functional.fbo.render.recreate_depthbuffer.no_rebind_tex2d_rgb_depth_component16
+dEQP-GLES2.functional.fbo.render.recreate_depthbuffer.rebind_rbo_rgb5_a1_depth_component16
+dEQP-GLES2.functional.fbo.render.resize.tex2d_bgra_depth_component16
+dEQP-GLES2.functional.fbo.render.shared_colorbuffer.tex2d_rgba_depth_component16
+
+dEQP-GLES2.functional.texture.filtering.2d.linear_linear_mirror_rgba4444_pot
+dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_repeat_rgba8888
+dEQP-GLES2.functional.texture.mipmap.2d.basic.linear_nearest_clamp
+
+dEQP-GLES2.functional.shaders.invariance.highp.loop_0

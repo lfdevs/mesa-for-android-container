@@ -22,9 +22,6 @@ dEQP-VK.ray_tracing_pipeline.build.*_4_4_4096
 
 dEQP-VK.ray_tracing_pipeline.large_shader_set.*.4096
 
-dEQP-VK.ray_tracing_pipeline.misc.maxrtinvocations_AABB
-dEQP-VK.ray_tracing_pipeline.misc.maxrtinvocations_tri
-
 # Those cases take very long and hang the gpu.
 dEQP-VK.ray_tracing_pipeline.misc.recursiveTraces_AABB_11
 dEQP-VK.ray_tracing_pipeline.misc.recursiveTraces_AABB_12

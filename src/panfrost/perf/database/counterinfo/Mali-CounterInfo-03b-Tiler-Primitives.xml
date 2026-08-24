@@ -1,0 +1,1243 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2019-2026 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<CounterInfoList>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomTotalPrim</MachineName>
+    <StableID>65556</StableID>
+    <HumanName>Input primitives</HumanName>
+    <GroupName>Input Primitives</GroupName>
+    <GroupHumanName>Input primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The total number of input primitives to the rendering process.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the total number of input primitives to the
+      rendering process.
+
+      High complexity geometry is one of the most expensive inputs to the GPU,
+      because vertices are much larger than compressed texels. Optimize your
+      geometry to minimize mesh complexity, using dynamic level-of-detail and
+      normal maps to reduce the number of primitives required.
+    </LongDescription>
+    <Equation>
+      MaliGeomTotalCullPrim + MaliGeomVisiblePrim
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomTrianglePrim</MachineName>
+    <SourceName>TRIANGLES</SourceName>
+    <StableID>143</StableID>
+    <HumanName>Triangle primitives</HumanName>
+    <GroupName>Input Primitives</GroupName>
+    <GroupHumanName>Triangle primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of input triangle primitives.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every input triangle primitive. The count is
+      made before any culling or clipping.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomLinePrim</MachineName>
+    <SourceName>LINES</SourceName>
+    <StableID>144</StableID>
+    <HumanName>Line primitives</HumanName>
+    <GroupName>Input Primitives</GroupName>
+    <GroupHumanName>Line primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of input line primitives.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every input line primitive. The count is made
+      before any culling or clipping.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomPointPrim</MachineName>
+    <SourceName>POINTS</SourceName>
+    <StableID>145</StableID>
+    <HumanName>Point primitives</HumanName>
+    <GroupName>Input Primitives</GroupName>
+    <GroupHumanName>Point primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of input point primitives.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every input point primitive. The count is
+      made before any culling or clipping.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomTotalCullPrim</MachineName>
+    <StableID>65562</StableID>
+    <HumanName>Culled primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Culled primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives that were culled during the rendering process.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of primitives that were culled during
+      the rendering process, for any reason.
+
+      For efficient 3D content, it is expected that only 50% of primitives are
+      visible because back-face culling is used to remove half of each model.
+    </LongDescription>
+    <Equation>
+      MaliGeomFaceXYPlaneCullPrim + MaliGeomZPlaneCullPrim
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomTotalCullPrim</MachineName>
+    <StableID>65562</StableID>
+    <HumanName>Culled primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Culled primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives that were culled during the rendering process.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of primitives that were culled during
+      the rendering process, for any reason.
+
+      For efficient 3D content, it is expected that only 50% of primitives are
+      visible because back-face culling is used to remove half of each model.
+    </LongDescription>
+    <Equation>
+      MaliGeomFaceXYPlaneCullPrim + MaliGeomZPlaneCullPrim + MaliGeomSampleCullPrim
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomTotalCullPrim</MachineName>
+    <StableID>65562</StableID>
+    <HumanName>Culled primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Culled primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives that were culled during the rendering process.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of primitives that were culled during
+      the rendering process, for any reason.
+
+      For efficient 3D content, it is expected that only 50% of primitives are
+      visible because back-face culling is used to remove half of each model.
+    </LongDescription>
+    <Equation>
+      MaliGeomFaceCullPrim + MaliGeomPlaneCullPrim + MaliGeomSampleCullPrim
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomTotalCullPrim</MachineName>
+    <StableID>65562</StableID>
+    <HumanName>Culled primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Culled primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives that were culled during the rendering process.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of primitives that were culled during
+      the rendering process, for any reason.
+
+      For efficient 3D content, it is expected that only 50% of primitives are
+      visible because back-face culling is used to remove half of each model.
+    </LongDescription>
+    <Equation>
+      MaliGeomFaceCullPrim + MaliGeomPlaneCullPrim + MaliGeomSampleCullPrim + MaliGeomScissorCullPrim
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomFaceXYPlaneCullPrim</MachineName>
+    <SourceName>PRIM_CULLED</SourceName>
+    <StableID>149</StableID>
+    <HumanName>Facing or XY plane test culled primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Facing or XY plane culled primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives that are culled by facing or frustum XY plane
+      tests.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every primitive culled by the facing test, or
+      culled by testing against the view frustum X and Y clip planes.
+
+      For an arbitrary 3D scene we would expect approximately half of the
+      triangles to be back-facing. If you see a significantly lower percentage
+      than this, check that the facing test is properly enabled.
+
+      It is expected that a small number of primitives are outside of the
+      frustum extents, as application culling is never perfect and some models
+      might intersect a frustum clip plane. If this counter is significantly
+      higher than half of the triangles, use draw call bounding box checks to
+      cull draws that are completely out-of-frustum.
+
+      If batched draw calls are complex and have a large bounding volume,
+      consider using smaller batches to reduce the bounding volume to enable
+      better culling.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomFaceXYPlaneCullRate</MachineName>
+    <StableID>65558</StableID>
+    <HumanName>Facing or XY plane test cull percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Facing or XY plane culled primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives culled by the facing or frustum XY plane
+      tests.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives entering the facing
+      and XY plane test that are culled by it. Primitives that are outside of
+      the view frustum in the XY axis, or that are back-facing inside the
+      frustum, are culled by this stage.
+
+      For efficient 3D content, it is expected that 50% of primitives are
+      culled by the facing test. If more than 50% of primitives are culled it
+      might be because they are out-of-frustum, which can often be optimized
+      with better software culling or batching granularity.
+    </LongDescription>
+    <Equation>
+      (MaliGeomFaceXYPlaneCullPrim / MaliGeomTotalPrim) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomZPlaneCullPrim</MachineName>
+    <SourceName>PRIM_CLIPPED</SourceName>
+    <StableID>150</StableID>
+    <HumanName>Z plane test culled primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Z plane culled primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives that are culled by frustum Z plane tests.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every primitive culled by testing against the
+      view frustum near and far clip planes.
+
+      It is expected that a small number of primitives are outside of the
+      frustum extents, as application culling is never perfect and some models
+      might intersect a frustum clip plane.
+
+      Use draw call bounding box checks to cull draws that are completely
+      out-of-frustum. If batched draw calls are complex and have a large
+      bounding volume consider using smaller batches to reduce the bounding
+      volume to enable better culling.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomZPlaneCullRate</MachineName>
+    <StableID>65559</StableID>
+    <HumanName>Z plane test cull percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Z plane culled primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives culled by the frustum Z plane test.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives entering the Z plane
+      culling test that are culled by it. Primitives that are closer than the
+      frustum near clip plane, or further away than the frustum far clip plane,
+      are culled by this stage.
+
+      Seeing a significant proportion of triangles culled at this stage can be
+      indicative of insufficient application software culling.
+    </LongDescription>
+    <Equation>
+      (MaliGeomZPlaneCullPrim / (MaliGeomTotalPrim - MaliGeomFaceXYPlaneCullPrim)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomFaceCullPrim</MachineName>
+    <SourceName>PRIM_FACE_CULLED</SourceName>
+    <SourceAlias>BINNER_FACE_CULLED</SourceAlias>
+    <StableID>297</StableID>
+    <HumanName>Facing test culled primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Facing culled primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives that are culled by facing tests.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every primitive culled by the facing test.
+
+      For an arbitrary 3D scene we would expect approximately half of the
+      triangles to be back-facing. If you see a significantly lower percentage
+      than this, check that the facing test is properly enabled.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomFaceCullRate</MachineName>
+    <StableID>65671</StableID>
+    <HumanName>Facing test cull percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Facing culled primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives culled by the facing test.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives entering the facing
+      test that are culled by it. Back-facing triangles that are inside the
+      frustum are culled by this stage.
+
+      For efficient 3D content, it is expected that 50% of primitives are
+      culled by the facing test. If you see a significantly lower percentage,
+      check that the facing test is properly enabled.
+    </LongDescription>
+    <Equation>
+      (MaliGeomFaceCullPrim / MaliGeomTotalPrim) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomFaceCullRate</MachineName>
+    <StableID>65671</StableID>
+    <HumanName>Facing test cull percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Facing culled primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives culled by the facing test.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives entering the facing
+      test that are culled by it. Back-facing triangles that are inside the
+      frustum are culled by this stage.
+
+      For efficient 3D content, it is expected that 50% of primitives are
+      culled by the facing test. If you see a significantly lower percentage,
+      check that the facing test is properly enabled.
+    </LongDescription>
+    <Equation>
+      (MaliGeomFaceCullPrim / (MaliGeomTotalPrim - MaliGeomPlaneCullPrim - MaliGeomScissorCullPrim)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomPlaneCullPrim</MachineName>
+    <SourceName>PRIM_FRUSTUM_CULLED</SourceName>
+    <SourceAlias>BINNER_FRUSTUM_CULLED</SourceAlias>
+    <StableID>298</StableID>
+    <HumanName>Frustum test culled primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Frustum culled primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives that are culled by frustum tests.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every primitive culled by testing against the
+      view frustum clip planes.
+
+      If significant numbers of triangles are culled by this test, Arm
+      recommends reviewing application culling and batching. Test draw call
+      bounding boxes against the frustum to cull draws that are completely
+      out-of-frustum. Reduce the size of static batches to reduce the bounding
+      volume of each batch, enabling better culling.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomPlaneCullRate</MachineName>
+    <StableID>65672</StableID>
+    <HumanName>Frustum test cull percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Frustum culled primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives culled by the frustum test.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives entering the frustum
+      test that are culled by it. Primitives that are outside of the view
+      frustum are culled by this stage.
+
+      If a significant percentage of triangles are culled by this test we
+      recommend reviewing application culling and batching. Test draw call
+      bounding boxes against the frustum to cull draws that are completely
+      out-of-frustum. Reduce the size of static batches to reduce the bounding
+      volume of each batch, enabling better culling.
+    </LongDescription>
+    <Equation>
+      (MaliGeomPlaneCullPrim / (MaliGeomTotalPrim - MaliGeomFaceCullPrim)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomPlaneCullRate</MachineName>
+    <StableID>65672</StableID>
+    <HumanName>Frustum test cull percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Frustum culled primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives culled by the frustum test.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives entering the frustum
+      test that are culled by it. Primitives that are outside of the view
+      frustum are culled by this stage.
+
+      If a significant percentage of triangles are culled by this test we
+      recommend reviewing application culling and batching. Test draw call
+      bounding boxes against the frustum to cull draws that are completely
+      out-of-frustum. Reduce the size of static batches to reduce the bounding
+      volume of each batch, enabling better culling.
+    </LongDescription>
+    <Equation>
+      (MaliGeomPlaneCullPrim / MaliGeomTotalPrim) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomScissorCullPrim</MachineName>
+    <SourceName>PRIM_SCISSOR_CULLED</SourceName>
+    <SourceAlias>BINNER_SCISSOR_CULLED</SourceAlias>
+    <StableID>334</StableID>
+    <HumanName>Scissor test culled primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Scissor culled primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives that are culled by the scissor test.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every primitive culled by the scissor test.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomScissorCullRate</MachineName>
+    <StableID>412</StableID>
+    <HumanName>Scissor test cull percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Scissor culled primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives culled by the scissor test.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives entering the scissor
+      test that are culled by it. Primitives outside of the active scissor
+      region are killed by this stage.
+    </LongDescription>
+    <Equation>
+      (MaliGeomScissorCullPrim / (MaliGeomTotalPrim - MaliGeomPlaneCullPrim)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomSampleCullPrim</MachineName>
+    <SourceName>PRIM_SAT_CULLED</SourceName>
+    <SourceAlias>BINNER_SAMPLE_CULLED</SourceAlias>
+    <SourceAlias>PRIM_SAMPLE_CULLED</SourceAlias>
+    <StableID>151</StableID>
+    <HumanName>Sample test culled primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Sample culled primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives culled by the sample coverage test.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every primitive culled by the sample coverage
+      test. It is expected that a few primitives are small and fail the sample
+      coverage test, as application mesh level-of-detail selection can never be
+      perfect. If the number of primitives counted is more than than 5-10% of
+      the total number, this might indicate that the application has a large
+      number of very small triangles, which are very expensive for a GPU to
+      process.
+
+      Aim to keep triangle screen area above 10 pixels. Use schemes such as
+      mesh level-of-detail to select simplified meshes as objects move further
+      away from the camera.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomSampleCullRate</MachineName>
+    <StableID>65560</StableID>
+    <HumanName>Sample test cull percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Sample culled primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives culled by the sample coverage test.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives entering the sample
+      coverage test that are culled by it. This stage culls primitives that are
+      so small that they hit no rasterizer sample points.
+
+      If a significant number of triangles are culled at this stage, the
+      application is using geometry meshes that are too complex for their
+      screen coverage. Use schemes such as mesh level-of-detail to select
+      simplified meshes as objects move further away from the camera.
+    </LongDescription>
+    <Equation>
+      (MaliGeomSampleCullPrim / (MaliGeomTotalPrim - MaliGeomFaceXYPlaneCullPrim - MaliGeomZPlaneCullPrim)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomSampleCullRate</MachineName>
+    <StableID>65560</StableID>
+    <HumanName>Sample test cull percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Sample culled primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives culled by the sample coverage test.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives entering the sample
+      coverage test that are culled by it. This stage culls primitives that are
+      so small that they hit no rasterizer sample points.
+
+      If a significant number of triangles are culled at this stage, the
+      application is using geometry meshes that are too complex for their
+      screen coverage. Use schemes such as mesh level-of-detail to select
+      simplified meshes as objects move further away from the camera.
+    </LongDescription>
+    <Equation>
+      (MaliGeomSampleCullPrim / (MaliGeomTotalPrim - MaliGeomFaceCullPrim - MaliGeomPlaneCullPrim)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomSampleCullRate</MachineName>
+    <StableID>65560</StableID>
+    <HumanName>Sample test cull percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Sample culled primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives culled by the sample coverage test.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives entering the sample
+      coverage test that are culled by it. This stage culls primitives that are
+      so small that they hit no rasterizer sample points.
+
+      If a significant number of triangles are culled at this stage, the
+      application is using geometry meshes that are too complex for their
+      screen coverage. Use schemes such as mesh level-of-detail to select
+      simplified meshes as objects move further away from the camera.
+    </LongDescription>
+    <Equation>
+      (MaliGeomSampleCullPrim / (MaliGeomTotalPrim - MaliGeomPlaneCullPrim - MaliGeomScissorCullPrim - MaliGeomFaceCullPrim)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomVisiblePrim</MachineName>
+    <SourceName>PRIM_VISIBLE</SourceName>
+    <SourceAlias>BINNER_PRIM_VISIBLE</SourceAlias>
+    <StableID>148</StableID>
+    <HumanName>Visible primitives</HumanName>
+    <GroupName>Primitive Culling</GroupName>
+    <GroupHumanName>Visible primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of primitives that are visible after culling.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every visible primitive that survives all
+      culling stages.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomVisibleRate</MachineName>
+    <StableID>65557</StableID>
+    <HumanName>Visible primitive percentage</HumanName>
+    <GroupName>Primitive Culling Rate</GroupName>
+    <GroupHumanName>Visible primitive rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of primitives that are visible after culling.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of primitives that are visible
+      after culling.
+
+      For efficient 3D content, it is expected that only 50% of primitives are
+      visible because back-face culling is used to remove half of each model.
+
+      * A significantly higher visibility rate indicates that the facing test
+        might not be enabled.
+      * A significantly lower visibility rate indicates that geometry is being
+        culled for other reasons, which is often possible to optimize. Use the
+        individual culling counters for a more detailed breakdown.
+    </LongDescription>
+    <Equation>
+      (MaliGeomVisiblePrim / MaliGeomTotalPrim) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomFrontFacePrim</MachineName>
+    <SourceName>FRONT_FACING</SourceName>
+    <StableID>146</StableID>
+    <HumanName>Visible front-facing primitives</HumanName>
+    <GroupName>Visible Primitives</GroupName>
+    <GroupHumanName>Front-facing primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of front-facing triangles that are visible after culling.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every visible front-facing triangle that
+      survives culling.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomBackFacePrim</MachineName>
+    <SourceName>BACK_FACING</SourceName>
+    <StableID>147</StableID>
+    <HumanName>Visible back-facing primitives</HumanName>
+    <GroupName>Visible Primitives</GroupName>
+    <GroupHumanName>Back-facing primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of back-facing triangles that are visible after culling.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every visible back-facing triangle that
+      survives culling.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomDVSPrim</MachineName>
+    <SourceName>PRIM_VISIBLE_DVS</SourceName>
+    <SourceAlias>BINNER_PRIM_DEFERRED</SourceAlias>
+    <StableID>335</StableID>
+    <HumanName>Deferred vertex shading primitives</HumanName>
+    <GroupName>Geometry Primitive Properties</GroupName>
+    <GroupHumanName>Deferred vertex shading primitives</GroupHumanName>
+    <Units>primitives</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of primitives using deferred vertex shading that are visible
+      after culling.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every visible primitive that is using
+      deferred vertex shading.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliGeomDVSRate</MachineName>
+    <StableID>93</StableID>
+    <HumanName>Deferred vertex shading primitive percentage</HumanName>
+    <GroupName>Geometry Workload Properties</GroupName>
+    <GroupHumanName>Deferred vertex shading rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of visible primitives using deferred vertex shading.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of visible primitives that are
+      using deferred vertex shading, which is the most efficient way to process
+      graphics pipeline geometry.
+
+      A low percentage indicates that many primitives are using advanced
+      geometry techniques such as geometry shaders, tessellation shaders, or
+      transform feedback. These require the geometry to be processed during the
+      binning phase, writing geometry outputs back to main memory to pass data
+      to the main phase.
+    </LongDescription>
+    <Equation>
+      (MaliGeomDVSPrim / MaliGeomVisiblePrim) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Primitives</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+</CounterInfoList>

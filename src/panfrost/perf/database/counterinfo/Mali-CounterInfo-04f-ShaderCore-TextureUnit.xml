@@ -1,0 +1,2060 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2019-2026 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<CounterInfoList>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexSample</MachineName>
+    <StableID>65609</StableID>
+    <HumanName>Texture samples</HumanName>
+    <GroupName>Texture Unit Requests</GroupName>
+    <GroupHumanName>Texture samples</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture samples made.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of texture samples made.
+    </LongDescription>
+    <Equation>
+      MaliTexInstr
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexSample</MachineName>
+    <StableID>65609</StableID>
+    <HumanName>Texture samples</HumanName>
+    <GroupName>Texture Unit Requests</GroupName>
+    <GroupHumanName>Texture samples</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture samples made.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of texture samples made.
+    </LongDescription>
+    <Equation>
+      MaliTexQuads * 4
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCPI</MachineName>
+    <StableID>65626</StableID>
+    <HumanName>Texture filtering cycles per instruction</HumanName>
+    <GroupName>Texture Unit CPI</GroupName>
+    <GroupHumanName>Texture CPI</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The average number of texture filtering cycles per instruction.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the average number of texture filtering cycles
+      per instruction. For texture-limited content that has a CPI higher than
+      the optimal throughout of this core ({{C::MaliTexSamplePerCy.equation}}
+      samples per cycle), consider using simpler texture filters. See
+      {{C::MaliTexIssueCy}} for details of the expected performance for
+      different types of operation.
+    </LongDescription>
+    <Equation>
+      MaliTexIssueCy / MaliTexSample
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexUtil</MachineName>
+    <StableID>65644</StableID>
+    <HumanName>Texture unit utilization</HumanName>
+    <GroupName>Shader Core Unit Utilization</GroupName>
+    <GroupHumanName>Texture unit utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage utilization of the texturing unit.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the texturing unit.
+
+      The most effective technique for reducing texturing unit load is reducing
+      the number of texture samples read by your shaders. Using 32bpp color
+      formats, and the ASTC decode mode extensions to select a 32bpp
+      intermediate precision, can reduce cache access cost. Using simpler
+      texture filters can reduce filtering cost. Using a 16bit per component
+      sampler result can reduce data return cost.
+    </LongDescription>
+    <Equation>
+      (MaliTexIssueCy / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCacheUtil</MachineName>
+    <StableID>65662</StableID>
+    <HumanName>Texture unit cache utilization</HumanName>
+    <GroupName>Texture Unit Utilization</GroupName>
+    <GroupHumanName>Cache utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage utilization of the texturing unit cache lookup path.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage utilization of the texturing unit
+      cache lookup path.
+    </LongDescription>
+    <Equation>
+      (MaliTexCacheLookup / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexInstr</MachineName>
+    <SourceName>TEX_INSTR</SourceName>
+    <SourceAlias>TEX_WORDS</SourceAlias>
+    <StableID>248</StableID>
+    <HumanName>Texture instructions</HumanName>
+    <GroupName>Texture Unit Requests</GroupName>
+    <GroupHumanName>Texture requests</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of thread-width texture operations processed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every thread-width texture operation
+      processed by the texture unit.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexMipInstr</MachineName>
+    <SourceName>TEX_INSTR_MIPMAP</SourceName>
+    <StableID>249</StableID>
+    <HumanName>Mipmapped texture instructions</HumanName>
+    <GroupName>Texture Unit Requests</GroupName>
+    <GroupHumanName>Mipmapped texture requests</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture operations that act on a mipmapped texture.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture operation that acts on a
+      mipmapped texture. Mipmapping improves texturing quality for 3D scenes by
+      providing some pre-filtering for minified texture samples. It also
+      improves performance because it reduces pressure on texture caches. Aim
+      to use mipmapping for all texturing operations in a 3D scene that read
+      from static input textures.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexMipInstrRate</MachineName>
+    <StableID>65605</StableID>
+    <HumanName>Texture accesses using mipmapping percentage</HumanName>
+    <GroupName>Texture Unit Usage Rate</GroupName>
+    <GroupHumanName>Mipmapped sample rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of texture operations accessing mipmapped textures.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of texture operations accessing
+      mipmapped textures.
+
+      Mipmapping significantly improves image quality and memory bandwidth in
+      3D scenes with variable object view distance. Aim to enable mipmapping
+      for all offline-authored texture assets in 3D content.
+    </LongDescription>
+    <Equation>
+      (MaliTexMipInstr / MaliTexInstr) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexQuadPassMip</MachineName>
+    <SourceName>TEX_DFCH_NUM_PASSES_MIP_MAP</SourceName>
+    <StableID>260</StableID>
+    <HumanName>Mipmapped texture quad issues</HumanName>
+    <GroupName>Texture Unit Quads</GroupName>
+    <GroupHumanName>Mipmapped texture issues</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of quad-width filtering passes that use a mipmapped texture.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every quad-width filtering pass that uses a
+      mipmapped texture. For applications rendering a 3D scene, Arm recommends
+      using mipmaps as much as possible to improve both image quality and
+      performance.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexMipInstrRate</MachineName>
+    <StableID>65605</StableID>
+    <HumanName>Texture accesses using mipmapping percentage</HumanName>
+    <GroupName>Texture Unit Usage Rate</GroupName>
+    <GroupHumanName>Mipmapped sample rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of texture operations accessing mipmapped textures.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of texture operations accessing
+      mipmapped textures.
+
+      Mipmapping significantly improves image quality and memory bandwidth in
+      3D scenes with variable object view distance. Aim to enable mipmapping
+      for all offline-authored texture assets in 3D content.
+    </LongDescription>
+    <Equation>
+      (MaliTexQuadPassMip / MaliTexQuadPass) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCompressInstr</MachineName>
+    <SourceName>TEX_INSTR_COMPRESSED</SourceName>
+    <StableID>250</StableID>
+    <HumanName>Compressed texture instructions</HumanName>
+    <GroupName>Texture Unit Requests</GroupName>
+    <GroupHumanName>Compressed texture requests</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture operations acting on a compressed texture.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture operation acting on a
+      compressed texture. Lossy texture compression, such as ASTC and ETC,
+      provides a significant reduction in texture size and bandwidth, improving
+      performance and reducing memory power consumption.
+
+      Note that this counter excludes textures compressed using AFBC lossless
+      framebuffer compression.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCompressInstrRate</MachineName>
+    <StableID>65606</StableID>
+    <HumanName>Texture samples using compressed texture percentage</HumanName>
+    <GroupName>Texture Unit Usage Rate</GroupName>
+    <GroupHumanName>Compressed sample rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of texture operations accessing compressed textures.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of texture operations accessing
+      compressed textures. Note that compressed textures in this instance means
+      API-level compression, such as ETC and ASTC. The AFBC lossless
+      framebuffer compression is not included.
+    </LongDescription>
+    <Equation>
+      (MaliTexCompressInstr / MaliTexInstr) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCacheFetch</MachineName>
+    <SourceName>TEX_TFCH_NUM_LINES_FETCHED</SourceName>
+    <StableID>262</StableID>
+    <HumanName>Texture line fetch requests</HumanName>
+    <GroupName>Texture Unit Cache</GroupName>
+    <GroupHumanName>Line fetches</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture line fetches from the L2 cache.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture line fetch from the L2 cache.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCacheCompressFetch</MachineName>
+    <SourceName>TEX_TFCH_NUM_LINES_FETCHED_BLOCK_COMPRESSED</SourceName>
+    <StableID>263</StableID>
+    <HumanName>Compressed texture line fetch requests</HumanName>
+    <GroupName>Texture Unit Cache</GroupName>
+    <GroupHumanName>Compressed line fetches</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture line fetches from the L2 cache that are block
+      compressed textures.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture line fetch from the L2 cache
+      that is a block compressed texture. Note that this counter excludes lines
+      compressed using the AFBC lossless compression scheme.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCacheCompressFetchRate</MachineName>
+    <StableID>65614</StableID>
+    <HumanName>Texture data fetches from compressed lines</HumanName>
+    <GroupName>Texture Unit Usage Rate</GroupName>
+    <GroupHumanName>Compressed line fetch rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of texture line fetches that are from block compressed
+      textures.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of texture line fetches that are
+      from textures using API block compression, such as ASTC or ETC2.
+
+      Texture compression significantly reduces memory bandwidth consumption,
+      so aim to maximize this percentage by compressing all offline-authored
+      texture assets. However, note that this counter does not include texture
+      data fetches from framebuffers compressed with AFBC lossless compression.
+    </LongDescription>
+    <Equation>
+      (MaliTexCacheCompressFetch / MaliTexCacheFetch) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTex3DInstr</MachineName>
+    <SourceName>TEX_INSTR_3D</SourceName>
+    <StableID>251</StableID>
+    <HumanName>3D texture instructions</HumanName>
+    <GroupName>Texture Unit Requests</GroupName>
+    <GroupHumanName>3D texture requests</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture operations acting on a 3D texture.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture operation acting on a 3D
+      texture. 3D filtering is half the performance of 2D filtering.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTex3DInstrRate</MachineName>
+    <StableID>65607</StableID>
+    <HumanName>Texture samples using 3D texture percentage</HumanName>
+    <GroupName>Texture Unit Usage Rate</GroupName>
+    <GroupHumanName>3D sample rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of texture operations accessing 3D textures.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of texture operations accessing 3D
+      textures.
+    </LongDescription>
+    <Equation>
+      (MaliTex3DInstr / MaliTexInstr) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexTriInstr</MachineName>
+    <SourceName>TEX_INSTR_TRILINEAR</SourceName>
+    <StableID>252</StableID>
+    <HumanName>Trilinear filtered texture instructions</HumanName>
+    <GroupName>Texture Unit Requests</GroupName>
+    <GroupHumanName>Trilinear filtered requests</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture operations using a trilinear texture filter.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture operation that uses a trilinear
+      texture filter. Trilinear filtering is half the performance of bilinear
+      filtering.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexTriInstrRate</MachineName>
+    <StableID>65608</StableID>
+    <HumanName>Texture accesses using trilinear filter percentage</HumanName>
+    <GroupName>Texture Unit Usage Rate</GroupName>
+    <GroupHumanName>Trilinear sample rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of texture operations using trilinear filtering.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of texture operations using
+      trilinear filtering. Trilinear samples are twice the cost of simple
+      bilinear samples.
+    </LongDescription>
+    <Equation>
+      (MaliTexTriInstr / MaliTexInstr) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexQuadPassTri</MachineName>
+    <SourceName>TEX_TIDX_NUM_SPLIT_MIP_MAP</SourceName>
+    <StableID>261</StableID>
+    <HumanName>Trilinear filtered texture quad issues</HumanName>
+    <GroupName>Texture Unit Quads</GroupName>
+    <GroupHumanName>Trilinear filtered issues</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of quad-width filtering passes that use a trilinear filter.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every quad-width filtering pass that uses a
+      trilinear filter.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexTriInstrRate</MachineName>
+    <StableID>65608</StableID>
+    <HumanName>Texture accesses using trilinear filter percentage</HumanName>
+    <GroupName>Texture Unit Usage Rate</GroupName>
+    <GroupHumanName>Trilinear sample rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of texture operations using trilinear filtering.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of texture operations using
+      trilinear filtering. Trilinear samples are twice the cost of simple
+      bilinear samples.
+    </LongDescription>
+    <Equation>
+      (MaliTexQuadPassTri / MaliTexQuads) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexFiltIssueCy</MachineName>
+    <SourceName>TEX_ISSUES</SourceName>
+    <StableID>253</StableID>
+    <HumanName>Texture filtering cycles</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Filtering active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture filtering issue cycles.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture filtering issue cycle. This GPU
+      can do {{C::MaliTexSamplePerCy.equation}}x 2D bilinear texture samples
+      per clock. More complex filtering operations are composed of multiple 2D
+      bilinear samples, and take proportionally more filtering time to
+      complete. The costs per sample are:
+
+      * 2D bilinear filtering takes one cycle.
+      * 2D trilinear filtering takes two cycles.
+      * 3D bilinear filtering takes two cycles.
+      * 3D trilinear filtering takes four cycles.
+      * Sampling from multi-plane YUV takes one cycle per plane.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexFiltIssueCy</MachineName>
+    <SourceName>TEX_COORD_ISSUE</SourceName>
+    <StableID>253</StableID>
+    <HumanName>Texture filtering cycles</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Filtering active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture filtering issue cycles.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture filtering issue cycle. This GPU
+      can do {{C::MaliTexSamplePerCy.equation}}x 2D bilinear texture samples
+      per clock. More complex filtering operations are composed of multiple 2D
+      bilinear samples, and take proportionally more filtering time to
+      complete. The costs per sample are:
+
+      * 2D bilinear filtering takes one cycle.
+      * 2D trilinear filtering takes two cycles.
+      * 3D bilinear filtering takes two cycles.
+      * 3D trilinear filtering takes four cycles.
+      * Sampling from multi-plane YUV takes one cycle per plane.
+
+      Anisotropic filtering makes multiple filtered subsamples which are
+      combined to make the final output sample color. For a filter with
+      MAX_ANISOTROPY of N, up to N times the cycles of the base filter are
+      required.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCoordStallCy</MachineName>
+    <SourceName>TEX_COORD_STALL</SourceName>
+    <StableID>254</StableID>
+    <HumanName>Texture filtering coordinate stall cycles</HumanName>
+    <GroupName>Texture Unit Stall Cycles</GroupName>
+    <GroupHumanName>Coordinate stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when threads are stalled at the texel coordinate
+      calculation stage.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when threads are stalled at the
+      texel coordinate calculation stage.
+
+      These stalled threads can occur when the texture cache is full of threads
+      waiting for data and the cache is unable to accept new threads.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexDataStallCy</MachineName>
+    <SourceName>TEX_STARVE_CACHE</SourceName>
+    <StableID>255</StableID>
+    <HumanName>Texture line fill stall cycles</HumanName>
+    <GroupName>Texture Unit Stall Cycles</GroupName>
+    <GroupHumanName>Line fill stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when at least one thread is waiting for data from
+      the texture cache, but no lookup is completed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when at least one thread is
+      waiting for data from the texture cache, but no lookup is completed.
+
+      This event occurs if no new threads enter the data fetch stage from texel
+      address calculation, and all threads that are already in the data fetch
+      stage are still waiting for their data.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexPartDataStallCy</MachineName>
+    <SourceName>TEX_STARVE_FILTER</SourceName>
+    <StableID>256</StableID>
+    <HumanName>Texture filtering partial data stall cycles</HumanName>
+    <GroupName>Texture Unit Stall Cycles</GroupName>
+    <GroupHumanName>Partial data stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when at least one thread fetched some data from the
+      texture cache, but no filtering operation is started.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when at least one thread
+      fetched some data from the texture cache, but no filtering operation is
+      started because no thread has all the data that it requires.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexQuads</MachineName>
+    <SourceName>TEX_MSGI_NUM_QUADS</SourceName>
+    <StableID>257</StableID>
+    <HumanName>Texture quads</HumanName>
+    <GroupName>Texture Unit Quads</GroupName>
+    <GroupHumanName>Texture requests</GroupHumanName>
+    <Units>quads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of quad-width texture operations processed by the texture
+      unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every quad-width texture operation processed
+      by the texture unit.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexQuads</MachineName>
+    <StableID>257</StableID>
+    <HumanName>Texture quads</HumanName>
+    <GroupName>Texture Unit Quads</GroupName>
+    <GroupHumanName>Texture requests</GroupHumanName>
+    <Units>quads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of quad-width texture operations processed by the texture
+      unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every quad-width texture operation processed
+      by the texture unit.
+    </LongDescription>
+    <Equation>
+      MaliTexOutMsg
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexQuads</MachineName>
+    <StableID>257</StableID>
+    <HumanName>Texture quads</HumanName>
+    <GroupName>Texture Unit Quads</GroupName>
+    <GroupHumanName>Texture requests</GroupHumanName>
+    <Units>quads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of quad-width texture operations processed by the texture
+      unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every quad-width texture operation processed
+      by the texture unit.
+    </LongDescription>
+    <Equation>
+      MaliTexOutMsg * 2
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexQuads</MachineName>
+    <StableID>257</StableID>
+    <HumanName>Texture quads</HumanName>
+    <GroupName>Texture Unit Quads</GroupName>
+    <GroupHumanName>Texture requests</GroupHumanName>
+    <Units>quads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of quad-width texture operations processed by the texture
+      unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every quad-width texture operation processed
+      by the texture unit.
+    </LongDescription>
+    <Equation>
+      (MaliTexOutMsg * 2) - MaliTexOutSingleMsg
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexQuadPass</MachineName>
+    <SourceName>TEX_DFCH_NUM_PASSES</SourceName>
+    <StableID>258</StableID>
+    <HumanName>Texture quad issues</HumanName>
+    <GroupName>Texture Unit Quads</GroupName>
+    <GroupHumanName>Texture issues</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of quad-width filtering passes.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every quad-width filtering pass. A single
+      texture operation is split into multiple bilinear passes for:
+
+      * Use of trilinear filtering
+      * Use of anisotropic filtering
+      * Use of a 3D texture format
+      * Use of a cubemap texture format that requires data from multiple cube
+        faces.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexQuadPassDescMiss</MachineName>
+    <SourceName>TEX_DFCH_NUM_PASSES_MISS</SourceName>
+    <StableID>259</StableID>
+    <HumanName>Texture quad descriptor misses</HumanName>
+    <GroupName>Texture Unit Quads</GroupName>
+    <GroupHumanName>Descriptor misses</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of quad-width filtering passes that miss in the resource or
+      sampler descriptor cache.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every quad-width filtering pass that misses
+      in the resource or sampler descriptor cache. A high miss rate in the
+      descriptor cache can indicate:
+
+      * Cache thrashing because of too many unique texture or sampler
+        descriptors
+      * A high memory fetch latency causing multiple sampling operations to
+        miss on the same descriptor
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCacheLookup</MachineName>
+    <SourceName>TEX_TFCH_NUM_OPERATIONS</SourceName>
+    <StableID>264</StableID>
+    <HumanName>Texture cache lookup requests</HumanName>
+    <GroupName>Texture Unit Cache Cycles</GroupName>
+    <GroupHumanName>Cache lookup</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture cache lookup cycles.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture cache lookup cycle. A high
+      number of cache lookups per pass can indicate a poor access pattern, that
+      sparsely samples texels from a high resolution texture. This normally
+      occurs for 3D content that has failed to use mipmaps, and so accesses the
+      high resolution level 0 surface when an object is distant from the
+      camera.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexFiltIssueCy</MachineName>
+    <SourceName>TEX_FILT_NUM_OPERATIONS</SourceName>
+    <StableID>253</StableID>
+    <HumanName>Texture filtering cycles</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Filtering active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture filtering issue cycles.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture filtering issue cycle. This GPU
+      can do {{C::MaliTexSamplePerCy.equation}}x 2D bilinear texture samples
+      per clock. More complex filtering operations are composed of multiple 2D
+      bilinear samples, and take proportionally more filtering time to
+      complete.
+
+      * 2D trilinear filtering runs at half speed.
+      * 3D bilinear filtering runs at half speed.
+      * 3D trilinear filtering runs at quarter speed.
+
+      Anisotropic filtering makes up to MAX_ANISOTROPY filtered subsamples of
+      the current base filter type. For example, using trilinear filtering with
+      a MAX_ANISOTROPY of 3 will require up to 6 bilinear filters.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G76</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexFiltIssueCy</MachineName>
+    <SourceName>TEX_FILT_NUM_OPERATIONS</SourceName>
+    <StableID>253</StableID>
+    <HumanName>Texture filtering cycles</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Filtering active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture filtering issue cycles.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture filtering issue cycle. This GPU
+      can do {{C::MaliTexSamplePerCy.equation}}x 2D bilinear texture samples
+      per clock. More complex filtering operations are composed of multiple 2D
+      bilinear samples, and take proportionally more filtering time to
+      complete. The scaling factors for more expensive operations are:
+
+      * 2D trilinear filtering runs at half speed.
+      * 3D bilinear filtering runs at half speed.
+      * 3D trilinear filtering runs at quarter speed.
+
+      Anisotropic filtering makes up to MAX_ANISOTROPY filtered subsamples of
+      the current base filter type. For example, using trilinear filtering with
+      a MAX_ANISOTROPY of 3 will require up to 6 bilinear filters.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexFiltIssueCy</MachineName>
+    <SourceName>TEX_FILT_NUM_OPERATIONS</SourceName>
+    <StableID>253</StableID>
+    <HumanName>Texture filtering cycles</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Filtering active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of texture filtering issue cycles.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture filtering issue cycle. This GPU
+      can do {{C::MaliTexSamplePerCy.equation}}x 2D bilinear texture samples
+      per clock. More complex filtering operations are composed of multiple 2D
+      bilinear samples, and take proportionally more filtering time to
+      complete. The scaling factors for more expensive operations are:
+
+      * 2D trilinear filtering runs at half speed.
+      * 3D bilinear filtering runs at half speed.
+      * 3D trilinear filtering runs at quarter speed.
+
+      Anisotropic filtering makes up to MAX_ANISOTROPY filtered subsamples of
+      the current base filter type. For example, using trilinear filtering with
+      a MAX_ANISOTROPY of 3 will require up to 6 bilinear filters.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexIssueCy</MachineName>
+    <StableID>457</StableID>
+    <HumanName>Texture unit issue cycles</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Texture unit issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles the texture unit was busy.
+    </ShortDescription>
+    <LongDescription>
+      This expression measures the number of cycles the texture unit was busy
+      processing work.
+    </LongDescription>
+    <Equation>
+      MaliTexFiltIssueCy
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexIssueCy</MachineName>
+    <StableID>457</StableID>
+    <HumanName>Texture unit issue cycles</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Texture unit issues</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles the texture unit was busy.
+    </ShortDescription>
+    <LongDescription>
+      This expression measures the number of cycles the texture unit was busy
+      processing work.
+    </LongDescription>
+    <Equation>
+      max(MaliTexFiltIssueCy, MaliTexCacheLookupCy, MaliTexCacheSimpleLoadCy, MaliTexCacheComplexLoadCy, MaliTexInBt, MaliTexOutBt, MaliTexL1CacheOutputCy, MaliTexL1CacheLookupCy, MaliTexIndexCy)
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexInBt</MachineName>
+    <SourceName>TEX_MSGI_NUM_FLITS</SourceName>
+    <StableID>267</StableID>
+    <HumanName>Texture message read beats</HumanName>
+    <GroupName>Texture Unit Bus</GroupName>
+    <GroupHumanName>Input beats</GroupHumanName>
+    <Units>beats</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of texture request message data beats.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle of input request data sent
+      to the texture unit.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexInBusUtil</MachineName>
+    <StableID>65618</StableID>
+    <HumanName>Texture input bus utilization</HumanName>
+    <GroupName>Texture Unit Utilization</GroupName>
+    <GroupHumanName>Input bus utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage load on the texture message input bus.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage load on the texture message input
+      bus.
+
+      If bus utilization is higher than the filtering unit utilization, your
+      content might be limited by texture operation parameter passing. Requests
+      that require more input parameters, such as 3D accesses, array accesses,
+      and accesses using an explicit level-of-detail, place a higher load on
+      the bus than basic 2D texture operations.
+    </LongDescription>
+    <Equation>
+      (MaliTexInBt / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexOutBt</MachineName>
+    <SourceName>TEX_MSGO_NUM_FLITS</SourceName>
+    <SourceAlias>TEX_RSPS_NUM_OPERATIONS</SourceAlias>
+    <StableID>268</StableID>
+    <HumanName>Texture message write beats</HumanName>
+    <GroupName>Texture Unit Bus</GroupName>
+    <GroupHumanName>Output beats</GroupHumanName>
+    <Units>beats</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of texture response message data beats.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle of output response data
+      sent by the texture unit.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexOutBusUtil</MachineName>
+    <StableID>65619</StableID>
+    <HumanName>Texture output bus utilization</HumanName>
+    <GroupName>Texture Unit Utilization</GroupName>
+    <GroupHumanName>Output bus utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage load on the texture message output bus.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage load on the texture message output
+      bus.
+
+      If bus utilization is higher than the filtering unit utilization, your
+      content might be limited by texture result return. Requests that require
+      higher precision sampler return type place a higher load on the bus, so
+      it is recommended to use a 16-bit sampler precision whenever possible.
+    </LongDescription>
+    <Equation>
+      (MaliTexOutBt / MaliCoreActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexOutMsg</MachineName>
+    <SourceName>TEX_MSGO_NUM_MSG</SourceName>
+    <StableID>315</StableID>
+    <HumanName>Texture messages</HumanName>
+    <GroupName>Texture Unit Quads</GroupName>
+    <GroupHumanName>Texture messages</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of output texture messages from the texture unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture message emitted by the texture
+      unit.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexOutSingleMsg</MachineName>
+    <SourceName>TEX_MSGO_NUM_SINGLE_QUAD_MSG</SourceName>
+    <StableID>337</StableID>
+    <HumanName>Texture messages with single quad</HumanName>
+    <GroupName>Texture Unit Quads</GroupName>
+    <GroupHumanName>Texture messages with single quad</GroupHumanName>
+    <Units>issues</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of single quad output texture messages from the texture unit.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every texture message emitted by the texture
+      unit which only contains a single quad.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexDescStallCy</MachineName>
+    <SourceName>TEX_DFCH_CLK_STALLED</SourceName>
+    <StableID>270</StableID>
+    <HumanName>Texture descriptor stall cycles</HumanName>
+    <GroupName>Texture Unit Stall Cycles</GroupName>
+    <GroupHumanName>Descriptor stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when a quad is stalled on texture descriptor fetch.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle a quad is stalled on
+      texture descriptor fetch. This might not correspond to a stall cycle in
+      the filtering unit if there is enough work already buffered after the
+      descriptor fetcher to hide the stall.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexDataFetchStallCy</MachineName>
+    <SourceName>TEX_TFCH_CLK_STALLED</SourceName>
+    <StableID>271</StableID>
+    <HumanName>Texture fetch stall cycles</HumanName>
+    <GroupName>Texture Unit Stall Cycles</GroupName>
+    <GroupHumanName>Fetch queue stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when a quad is stalled on entering texture fetch
+      because the fetch queue is full.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle a quad is stalled on
+      entering texture fetch because the fetch queue is full. This might not
+      correspond to a stall cycle in the filtering unit if there is enough work
+      already buffered to hide the stall.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexFiltStallCy</MachineName>
+    <SourceName>TEX_TFCH_STARVED_PENDING_DATA_FETCH</SourceName>
+    <StableID>272</StableID>
+    <HumanName>Texture filtering stall cycles</HumanName>
+    <GroupName>Texture Unit Stall Cycles</GroupName>
+    <GroupHumanName>Filtering unit stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when the filtering unit is idle and there is at
+      least one quad present in the texture data fetch queue.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle the filtering unit is idle
+      and there is at least one quad present in the texture data fetch queue. A
+      high stall rate here can be indicative of content which is failing to
+      make good use of the texture cache. For example, under-sampling from a
+      high resolution texture.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexFullBiFiltCy</MachineName>
+    <SourceName>TEX_FILT_NUM_FXR_OPERATIONS</SourceName>
+    <StableID>273</StableID>
+    <HumanName>Texture filtering cycles using full bilinear</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Full bilinear filtering active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when the filtering unit is filled with bilinear
+      filtering.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when the filtering unit
+      data path is running full speed bilinear filtering.
+
+      Filtering will run at half rate for formats that are stored in the cache
+      at more than 32-bits per decompressed texel.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexFullTriFiltCy</MachineName>
+    <SourceName>TEX_FILT_NUM_FST_OPERATIONS</SourceName>
+    <StableID>274</StableID>
+    <HumanName>Texture filtering cycles using full trilinear</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Full trilinear filtering active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of cycles when the filtering unit is filled with trilinear
+      filtering.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when the filtering unit
+      data path is running full speed trilinear filtering.
+
+      Filtering will run at half rate for formats that are stored in the cache
+      at more than 32-bits per decompressed texel.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexIndexCy</MachineName>
+    <SourceName>TEX_TIDX_NUM_OPERATIONS</SourceName>
+    <StableID>344</StableID>
+    <HumanName>Texture index calculation cycles</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Index calculation active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles computing texel index values.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when the texture unit is
+      computing a texel index value.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCacheLookupCy</MachineName>
+    <SourceName>TEX_TFCH_NUM_TCL_OPERATIONS</SourceName>
+    <StableID>345</StableID>
+    <HumanName>Texture cache lookup cycles</HumanName>
+    <GroupName>Texture Unit Cache Cycles</GroupName>
+    <GroupHumanName>Cache lookup active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles returning data from the texture cache.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when the texture cache is
+      returning data.
+
+      A high value here can be indicative of a inefficient post-decompression
+      texture formats. For example, a 64-bpp format takes twice as long as a
+      32-bpp format.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCacheSimpleLoadCy</MachineName>
+    <SourceName>TEX_CFCH_NUM_DIRECT_PATH_OPERATIONS</SourceName>
+    <StableID>338</StableID>
+    <HumanName>Simple texture load cycles</HumanName>
+    <GroupName>Texture Unit Cache Cycles</GroupName>
+    <GroupHumanName>Simple load active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles loading simple texture formats.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when the texture cache is
+      fetching formats with simple data layouts using the direct path.
+
+      A high value here can be indicative of a high cache miss rate in the
+      texture data cache.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexCacheComplexLoadCy</MachineName>
+    <SourceName>TEX_CFCH_NUM_RP_OPERATIONS</SourceName>
+    <StableID>339</StableID>
+    <HumanName>Complex texture load cycles</HumanName>
+    <GroupName>Texture Unit Cache Cycles</GroupName>
+    <GroupHumanName>Complex load active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles loading complex texture formats.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when the texture cache is
+      fetching formats with complex data layouts using the decompressor path.
+
+      A high value here can be indicative of a high cache miss rate in the
+      texture data cache.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexL1CacheLoadCy</MachineName>
+    <SourceName>TEX_CFCH_NUM_OUTPUT_OPERATIONS</SourceName>
+    <StableID>342</StableID>
+    <HumanName>L1 texture cache load cycles</HumanName>
+    <GroupName>Texture Unit Cache Cycles</GroupName>
+    <GroupHumanName>L1 load active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles the L1 cache is being loaded.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when data is being
+      transferred into the L1 texture cache.
+
+      A high value here can be indicative of a high cache miss rate in the
+      texture data cache.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexL1CacheLookupCy</MachineName>
+    <SourceName>TEX_CFCH_NUM_L1_CT_OPERATIONS</SourceName>
+    <StableID>340</StableID>
+    <HumanName>L1 texture cache lookup cycles</HumanName>
+    <GroupName>Texture Unit Cache Cycles</GroupName>
+    <GroupHumanName>L1 lookup active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles the L1 cache is being accessed.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when the L1 texture cache
+      is being accessed.
+
+      A high value here can be indicative of a high cache miss rate in the
+      texture data cache.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexL1CacheOutputCy</MachineName>
+    <SourceName>TEX_CFCH_NUM_L1_CL_OPERATIONS</SourceName>
+    <StableID>341</StableID>
+    <HumanName>L1 texture cache output cycles</HumanName>
+    <GroupName>Texture Unit Cache Cycles</GroupName>
+    <GroupHumanName>L1 output active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles the L1 cache is returning data.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when the L1 texture cache
+      is returning data for a sampling operation.
+
+      A high value here can be indicative of a high cache miss rate in the
+      texture data cache.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexFiltFullRate</MachineName>
+    <StableID>65620</StableID>
+    <HumanName>Texture full speed filtering percentage</HumanName>
+    <GroupName>Texture Unit Usage Rate</GroupName>
+    <GroupHumanName>Full speed filter rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage of texture filtering cycles using the full width of the
+      texture filtering data path.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage of texture filtering cycles using
+      the full width of the texture filtering data path.
+
+      Filtering will run at half rate for formats that are stored in the cache
+      at more than 32-bits per decompressed texel. When using the ASTC texture
+      format, use the decode mode extensions to opt-in to a 32-bit per pixel
+      intermediate format to ensure you can use the full filtering performance.
+    </LongDescription>
+    <Equation>
+      ((MaliTexFullBiFiltCy + MaliTexFullTriFiltCy) / MaliTexFiltIssueCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexClkActiveCy</MachineName>
+    <SourceName>TEX_TEXP_CLK_ACTIVE</SourceName>
+    <StableID>346</StableID>
+    <HumanName>Texture unit clock active cycles</HumanName>
+    <GroupName>Texture Unit Cycles</GroupName>
+    <GroupHumanName>Texture unit clock active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles the texture unit was active.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when the texture unit is
+      active, and contains an active sample message.
+
+      A high active time does not imply a high utilization. The unit counts as
+      active even if only a single pipeline stage is busy.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTexClkStarvedCy</MachineName>
+    <SourceName>TEX_MSGI_CLK_STARVED</SourceName>
+    <StableID>343</StableID>
+    <HumanName>Texture causing starvation cycles</HumanName>
+    <GroupName>Texture Unit Stall Cycles</GroupName>
+    <GroupHumanName>Texture causing starvation</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles the texture unit was active but did not return a
+      texture sample.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every clock cycle when the texture unit is
+      active and a response message could be accepted, but no response was
+      generated.
+
+      A high value here can be indicative of a inefficient texturing operations
+      which are failing to sustain full throughput, and can be caused by a high
+      miss rate in either descriptor or data cache, or complex multicycle
+      filtering operations.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>System</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+</CounterInfoList>

@@ -559,8 +559,7 @@ VAStatus vlVaMapBuffer2(VADriverContextP ctx, VABufferID buf_id, void **pbuf, ui
 
 // internal functions
 MESAPROC VAStatus vlVaHandleVAProcPipelineParameterBufferType(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf) TAIL;
-VAStatus vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface, struct pipe_video_buffer *templat,
-                                   const uint64_t *modifiers, unsigned int modifiers_count);
+VAStatus vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface, const uint64_t *modifiers, unsigned modifiers_count);
 struct pipe_video_buffer *vlVaGetSurfaceBuffer(vlVaDriver *drv, vlVaSurface *surface);
 void vlVaSurfaceFlush(vlVaDriver *drv, vlVaSurface *surf);
 void vlVaAddRawHeader(struct util_dynarray *headers, uint8_t type, uint32_t size, uint8_t *buf,

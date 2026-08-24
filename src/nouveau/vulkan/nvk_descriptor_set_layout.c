@@ -513,10 +513,10 @@ nvk_GetDescriptorSetLayoutSupport(VkDevice device,
    pSupport->supported = dynamic_buffer_count <= NVK_MAX_DYNAMIC_BUFFERS &&
                          buffer_size <= max_buffer_size;
 
-   vk_foreach_struct(ext, pSupport->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pSupport->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT: {
-         VkDescriptorSetVariableDescriptorCountLayoutSupport *vs = (void *)ext;
+         VkDescriptorSetVariableDescriptorCountLayoutSupport *vs = ext;
          uint32_t max_var_count;
 
          if (variable_stride > 0) {
@@ -536,7 +536,7 @@ nvk_GetDescriptorSetLayoutSupport(VkDevice device,
       }
 
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }

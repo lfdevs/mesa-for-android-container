@@ -452,7 +452,8 @@ void si_init_shader_args(struct si_shader *shader, struct si_shader_args *args,
                          SI_PARAM_PERSP_CENTER);
       si_add_arg_checked(&args->ac, AC_ARG_VGPR, 2, AC_ARG_VALUE, &args->ac.persp_centroid,
                          SI_PARAM_PERSP_CENTROID);
-      si_add_arg_checked(&args->ac, AC_ARG_VGPR, 3, AC_ARG_VALUE, NULL, SI_PARAM_PERSP_PULL_MODEL);
+      si_add_arg_checked(&args->ac, AC_ARG_VGPR, 3, AC_ARG_VALUE, &args->ac.pull_model,
+                         SI_PARAM_PERSP_PULL_MODEL);
       si_add_arg_checked(&args->ac, AC_ARG_VGPR, 2, AC_ARG_VALUE, &args->ac.linear_sample,
                          SI_PARAM_LINEAR_SAMPLE);
       si_add_arg_checked(&args->ac, AC_ARG_VGPR, 2, AC_ARG_VALUE, &args->ac.linear_center,
@@ -677,7 +678,8 @@ void si_get_ps_prolog_args(struct si_shader_args *args,
    if (key->ps_prolog.uses_persp_centroid)
       ac_add_arg(&args->ac, AC_ARG_VGPR, 2, AC_ARG_VALUE, &args->ac.persp_centroid);
 
-   /* skip PERSP_PULL_MODEL */
+   if (key->ps_prolog.uses_persp_pull_model)
+      ac_add_arg(&args->ac, AC_ARG_VGPR, 3, AC_ARG_VALUE, &args->ac.pull_model);
 
    if (key->ps_prolog.uses_linear_sample_and_center) {
       ac_add_arg(&args->ac, AC_ARG_VGPR, 2, AC_ARG_VALUE, &args->ac.linear_sample);

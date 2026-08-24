@@ -443,7 +443,9 @@ radv_emit_task_rings(struct radv_device *device, struct radv_cmd_stream *cs, str
 
    radeon_begin(cs);
 
-   /* Tell the GPU where the task control buffer is. */
+   /* Tell the GPU where the task control buffer is.
+    * CP reads the buffer and caches the data structure internally.
+    */
    radeon_emit(PKT3(PKT3_DISPATCH_TASK_STATE_INIT, 1, 0) | PKT3_SHADER_TYPE_S(!!compute));
    /* bits [31:8]: control buffer address lo, bits[7:0]: reserved (set to zero) */
    radeon_emit(task_ctrlbuf_va & 0xFFFFFF00);
@@ -1056,7 +1058,6 @@ radv_update_preamble_cs(struct radv_queue_state *queue, struct radv_device *devi
 
          radv_emit_gs_ring_sizes(device, cs, esgs_ring_bo, needs->esgs_ring_size, gsvs_ring_bo, needs->gsvs_ring_size);
          radv_emit_tess_factor_ring(device, cs, tess_rings_bo);
-         radv_emit_task_rings(device, cs, task_rings_bo, false);
          radv_emit_ge_rings(device, cs, ge_rings_bo);
          radv_emit_graphics_shader_pointers(device, cs, descriptor_bo);
          radv_emit_compute_scratch(device, cs, needs->compute_scratch_size_per_wave, needs->compute_scratch_waves,
@@ -1065,14 +1066,6 @@ radv_update_preamble_cs(struct radv_queue_state *queue, struct radv_device *devi
          break;
       case RADV_QUEUE_COMPUTE:
          radv_emit_compute(device, cs, true);
-
-         if (task_rings_bo) {
-            radeon_begin(cs);
-            radeon_event_write(V_028A90_CS_PARTIAL_FLUSH);
-            radeon_end();
-         }
-
-         radv_emit_task_rings(device, cs, task_rings_bo, true);
          radv_emit_compute_shader_pointers(device, cs, descriptor_bo);
          radv_emit_compute_scratch(device, cs, needs->compute_scratch_size_per_wave, needs->compute_scratch_waves,
                                    compute_scratch_bo);
@@ -1081,14 +1074,14 @@ radv_update_preamble_cs(struct radv_queue_state *queue, struct radv_device *devi
          break;
       }
 
-      if (i < 2) {
+      if (i < 2 || task_rings_bo) {
          /* The two initial preambles have a cache flush at the beginning. */
          const enum amd_gfx_level gfx_level = pdev->info.gfx_level;
          enum radv_cmd_flush_bits flush_bits = RADV_CMD_FLAG_INV_ICACHE | RADV_CMD_FLAG_INV_SCACHE |
                                                RADV_CMD_FLAG_INV_VCACHE | RADV_CMD_FLAG_INV_L2 |
                                                RADV_CMD_FLAG_START_PIPELINE_STATS;
 
-         if (i == 0) {
+         if (i == 0 || task_rings_bo) {
             /* The full flush preamble should also wait for previous shader work to finish. */
             flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH;
             if (queue->qf == RADV_QUEUE_GENERAL)
@@ -1097,6 +1090,13 @@ radv_update_preamble_cs(struct radv_queue_state *queue, struct radv_device *devi
 
          radv_cs_emit_cache_flush(ws, cs, gfx_level, NULL, 0, flush_bits, &sqtt_flush_bits, 0);
       }
+
+      /* Emit task rings after the initial cache flush and wait
+       * to make sure that we aren't reading stale data from cache
+       * and that a previous submission isn't perturbing the BO.
+       */
+      if (task_rings_bo)
+         radv_emit_task_rings(device, cs, task_rings_bo, queue->qf == RADV_QUEUE_COMPUTE);
 
       result = radv_finalize_cmd_stream(device, cs);
       if (result != VK_SUCCESS)
@@ -1382,7 +1382,11 @@ radv_create_gang_wait_preambles_postambles(struct radv_queue *queue)
    struct radeon_winsys_bo *gang_sem_bo = NULL;
    enum radeon_bo_flag gang_sem_bo_flags = RADEON_FLAG_NO_INTERPROCESS_SHARING | RADEON_FLAG_ZERO_VRAM;
 
-   /* When the "gang leader" is SDMA, we need to ensure that the gang semaphores BO
+   /* Gang wait preamble is executed before the main preamble which means it may be
+    * before a cache flush, which may cause the CP to read stale values. Bypass the
+    * L2 cache to make sure it works.
+    *
+    * Also when the "gang leader" is SDMA, we need to ensure that the gang semaphores BO
     * is coherent between SDMA and CP. To achieve this, we need bypass the L2 cache
     * when either SDMA or CP are connected to L2.
     *
@@ -1402,8 +1406,7 @@ radv_create_gang_wait_preambles_postambles(struct radv_queue *queue)
     * GFX12:
     *   neither CP nor SDMA are connected to L2
     */
-   if (ip == AMD_IP_SDMA && pdev->info.gfx_level >= GFX9 && pdev->info.gfx_level < GFX12)
-      gang_sem_bo_flags |= RADEON_FLAG_GL2_BYPASS;
+   gang_sem_bo_flags |= RADEON_FLAG_GL2_BYPASS;
 
    /* Gang semaphores BO.
     * DWORD 0: used in preambles, gang leader writes, gang members wait.
@@ -1454,7 +1457,9 @@ radv_create_gang_wait_preambles_postambles(struct radv_queue *queue)
     * in a multi-process environment, because task shader dispatches are not
     * meant to be executed on multiple compute engines at the same time.
     */
-   radv_cp_wait_mem(ace_pre_cs, WAIT_REG_MEM_GREATER_OR_EQUAL, ace_wait_va, 1, 0xffffffff);
+   ac_emit_cp_wait_mem(
+      ace_pre_cs->b, ace_wait_va, 1, 0xffffffff,
+      S_3C1_FUNCTION(V_3C1_GREATER_THAN_OR_EQUAL_REFERENCE_VALUE) | S_3C1_OPERATION(V_3C1_WAIT_MEM_PREEMPTABLE));
    radv_cs_write_data(device, ace_pre_cs, V_371_MICRO_ENGINE, ace_wait_va, 1, &zero, false);
    radv_cs_write_data(device, leader_pre_cs, V_371_MICRO_ENGINE, ace_wait_va, 1, &one, false);
    /* Create postambles for gang submission.
@@ -1463,8 +1468,15 @@ radv_create_gang_wait_preambles_postambles(struct radv_queue *queue)
     * as soon as the gang leader is done, which may lead to bugs because the
     * same command buffers could be submitted again while still being executed.
     */
-   radv_cp_wait_mem(leader_post_cs, WAIT_REG_MEM_GREATER_OR_EQUAL, leader_wait_va, 1, 0xffffffff);
-   radv_cs_write_data(device, leader_post_cs, V_371_MICRO_ENGINE, leader_wait_va, 1, &zero, false);
+   const uint32_t leader_engine_sel = ip == AMD_IP_GFX ? V_371_PREFETCH_PARSER : V_371_MICRO_ENGINE;
+   if (ip == AMD_IP_SDMA)
+      ac_emit_sdma_wait_mem(leader_post_cs->b, WAIT_REG_MEM_GREATER_OR_EQUAL, leader_wait_va, 1, 0xffffffff);
+   else
+      ac_emit_cp_wait_mem(
+         leader_post_cs->b, leader_wait_va, 1, 0xffffffff,
+         S_3C1_FUNCTION(V_3C1_GREATER_THAN_OR_EQUAL_REFERENCE_VALUE) | S_3C1_ENGINE_SEL(leader_engine_sel));
+   radv_cs_write_data(device, leader_post_cs, leader_engine_sel, leader_wait_va, 1, &zero, false);
+
    radv_cs_emit_write_event_eop(ace_post_cs, pdev->info.gfx_level, V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM,
                                 EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM, EOP_DATA_SEL_VALUE_32BIT, leader_wait_va, 1, 0);
 
@@ -2000,6 +2012,12 @@ radv_queue_init(struct radv_device *device, struct radv_queue *queue, int idx,
       if (result != VK_SUCCESS)
          goto fail;
    }
+
+   /* Use internal synchronization for UVD < 6.3 to prevent a possible
+    * race between application submissions and destroying the video session.
+    */
+   if (pdev->info.family < CHIP_POLARIS10 && queue->state.qf == RADV_QUEUE_VIDEO_DEC)
+      queue->vk.internally_synchronized = true;
 
    return VK_SUCCESS;
 fail:

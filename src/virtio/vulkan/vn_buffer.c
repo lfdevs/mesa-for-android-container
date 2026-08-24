@@ -10,8 +10,8 @@
 
 #include "vn_buffer.h"
 
-#include "venus-protocol/vn_protocol_driver_buffer.h"
-#include "venus-protocol/vn_protocol_driver_buffer_view.h"
+#include "vn_protocol_driver_buffer.h"
+#include "vn_protocol_driver_buffer_view.h"
 
 #include "vn_device.h"
 #include "vn_device_memory.h"
@@ -57,10 +57,10 @@ vn_buffer_get_cache_index(const VkBufferCreateInfo *create_info,
     * usage must not be 0
     */
    uint64_t usage = (uint64_t)create_info->usage;
-   vk_foreach_struct_const(pnext, create_info->pNext) {
-      switch (pnext->sType) {
+   vk_foreach_struct_const(sType, pnext, create_info->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO: {
-         const VkBufferUsageFlags2CreateInfo *usage2 = (void *)pnext;
+         const VkBufferUsageFlags2CreateInfo *usage2 = pnext;
          usage = (uint64_t)usage2->usage;
          break;
       }
@@ -343,9 +343,9 @@ vn_buffer_fix_create_info(
    local_info->create = *create_info;
    VkBaseOutStructure *cur = (void *)&local_info->create;
 
-   vk_foreach_struct_const(src, create_info->pNext) {
+   vk_foreach_struct_const(sType, src, create_info->pNext) {
       void *next = NULL;
-      switch (src->sType) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO:
          memcpy(&local_info->external, src, sizeof(local_info->external));
          local_info->external.handleTypes = renderer_handle_type;

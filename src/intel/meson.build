@@ -34,6 +34,7 @@ endif
 if with_intel_hasvk or with_intel_vk or with_gallium_iris
   subdir('ds')
 endif
+subdir('metrics_library')
 if with_intel_tools
   subdir('tools')
   subdir('executor')

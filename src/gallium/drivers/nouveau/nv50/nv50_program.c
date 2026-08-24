@@ -52,7 +52,7 @@ nv50_vertprog_assign_slots(struct nv50_ir_prog_info_out *info)
       prog->in[i].hw = n;
       prog->in[i].mask = info->in[i].mask;
 
-      prog->vp.attrs[(4 * i) / 32] |= info->in[i].mask << ((4 * i) % 32);
+      prog->vp.attrs[(4 * i) / 32] |= (uint32_t)(info->in[i].mask) << ((4 * i) % 32);
 
       for (c = 0; c < 4; ++c)
          if (info->in[i].mask & (1 << c))

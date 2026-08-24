@@ -56,6 +56,8 @@ void genX(init_cps_device_state)(struct anv_device *device);
 uint32_t genX(call_internal_shader)(nir_builder *b,
                                     enum anv_internal_kernel_name shader_name);
 
+void genX(cmd_buffer_disable_hiz_planes)(struct anv_cmd_buffer *cmd_buffer);
+
 void
 genX(set_fast_clear_state)(struct anv_cmd_buffer *cmd_buffer,
                            const struct anv_image *image,
@@ -97,8 +99,9 @@ void
 genX(cmd_buffer_update_color_aux_op)(struct anv_cmd_buffer *cmd_buffer,
                                      enum anv_color_aux_op_class aux_op);
 
-void genX(cmd_buffer_emit_gfx12_depth_wa)(struct anv_cmd_buffer *cmd_buffer,
-                                          const struct isl_surf *surf);
+void
+genX(cmd_buffer_emit_depth_stencil)(struct anv_cmd_buffer *cmd_buffer,
+                                    enum isl_aux_usage hiz_usage);
 
 void genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(struct anv_cmd_buffer *cmd_buffer,
                                                     int vb_index,
@@ -213,13 +216,13 @@ void genX(emit_l3_config)(struct anv_batch *batch,
 void genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
                                 const struct intel_l3_config *cfg);
 
-void genX(flush_descriptor_buffers)(struct anv_cmd_buffer *cmd_buffer,
-                                    struct anv_cmd_pipeline_state *pipe_state,
-                                    VkShaderStageFlags active_stages);
+void genX(flush_binding_mode)(struct anv_cmd_buffer *cmd_buffer,
+                              struct anv_bind_point_state *bind_state,
+                              VkShaderStageFlags active_stages);
 
 uint32_t
 genX(cmd_buffer_flush_descriptor_sets)(struct anv_cmd_buffer *cmd_buffer,
-                                       struct anv_cmd_pipeline_state *pipe_state,
+                                       struct anv_bind_point_state *bind_state,
                                        const VkShaderStageFlags dirty,
                                        const struct anv_shader **shaders,
                                        uint32_t num_shaders);
@@ -298,7 +301,8 @@ void genX(batch_emit_fast_color_dummy_blit)(struct anv_batch *batch,
                                             struct anv_device *device);
 
 #if GFX_VERx10 >= 300
-#define anv_shader_internal_get_handler(bin, local_arg_offset) ({    \
+#define anv_shader_internal_get_handler(devinfo, bin,                \
+                                        local_arg_offset) ({         \
    assert((local_arg_offset) % 8 == 0);                              \
    const struct brw_bs_prog_data *prog_data =                        \
       brw_bs_prog_data_const(bin->prog_data);                        \
@@ -308,13 +312,14 @@ void genX(batch_emit_fast_color_dummy_blit)(struct anv_batch *batch,
       .OffsetToLocalArguments = (local_arg_offset) / 8,              \
       .BindlessShaderDispatchMode = RT_SIMD16,                       \
       .KernelStartPointer = bin->kernel.offset,                      \
-      .RegistersPerThread = ptl_register_blocks(prog_data->base.grf_used), \
+      .RegistersPerThread =                                          \
+         intel_register_blocks(devinfo, prog_data->base.grf_used),   \
    };                                                                \
 })
 #endif
 
 #if GFX_VERx10 >= 300
-#define anv_shader_get_bsr(shader, local_arg_offset) ({              \
+#define anv_shader_get_bsr(devinfo, shader, local_arg_offset) ({     \
    assert((local_arg_offset) % 8 == 0);                              \
    const struct brw_bs_prog_data *prog_data =                        \
       brw_bs_prog_data_const(shader->prog_data);                     \
@@ -325,11 +330,12 @@ void genX(batch_emit_fast_color_dummy_blit)(struct anv_batch *batch,
       .BindlessShaderDispatchMode = RT_SIMD16,                       \
       .KernelStartPointer = shader->replay_kernel.alloc_size != 0 ?  \
          shader->replay_kernel.offset : shader->kernel.offset,       \
-      .RegistersPerThread = ptl_register_blocks(prog_data->base.grf_used), \
+      .RegistersPerThread =                                          \
+         intel_register_blocks(devinfo, prog_data->base.grf_used),   \
    };                                                                \
 })
 #else
-#define anv_shader_get_bsr(shader, local_arg_offset) ({              \
+#define anv_shader_get_bsr(devinfo, shader, local_arg_offset) ({     \
    assert((local_arg_offset) % 8 == 0);                              \
    const struct brw_bs_prog_data *prog_data =                        \
       brw_bs_prog_data_const(shader->prog_data);                     \
@@ -346,7 +352,8 @@ void genX(batch_emit_fast_color_dummy_blit)(struct anv_batch *batch,
 #endif
 
 #if GFX_VERx10 >= 300
-#define anv_shader_internal_get_bsr(bin, local_arg_offset) ({        \
+#define anv_shader_internal_get_bsr(devinfo, bin,                    \
+                                    local_arg_offset) ({             \
    assert((local_arg_offset) % 8 == 0);                              \
    const struct brw_bs_prog_data *prog_data =                        \
       brw_bs_prog_data_const(bin->prog_data);                        \
@@ -356,11 +363,13 @@ void genX(batch_emit_fast_color_dummy_blit)(struct anv_batch *batch,
       .OffsetToLocalArguments = (local_arg_offset) / 8,              \
       .BindlessShaderDispatchMode = RT_SIMD16,                       \
       .KernelStartPointer = bin->kernel.offset,                      \
-      .RegistersPerThread = ptl_register_blocks(prog_data->base.grf_used), \
+      .RegistersPerThread =                                          \
+         intel_register_blocks(devinfo, prog_data->base.grf_used),   \
    };                                                                \
 })
 #else
-#define anv_shader_internal_get_bsr(bin, local_arg_offset) ({        \
+#define anv_shader_internal_get_bsr(devinfo, bin,                    \
+                                    local_arg_offset) ({             \
    assert((local_arg_offset) % 8 == 0);                              \
    const struct brw_bs_prog_data *prog_data =                        \
       brw_bs_prog_data_const(bin->prog_data);                        \
@@ -473,33 +482,33 @@ genX(cmd_buffer_emit_push_descriptor_surfaces)(struct anv_cmd_buffer *cmd_buffer
 
 static inline VkShaderStageFlags
 genX(cmd_buffer_flush_push_descriptors)(struct anv_cmd_buffer *cmd_buffer,
-                                        struct anv_cmd_pipeline_state *state)
+                                        struct anv_bind_point_state *bind_state)
 {
-   if (state->push_buffer_stages == 0 && state->push_descriptor_stages == 0)
+   if (bind_state->push_buffer_stages == 0 && bind_state->push_descriptor_stages == 0)
       return 0;
 
-   assert(state->push_descriptor_index != UINT8_MAX);
+   assert(bind_state->push_descriptor_index != UINT8_MAX);
    struct anv_descriptor_set *set =
-      state->descriptors[state->push_descriptor_index];
+      bind_state->descriptors[bind_state->push_descriptor_index];
    assert(set->is_push);
 
    const VkShaderStageFlags push_buffer_dirty =
-      cmd_buffer->state.push_descriptors_dirty & state->push_buffer_stages;
+      cmd_buffer->state.push_descriptors_dirty & bind_state->push_buffer_stages;
    if (push_buffer_dirty) {
       if (set->desc_surface_state.map == NULL)
          genX(cmd_buffer_emit_push_descriptor_buffer_surface)(cmd_buffer, set);
 
       /* Force the next push descriptor update to allocate a new descriptor set. */
-      state->push_descriptor.set_used_on_gpu = true;
+      bind_state->push_descriptor.set_used_on_gpu = true;
    }
 
    const VkShaderStageFlags push_descriptor_dirty =
-      cmd_buffer->state.push_descriptors_dirty & state->push_descriptor_stages;
+      cmd_buffer->state.push_descriptors_dirty & bind_state->push_descriptor_stages;
    if (push_descriptor_dirty) {
       genX(cmd_buffer_emit_push_descriptor_surfaces)(cmd_buffer, set);
 
       /* Force the next push descriptor update to allocate a new descriptor set. */
-      state->push_descriptor.set_used_on_gpu = true;
+      bind_state->push_descriptor.set_used_on_gpu = true;
    }
 
    /* Clear the dirty stages now that we've generated the surface states for
@@ -571,7 +580,7 @@ genX(cmd_buffer_rhwo_wa_14024015672)(struct anv_cmd_buffer *cmd_buffer,
 {
    struct anv_device *device = cmd_buffer->device;
    const bool rhwo_opt_enable =
-      !device->physical->instance->drirc.debug.wa_14024015672_msaa &&
+      !device->physical->drirc.debug.wa_14024015672_msaa &&
       msaa_enabled;
    if (intel_needs_workaround(device->info, 14024015672) &&
        cmd_buffer->state.pending_rhwo_optimization_enabled != rhwo_opt_enable)

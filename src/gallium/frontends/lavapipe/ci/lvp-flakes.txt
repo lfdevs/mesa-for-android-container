@@ -130,4 +130,10 @@ dEQP-VK.tessellation.winding.lower_left_domain.hlsl_quads_ccw_yflip
 
 dEQP-VK.texture.explicit_lod.2d.sizes.128x128_nearest_linear_mipmap_linear_repeat
 
+dEQP-VK.compute.shader_object_binary.cooperative_matrix.khr_a.subgroupscope.spacetodepth.float16_float16.buffer.rowmajor.tensorlayout
+dEQP-VK.compute.shader_object_binary.cooperative_matrix.khr_a.subgroupscope.spacetodepth.sint8_sint8.buffer.rowmajor.tensorlayout
+dEQP-VK.compute.shader_object_spirv.cooperative_matrix.khr_a.subgroupscope.spacetodepth.float16_float16.buffer.rowmajor.tensorlayout
+dEQP-VK.compute.shader_object_spirv.cooperative_matrix.khr_a.subgroupscope.spacetodepth.sint8_sint8.buffer.rowmajor.tensorlayout
+dEQP-VK.compute.shader_object_spirv.cooperative_matrix.khr_a.subgroupscope.tensorlayout2d.float16_float16.buffer.rowmajor.tensorlayout
+
 nir-stress=dEQP-VK.sparse_resources.buffer.vertex_buffer.sparse_binding

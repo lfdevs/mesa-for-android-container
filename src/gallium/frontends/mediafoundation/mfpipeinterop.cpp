@@ -126,59 +126,6 @@ ConvertAVEncVProfileToPipeVideoProfile( struct vl_screen *vlScreen, UINT32 profi
    return pipeProfile;
 }
 
-// utility to convert from AVEncVProfile to pipe_video_chroma_format
-enum pipe_video_chroma_format
-ConvertAVEncVProfileToPipeVideoChromaFormat( UINT32 profile, D3D12_VIDEO_ENCODER_CODEC codec )
-{
-   // default to 420
-   pipe_video_chroma_format chromaFormat = PIPE_VIDEO_CHROMA_FORMAT_420;
-
-   switch( codec )
-   {
-      case D3D12_VIDEO_ENCODER_CODEC_H264:
-         switch( profile )
-         {
-            case eAVEncH264VProfile_422:
-               chromaFormat = PIPE_VIDEO_CHROMA_FORMAT_422;
-               break;
-            case eAVEncH264VProfile_444:
-               chromaFormat = PIPE_VIDEO_CHROMA_FORMAT_444;
-               break;
-         }
-         break;
-      case D3D12_VIDEO_ENCODER_CODEC_HEVC:
-         switch( profile )
-         {
-            case eAVEncH265VProfile_Main_422_10:
-            case eAVEncH265VProfile_Main_422_12:
-               chromaFormat = PIPE_VIDEO_CHROMA_FORMAT_422;
-               break;
-            case eAVEncH265VProfile_Main_444_8:
-            case eAVEncH265VProfile_Main_444_10:
-            case eAVEncH265VProfile_Main_444_12:
-               chromaFormat = PIPE_VIDEO_CHROMA_FORMAT_444;
-               break;
-         }
-         break;
-      case D3D12_VIDEO_ENCODER_CODEC_AV1:
-         switch( profile )
-         {
-            case eAVEncAV1VProfile_High_444_10:
-            case eAVEncAV1VProfile_High_444_8:
-            case eAVEncAV1VProfile_Professional_444_12:
-               chromaFormat = PIPE_VIDEO_CHROMA_FORMAT_444;
-               break;
-            case eAVEncAV1VProfile_Professional_422_8:
-            case eAVEncAV1VProfile_Professional_422_10:
-            case eAVEncAV1VProfile_Professional_422_12:
-               chromaFormat = PIPE_VIDEO_CHROMA_FORMAT_422;
-               break;
-         }
-         break;
-   }
-   return chromaFormat;
-}
-
 // utility to convert from pipe_h2645_enc_picture_type to eAVEncH264PictureType
 // There is no eAVEncH265PictureType, so this is used for both
 enum eAVEncH264PictureType

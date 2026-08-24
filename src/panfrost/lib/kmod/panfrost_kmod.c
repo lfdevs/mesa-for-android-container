@@ -5,13 +5,17 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <pthread.h>
 #include <string.h>
 #include <xf86drm.h>
+#include <sys/eventfd.h>
+#include <sys/timerfd.h>
 
 #include "util/hash_table.h"
 #include "util/macros.h"
-#include "util/simple_mtx.h"
 #include "util/stack_array.h"
+#include "util/timespec.h"
 
 #include "drm-uapi/panfrost_drm.h"
 
@@ -40,6 +44,33 @@ struct panfrost_kmod_bo {
     * We don't control it, it's automatically assigned by the kernel driver.
     */
    uint64_t offset;
+};
+
+enum panfrost_kmod_perf_session_state {
+   PANFROST_KMOD_PERF_SESSION_STOPPED,
+   PANFROST_KMOD_PERF_SESSION_STARTING,
+   PANFROST_KMOD_PERF_SESSION_STARTED,
+   PANFROST_KMOD_PERF_SESSION_STOPPING,
+};
+
+struct panfrost_kmod_perf_session {
+   struct pan_kmod_perf_session base;
+   enum panfrost_kmod_perf_session_state state;
+   thrd_t thread;
+
+   /* We can't use a simple_mtx_t here, because the lock is taken by both an RT
+    * thread and a normal prio one, and we want priority inheritance when the
+    * normal prio thread has the lock held and the RT thread wants to acquire it.
+    */
+   pthread_mutex_t lock;
+   struct pan_kmod_perf_sample_layout sample_layout;
+
+   int timerfd;
+   int eventfd;
+
+   void *hw_sample;
+   struct pan_kmod_perf_consolidated_sample consolidated_sample;
+   struct pan_kmod_perf_dumped_sample dumped_sample;
 };
 
 /* Abstraction over the raw drm_panfrost_get_param ioctl for fetching
@@ -163,6 +194,8 @@ panfrost_dev_query_props(struct panfrost_kmod_dev *panfrost_dev)
       panfrost_query_raw(fd, DRM_PANFROST_PARAM_MEM_FEATURES, true, 0);
    props->mmu_features =
       panfrost_query_raw(fd, DRM_PANFROST_PARAM_MMU_FEATURES, true, 0);
+   props->l2_features =
+      panfrost_query_raw(fd, DRM_PANFROST_PARAM_L2_FEATURES, true, 0);
 
    for (unsigned i = 0; i < ARRAY_SIZE(props->texture_features); i++) {
       props->texture_features[i] = panfrost_query_raw(
@@ -178,6 +211,11 @@ panfrost_dev_query_props(struct panfrost_kmod_dev *panfrost_dev)
       props->gpu_can_query_timestamp = true;
       props->timestamp_frequency = panfrost_query_raw(
          fd, DRM_PANFROST_PARAM_SYSTEM_TIMESTAMP_FREQUENCY, true, 0);
+
+      if (props->timestamp_frequency) {
+         props->timestamp_cycles_to_ns_factor =
+            (double)NSEC_PER_SEC / props->timestamp_frequency;
+      }
    }
 
    /* Device coherent timestamps are always enabled on panfrost */
@@ -616,6 +654,318 @@ panfrost_kmod_bo_label(struct pan_kmod_dev *dev, struct pan_kmod_bo *bo, const c
       mesa_loge("DRM_IOCTL_PANFROST_SET_LABEL_BO failed (err=%d)", errno);
 }
 
+static uint32_t
+panthor_kmod_perf_hw_sample_size(struct pan_kmod_dev *dev)
+{
+   uint32_t hw_blk_cnt =
+      2 + pan_query_core_count(&dev->props) + pan_query_l2_slices(&dev->props);
+   uint32_t counters_per_block = pan_query_perf_counter_per_block(&dev->props);
+   uint32_t hw_blk_sz = counters_per_block * sizeof(uint32_t);
+
+   return hw_blk_cnt * hw_blk_sz;
+}
+
+static int
+panfrost_kmod_perf_init_sample_layout(struct panfrost_kmod_perf_session *session)
+{
+   struct pan_kmod_dev *dev = session->base.dev;
+   uint32_t hw_blk_cnt =
+      2 + pan_query_core_count(&dev->props) + pan_query_l2_slices(&dev->props);
+   uint32_t hw_sample_offset = 0;
+   int ret;
+
+   ret = pan_kmod_perf_sample_layout_init(dev, &session->sample_layout, hw_blk_cnt);
+   if (ret)
+      return ret;
+
+   pan_kmod_perf_sample_layout_add_section(dev, &session->sample_layout,
+                                           MALI_PERF_BLOCK_GPU_FRONT_END, 0,
+                                           &hw_sample_offset);
+   pan_kmod_perf_sample_layout_add_section(dev, &session->sample_layout,
+                                           MALI_PERF_BLOCK_TILER, 0,
+                                           &hw_sample_offset);
+   pan_kmod_perf_sample_layout_add_memsys_sections(dev, &session->sample_layout,
+                                                   &hw_sample_offset);
+   pan_kmod_perf_sample_layout_add_shader_core_sections(
+      dev, &session->sample_layout, &hw_sample_offset);
+   return 0;
+}
+
+static void
+panfrost_kmod_perf_destroy(struct pan_kmod_perf_session *session)
+{
+   struct panfrost_kmod_perf_session *panfrost_session =
+      container_of(session, struct panfrost_kmod_perf_session, base);
+   struct pan_kmod_dev *dev = session->dev;
+
+   if (p_atomic_read(&panfrost_session->state) != PANFROST_KMOD_PERF_SESSION_STOPPED) {
+      p_atomic_set(&panfrost_session->state, PANFROST_KMOD_PERF_SESSION_STOPPING);
+      eventfd_write(panfrost_session->eventfd, 1);
+      thrd_join(panfrost_session->thread, NULL);
+   }
+
+   if (panfrost_session->hw_sample)
+      pan_kmod_dev_free(dev, panfrost_session->hw_sample);
+
+   pan_kmod_perf_consolidated_sample_cleanup(
+      dev, &panfrost_session->consolidated_sample);
+   pan_kmod_perf_dumped_sample_cleanup(dev, &panfrost_session->dumped_sample);
+   pan_kmod_perf_sample_layout_cleanup(dev, &panfrost_session->sample_layout);
+   pthread_mutex_destroy(&panfrost_session->lock);
+   pan_kmod_dev_free(dev, panfrost_session);
+}
+
+static void
+panfrost_kmod_patch_hw_sample_timestamp(
+   void *hw_sample, uint64_t new_ts,
+   const struct pan_kmod_perf_sample_layout *layout)
+{
+   for (uint32_t s = 0; s < layout->section_count; s++) {
+      const struct pan_kmod_perf_sample_section *section = &layout->sections[s];
+      uint32_t *in = hw_sample + section->hw_sample_offset;
+      in[0] = (uint32_t)new_ts;
+      in[1] = (uint32_t)(new_ts >> 32);
+   }
+}
+
+static int
+panfrost_kmod_perf_sample_locked(struct panfrost_kmod_perf_session *session)
+{
+   struct pan_kmod_dev *dev = session->base.dev;
+   void *hw_sample = session->hw_sample;
+   struct drm_panfrost_perfcnt_dump req = {
+      .buf_ptr = (uint64_t)(uintptr_t)hw_sample,
+   };
+
+   int ret = pan_kmod_ioctl(dev->fd, DRM_IOCTL_PANFROST_PERFCNT_DUMP, &req);
+   if (ret)
+      return ret;
+
+   /* XXX: Don't do this once the kernel issue is resolved. */
+   uint64_t gpu_ts = pan_kmod_query_timestamp(dev);
+   panfrost_kmod_patch_hw_sample_timestamp(hw_sample, gpu_ts,
+                                           &session->sample_layout);
+
+   pan_kmod_perf_consolidate_sample(dev, &session->sample_layout, hw_sample,
+                                    &session->consolidated_sample);
+
+   return 0;
+}
+
+static int
+panfrost_kmod_perf_thread(void *data)
+{
+   struct panfrost_kmod_perf_session *session = data;
+   const struct sched_param rt_params = {
+      /* Do not use max priority to avoid starving migration and watchdog
+       * threads.
+       */
+      .sched_priority = sched_get_priority_max(SCHED_FIFO) - 1,
+   };
+   /* This is best effort. If we can't make the thread RT because we don't
+    * have CAP_SYS_NICE, we keep going.
+    */
+   int ret = sched_setscheduler(0, SCHED_FIFO, &rt_params);
+   if (ret)
+      mesa_logw("Can't make the perfcnt thread RT (err=%d)", errno);
+
+   p_atomic_set(&session->state, PANFROST_KMOD_PERF_SESSION_STARTED);
+
+   while (true) {
+      struct pollfd fds[] = {
+         { session->eventfd, POLLIN, },
+         { session->timerfd, POLLIN, },
+      };
+
+      ret = poll(fds, ARRAY_SIZE(fds), INT_MAX);
+      if (ret < 0)
+         goto err;
+
+      if (fds[0].revents & POLLIN) {
+         eventfd_t evt;
+
+         ret = eventfd_read(session->eventfd, &evt);
+         if (ret)
+            goto err;
+      }
+
+      if (fds[1].revents & POLLIN) {
+         uint64_t expired = 0;
+
+         read(session->timerfd, &expired, sizeof(expired));
+         pthread_mutex_lock(&session->lock);
+         panfrost_kmod_perf_sample_locked(session);
+         pthread_mutex_unlock(&session->lock);
+      }
+
+      if (p_atomic_cmpxchg(&session->state, PANFROST_KMOD_PERF_SESSION_STOPPING,
+                           PANFROST_KMOD_PERF_SESSION_STOPPED) ==
+          PANFROST_KMOD_PERF_SESSION_STOPPING) {
+         return 0;
+      }
+   }
+
+   return 0;
+
+err:
+   p_atomic_set(&session->state, PANFROST_KMOD_PERF_SESSION_STOPPED);
+   return ret;
+}
+
+static int64_t
+panfrost_kmod_perf_get_hw_counter_value(struct mali_perf_backend *backend,
+                                       struct mali_perf_hw_counter_id id)
+{
+   struct panfrost_kmod_perf_session *session = container_of(
+      backend, struct panfrost_kmod_perf_session, base.mali_perf_backend);
+   uint32_t counters_per_block =
+      pan_query_perf_counter_per_block(&session->base.dev->props);
+   int64_t *base = session->dumped_sample.data +
+                   session->sample_layout.block_type_offset[id.block.type];
+
+   base += counters_per_block * id.block.index;
+   return base[id.index];
+}
+
+static struct pan_kmod_perf_session *
+panfrost_kmod_perf_create(struct pan_kmod_dev *dev)
+{
+   struct pan_kmod_perf_caps caps = {
+      /* FIXME: check if we can make the thread RT before advertising 10KHz
+       * sampling.
+       */
+      .min_sampling_period_ns = 1000000,
+   };
+   struct mali_perf_backend backend = {
+      .get_hw_counter_value = panfrost_kmod_perf_get_hw_counter_value,
+   };
+   struct panfrost_kmod_perf_session *session;
+
+   session = pan_kmod_dev_alloc(dev, sizeof(*session));
+   if (!session)
+      return NULL;
+
+   session->eventfd = -1;
+   session->timerfd = -1;
+   pthread_mutex_init(&session->lock, NULL);
+   pan_kmod_perf_session_init(&session->base, dev, caps, backend);
+
+   int ret = panfrost_kmod_perf_init_sample_layout(session);
+   if (ret)
+      goto err_cleanup_session;
+
+   session->hw_sample =
+      pan_kmod_dev_alloc(dev, panthor_kmod_perf_hw_sample_size(dev));
+   ret = pan_kmod_perf_consolidated_sample_init(dev, &session->sample_layout,
+                                                &session->consolidated_sample);
+   ret |= pan_kmod_perf_dumped_sample_init(dev, &session->sample_layout,
+                                           &session->dumped_sample);
+   if (!session->hw_sample || ret) {
+      mesa_loge("failed to allocate the consolidated sample buffer");
+      goto err_cleanup_session;
+   }
+
+   session->timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC);
+   if (session->timerfd < 0) {
+      mesa_loge("timerfd_create() failed (err=%d)", errno);
+      goto err_cleanup_session;
+   }
+
+   session->eventfd = eventfd(0, 0);
+   if (session->eventfd < 0) {
+      mesa_loge("eventfd() failed (err=%d)", errno);
+      goto err_cleanup_session;
+   }
+
+   p_atomic_set(&session->state, PANFROST_KMOD_PERF_SESSION_STARTING);
+   ret = u_thread_create(&session->thread, panfrost_kmod_perf_thread, session);
+   if (ret) {
+      p_atomic_set(&session->state, PANFROST_KMOD_PERF_SESSION_STOPPED);
+      goto err_cleanup_session;
+   }
+
+   return &session->base;
+
+err_cleanup_session:
+   panfrost_kmod_perf_destroy(&session->base);
+   return NULL;
+}
+
+static int
+panfrost_kmod_perf_enable(struct pan_kmod_perf_session *session,
+                          const struct pan_kmod_perf_config *cfg)
+{
+   struct panfrost_kmod_perf_session *panfrost_session =
+      container_of(session, struct panfrost_kmod_perf_session, base);
+   struct drm_panfrost_perfcnt_enable req = {
+      .enable = 1,
+   };
+   int ret;
+
+   ret =
+      pan_kmod_ioctl(session->dev->fd, DRM_IOCTL_PANFROST_PERFCNT_ENABLE, &req);
+   if (ret) {
+      mesa_loge("DRM_IOCTL_PANFROST_PERFCNT_ENABLE failed (err=%d)", errno);
+      if (errno == ENOSYS)
+         mesa_loge("try `# echo Y > /sys/module/panfrost/parameters/unstable_ioctls\n`");
+      return ret;
+   }
+
+   struct itimerspec ts = {
+      .it_interval = {
+         .tv_nsec = cfg->sampling_period_ns % 1000000000ull,
+         .tv_sec = cfg->sampling_period_ns / 1000000000ull,
+      },
+   };
+
+   ts.it_value = ts.it_interval;
+
+   ret = timerfd_settime(panfrost_session->timerfd, 0, &ts, NULL);
+   if (ret)
+      return ret;
+
+   session->config = *cfg;
+
+   /* Counters start accumulating once they are enabled. */
+   uint64_t gpu_ts = pan_kmod_query_timestamp(session->dev);
+   pthread_mutex_lock(&panfrost_session->lock);
+   panfrost_session->consolidated_sample.time_span.start_gpu_ts = gpu_ts;
+   panfrost_session->consolidated_sample.time_span.end_gpu_ts = gpu_ts;
+   pthread_mutex_unlock(&panfrost_session->lock);
+
+   return 0;
+}
+
+static int
+panfrost_kmod_perf_disable(struct pan_kmod_perf_session *session)
+{
+   struct panfrost_kmod_perf_session *panfrost_session =
+      container_of(session, struct panfrost_kmod_perf_session, base);
+   struct drm_panfrost_perfcnt_enable req = {
+      .enable = 0,
+   };
+   struct itimerspec ts = {0};
+
+   timerfd_settime(panfrost_session->timerfd, 0, &ts, NULL);
+   return pan_kmod_ioctl(session->dev->fd, DRM_IOCTL_PANFROST_PERFCNT_ENABLE,
+                         &req);
+}
+
+static void
+panfrost_kmod_perf_dump(struct pan_kmod_perf_session *session,
+                        struct mali_perf_dump_info *info)
+{
+   struct panfrost_kmod_perf_session *panfrost_session =
+      container_of(session, struct panfrost_kmod_perf_session, base);
+   struct pan_kmod_dev *dev = session->dev;
+
+   pthread_mutex_lock(&panfrost_session->lock);
+   *info = pan_kmod_perf_dump_sample(dev, &panfrost_session->sample_layout,
+                                     &panfrost_session->consolidated_sample,
+                                     &panfrost_session->dumped_sample);
+   pthread_mutex_unlock(&panfrost_session->lock);
+}
+
 const struct pan_kmod_ops panfrost_kmod_ops = {
    .dev_create = panfrost_kmod_dev_create,
    .dev_destroy = panfrost_kmod_dev_destroy,
@@ -633,4 +983,9 @@ const struct pan_kmod_ops panfrost_kmod_ops = {
    .vm_bind = panfrost_kmod_vm_bind,
    .query_timestamp = panfrost_kmod_query_timestamp,
    .bo_set_label = panfrost_kmod_bo_label,
+   .perf_create = panfrost_kmod_perf_create,
+   .perf_destroy = panfrost_kmod_perf_destroy,
+   .perf_enable = panfrost_kmod_perf_enable,
+   .perf_disable = panfrost_kmod_perf_disable,
+   .perf_dump = panfrost_kmod_perf_dump,
 };

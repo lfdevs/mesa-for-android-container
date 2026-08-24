@@ -111,6 +111,16 @@ v3d_device_has_unpack_max0(const struct v3d_device_info *devinfo)
                  (devinfo->rev == 6 && devinfo->compat_rev >= 4)));
 }
 
+/* V3D 4.2 and earlier shader records carry an address for the values used when
+ * a vertex attribute is not fed by the vertex input state. Later hardware
+ * dropped the field, so the backing BO is only needed on <= 4.2.
+ */
+static inline bool
+v3d_device_needs_default_attribute_values(const struct v3d_device_info *devinfo)
+{
+        return devinfo->ver <= 42;
+}
+
 #ifdef __cplusplus
 }
 #endif

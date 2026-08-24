@@ -431,10 +431,6 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
    if (result != VK_SUCCESS)
       return result;
 
-   result = pin_state_pool(device, execbuf, anv_device_get_general_state_pool(device));
-   if (result != VK_SUCCESS)
-      return result;
-
    result = pin_shader_heap(device, execbuf, &device->shader_heap);
    if (result != VK_SUCCESS)
       return result;

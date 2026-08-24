@@ -113,6 +113,8 @@ radeon_ioctl_gem_mmap(int fd, unsigned long request, void *arg)
 
    mmap_bo->addr_ptr = drm_shim_bo_get_mmap_offset(shim_fd, bo);
 
+   drm_shim_bo_put(bo);
+
    return 0;
 }
 

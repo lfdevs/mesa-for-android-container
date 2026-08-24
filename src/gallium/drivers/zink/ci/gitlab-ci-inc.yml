@@ -248,6 +248,8 @@
     - .zink-trace-test
   variables:
     GPU_VERSION: zink-anv-adl
+    HWCI_KERNEL_MODULES: i915
+    LAVA_CMDLINE: null
 
 .zink-anv-tgl-test:
   extends:

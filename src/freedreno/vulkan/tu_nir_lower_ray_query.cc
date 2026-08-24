@@ -260,15 +260,13 @@ load_tlas(nir_builder *b, nir_def *tlas,
                               .align_mul = AS_RECORD_SIZE,
                               .align_offset = offset);
    } else {
-      return nir_load_global_ir3(b, components, 32,
-                                 nir_pack_64_2x32(b, tlas),
-                                 nir_iadd_imm(b, nir_imul_imm(b, index, AS_RECORD_SIZE),
-                                              offset),
-                                 /* The required alignment of the
-                                  * user-specified base from the Vulkan spec.
-                                  */
-                                 .align_mul = 256,
-                                 .align_offset = 0);
+      return nir_load_global_offset(
+         b, components, 32, nir_pack_64_2x32(b, tlas),
+         nir_iadd_imm(b, nir_imul_imm(b, index, AS_RECORD_SIZE), offset),
+         /* The required alignment of the
+          * user-specified base from the Vulkan spec.
+          */
+         .align_mul = 256, .align_offset = 0);
    }
 }
 
@@ -782,8 +780,8 @@ build_ray_traversal(nir_builder *b, nir_deref_instr *rq,
             /* TODO: Implement optimization to try to combine these into 1
              * 32-bit ID, for compressed nodes.
              *
-             * load_global_ir3 doesn't have the required range so we have to
-             * do the offset math ourselves.
+             * load_global_offset doesn't have the required range so we have
+             * to do the offset math ourselves.
              */
             nir_def *offset =
                nir_ior_imm(b, nir_imul_imm(b, nir_u2u64(b, bvh_node),

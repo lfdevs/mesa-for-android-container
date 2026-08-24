@@ -35,8 +35,26 @@ void r300_emit_blend_state(struct r300_context* r300,
         } else if (cb->format == PIPE_FORMAT_R16G16B16X16_FLOAT) {
             WRITE_CS_TABLE(blend->cb_noclamp_noalpha, size);
         } else {
+            struct r300_resource *tex = r300_resource(cb->texture);
+            unsigned colormask = blend->state.rt[0].colormask;
             unsigned swz = r300_surface(cb)->colormask_swizzle;
-            WRITE_CS_TABLE(blend->cb_clamp[swz], size);
+
+            /* Pre-R5xx can lose parts of unblended masked writes to microtiled
+             * color buffers. An identity blend with colorbuffer reads enabled
+             * makes the cache preserve untouched channels and pixels through
+             * read-modify-write.
+             */
+            if (!r300->screen->caps.is_r500 &&
+                tex->tex.microtile != RADEON_LAYOUT_LINEAR &&
+                cb->texture->nr_samples <= 1 &&
+                r300_is_blending_supported(r300->screen, cb->format) &&
+                !blend->state.rt[0].blend_enable &&
+                !blend->state.logicop_enable &&
+                colormask != 0 &&
+                colormask != PIPE_MASK_RGBA)
+                WRITE_CS_TABLE(blend->cb_clamp_masked_write[swz], size);
+            else
+                WRITE_CS_TABLE(blend->cb_clamp[swz], size);
         }
     } else {
         WRITE_CS_TABLE(blend->cb_no_readwrite, size);

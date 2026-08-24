@@ -7,6 +7,7 @@
 
 #include "kk_physical_device.h"
 
+#include "kk_debug.h"
 #include "kk_entrypoints.h"
 #include "kk_image.h"
 #include "kk_instance.h"
@@ -15,6 +16,7 @@
 #include "kk_wsi.h"
 
 #include "kosmickrisp/bridge/mtl_bridge.h"
+#include "kosmickrisp/bridge/ns_process_info.h"
 
 #include "util/disk_cache.h"
 #include "util/mesa-blake3.h"
@@ -34,11 +36,12 @@ kk_get_vk_version()
    if (version_override)
       return version_override;
 
-   return VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION);
+   return VK_MAKE_VERSION(1, 4, VK_HEADER_VERSION);
 }
 
 static void
 kk_get_device_extensions(const struct kk_instance *instance,
+                         const struct kk_physical_device *pdev,
                          struct vk_device_extension_table *ext)
 {
    *ext = (struct vk_device_extension_table){
@@ -84,7 +87,7 @@ kk_get_device_extensions(const struct kk_instance *instance,
       .EXT_buffer_device_address = true,
       .EXT_descriptor_indexing = true,
       .EXT_host_query_reset = true,
-      .EXT_sampler_filter_minmax = false,
+      .EXT_sampler_filter_minmax = pdev->info.gpu_apple_family >= 10,
       .EXT_scalar_block_layout = true,
       .EXT_separate_stencil_usage = true,
       .EXT_shader_viewport_index_layer = true,
@@ -126,6 +129,7 @@ kk_get_device_extensions(const struct kk_instance *instance,
       .KHR_map_memory2 = true,
       .KHR_push_descriptor = true,
       .KHR_shader_expect_assume = true,
+      .KHR_shader_float_controls2 = true,
       .KHR_shader_subgroup_rotate = true,
       .KHR_vertex_attribute_divisor = true,
       .EXT_global_priority = true,
@@ -142,6 +146,12 @@ kk_get_device_extensions(const struct kk_instance *instance,
       .KHR_maintenance8 = true,
       .KHR_maintenance9 = true,
       .KHR_maintenance10 = true,
+#ifdef KK_USE_WSI_PLATFORM
+      .KHR_present_id = true,
+      .KHR_present_id2 = true,
+      .KHR_present_wait = true,
+      .KHR_present_wait2 = true,
+#endif
       .KHR_robustness2 = true,
       .KHR_shader_fma = true,
       .KHR_shader_maximal_reconvergence = true,
@@ -159,17 +169,22 @@ kk_get_device_extensions(const struct kk_instance *instance,
       .EXT_attachment_feedback_loop_layout = true,
       .EXT_attachment_feedback_loop_dynamic_state = true,
       .EXT_blend_operation_advanced = true,
+      .EXT_border_color_swizzle = KK_EXPERIMENTAL(CUSTOM_BORDER),
       .EXT_calibrated_timestamps = true,
       .EXT_conditional_rendering = true,
+      .EXT_custom_border_color = KK_EXPERIMENTAL(CUSTOM_BORDER),
       .EXT_custom_resolve = true,
       .EXT_debug_marker = true,
       .EXT_depth_clip_control = true,
+      .EXT_depth_clip_enable = true,
       .EXT_extended_dynamic_state3 = true,
       .EXT_external_memory_metal = true,
       .EXT_external_memory_host = true,
       .EXT_hdr_metadata = true,
       .EXT_image_2d_view_of_3d = true,
+      .EXT_image_view_min_lod = KK_EXPERIMENTAL(IMAGE_VIEW_MIN_LOD),
       .EXT_load_store_op_none = true,
+      .EXT_map_memory_placed = true,
       .EXT_memory_budget = true,
       .EXT_multi_draw = true,
       .EXT_mutable_descriptor_type = true,
@@ -177,6 +192,7 @@ kk_get_device_extensions(const struct kk_instance *instance,
       .EXT_post_depth_coverage = true,
       .EXT_primitive_restart_index = true,
       .EXT_primitive_topology_list_restart = true,
+      .EXT_provoking_vertex = true,
       .EXT_robustness2 = true,
       .EXT_sample_locations = true,
       .EXT_shader_atomic_float = true,
@@ -195,11 +211,13 @@ kk_get_device_extensions(const struct kk_instance *instance,
       .KHR_external_semaphore_fd = true,
 
       .AMD_shader_image_load_store_lod = true,
+      .AMD_buffer_marker = true,
    };
 }
 
 static void
 kk_get_device_features(
+   const struct kk_physical_device *pdev,
    const struct vk_device_extension_table *supported_extensions,
    struct vk_features *features)
 {
@@ -207,6 +225,7 @@ kk_get_device_features(
       /* Vulkan 1.0 */
       .alphaToOne = true,
       .depthBiasClamp = true,
+      .depthBounds = pdev->info.gpu_apple_family >= 10,
       .depthClamp = true,
       .drawIndirectFirstInstance = true,
       .dualSrcBlend = true,
@@ -248,8 +267,8 @@ kk_get_device_features(
       .shaderDrawParameters = true,
       .storageBuffer16BitAccess = true,
       /* TODO KOSMICKRISP
-       * Disabled due to failing tests (vertex fragment interface mismatch):
-       * dEQP-VK.spirv_assembly.instruction.graphics.16bit_storage.*
+       * Disabled due to failing tests (TCS/TES patch I/O):
+       * dEQP-VK.tessellation.tess_io.max_in_out.with_f16.*.tcs_patch_*reads*
        */
       .storageInputOutput16 = false,
       .storagePushConstant16 = true,
@@ -274,6 +293,7 @@ kk_get_device_features(
       .imagelessFramebuffer = true,
       .multiDrawIndirect = true,
       .runtimeDescriptorArray = true,
+      .samplerFilterMinmax = supported_extensions->EXT_sampler_filter_minmax,
       .samplerMirrorClampToEdge = true,
       .scalarBlockLayout = true,
       .separateDepthStencilLayouts = true,
@@ -333,6 +353,7 @@ kk_get_device_features(
       .maintenance6 = true,
       .pipelineRobustness = true,
       .pushDescriptor = true,
+      .shaderFloatControls2 = true,
       .shaderSubgroupRotate = true,
       .shaderSubgroupRotateClustered = true,
       .vertexAttributeInstanceRateDivisor = true,
@@ -352,6 +373,20 @@ kk_get_device_features(
 
       /* VK_KHR_maintenance10 */
       .maintenance10 = true,
+
+#ifdef KK_USE_WSI_PLATFORM
+      /* VK_KHR_present_id */
+      .presentId = true,
+
+      /* VK_KHR_present_id2 */
+      .presentId2 = true,
+
+      /* VK_KHR_present_wait */
+      .presentWait = true,
+
+      /* VK_KHR_present_wait2 */
+      .presentWait2 = true,
+#endif
 
       /* VK_KHR_robustness2 */
       .robustBufferAccess2 = true,
@@ -403,9 +438,18 @@ kk_get_device_features(
       /* VK_EXT_blend_operation_advanced */
       .advancedBlendCoherentOperations = true,
 
+      /* VK_EXT_border_color_swizzle */
+      .borderColorSwizzle = supported_extensions->EXT_border_color_swizzle,
+      .borderColorSwizzleFromImage = false,
+
       /* VK_EXT_conditional_rendering */
       .conditionalRendering = true,
       .inheritedConditionalRendering = true,
+
+      /* VK_EXT_custom_border_color */
+      .customBorderColors = supported_extensions->EXT_custom_border_color,
+      .customBorderColorWithoutFormat =
+         supported_extensions->EXT_custom_border_color,
 
       /* VK_EXT_custom_resolve */
       .customResolve = true,
@@ -413,16 +457,29 @@ kk_get_device_features(
       /* VK_EXT_depth_clip_control */
       .depthClipControl = true,
 
+      /* VK_EXT_depth_clip_enable */
+      .depthClipEnable = true,
+
       /* VK_EXT_extended_dynamic_state3 */
       .extendedDynamicState3DepthClampEnable = true,
+      .extendedDynamicState3DepthClipEnable = true,
       .extendedDynamicState3DepthClipNegativeOneToOne = true,
       .extendedDynamicState3LineRasterizationMode = true,
+      .extendedDynamicState3ProvokingVertexMode = true,
       .extendedDynamicState3SampleLocationsEnable = true,
       .extendedDynamicState3TessellationDomainOrigin = true,
 
       /* EXT_image_2d_view_of_3d */
       .image2DViewOf3D = true,
       .sampler2DViewOf3D = true,
+
+      /* VK_EXT_image_view_min_lod */
+      .minLod = supported_extensions->EXT_image_view_min_lod,
+
+      /* VK_EXT_map_memory_placed */
+      .memoryMapPlaced = true,
+      .memoryMapRangePlaced = false,
+      .memoryUnmapReserve = true,
 
       /* VK_EXT_multi_draw */
       .multiDraw = true,
@@ -439,6 +496,9 @@ kk_get_device_features(
       .primitiveTopologyListRestart = true,
       .primitiveTopologyPatchListRestart = false,
 
+      /* VK_EXT_provoking_vertex */
+      .provokingVertexLast = true,
+
       /* VK_EXT_shader_replicated_composites */
       .shaderReplicatedComposites = true,
 
@@ -449,6 +509,8 @@ kk_get_device_features(
       .shaderBufferFloat32Atomics = true,
       .shaderBufferFloat32AtomicAdd = true,
       .shaderSharedFloat32Atomics = true,
+      .shaderSharedFloat32AtomicAdd =
+         pdev->info.msl_version >= MTL_LANGUAGE_VERSION_4_1,
 
       /* VK_EXT_vertex_attribute_robustness */
       .vertexAttributeRobustness = true,
@@ -459,14 +521,21 @@ kk_get_device_features(
 }
 
 static void
-kk_get_device_properties(const struct kk_physical_device *pdev,
-                         const struct kk_instance *instance,
-                         struct vk_properties *properties)
+kk_get_device_properties(
+   const struct kk_physical_device *pdev, const struct kk_instance *instance,
+   const struct vk_device_extension_table *supported_extensions,
+   struct vk_properties *properties)
 {
-   VkSampleCountFlags sample_counts = pdev->supported_sample_counts;
+   VkSampleCountFlags sample_counts = pdev->info.supported_sample_counts;
 
    uint64_t os_page_size = 4096;
    os_get_page_size(&os_page_size);
+
+   // Queries the frequency of the GPU timestamp in ticks per second.
+   uint64_t timestamp_frequency =
+      mtl_device_timestamp_frequency(pdev->mtl_dev_handle);
+   float timestamp_period =
+      timestamp_frequency ? (1000000000.0f / (float)timestamp_frequency) : 1.0f;
 
    *properties = (struct vk_properties){
       .apiVersion = kk_get_vk_version(),
@@ -570,10 +639,10 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
       .sampledImageIntegerSampleCounts = sample_counts,
       .sampledImageDepthSampleCounts = sample_counts,
       .sampledImageStencilSampleCounts = sample_counts,
-      .storageImageSampleCounts = sample_counts,
+      .storageImageSampleCounts = VK_SAMPLE_COUNT_1_BIT,
       .maxSampleMaskWords = 1,
-      .timestampComputeAndGraphics = false,
-      .timestampPeriod = 1,
+      .timestampComputeAndGraphics = true,
+      .timestampPeriod = timestamp_period,
       .maxClipDistances = 8,
       .maxCullDistances = 8,
       .maxCombinedClipAndCullDistances = 8,
@@ -628,8 +697,8 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
       .conformanceVersion = (VkConformanceVersion){1, 4, 3, 2},
       .denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE,
       .roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE,
-      .shaderSignedZeroInfNanPreserveFloat16 = false,
-      .shaderSignedZeroInfNanPreserveFloat32 = false,
+      .shaderSignedZeroInfNanPreserveFloat16 = true,
+      .shaderSignedZeroInfNanPreserveFloat32 = true,
       .shaderSignedZeroInfNanPreserveFloat64 = false,
       .shaderDenormPreserveFloat16 = false,
       .shaderDenormPreserveFloat32 = false,
@@ -637,8 +706,8 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
       .shaderDenormFlushToZeroFloat16 = false,
       .shaderDenormFlushToZeroFloat32 = false,
       .shaderDenormFlushToZeroFloat64 = false,
-      .shaderRoundingModeRTEFloat16 = false,
-      .shaderRoundingModeRTEFloat32 = false,
+      .shaderRoundingModeRTEFloat16 = true,
+      .shaderRoundingModeRTEFloat32 = true,
       .shaderRoundingModeRTEFloat64 = false,
       .shaderRoundingModeRTZFloat16 = false,
       .shaderRoundingModeRTZFloat32 = false,
@@ -669,8 +738,10 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
       .maxDescriptorSetUpdateAfterBindSampledImages = KK_MAX_DESCRIPTORS,
       .maxDescriptorSetUpdateAfterBindStorageImages = KK_MAX_DESCRIPTORS,
       .maxDescriptorSetUpdateAfterBindInputAttachments = KK_MAX_DESCRIPTORS,
-      .filterMinmaxSingleComponentFormats = false,
-      .filterMinmaxImageComponentMapping = false,
+      .filterMinmaxSingleComponentFormats =
+         supported_extensions->EXT_sampler_filter_minmax,
+      .filterMinmaxImageComponentMapping =
+         supported_extensions->EXT_sampler_filter_minmax,
       .maxTimelineSemaphoreValueDifference = UINT64_MAX,
       .framebufferIntegerColorSampleCounts = sample_counts,
 
@@ -919,61 +990,11 @@ kk_physical_device_free_disk_cache(struct kk_physical_device *pdev)
 }
 
 static uint64_t
-kk_get_sysmem_heap_size(void)
+kk_get_sysmem_heap_size(struct kk_physical_device *pdev)
 {
-   /* Report the total amount of system memory as the actual heap size */
-   uint64_t sysmem_size_B = 0;
-   if (!os_get_total_physical_memory(&sysmem_size_B))
-      return 0;
-
-   return sysmem_size_B;
-}
-
-static uint64_t
-kk_get_sysmem_heap_budget(struct kk_physical_device *pdev)
-{
-   /* From the Vulkan 1.3.278 spec:
-    *
-    *    "heapBudget is an array of VK_MAX_MEMORY_HEAPS VkDeviceSize
-    *    values in which memory budgets are returned, with one
-    *    element for each memory heap. A heap’s budget is a rough
-    *    estimate of how much memory the process can allocate from
-    *    that heap before allocations may fail or cause performance
-    *    degradation. The budget includes any currently allocated
-    *    device memory."
-    *
-    * and
-    *
-    *    "The heapBudget value must be less than or equal to
-    *    VkMemoryHeap::size for each heap."
-    *
-    * From Metal documentation for recommendedMaxWorkingSetSize:
-    *
-    *     An approximation of how much memory, in bytes, this GPU device can
-    *     allocate without affecting its runtime performance.
-    *
-    * From Metal documentation for currentAllocatedSize:
-    *
-    *     The total amount of memory, in bytes, the GPU device is using for all
-    *     of its resources.
-    *
-    * First, determine the total and available system memory to calculate the
-    * amount of used memory. Then, subtract this from the Metal-defined budget,
-    * and add back the current used memory by this device.
-    */
-   uint64_t sysmem_size_B = 0;
-   uint64_t sysmem_available_B = 0;
-   if (!os_get_total_physical_memory(&sysmem_size_B) ||
-       !os_get_available_system_memory(&sysmem_available_B))
-      return 0;
-
-   uint64_t sysmem_used_B = sysmem_size_B - sysmem_available_B;
-   uint64_t sysmem_budget_B =
-      mtl_device_recommended_max_working_set_size(pdev->mtl_dev_handle);
-   uint64_t remaining_budget_B =
-      sysmem_budget_B > sysmem_used_B ? sysmem_budget_B - sysmem_used_B : 0u;
-   return remaining_budget_B +
-          mtl_device_current_allocated_size(pdev->mtl_dev_handle);
+   /* Report the recommended Metal working set size as the GPU heap size. This
+    * is a fixed percent of the total available system memory. */
+   return mtl_device_recommended_max_working_set_size(pdev->mtl_dev_handle);
 }
 
 static uint64_t
@@ -997,6 +1018,19 @@ kk_get_sysmem_heap_used(struct kk_physical_device *pdev)
    return mtl_device_current_allocated_size(pdev->mtl_dev_handle);
 }
 
+static uint64_t
+kk_get_sysmem_heap_budget(struct kk_physical_device *pdev)
+{
+   uint64_t heap_size = kk_get_sysmem_heap_size(pdev);
+   uint64_t used = kk_get_sysmem_heap_used(pdev);
+
+   /* Budget is calculated using the default Mesa logic, based on available
+    * system memory. Available memory is reduced to 90% to avoid thrashing. */
+   const float available_percent = 0.9f;
+   return vk_physical_device_heap_budget_from_system(
+      &pdev->vk, available_percent, heap_size, used);
+}
+
 static void
 get_metal_limits(struct kk_physical_device *pdev)
 {
@@ -1012,16 +1046,73 @@ get_metal_limits(struct kk_physical_device *pdev)
       mtl_device_max_threadgroup_memory_length(pdev->mtl_dev_handle);
    pdev->info.max_buffer_size =
       mtl_device_max_buffer_length(pdev->mtl_dev_handle);
+   pdev->info.max_sampler_count =
+      mtl_device_max_argument_buffer_sampler_count(pdev->mtl_dev_handle);
    pdev->info.gpu_apple_family =
       mtl_device_get_gpu_apple_family(pdev->mtl_dev_handle);
 
-   pdev->supported_sample_counts = VK_SAMPLE_COUNT_1_BIT;
+   /* Determine the supported MSL version based on the OS. The version used to
+    * compile determines what features are available. */
+   if (ns_is_os_version_at_least(27, 0, 0))
+      pdev->info.msl_version = MTL_LANGUAGE_VERSION_4_1;
+   else
+      pdev->info.msl_version = MTL_LANGUAGE_VERSION_4_0;
+
+   /* See Metal Feature Set Tables. Note that for certain MSAA sample counts the
+    * tile size will actually be restricted to a width and/or height of 16, but
+    * we typically don't know the actual sample count when querying granularity
+    * or checking render area alignment. Use 32x32 always as a best effort
+    * optimal rendering area, which will also ensure proper alignment for 16
+    * wide/tall tiles chosen by Metal. */
+   pdev->info.rendering_tile_width = 32;
+   pdev->info.rendering_tile_height = 32;
+
+   pdev->info.supported_sample_counts = VK_SAMPLE_COUNT_1_BIT;
    for (uint32_t sample_count = VK_SAMPLE_COUNT_2_BIT;
         sample_count <= VK_SAMPLE_COUNT_8_BIT; sample_count <<= 1) {
       if (mtl_device_supports_sample_count(pdev->mtl_dev_handle, sample_count))
-         pdev->supported_sample_counts |= sample_count;
+         pdev->info.supported_sample_counts |= sample_count;
    }
-   assert(pdev->supported_sample_counts <= (KK_MAX_SAMPLES << 1) - 1);
+   assert(pdev->info.supported_sample_counts <= (KK_MAX_SAMPLES << 1) - 1);
+}
+
+static void
+kk_parse_environment_options(struct kk_physical_device *pdev)
+{
+   struct kk_env_settings *settings = &pdev->settings;
+
+   settings->gpu_capture_enabled =
+      debug_get_bool_option("MESA_KK_GPU_CAPTURE", false);
+
+   const char *list = debug_get_option("MESA_KK_DISABLE_WORKAROUNDS", "");
+   const char *all_workarounds = "all";
+   const size_t all_len = strlen(all_workarounds);
+   for (unsigned n; n = strcspn(list, ","), *list; list += MAX2(1, n)) {
+      if (n == all_len && !strncmp(list, all_workarounds, n)) {
+         settings->disabled_workarounds = UINT64_MAX;
+         break;
+      }
+
+      int index = atoi(list);
+      settings->disabled_workarounds |= BITFIELD64_BIT(index);
+   }
+
+   /* Workarounds resolved on macOS 27 */
+   if (ns_is_os_version_at_least(27, 0, 0)) {
+      /* 1-6 */
+      settings->disabled_workarounds |= BITFIELD64_MASK(7);
+
+      settings->disabled_workarounds |= BITFIELD64_BIT(8);
+      settings->disabled_workarounds |= BITFIELD64_BIT(11);
+      settings->disabled_workarounds |= BITFIELD64_BIT(12);
+      settings->disabled_workarounds |= BITFIELD64_BIT(17);
+   }
+   /* M5-only workarounds */
+   if (pdev->info.gpu_apple_family < 10) {
+      settings->disabled_workarounds |= BITFIELD64_BIT(16);
+   } else {
+      settings->disabled_workarounds &= ~BITFIELD64_BIT(2);
+   }
 }
 
 VkResult
@@ -1044,6 +1135,7 @@ kk_enumerate_physical_devices(struct vk_instance *_instance)
       goto fail_alloc;
    }
    get_metal_limits(pdev);
+   kk_parse_environment_options(pdev);
 
    struct vk_physical_device_dispatch_table dispatch_table;
    vk_physical_device_dispatch_table_from_entrypoints(
@@ -1052,13 +1144,13 @@ kk_enumerate_physical_devices(struct vk_instance *_instance)
       &dispatch_table, &wsi_physical_device_entrypoints, false);
 
    struct vk_device_extension_table supported_extensions;
-   kk_get_device_extensions(instance, &supported_extensions);
+   kk_get_device_extensions(instance, pdev, &supported_extensions);
 
    struct vk_features supported_features;
-   kk_get_device_features(&supported_extensions, &supported_features);
+   kk_get_device_features(pdev, &supported_extensions, &supported_features);
 
    struct vk_properties properties;
-   kk_get_device_properties(pdev, instance, &properties);
+   kk_get_device_properties(pdev, instance, &supported_extensions, &properties);
 
    properties.drmHasRender = false;
 
@@ -1070,7 +1162,7 @@ kk_enumerate_physical_devices(struct vk_instance *_instance)
 
    kk_physical_device_init_pipeline_cache(pdev);
 
-   uint64_t sysmem_size_B = kk_get_sysmem_heap_size();
+   uint64_t sysmem_size_B = kk_get_sysmem_heap_size(pdev);
    if (sysmem_size_B == 0) {
       result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                          "Failed to query total system memory");
@@ -1187,10 +1279,10 @@ kk_GetPhysicalDeviceMemoryProperties2(
       pMemoryProperties->memoryProperties.memoryTypes[i] = pdev->mem_types[i];
    }
 
-   vk_foreach_struct(ext, pMemoryProperties->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryProperties->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT: {
-         VkPhysicalDeviceMemoryBudgetPropertiesEXT *p = (void *)ext;
+         VkPhysicalDeviceMemoryBudgetPropertiesEXT *p = ext;
 
          for (unsigned i = 0; i < pdev->mem_heap_count; i++) {
             const struct kk_memory_heap *heap = &pdev->mem_heaps[i];
@@ -1213,7 +1305,7 @@ kk_GetPhysicalDeviceMemoryProperties2(
          break;
       }
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -1235,15 +1327,14 @@ kk_GetPhysicalDeviceQueueFamilyProperties2(
       {
          p->queueFamilyProperties.queueFlags = queue_family->queue_flags;
          p->queueFamilyProperties.queueCount = queue_family->queue_count;
-         p->queueFamilyProperties.timestampValidBits =
-            0; /* TODO_KOSMICKRISP Timestamp queries */
+         p->queueFamilyProperties.timestampValidBits = 64;
          p->queueFamilyProperties.minImageTransferGranularity =
             (VkExtent3D){1, 1, 1};
 
-         vk_foreach_struct(ext, p->pNext) {
-            switch (ext->sType) {
+         vk_foreach_struct(sType, ext, p->pNext) {
+            switch (sType) {
             case VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES: {
-               VkQueueFamilyGlobalPriorityProperties *pSub = (void *)ext;
+               VkQueueFamilyGlobalPriorityProperties *pSub = ext;
                pSub->priorityCount = 1;
                pSub->priorities[0] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM;
                break;
@@ -1251,14 +1342,14 @@ kk_GetPhysicalDeviceQueueFamilyProperties2(
 
             case VK_STRUCTURE_TYPE_QUEUE_FAMILY_OPTIMAL_IMAGE_TRANSFER_GRANULARITY_PROPERTIES_KHR: {
                VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR *pSub =
-                  (void *)ext;
+                  ext;
                pSub->optimalImageTransferGranularity =
                   p->queueFamilyProperties.minImageTransferGranularity;
                break;
             }
 
             default:
-               vk_debug_ignored_stype(ext->sType);
+               vk_debug_ignored_stype(sType);
                break;
             }
          }

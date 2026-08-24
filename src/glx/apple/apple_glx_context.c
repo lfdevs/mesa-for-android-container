@@ -642,3 +642,45 @@ apple_glx_context_uses_stereo(void *ptr)
 
    return ac->uses_stereo;
 }
+
+bool
+apple_glx_context_set_swap_interval(void *ptr, int interval)
+{
+   struct apple_glx_context *ac = ptr;
+   GLint value = interval;
+   CGLError error;
+
+   if (!ac)
+      return false;
+
+   error = apple_cgl.set_parameter(ac->context_obj, kCGLCPSwapInterval, &value);
+   if (kCGLNoError != error) {
+      apple_glx_log_error("%s: CGLSetParameter failed: %s", __func__,
+                          apple_cgl.error_string(error));
+      return false;
+   }
+
+   return true;
+}
+
+bool
+apple_glx_context_get_swap_interval(void *ptr, int *interval)
+{
+   struct apple_glx_context *ac = ptr;
+   GLint value = 0;
+   CGLError error;
+
+   if (!ac)
+      return false;
+
+   error = apple_cgl.get_parameter(ac->context_obj, kCGLCPSwapInterval, &value);
+   if (kCGLNoError != error) {
+      apple_glx_log_error("%s: CGLGetParameter failed: %s", __func__,
+                          apple_cgl.error_string(error));
+      return false;
+   }
+
+   *interval = value;
+
+   return true;
+}

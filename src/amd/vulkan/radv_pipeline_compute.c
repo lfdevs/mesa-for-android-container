@@ -71,6 +71,8 @@ radv_get_compute_shader_metadata(const struct radv_device *device, const struct 
    } else {
       metadata->indirect_descriptors_sgpr = radv_get_user_sgpr(cs, AC_UD_INDIRECT_DESCRIPTORS);
    }
+
+   metadata->cs_state_sgpr = radv_get_user_sgpr(cs, AC_UD_CS_STATE);
 }
 
 void

@@ -35,9 +35,14 @@ prepare_push_uniforms(struct panvk_cmd_buffer *cmdbuf,
 
    uint64_t *push_consts = cmdbuf->state.push_constants.data;
    uint64_t *faus = push_uniforms->cpu;
-   uint32_t w, fau = 0;
+   const struct pan_fau_layout *fau = &shader->info.fau;
+   uint32_t w;
 
    for (uint32_t r = 0; r < repeat_count; r++) {
+      /* Each repeat owns its own contiguous block of total_count slots. */
+      uint64_t *repeat_faus = faus + r * shader->fau.total_count;
+      uint32_t fau_idx = 0;
+
       common_inner.push_uniforms =
          push_uniforms->gpu + r * shader->fau.total_count * sizeof(uint64_t);
 
@@ -46,19 +51,24 @@ prepare_push_uniforms(struct panvk_cmd_buffer *cmdbuf,
        * these loops. */
       BITSET_FOREACH_SET(w, shader->fau.used_sysvals, MAX_SYSVAL_FAUS) {
          if (w >= SYSVALS_COMMON_START && w < SYSVALS_COMMON_END)
-            faus[fau++] = common[w - SYSVALS_COMMON_START];
+            repeat_faus[fau_idx++] = common[w - SYSVALS_COMMON_START];
          else
-            faus[fau++] = sysvals[w];
+            repeat_faus[fau_idx++] = sysvals[w];
       }
 
       BITSET_FOREACH_SET(w, shader->fau.used_push_consts, MAX_PUSH_CONST_FAUS)
-         faus[fau++] = push_consts[w];
+         repeat_faus[fau_idx++] = push_consts[w];
+      assert(fau_idx <= shader->fau.total_count);
 
-      for (uint32_t i = 0; i < shader->info.fau_consts_count; i += 2) {
-         faus[fau++] = (uint64_t)shader->info.fau_consts[i + 1] << 32 |
-                       shader->info.fau_consts[i];
+      pan_fau_foreach_imm(fau, i) {
+         bool hi = (i & 1) != 0;
+         unsigned idx = i / 2;
+         assert(fau_idx <= idx && idx < shader->fau.total_count);
+
+         repeat_faus[idx] =
+            (repeat_faus[idx] & ((uint64_t)UINT32_MAX << (32 * !hi))) |
+            ((uint64_t)fau->words[i].constant << (32 * hi));
       }
-      assert(fau % shader->fau.total_count == 0);
    }
 
    return VK_SUCCESS;

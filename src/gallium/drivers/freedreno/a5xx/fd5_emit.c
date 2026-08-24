@@ -724,7 +724,8 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
             OUT_PKT7(ring, CP_MEM_WRITE, 3);
             OUT_RELOC(ring, offset_bo, 0, 0, 0);
-            OUT_RING(ring, target->base.buffer_offset);
+            /* the counter is in dwords, VPC_SO_BUFFER_OFFSET in bytes: */
+            OUT_RING(ring, target->base.buffer_offset >> 2);
 
             OUT_PKT4(ring, REG_A5XX_VPC_SO_BUFFER_OFFSET(i), 1);
             OUT_RING(ring, target->base.buffer_offset);

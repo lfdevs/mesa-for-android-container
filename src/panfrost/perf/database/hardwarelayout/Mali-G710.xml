@@ -1,0 +1,196 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2020-2025 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<HardwareLayout gpu="Mali-G710" generated="0" source="">
+  <CounterBlock type="GPU Front-end" bank="0" size="64">
+    <Counter name="GPU_ACTIVE" index="4"/>
+    <Counter name="MCU_ACTIVE" index="5"/>
+    <Counter name="GPU_ITER_ACTIVE" index="6"/>
+    <Counter name="MMU_FLUSH_COUNT" index="7"/>
+    <Counter name="GPU_IRQ_ACTIVE" index="10"/>
+    <Counter name="GPU_IRQ_COUNT" index="11"/>
+    <Counter name="CACHE_FLUSH_CYCLES" index="12"/>
+    <Counter name="CACHE_FLUSH" index="13"/>
+    <Counter name="ITER_TILER_ACTIVE" index="16"/>
+    <Counter name="ITER_TILER_JOB_COMPLETED" index="17"/>
+    <Counter name="ITER_TILER_IDVS_TASK_COMPLETED" index="18"/>
+    <Counter name="ITER_TILER_IRQ_ACTIVE" index="20"/>
+    <Counter name="ITER_TILER_READY_BLOCKED" index="22"/>
+    <Counter name="ITER_TILER_EP_DRAIN" index="23"/>
+    <Counter name="ITER_COMP_ACTIVE" index="24"/>
+    <Counter name="ITER_COMP_JOB_COMPLETED" index="25"/>
+    <Counter name="ITER_COMP_TASK_COMPLETED" index="26"/>
+    <Counter name="ITER_COMP_IRQ_ACTIVE" index="28"/>
+    <Counter name="ITER_COMP_READY_BLOCKED" index="30"/>
+    <Counter name="ITER_COMP_EP_DRAIN" index="31"/>
+    <Counter name="ITER_FRAG_ACTIVE" index="32"/>
+    <Counter name="ITER_FRAG_JOB_COMPLETED" index="33"/>
+    <Counter name="ITER_FRAG_TASK_COMPLETED" index="34"/>
+    <Counter name="ITER_FRAG_IRQ_ACTIVE" index="36"/>
+    <Counter name="ITER_FRAG_READY_BLOCKED" index="38"/>
+    <Counter name="CEU_ACTIVE" index="40"/>
+    <Counter name="LSU_ACTIVE" index="45"/>
+    <Counter name="CSHWIF0_ENABLED" index="48"/>
+    <Counter name="CSHWIF0_WAIT_BLOCKED" index="51"/>
+    <Counter name="CSHWIF1_ENABLED" index="52"/>
+    <Counter name="CSHWIF1_WAIT_BLOCKED" index="55"/>
+    <Counter name="CSHWIF2_ENABLED" index="56"/>
+    <Counter name="CSHWIF2_WAIT_BLOCKED" index="59"/>
+    <Counter name="CSHWIF3_ENABLED" index="60"/>
+    <Counter name="CSHWIF3_WAIT_BLOCKED" index="63"/>
+  </CounterBlock>
+  <CounterBlock type="Memory System" bank="0" size="64">
+    <Counter name="MMU_REQUESTS" index="4"/>
+    <Counter name="MMU_TABLE_READS_L3" index="5"/>
+    <Counter name="MMU_TABLE_READS_L2" index="6"/>
+    <Counter name="MMU_HIT_L3" index="7"/>
+    <Counter name="MMU_HIT_L2" index="8"/>
+    <Counter name="L2_RD_MSG_IN_EVICT" index="12"/>
+    <Counter name="L2_RD_MSG_IN_CU" index="13"/>
+    <Counter name="L2_RD_MSG_IN" index="16"/>
+    <Counter name="L2_RD_MSG_IN_STALL" index="17"/>
+    <Counter name="L2_WR_MSG_IN" index="18"/>
+    <Counter name="L2_WR_MSG_IN_STALL" index="19"/>
+    <Counter name="L2_SNP_MSG_IN" index="20"/>
+    <Counter name="L2_SNP_MSG_IN_STALL" index="21"/>
+    <Counter name="L2_RD_MSG_OUT" index="22"/>
+    <Counter name="L2_RD_MSG_OUT_STALL" index="23"/>
+    <Counter name="L2_WR_MSG_OUT" index="24"/>
+    <Counter name="L2_ANY_LOOKUP" index="25"/>
+    <Counter name="L2_READ_LOOKUP" index="26"/>
+    <Counter name="L2_WRITE_LOOKUP" index="27"/>
+    <Counter name="L2_EXT_SNOOP_LOOKUP" index="28"/>
+    <Counter name="L2_EXT_READ" index="29"/>
+    <Counter name="L2_EXT_READ_NOSNP" index="30"/>
+    <Counter name="L2_EXT_READ_UNIQUE" index="31"/>
+    <Counter name="L2_EXT_READ_BEATS" index="32"/>
+    <Counter name="L2_EXT_AR_STALL" index="33"/>
+    <Counter name="L2_EXT_AR_CNT_Q1" index="34"/>
+    <Counter name="L2_EXT_AR_CNT_Q2" index="35"/>
+    <Counter name="L2_EXT_AR_CNT_Q3" index="36"/>
+    <Counter name="L2_EXT_RRESP_0_127" index="37"/>
+    <Counter name="L2_EXT_RRESP_128_191" index="38"/>
+    <Counter name="L2_EXT_RRESP_192_255" index="39"/>
+    <Counter name="L2_EXT_RRESP_256_319" index="40"/>
+    <Counter name="L2_EXT_RRESP_320_383" index="41"/>
+    <Counter name="L2_EXT_WRITE" index="42"/>
+    <Counter name="L2_EXT_WRITE_NOSNP_FULL" index="43"/>
+    <Counter name="L2_EXT_WRITE_NOSNP_PTL" index="44"/>
+    <Counter name="L2_EXT_WRITE_SNP_FULL" index="45"/>
+    <Counter name="L2_EXT_WRITE_SNP_PTL" index="46"/>
+    <Counter name="L2_EXT_WRITE_BEATS" index="47"/>
+    <Counter name="L2_EXT_W_STALL" index="48"/>
+    <Counter name="L2_EXT_AW_CNT_Q1" index="49"/>
+    <Counter name="L2_EXT_AW_CNT_Q2" index="50"/>
+    <Counter name="L2_EXT_AW_CNT_Q3" index="51"/>
+    <Counter name="L2_EXT_SNOOP" index="52"/>
+    <Counter name="L2_EXT_SNOOP_STALL" index="53"/>
+  </CounterBlock>
+  <CounterBlock type="Shader Core" bank="0" size="64">
+    <Counter name="FRAG_ACTIVE" index="4"/>
+    <Counter name="FRAG_PRIMITIVES_OUT" index="5"/>
+    <Counter name="FRAG_PRIM_RAST" index="6"/>
+    <Counter name="FRAG_FPK_ACTIVE" index="7"/>
+    <Counter name="FRAG_WARPS" index="9"/>
+    <Counter name="FRAG_PARTIAL_QUADS_RAST" index="10"/>
+    <Counter name="FRAG_QUADS_RAST" index="11"/>
+    <Counter name="FRAG_QUADS_EZS_TEST" index="12"/>
+    <Counter name="FRAG_QUADS_EZS_UPDATE" index="13"/>
+    <Counter name="FRAG_QUADS_EZS_KILL" index="14"/>
+    <Counter name="FRAG_LZS_TEST" index="15"/>
+    <Counter name="FRAG_LZS_KILL" index="16"/>
+    <Counter name="WARP_REG_SIZE_64" index="17"/>
+    <Counter name="FRAG_PTILES" index="18"/>
+    <Counter name="FRAG_TRANS_ELIM" index="19"/>
+    <Counter name="QUAD_FPK_KILLER" index="20"/>
+    <Counter name="FULL_QUAD_WARPS" index="21"/>
+    <Counter name="COMPUTE_ACTIVE" index="22"/>
+    <Counter name="COMPUTE_TASKS" index="23"/>
+    <Counter name="COMPUTE_WARPS" index="24"/>
+    <Counter name="EXEC_CORE_ACTIVE" index="26"/>
+    <Counter name="EXEC_INSTR_FMA" index="27"/>
+    <Counter name="EXEC_INSTR_CVT" index="28"/>
+    <Counter name="EXEC_INSTR_SFU" index="29"/>
+    <Counter name="EXEC_INSTR_DIVERGED" index="31"/>
+    <Counter name="EXEC_ICACHE_MISS" index="32"/>
+    <Counter name="EXEC_STARVE_ARITH" index="33"/>
+    <Counter name="CALL_BLEND_SHADER" index="34"/>
+    <Counter name="TEX_MSGI_NUM_FLITS" index="35"/>
+    <Counter name="TEX_DFCH_CLK_STALLED" index="36"/>
+    <Counter name="TEX_TFCH_CLK_STALLED" index="37"/>
+    <Counter name="TEX_TFCH_STARVED_PENDING_DATA_FETCH" index="38"/>
+    <Counter name="TEX_FILT_NUM_OPERATIONS" index="39"/>
+    <Counter name="TEX_FILT_NUM_FXR_OPERATIONS" index="40"/>
+    <Counter name="TEX_FILT_NUM_FST_OPERATIONS" index="41"/>
+    <Counter name="TEX_MSGO_NUM_MSG" index="42"/>
+    <Counter name="TEX_MSGO_NUM_FLITS" index="43"/>
+    <Counter name="LS_MEM_READ_FULL" index="44"/>
+    <Counter name="LS_MEM_READ_SHORT" index="45"/>
+    <Counter name="LS_MEM_WRITE_FULL" index="46"/>
+    <Counter name="LS_MEM_WRITE_SHORT" index="47"/>
+    <Counter name="LS_MEM_ATOMIC" index="48"/>
+    <Counter name="VARY_INSTR" index="49"/>
+    <Counter name="VARY_SLOT_32" index="50"/>
+    <Counter name="VARY_SLOT_16" index="51"/>
+    <Counter name="ATTR_INSTR" index="52"/>
+    <Counter name="SHADER_CORE_ACTIVE" index="53"/>
+    <Counter name="BEATS_RD_FTC" index="54"/>
+    <Counter name="BEATS_RD_FTC_EXT" index="55"/>
+    <Counter name="BEATS_RD_LSC" index="56"/>
+    <Counter name="BEATS_RD_LSC_EXT" index="57"/>
+    <Counter name="BEATS_RD_TEX" index="58"/>
+    <Counter name="BEATS_RD_TEX_EXT" index="59"/>
+    <Counter name="BEATS_RD_OTHER" index="60"/>
+    <Counter name="BEATS_WR_LSC_OTHER" index="61"/>
+    <Counter name="BEATS_WR_TIB" index="62"/>
+    <Counter name="BEATS_WR_LSC_WB" index="63"/>
+  </CounterBlock>
+  <CounterBlock type="Tiler" bank="0" size="64">
+    <Counter name="TILER_ACTIVE" index="4"/>
+    <Counter name="TRIANGLES" index="6"/>
+    <Counter name="LINES" index="7"/>
+    <Counter name="POINTS" index="8"/>
+    <Counter name="FRONT_FACING" index="9"/>
+    <Counter name="BACK_FACING" index="10"/>
+    <Counter name="PRIM_VISIBLE" index="11"/>
+    <Counter name="PRIM_CULLED" index="12"/>
+    <Counter name="PRIM_CLIPPED" index="13"/>
+    <Counter name="PRIM_SAT_CULLED" index="14"/>
+    <Counter name="BUS_READ" index="17"/>
+    <Counter name="BUS_WRITE_UTLB0" index="18"/>
+    <Counter name="BUS_WRITE_UTLB1" index="19"/>
+    <Counter name="IDVS_POS_SHAD_REQ" index="21"/>
+    <Counter name="IDVS_POS_SHAD_WAIT" index="22"/>
+    <Counter name="IDVS_POS_SHAD_STALL" index="23"/>
+    <Counter name="IDVS_POS_FIFO_FULL" index="24"/>
+    <Counter name="VCACHE_HIT" index="26"/>
+    <Counter name="VCACHE_MISS" index="27"/>
+    <Counter name="IDVS_VBU_HIT" index="34"/>
+    <Counter name="IDVS_VBU_MISS" index="35"/>
+    <Counter name="IDVS_VAR_SHAD_REQ" index="37"/>
+    <Counter name="IDVS_VAR_SHAD_STALL" index="38"/>
+  </CounterBlock>
+</HardwareLayout>

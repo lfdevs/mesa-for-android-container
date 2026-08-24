@@ -296,7 +296,8 @@ bo_create_internal(struct zink_screen *screen,
    bo->type = ZINK_BO_REAL;
    bo->base.placement = mem_type_idx;
    bo->base.usage = flags;
-   bo->unique_id = p_atomic_inc_return(&screen->pb.next_bo_unique_id);
+   if (!bo->unique_id)
+      bo->unique_id = p_atomic_inc_return(&screen->pb.next_bo_unique_id);
 
    return bo;
 
@@ -598,7 +599,8 @@ zink_bo_create(struct zink_screen *screen, uint64_t size, unsigned alignment, en
       bo->base.size = size;
       memset(&bo->reads, 0, sizeof(bo->reads));
       memset(&bo->writes, 0, sizeof(bo->writes));
-      bo->unique_id = p_atomic_inc_return(&screen->pb.next_bo_unique_id);
+      if (!bo->unique_id)
+         bo->unique_id = p_atomic_inc_return(&screen->pb.next_bo_unique_id);
       assert(alignment <= 1 << bo->base.alignment_log2);
 
       return &bo->base;
@@ -662,8 +664,8 @@ zink_bo_map(struct zink_screen *screen, struct zink_bo *bo)
       offset = bo->offset - real->offset;
    }
 
-   if (p_atomic_inc_return(&real->u.real.map_count) > 1)
-      cpu = p_atomic_read(&real->u.real.cpu_ptr);
+   p_atomic_inc(&real->u.real.map_count);
+   cpu = p_atomic_read(&real->u.real.cpu_ptr);
    if (!cpu) {
       simple_mtx_lock(&real->lock);
       /* Must re-check due to the possibility of a race. Re-check need not
@@ -698,14 +700,18 @@ zink_bo_unmap(struct zink_screen *screen, struct zink_bo *bo)
 
    if (p_atomic_dec_zero(&real->u.real.map_count)) {
       simple_mtx_lock(&real->lock);
-      /* Re-check in case of race with zink_bo_map */
-      if (!p_atomic_read(&real->u.real.map_count)) {
-         p_atomic_set(&real->u.real.cpu_ptr, NULL);
+      void *cpu_ptr = real->u.real.cpu_ptr;
+      p_atomic_set(&real->u.real.cpu_ptr, NULL);
+
+      if (p_atomic_read(&real->u.real.map_count) == 0) {
          if (unlikely(zink_debug & ZINK_DEBUG_MAP)) {
             p_atomic_add(&screen->mapped_vram, -real->base.size);
             mesa_loge("UNMAP(%"PRIu64") TOTAL(%"PRIu64")", real->base.size, screen->mapped_vram);
          }
+
          VKSCR(UnmapMemory)(screen->dev, real->mem);
+      } else {
+         p_atomic_set(&real->u.real.cpu_ptr, cpu_ptr);
       }
       simple_mtx_unlock(&real->lock);
    }

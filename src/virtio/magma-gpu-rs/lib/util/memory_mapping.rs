@@ -3,8 +3,8 @@
 
 use crate::util::defines::MappedRegion;
 use crate::util::sys::platform::MemoryMapping as PlatformMapping;
-use crate::util::MesaMapping;
 use crate::util::OwnedDescriptor;
+use crate::util::RawMapping;
 use crate::util::Result;
 
 pub struct MemoryMapping {
@@ -30,8 +30,8 @@ impl MemoryMapping {
         Ok(MemoryMapping { mapping })
     }
 
-    pub fn as_mesa_mapping(&self) -> MesaMapping {
-        MesaMapping {
+    pub fn as_raw_mapping(&self) -> RawMapping {
+        RawMapping {
             ptr: self.mapping.addr as u64,
             size: self.mapping.size as u64,
         }
@@ -48,7 +48,7 @@ unsafe impl MappedRegion for MemoryMapping {
         self.mapping.size
     }
 
-    fn as_mesa_mapping(&self) -> MesaMapping {
-        self.as_mesa_mapping()
+    fn as_raw_mapping(&self) -> RawMapping {
+        self.as_raw_mapping()
     }
 }

@@ -332,6 +332,8 @@ variable:
     Zap renderpass loads for DONT_CARE
   ``nogeneral``
     Disable GENERAL layout usage for supported hardware
+  ``perfinfo``
+    Log info when the driver notices perf issues
 
 Vulkan Validation Layers
 ^^^^^^^^^^^^^^^^^^^^^^^^

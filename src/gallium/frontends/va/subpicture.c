@@ -62,26 +62,6 @@ vlVaQuerySubpictureFormats(VADriverContextP ctx, VAImageFormat *format_list,
    return VA_STATUS_SUCCESS;
 }
 
-static void
-upload_sampler(struct pipe_context *pipe, struct pipe_sampler_view *dst,
-               const struct pipe_box *dst_box, const void *src, unsigned src_stride,
-               unsigned src_x, unsigned src_y)
-{
-   struct pipe_transfer *transfer;
-   void *map;
-
-   map = pipe->texture_map(pipe, dst->texture, 0, PIPE_MAP_WRITE,
-                            dst_box, &transfer);
-   if (!map)
-      return;
-
-   util_copy_rect(map, dst->texture->format, transfer->stride, 0, 0,
-                  dst_box->width, dst_box->height,
-                  src, src_stride, src_x, src_y);
-
-   pipe->texture_unmap(pipe, transfer);
-}
-
 static VAStatus
 vlVaPutSubpictures(vlVaSurface *surf, vlVaDriver *drv,
                    struct pipe_video_buffer *dst_buffer, struct u_rect *dirty_area,
@@ -320,7 +300,7 @@ vlVaCreateSubpicture(VADriverContextP ctx, VAImageID image,
    sub->surf->templat.width = img->width;
    sub->surf->templat.height = img->height;
 
-   if (vlVaHandleSurfaceAllocate(drv, sub->surf, &sub->surf->templat, NULL, 0) != VA_STATUS_SUCCESS) {
+   if (vlVaHandleSurfaceAllocate(drv, sub->surf, NULL, 0) != VA_STATUS_SUCCESS) {
       FREE(sub->surf);
       FREE(sub);
       mtx_unlock(&drv->mutex);
@@ -414,7 +394,7 @@ vlVaSubpictureImage(VADriverContextP ctx, VASubpictureID subpicture, VAImageID i
    sub->surf->templat.width = img->width;
    sub->surf->templat.height = img->height;
 
-   if (vlVaHandleSurfaceAllocate(drv, sub->surf, &sub->surf->templat, NULL, 0) != VA_STATUS_SUCCESS) {
+   if (vlVaHandleSurfaceAllocate(drv, sub->surf, NULL, 0) != VA_STATUS_SUCCESS) {
       FREE(sub->surf);
       sub->surf = NULL;
       mtx_unlock(&drv->mutex);

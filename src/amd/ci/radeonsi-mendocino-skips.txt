@@ -10,3 +10,6 @@ KHR-Single-GL46.meshShader.*
 
 # These tests can time out, even when run single-threaded
 KHR-Single-GL46.subgroups.arithmetic.framebuffer.*
+
+# Skip VK test on GL drivers
+vulkan@.*

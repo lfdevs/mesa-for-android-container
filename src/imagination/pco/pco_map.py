@@ -821,10 +821,10 @@ def group_map(op, hdr, enc_ops, srcs=[], iss=[], dests=[]):
       phase = OP_PHASE.enum.elems[_phase].cname
       io = IO.enum.elems[_io]
 
-      if not io.string.startswith('s'):
-         continue
+      val = int(src[2]) + 1
 
-      val = int(io.string[1:]) + 1
+      if io.string.startswith('s'):
+         assert val == (int(io.string[1:]) + 1)
 
       if is_self:
          if origin.type == 'dest':

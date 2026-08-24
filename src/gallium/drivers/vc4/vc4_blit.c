@@ -374,7 +374,10 @@ vc4_yuv_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
                 goto fallback;
         }
 
-        vc4_blitter_save(vc4, VC4_BLIT);
+        /* We bind our own fragment constant buffer below and
+         * restore the previous one, so save it too.
+         */
+        vc4_blitter_save(vc4, VC4_BLIT | VC4_SAVE_FRAGMENT_CONSTANT);
 
         /* Create a renderable surface mapping the T-tiled shadow buffer.
          */

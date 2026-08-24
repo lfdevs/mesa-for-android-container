@@ -53,22 +53,23 @@ adjust_driver_push_values(nir_shader *nir,
        * the shader.
        */
       const uint32_t push_reg_mask_start =
-         anv_drv_const_offset(gfx.push_reg_mask[nir->info.stage]);
-      assert(anv_drv_const_size(gfx.push_reg_mask[nir->info.stage]) <= 4);
+         anv_drv_const_offset(drv_data.gfx.push_reg_mask[nir->info.stage]);
+      assert(anv_drv_const_size(drv_data.gfx.push_reg_mask[nir->info.stage]) <= 4);
       BITSET_SET(data->push_dwords, push_reg_mask_start / 4);
    }
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       if (push_info->fragment_dynamic) {
-         const uint32_t fs_config_start = anv_drv_const_offset(gfx.fs_config);
-         assert(anv_drv_const_size(gfx.fs_config) <= 4);
+         const uint32_t fs_config_start =
+            anv_drv_const_offset(drv_data.gfx.fs_config);
+         assert(anv_drv_const_size(drv_data.gfx.fs_config) <= 4);
          BITSET_SET(data->push_dwords, fs_config_start / 4);
       }
 
       if (data->needs_wa_18019110168) {
          const uint32_t fs_per_prim_remap_start =
-            anv_drv_const_offset(gfx.wa_18019110168);
-         assert(anv_drv_const_size(gfx.wa_18019110168) <= 4);
+            anv_drv_const_offset(drv_data.gfx.wa_18019110168);
+         assert(anv_drv_const_size(drv_data.gfx.wa_18019110168) <= 4);
          BITSET_SET(data->push_dwords, fs_per_prim_remap_start / 4);
       }
    }
@@ -76,8 +77,8 @@ adjust_driver_push_values(nir_shader *nir,
    if (nir->info.stage == MESA_SHADER_MESH &&
        brw_nir_mesh_shader_needs_wa_18019110168(devinfo, nir)) {
       const uint32_t mesh_provoking_vertex_start =
-         anv_drv_const_offset(gfx.wa_18019110168);
-      assert(anv_drv_const_size(gfx.wa_18019110168) <= 4);
+         anv_drv_const_offset(drv_data.gfx.wa_18019110168);
+      assert(anv_drv_const_size(drv_data.gfx.wa_18019110168) <= 4);
       BITSET_SET(data->push_dwords, mesh_provoking_vertex_start / 4);
    }
 
@@ -88,8 +89,9 @@ adjust_driver_push_values(nir_shader *nir,
       (nir->info.stage == MESA_SHADER_TESS_EVAL &&
        push_info->separate_tessellation);
    if (data->needs_dyn_tess_config) {
-      const uint32_t tess_config_start = anv_drv_const_offset(gfx.tess_config);
-      assert(anv_drv_const_size(gfx.tess_config) <= 4);
+      const uint32_t tess_config_start =
+         anv_drv_const_offset(drv_data.gfx.tess_config);
+      assert(anv_drv_const_size(drv_data.gfx.tess_config) <= 4);
       BITSET_SET(data->push_dwords, tess_config_start / 4);
    }
 }
@@ -444,11 +446,11 @@ lower_to_push_data_intel(nir_builder *b,
        * vkCmdDispatch*().
        */
       if (b->shader->info.stage == MESA_SHADER_COMPUTE) {
-         if (anv_drv_const_includes_offset(cs.num_workgroups, base))
+         if (anv_drv_const_includes_offset(drv_data.cs.num_workgroups, base))
             state->bind_map->binding_mask |= ANV_PIPELINE_BIND_MASK_NUM_WORKGROUP;
-         else if (anv_drv_const_includes_offset(cs.base_workgroup, base))
+         else if (anv_drv_const_includes_offset(drv_data.cs.base_workgroup, base))
                state->bind_map->binding_mask |= ANV_PIPELINE_BIND_MASK_BASE_WORKGROUP;
-         else if (anv_drv_const_includes_offset(cs.unaligned_invocations_x, base))
+         else if (anv_drv_const_includes_offset(drv_data.cs.unaligned_invocations_x, base))
             state->bind_map->binding_mask |= ANV_PIPELINE_BIND_MASK_UNALIGNED_INV_X;
       }
       nir_intrinsic_set_base(intrin, base - base_offset);
@@ -664,12 +666,8 @@ anv_nir_compute_push_layout(nir_shader *nir,
    }
 
    const unsigned max_push_buffers = needs_padding_per_primitive ? 3 : 4;
-   const unsigned payload_size =
-      nir->info.stage == MESA_SHADER_VERTEX ?
-      brw_nir_vs_compute_payload_size(nir, devinfo) : 0;
    const unsigned max_push_size =
-      MIN2(compiler->register_file_size - payload_size,
-           devinfo->grf_size * (needs_padding_per_primitive ? 63 : 64));
+      32 * (needs_padding_per_primitive ? 63 : 64);
 
    for (unsigned i = 0; i < 4; i++) {
       struct anv_push_range *candidate_range = &analysis_ranges[i];
@@ -786,7 +784,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
    unsigned push_start = push_constant_range.start * 32;
    if (prog_data->robust_ubo_ranges) {
       const uint32_t push_reg_mask_offset =
-         anv_drv_const_offset(gfx.push_reg_mask[nir->info.stage]);
+         anv_drv_const_offset(drv_data.gfx.push_reg_mask[nir->info.stage]);
       assert(push_reg_mask_offset >= push_start);
       prog_data->push_reg_mask_param = (push_reg_mask_offset - push_start) / 4;
    }
@@ -796,7 +794,8 @@ anv_nir_compute_push_layout(nir_shader *nir,
       if (data.needs_dyn_tess_config) {
          struct brw_tcs_prog_data *tcs_prog_data = brw_tcs_prog_data(prog_data);
 
-         const uint32_t tess_config_offset = anv_drv_const_offset(gfx.tess_config);
+         const uint32_t tess_config_offset =
+            anv_drv_const_offset(drv_data.gfx.tess_config);
          assert(tess_config_offset >= push_start);
          tcs_prog_data->tess_config_param = tess_config_offset - push_start;
       }
@@ -806,7 +805,8 @@ anv_nir_compute_push_layout(nir_shader *nir,
       if (push_info->separate_tessellation) {
          struct brw_tes_prog_data *tes_prog_data = brw_tes_prog_data(prog_data);
 
-         const uint32_t tess_config_offset = anv_drv_const_offset(gfx.tess_config);
+         const uint32_t tess_config_offset =
+            anv_drv_const_offset(drv_data.gfx.tess_config);
          assert(tess_config_offset >= push_start);
          tes_prog_data->tess_config_param = tess_config_offset - push_start;
       }
@@ -818,13 +818,13 @@ anv_nir_compute_push_layout(nir_shader *nir,
 
       if (push_info->fragment_dynamic) {
          const uint32_t fs_config_offset =
-            anv_drv_const_offset(gfx.fs_config);
+            anv_drv_const_offset(drv_data.gfx.fs_config);
          assert(fs_config_offset >= push_start);
          fs_prog_data->fs_config_param = fs_config_offset - push_start;
       }
       if (data.needs_wa_18019110168) {
          const uint32_t fs_per_prim_remap_offset =
-            anv_drv_const_offset(gfx.wa_18019110168);
+            anv_drv_const_offset(drv_data.gfx.wa_18019110168);
          assert(fs_per_prim_remap_offset >= push_start);
          fs_prog_data->per_primitive_remap_param =
             fs_per_prim_remap_offset - push_start;
@@ -834,8 +834,8 @@ anv_nir_compute_push_layout(nir_shader *nir,
 
    case MESA_SHADER_COMPUTE: {
       const int subgroup_id_index =
-         BITSET_TEST(data.push_dwords, anv_drv_const_offset(cs.subgroup_id) / 4) ?
-         (anv_drv_const_offset(cs.subgroup_id) - push_start) / 4 : -1;
+         BITSET_TEST(data.push_dwords, anv_drv_const_offset(subgroup_id) / 4) ?
+         (anv_drv_const_offset(subgroup_id) - push_start) / 4 : -1;
       struct brw_cs_prog_data *cs_prog_data = brw_cs_prog_data(prog_data);
       brw_cs_fill_push_const_info(devinfo, cs_prog_data, subgroup_id_index);
       break;

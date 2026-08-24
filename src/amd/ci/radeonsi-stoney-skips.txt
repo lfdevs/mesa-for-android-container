@@ -52,3 +52,6 @@ glx@glx-multithread-buffer
 
 # Debian 12 (bookworm) uprev
 dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_frag_buffers32_sets1
+
+# Skip VK test on GL drivers
+vulkan@.*

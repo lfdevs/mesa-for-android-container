@@ -16,3 +16,7 @@ spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-ASYNC-GL_U
 spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-SYNC-GL_INT,Fail
 spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-SYNC-GL_UNSIGNED_INT,Fail
 spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-SYNC-GL_UNSIGNED_INT64_ARB,Fail
+
+# uprev Piglit in Mesa
+spec@arb_texture_view@tex-view,Fail
+vulkan@shaders@cmat-uniform-ctor,Fail

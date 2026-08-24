@@ -648,6 +648,12 @@ namespace {
 
    /** @} */
 
+   static bool
+   is_address_register(const brw_reg &r)
+   {
+      return r.file == ADDRESS || brw_reg_is_arf(r, BRW_ARF_ADDRESS);
+   }
+
    /**
     * Scoreboard representation.  This keeps track of the data dependencies of
     * registers with GRF granularity.
@@ -791,7 +797,7 @@ namespace {
                                reg_offset(r) / REG_SIZE);
 
          return (r.file == VGRF || r.file == FIXED_GRF ? &grf_deps[reg] :
-                 brw_reg_is_arf(r, BRW_ARF_ADDRESS) ? &addr_dep :
+                 is_address_register(r) ? &addr_dep :
                  brw_reg_is_arf(r, BRW_ARF_ACCUMULATOR) ? &accum_dep :
                  brw_reg_is_arf(r, BRW_ARF_FLAG) ? &flag_deps[r.nr & 0x0f] :
                  brw_reg_is_arf(r, BRW_ARF_SCALAR) ? &scalar_dep :
@@ -1058,9 +1064,14 @@ namespace {
        * subsequent redundant synchronization.
        */
       for (unsigned i = 0; i < inst->sources; i++) {
+         const bool is_send_address_descriptor =
+            inst->is_send() &&
+            (i == SEND_SRC_DESC || i == SEND_SRC_EX_DESC) &&
+            is_address_register(inst->src[i]);
          const dependency rd_dep =
             inst->opcode == BRW_OPCODE_DPAS ? dependency(GEN_SBID_SRC, ip, exec_all, UNIT_DPAS) :
             (inst->is_payload(i) ||
+             is_send_address_descriptor ||
              is_unordered_math) ? dependency(GEN_SBID_SRC, ip, exec_all, UNIT_OTHER) :
             is_ordered ? dependency(TGL_REGDIST_SRC, jp, exec_all) :
             dependency::done;
@@ -1123,6 +1134,9 @@ namespace {
          for (unsigned j = 0; j < written; j++)
             sb.set(byte_offset(inst->dst, REG_SIZE * j), wr_dep);
       }
+
+      if (inst->uses_address_register_implicitly())
+         sb.set(brw_address_reg(0), dependency::done);
    }
 
    /**
@@ -1263,6 +1277,11 @@ namespace {
                            dependency(GEN_SBID_SET, ip, exec_all, unit));
          }
 
+         if (inst->uses_address_register_implicitly()) {
+            add_dependency(ids, inst_deps, dependency_for_write(devinfo, inst,
+               sb.get(brw_address_reg(0))));
+         }
+
          if (inst->dst.file != BAD_FILE && !inst->dst.is_null() &&
              !inst->dst.is_accumulator() &&
              inst->opcode != SHADER_OPCODE_UNDEF) {
@@ -1300,7 +1319,7 @@ namespace {
             flags >>= 4;
          }
 
-         deps.push_back(inst_deps);
+         deps.push_back(std::move(inst_deps));
          update_inst_scoreboard(shader, jps, inst, ip, sb);
          ip++;
       }
@@ -1376,7 +1395,7 @@ namespace {
                }
             }
 
-            deps1.push_back(inst_deps1);
+            deps1.push_back(std::move(inst_deps1));
             ip++;
          }
       }
@@ -1423,7 +1442,7 @@ namespace {
             add_dependency(ids, inst_deps1, dep);
          }
 
-         deps1.push_back(inst_deps1);
+         deps1.push_back(std::move(inst_deps1));
       }
 
       return deps1;

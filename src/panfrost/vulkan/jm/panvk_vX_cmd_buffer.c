@@ -107,9 +107,8 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
    if (batch->tlsinfo.tls.size) {
       unsigned thread_tls_alloc =
          pan_query_thread_tls_alloc(&phys_dev->kmod.dev->props);
-      unsigned core_id_range;
-
-      pan_query_core_count(&phys_dev->kmod.dev->props, &core_id_range);
+      unsigned core_id_range =
+         pan_query_core_id_range(&phys_dev->kmod.dev->props);
 
       unsigned size = pan_get_total_stack_size(batch->tlsinfo.tls.size,
                                                thread_tls_alloc, core_id_range);

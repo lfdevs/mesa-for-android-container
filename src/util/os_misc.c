@@ -32,6 +32,7 @@
 #include "os_file.h"
 #include "ralloc.h"
 #include "simple_mtx.h"
+#include "u_call_once.h"
 #include "u_debug.h"
 #include "u_math.h"
 
@@ -67,6 +68,7 @@
 #elif DETECT_OS_APPLE || DETECT_OS_BSD
 #  include <sys/sysctl.h>
 #  if DETECT_OS_APPLE
+#    include <sys/mman.h>
 #    include <mach/mach_host.h>
 #    include <mach/mach_init.h>
 #    include <mach/vm_param.h>
@@ -508,5 +510,48 @@ os_get_page_size(uint64_t *size)
 #else
 #error unexpected platform in os_sysinfo.c
    return false;
+#endif
+}
+
+#if DETECT_OS_APPLE
+
+static bool jit_allowed;
+
+/**
+ * On macOS, a process that has library validation enabled but lacks the
+ * com.apple.security.cs.allow-jit entitlement is not permitted to create
+ * writable+executable mappings.  There is no API to query that policy, so
+ * probe it by attempting the MAP_JIT mapping that any JIT would need.
+ */
+static void
+os_probe_jit_allowed(void)
+{
+   uint64_t page_size;
+
+   if (!os_get_page_size(&page_size))
+      return;
+
+   void *addr = mmap(NULL, page_size, PROT_READ | PROT_WRITE | PROT_EXEC,
+                     MAP_ANONYMOUS | MAP_PRIVATE | MAP_JIT, -1, 0);
+   if (addr == MAP_FAILED)
+      return;
+
+   munmap(addr, page_size);
+   jit_allowed = true;
+}
+
+#endif /* DETECT_OS_APPLE */
+
+bool
+os_jit_allowed(void)
+{
+#if DETECT_OS_APPLE
+   static util_once_flag once = UTIL_ONCE_FLAG_INIT;
+
+   util_call_once(&once, os_probe_jit_allowed);
+
+   return jit_allowed;
+#else
+   return true;
 #endif
 }

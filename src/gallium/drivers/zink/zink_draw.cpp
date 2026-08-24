@@ -373,6 +373,9 @@ emit_dynamic_state(struct zink_context *ctx, bool pipeline_changed, unsigned num
       ctx->stencil_ref_changed = false;
    }
 
+   if (ctx->depth_op_promoted && !ctx->can_promote_depth_op)
+      zink_update_depth_state(ctx);
+
    if (DYNAMIC_STATE != ZINK_NO_DYNAMIC_STATE && (BATCH_CHANGED || ctx->dsa_state_changed)) {
       VKCTX(CmdSetDepthBoundsTestEnable)(bs->cmdbuf, dsa_state->hw_state.depth_bounds_test);
       if (dsa_state->hw_state.depth_bounds_test)

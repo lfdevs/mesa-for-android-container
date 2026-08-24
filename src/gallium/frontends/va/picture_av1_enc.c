@@ -300,7 +300,7 @@ VAStatus vlVaHandleVAEncPictureParameterBufferTypeAV1(vlVaDriver *drv, vlVaConte
 
    if (!coded_buf->derived_surface.resource)
       coded_buf->derived_surface.resource = pipe_buffer_create(drv->pipe->screen, PIPE_BIND_VERTEX_BUFFER,
-                                            PIPE_USAGE_STAGING, coded_buf->size);
+                                            PIPE_USAGE_STAGING, MAX2(1024 * 1024, coded_buf->size));
    context->coded_buf = coded_buf;
 
    /* these frame types will need to be seen as force type */

@@ -51,6 +51,13 @@ mtl_bridge_dependencies = [
   idep_vulkan_util
 ]
 
+if host_machine.system() == 'darwin'
+  mtl_bridge_dependencies += dependency(
+    'appleframeworks',
+    modules : ['Foundation']
+  )
+endif
+
 libmtl_bridge = static_library(
   'mtl_bridge',
   [mtl_bridge_files],

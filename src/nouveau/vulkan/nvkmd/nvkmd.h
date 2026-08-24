@@ -103,6 +103,7 @@ enum nvkmd_engines {
    NVKMD_ENGINE_M2MF    = 1 << 3,
    NVKMD_ENGINE_COMPUTE = 1 << 4,
    NVKMD_ENGINE_BIND    = 1 << 5,
+   NVKMD_ENGINE_VDEC    = 1 << 6,
 };
 
 enum nvkmd_bind_op {

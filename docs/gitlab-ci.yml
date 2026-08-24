@@ -6,6 +6,7 @@ deploy-docs:
   stage: deploy
   pages: true
   rules:
+    - !reference [.no_downstream_pipeline-rules, rules]
     - !reference [.common-rules, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
     # post-merge pipeline
@@ -27,6 +28,7 @@ test-docs:
   interruptible: true
   stage: deploy
   rules:
+    - !reference [.no_downstream_pipeline-rules, rules]
     - !reference [.common-rules, rules]
     # merge pipeline
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $GITLAB_USER_LOGIN == "marge-bot"'
@@ -43,6 +45,7 @@ linkcheck-docs:
   interruptible: true
   stage: deploy
   rules:
+    - !reference [.no_downstream_pipeline-rules, rules]
     - !reference [.common-rules, rules]
     - !reference [.scheduled_pipeline-rules, rules]
     # pre-merge pipeline

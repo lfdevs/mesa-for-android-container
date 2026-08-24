@@ -275,7 +275,7 @@ lower_offset_for_global(nir_builder *b, nir_intrinsic_instr *intr,
       return false;
    }
 
-   unsigned bit_size = intr->intrinsic == nir_intrinsic_load_global_ir3
+   unsigned bit_size = intr->intrinsic == nir_intrinsic_load_global_offset
                           ? intr->def.bit_size
                           : intr->src[0].ssa->bit_size;
 
@@ -340,8 +340,8 @@ lower_io_offsets_block(nir_block *block, nir_builder *b, void *mem_ctx,
          progress = true;
       }
 
-      if (intr->intrinsic == nir_intrinsic_load_global_ir3 ||
-          intr->intrinsic == nir_intrinsic_store_global_ir3) {
+      if (intr->intrinsic == nir_intrinsic_load_global_offset ||
+          intr->intrinsic == nir_intrinsic_store_global_offset) {
          progress |= lower_offset_for_global(b, intr, c);
       }
    }
@@ -393,8 +393,8 @@ ir3_nir_max_imm_offset(nir_intrinsic_instr *intrin, const void *data)
       if (!compiler->info->props.has_ssbo_imm_offsets)
          return 0;
       return 127; /* stib.b */
-   case nir_intrinsic_load_global_ir3:
-   case nir_intrinsic_store_global_ir3:
+   case nir_intrinsic_load_global_offset:
+   case nir_intrinsic_store_global_offset:
       /* The immediate offset field is larger for ldg/stg than for their .a
        * versions. Return the max for .a. If the offset src itself turns out to
        * be constant and doesn't fit in BASE, but does fit in ldg/stg, we can
@@ -412,8 +412,8 @@ bool
 ir3_nir_allow_base_offset_wrap(nir_intrinsic_instr *intrin, const void *data)
 {
    switch (intrin->intrinsic) {
-   case nir_intrinsic_load_global_ir3:
-   case nir_intrinsic_store_global_ir3:
+   case nir_intrinsic_load_global_offset:
+   case nir_intrinsic_store_global_offset:
       return false;
    default:
       return true;
@@ -423,6 +423,7 @@ ir3_nir_allow_base_offset_wrap(nir_intrinsic_instr *intrin, const void *data)
 unsigned
 ir3_nir_max_offset_shift(nir_intrinsic_instr *intr, const void *data)
 {
+   const struct ir3_compiler *compiler = data;
    nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
    assert(util_bitcount(deref->modes) == 1);
 
@@ -433,6 +434,14 @@ ir3_nir_max_offset_shift(nir_intrinsic_instr *intr, const void *data)
        * to build accesses across bit sizes.  We'll legalize the shift for the
        * actual access size at the end.
        */
+      return 2;
+
+   case nir_var_mem_global:
+      if (compiler->gen >= 7 || intr->intrinsic == nir_intrinsic_deref_atomic ||
+          intr->intrinsic == nir_intrinsic_deref_atomic_swap) {
+         return 0;
+      }
+
       return 2;
 
    default:

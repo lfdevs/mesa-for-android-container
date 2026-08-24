@@ -361,11 +361,15 @@ struct glsl_type {
    unsigned length;
 
    /**
-    * Identifier to the name of the data type
+    * Name of the data type.  Builtin types store an offset into
+    * glsl_type_builtin_names; other types store a direct pointer.
     *
     * Use glsl_get_type_name() to access the actual name.
     */
-   uintptr_t name_id;
+   union {
+      uintptr_t name_id;
+      const char *name_ptr;
+   };
 
    /**
     * Explicit array, matrix, or vector stride.  This is used to communicate

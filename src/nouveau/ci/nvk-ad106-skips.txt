@@ -15,6 +15,7 @@ dEQP-VK.memory.pipeline_barrier.host_write_transfer_src.1048576
 dEQP-VK.memory.pipeline_barrier.host_write_vertex_buffer.65536_vertex_buffer_stride_4
 dEQP-VK.memory.pipeline_barrier.transfer_src_transfer_dst.1048576
 dEQP-VK.pipeline.pipeline_library.blend.dual_source.multi_attachments.r32g32b32a32_sfloat
+dEQP-VK.shader_object.binary.device_features.*
 dEQP-VK.sparse_resources.image_sparse_binding.multiple_bind_sparse_info.2d_array.*
 dEQP-VK.sparse_resources.image_sparse_binding.multiple_bind_sparse_info.cube_array.*
 dEQP-VK.sparse_resources.image_sparse_binding.multiple_sparse_image_opaque_memory_bind_info.3d.*

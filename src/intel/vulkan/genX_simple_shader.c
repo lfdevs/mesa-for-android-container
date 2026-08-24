@@ -44,7 +44,7 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
 
    struct anv_batch *batch = state->batch;
    struct anv_device *device = state->device;
-   const struct anv_instance *instance = device->physical->instance;
+   const struct anv_physical_device *pdevice = device->physical;
    const struct brw_fs_prog_data *prog_data =
       brw_fs_prog_data_const(state->kernel->prog_data);
 
@@ -88,8 +88,7 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
       /* Simple shaders have no requirement that we need to disable geometry
        * distribution.
        */
-      vf.GeometryDistributionEnable =
-         instance->drirc.debug.vf_distribution;
+      vf.GeometryDistributionEnable = pdevice->drirc.debug.vf_distribution;
 #endif
    }
    anv_batch_emit(batch, GENX(3DSTATE_VF_SGVS), sgvs) {
@@ -228,7 +227,8 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
 #endif
 
 #if GFX_VER >= 30
-      ps.RegistersPerThread = ptl_register_blocks(prog_data->base.grf_used);
+      ps.RegistersPerThread =
+         intel_register_blocks(device->info, prog_data->base.grf_used);
 #endif
 
       ps.MaximumNumberofThreadsPerPSD = device->info->max_threads_per_psd - 1;
@@ -252,6 +252,10 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
 #if INTEL_WA_18038825448_GFX_VER
       psx.EnablePSDependencyOnCPsizeChange = needs_ps_dependency;
 #endif
+
+#if INTEL_WA_16030144090_GFX_VER
+      assert(!prog_data->persample_dispatch);
+#endif
    }
 
    anv_batch_emit(batch, GENX(3DSTATE_VIEWPORT_STATE_POINTERS_CC), cc) {
@@ -274,7 +278,7 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
    anv_batch_emit(batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr);
 #endif
 
-   if (!instance->drirc.perf.disable_push_const_alloc) {
+   if (!pdevice->drirc.perf.disable_push_const_alloc) {
       VkShaderStageFlags push_stages =
          genX(push_constant_alloc_stages)(VK_SHADER_STAGE_FRAGMENT_BIT);
       genX(batch_emit_push_constants_alloc)(batch, device, push_stages);
@@ -431,9 +435,7 @@ genX(simple_shader_alloc_push)(struct anv_simple_shader *state, uint32_t size)
       s = anv_state_stream_alloc(state->dynamic_state_stream,
                                  size, ANV_UBO_ALIGNMENT);
    } else {
-      s = anv_state_stream_alloc(GFX_VERx10 >= 125 ?
-                                 state->general_state_stream :
-                                 state->dynamic_state_stream,
+      s = anv_state_stream_alloc(state->dynamic_state_stream,
                                  align(size, 64), 64);
    }
 
@@ -450,18 +452,8 @@ struct anv_address
 genX(simple_shader_push_state_address)(struct anv_simple_shader *state,
                                        struct anv_state push_state)
 {
-   if (state->kernel->stage == MESA_SHADER_FRAGMENT) {
-      return anv_state_pool_state_address(
-         anv_device_get_dynamic_state_pool(state->device), push_state);
-   } else {
-#if GFX_VERx10 >= 125
-      return anv_state_pool_state_address(
-         anv_device_get_general_state_pool(state->device), push_state);
-#else
-      return anv_state_pool_state_address(
-         anv_device_get_dynamic_state_pool(state->device), push_state);
-#endif
-   }
+   return anv_state_pool_state_address(
+      anv_device_get_dynamic_state_pool(state->device), push_state);
 }
 
 /** Emit a simple shader dispatch */
@@ -574,45 +566,43 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
          brw_cs_get_dispatch_info(devinfo, prog_data, NULL);
 
 #if GFX_VERx10 >= 125
+      const uint64_t push_addr64 = anv_address_physical(push_addr);
+      const bool has_vrt = devinfo->verx10 >= 300 && !INTEL_DEBUG(DEBUG_NO_VRT);
+      if (!has_vrt) {
+         uint8_t pixel_async_compute_thread_limit, z_pass_async_compute_thread_limit,
+               np_z_async_throttle_settings;
+         bool slm_or_barrier_enabled = prog_data->base.total_shared != 0 || prog_data->uses_barrier;
 
-/* Not need with VRT enabled */
-#if GFX_VERx10 < 300
-      uint8_t pixel_async_compute_thread_limit, z_pass_async_compute_thread_limit,
-              np_z_async_throttle_settings;
-      bool slm_or_barrier_enabled = prog_data->base.total_shared != 0 || prog_data->uses_barrier;
-
-      intel_compute_engine_async_threads_limit(devinfo, dispatch.threads,
-                                               slm_or_barrier_enabled,
-                                               prog_data->uses_fence,
-                                               &pixel_async_compute_thread_limit,
-                                               &z_pass_async_compute_thread_limit,
-                                               &np_z_async_throttle_settings);
-      anv_batch_emit(batch, GENX(STATE_COMPUTE_MODE), cm) {
-   #if GFX_VER >= 20
-         cm.AsyncComputeThreadLimit = pixel_async_compute_thread_limit;
-         cm.ZPassAsyncComputeThreadLimit = z_pass_async_compute_thread_limit;
-         cm.ZAsyncThrottlesettings = np_z_async_throttle_settings;
-         cm.AsyncComputeThreadLimitMask = 0x7;
-         cm.ZPassAsyncComputeThreadLimitMask = 0x7;
-         cm.ZAsyncThrottlesettingsMask = 0x3;
-   #else
-         cm.PixelAsyncComputeThreadLimit = pixel_async_compute_thread_limit;
-         cm.ZPassAsyncComputeThreadLimit = z_pass_async_compute_thread_limit;
-         cm.PixelAsyncComputeThreadLimitMask = 0x7;
-         cm.ZPassAsyncComputeThreadLimitMask = 0x7;
-         if (intel_device_info_is_mtl_or_arl(devinfo)) {
+         intel_compute_engine_async_threads_limit(devinfo, dispatch.threads,
+                                                slm_or_barrier_enabled,
+                                                prog_data->uses_fence,
+                                                &pixel_async_compute_thread_limit,
+                                                &z_pass_async_compute_thread_limit,
+                                                &np_z_async_throttle_settings);
+         anv_batch_emit(batch, GENX(STATE_COMPUTE_MODE), cm) {
+#if GFX_VER >= 20
+            cm.AsyncComputeThreadLimit = pixel_async_compute_thread_limit;
+            cm.ZPassAsyncComputeThreadLimit = z_pass_async_compute_thread_limit;
             cm.ZAsyncThrottlesettings = np_z_async_throttle_settings;
+            cm.AsyncComputeThreadLimitMask = 0x7;
+            cm.ZPassAsyncComputeThreadLimitMask = 0x7;
             cm.ZAsyncThrottlesettingsMask = 0x3;
+#else
+            cm.PixelAsyncComputeThreadLimit = pixel_async_compute_thread_limit;
+            cm.ZPassAsyncComputeThreadLimit = z_pass_async_compute_thread_limit;
+            cm.PixelAsyncComputeThreadLimitMask = 0x7;
+            cm.ZPassAsyncComputeThreadLimitMask = 0x7;
+            if (intel_device_info_is_mtl_or_arl(devinfo)) {
+               cm.ZAsyncThrottlesettings = np_z_async_throttle_settings;
+               cm.ZAsyncThrottlesettingsMask = 0x3;
+            }
+#endif
          }
-   #endif
       }
-#endif /* GFX_VERx10 < 300 */
 
       struct GENX(COMPUTE_WALKER_BODY) body = {
          .SIMDSize                       = dispatch.simd_size / 16,
          .MessageSIMD                    = dispatch.simd_size / 16,
-         .IndirectDataStartAddress       = push_state.offset,
-         .IndirectDataLength             = push_state.alloc_size,
          .LocalXMaximum                  = prog_data->local_size[0] - 1,
          .LocalYMaximum                  = prog_data->local_size[1] - 1,
          .LocalZMaximum                  = prog_data->local_size[2] - 1,
@@ -641,8 +631,14 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
                                                                                prog_data->base.total_shared),
             .NumberOfBarriers                  = prog_data->uses_barrier,
 #if GFX_VER >= 30
-            .RegistersPerThread = ptl_register_blocks(prog_data->base.grf_used),
+            .RegistersPerThread =
+               intel_register_blocks(devinfo, prog_data->base.grf_used),
 #endif
+         },
+         .EmitInlineParameter            = true,
+         .InlineData                     = {
+            [0] = push_addr64 & 0xffffffff,
+            [1] = push_addr64 >> 32,
          },
       };
 

@@ -11,6 +11,7 @@
 #include "r300_reg.h"
 
 #include "compiler/nir_to_rc.h"
+#include "compiler/r300_nir.h"
 #include "compiler/radeon_compiler.h"
 #include "nir/nir.h"
 
@@ -78,7 +79,7 @@ static void set_vertex_inputs_outputs(struct r300_vertex_program_compiler * c)
     }
 
     /* WPOS. */
-    if (vs->wpos)
+    if (vs->key.wpos)
         c->code->outputs[outputs->wpos] = reg++;
 }
 
@@ -126,10 +127,28 @@ void r300_translate_vertex_shader(struct r300_context *r300,
     r300_setup_vs_compiler(r300, &compiler, vs);
 
     nir_shader *clone = nir_shader_clone(NULL, shader->state.ir.nir);
+    if (vs->key.frontface)
+        NIR_PASS(_, clone, r300_nir_lower_frontface);
+
+    nir_variable *wpos_var = NULL;
+    if (vs->key.wpos)
+        NIR_PASS(_, clone, r300_nir_add_wpos, &wpos_var);
+
+    int wpos_output = wpos_var ? wpos_var->data.driver_location : ATTR_UNUSED;
     struct r300_fragment_program_external_state external_state = {};
     nir_to_rc(clone, (struct pipe_screen *)r300->screen,
               external_state, code, &compiler.Base);
-    vs->outputs.wpos = vs->outputs.num_total;
+
+    if (wpos_output != ATTR_UNUSED) {
+        vs->outputs.wpos = wpos_output;
+        for (unsigned i = 0; i < ATTR_GENERIC_COUNT; i++) {
+            if (vs->outputs.generic[i] == wpos_output) {
+                vs->outputs.generic[i] = ATTR_UNUSED;
+                vs->outputs.num_generic--;
+                break;
+            }
+        }
+    }
 
     /* Nothing to do if the shader does not write gl_Position. */
     if (vs->outputs.pos == ATTR_UNUSED) {
@@ -148,12 +167,8 @@ void r300_translate_vertex_shader(struct r300_context *r300,
         compiler.Base.remove_unused_constants = true;
     }
 
-    compiler.RequiredOutputs = ~(~0U << (vs->outputs.num_total + (vs->wpos ? 1 : 0)));
+    compiler.RequiredOutputs = ~(~0U << vs->outputs.num_total);
     compiler.SetHwInputOutput = &set_vertex_inputs_outputs;
-
-    /* Insert the WPOS output. */
-    if (vs->wpos)
-        rc_copy_output(&compiler.Base, vs->outputs.pos, vs->outputs.wpos);
 
     /* Invoke the compiler */
     r3xx_compile_vertex_program(&compiler);

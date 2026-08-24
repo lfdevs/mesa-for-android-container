@@ -46,6 +46,7 @@ typedef void mtl_compiler;
 typedef void mtl_argument_table_descriptor;
 typedef void mtl_argument_table;
 typedef void mtl_commit_options;
+typedef void mtl_counter_heap;
 
 struct mtl_feedback_data;
 typedef void (*mtl_feedback_handler_callback)(struct mtl_feedback_data *data);
@@ -195,6 +196,12 @@ enum mtl_sampler_mip_filter {
    MTL_SAMPLER_MIP_FILTER_LINEAR = 2,
 };
 
+enum mtl_sampler_reduction_mode {
+   MTL_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE = 0,
+   MTL_SAMPLER_REDUCTION_MODE_MINIMUM = 1,
+   MTL_SAMPLER_REDUCTION_MODE_MAXIMUM = 2,
+};
+
 enum mtl_compare_function {
    MTL_COMPARE_FUNCTION_NEVER = 0,
    MTL_COMPARE_FUNCTION_LESS = 1,
@@ -277,9 +284,9 @@ enum mtl_command_queue_error {
    MTL_COMMAND_QUEUE_ERROR_OUT_OF_MEMORY = 3,
 
    /* Indicates the physical removal of the GPU before the command buffer
-    * completed.
+    * completed. Deprecated in macOS 27, never used for Apple GPUs.
     */
-   MTL_COMMAND_QUEUE_ERROR_DEVICE_REMOVED = 4,
+   /* MTL_COMMAND_QUEUE_ERROR_DEVICE_REMOVED = 4, */
 
    /* Indicates that the system revokes GPU access because it’s responsible for
     * too many timeouts or hangs.
@@ -288,6 +295,22 @@ enum mtl_command_queue_error {
 
    /* Indicates an internal problem in the Metal framework. */
    MTL_COMMAND_QUEUE_ERROR_INTERNAL = 6,
+};
+
+enum mtl_math_mode {
+   MTL_MATH_MODE_SAFE = 0,
+   MTL_MATH_MODE_RELAXED = 1,
+   MTL_MATH_MODE_FAST = 2,
+};
+
+enum mtl_math_floating_point_functions {
+   MTL_MATH_FLOATING_POINT_FUNCTIONS_FAST = 0,
+   MTL_MATH_FLOATING_POINT_FUNCTIONS_PRECISE = 1,
+};
+
+enum mtl_language_version {
+   MTL_LANGUAGE_VERSION_4_0 = 0x40000,
+   MTL_LANGUAGE_VERSION_4_1 = 0x40001,
 };
 
 /** STRUCTURES */

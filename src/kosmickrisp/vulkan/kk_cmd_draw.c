@@ -13,6 +13,7 @@
 #include "kk_cmd_buffer.h"
 #include "kk_format.h"
 #include "kk_image_view.h"
+#include "kk_physical_device.h"
 #include "kk_query_pool.h"
 
 #include "kosmickrisp/bridge/mtl_bridge.h"
@@ -81,7 +82,13 @@ kk_GetRenderingAreaGranularityKHR(
    VkDevice device, const VkRenderingAreaInfoKHR *pRenderingAreaInfo,
    VkExtent2D *pGranularity)
 {
-   *pGranularity = (VkExtent2D){.width = 1, .height = 1};
+   VK_FROM_HANDLE(kk_device, dev, device);
+   struct kk_physical_device *pdev = kk_device_physical(dev);
+
+   *pGranularity = (VkExtent2D){
+      .width = pdev->info.rendering_tile_width,
+      .height = pdev->info.rendering_tile_height,
+   };
 }
 
 static void
@@ -106,7 +113,7 @@ kk_clear_common_attachment_description(
    mtl_render_pass_attachment_descriptor_set_load_action(
       descriptor, MTL_LOAD_ACTION_DONT_CARE);
    mtl_render_pass_attachment_descriptor_set_store_action(
-      descriptor, MTL_STORE_ACTION_DONT_CARE);
+      descriptor, MTL_STORE_ACTION_UNKNOWN);
 }
 
 static void
@@ -127,24 +134,23 @@ kk_fill_common_attachment_description(
       mtl_render_pass_attachment_descriptor_set_slice(
          descriptor, iview->vk.base_array_layer);
    }
+
+   /* STORE_OP_NONE behaves like DONT_CARE if there are writes
+    * (CLEAR or DONT_CARE are writes).
+    * If there are no writes, we need to preserve the contents. */
+   force_attachment_load |= (info->load_op == VK_ATTACHMENT_LOAD_OP_LOAD ||
+                             info->load_op == VK_ATTACHMENT_LOAD_OP_NONE) &&
+                            info->store_op == VK_ATTACHMENT_STORE_OP_NONE;
+
    enum mtl_load_action load_action =
       force_attachment_load
          ? MTL_LOAD_ACTION_LOAD
          : vk_attachment_load_op_to_mtl_load_action(info->load_op);
 
-   /* TODO_KOSMICKRISP Need to tackle issue #14344 */
-   if (load_action == MTL_LOAD_ACTION_DONT_CARE)
-      load_action = MTL_LOAD_ACTION_LOAD;
    mtl_render_pass_attachment_descriptor_set_load_action(descriptor,
                                                          load_action);
-   /* We need to force attachment store to correctly handle situations where the
-    * attachment is written to in a subpass, and later read from in the next one
-    * with the store operation being something else than store. The other reason
-    * being that we break renderpasses when a pipeline barrier is used, so we
-    * need to not loose the information of the attachment when we restart it. */
-   enum mtl_store_action store_action = MTL_STORE_ACTION_STORE;
-   mtl_render_pass_attachment_descriptor_set_store_action(descriptor,
-                                                          store_action);
+   mtl_render_pass_attachment_descriptor_set_store_action(
+      descriptor, MTL_STORE_ACTION_UNKNOWN);
 }
 
 static struct mtl_clear_color
@@ -304,8 +310,24 @@ kk_CmdBeginRendering(VkCommandBuffer commandBuffer,
          pass_descriptor, framebuffer_extent.width);
       mtl_render_pass_descriptor_set_render_target_height(
          pass_descriptor, framebuffer_extent.height);
+      /* Applications may set maximal extents for attachment-less rendering, for
+       * example DXVK. This can cause device loss from exceeding memory limits.
+       * We can get around this by ignoring the layer count, without any known
+       * impact on the resulting fragment invocations and side effects. */
+      mtl_render_pass_descriptor_set_render_target_array_length(pass_descriptor,
+                                                                0u);
+
       mtl_render_pass_descriptor_set_default_raster_sample_count(
          pass_descriptor, 1u);
+   } else {
+      mtl_render_pass_descriptor_set_render_target_width(
+         pass_descriptor, render->area.extent.width + render->area.offset.x);
+      mtl_render_pass_descriptor_set_render_target_height(
+         pass_descriptor, render->area.extent.height + render->area.offset.y);
+
+      /* Render targets are always arrays */
+      mtl_render_pass_descriptor_set_render_target_array_length(
+         pass_descriptor, layer_count ? layer_count : 1u);
    }
 
    /* Check if we are rendering to the whole framebuffer. Required to understand
@@ -318,27 +340,14 @@ kk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       (render->view_mask == 0u ||
        render->view_mask == BITFIELD64_MASK(render->layer_count));
 
-   /* Understand if the render area is tile aligned so we know if we actually
-    * need to load the tile to not lose information. */
-   uint32_t tile_alignment = 31u;
-   bool is_tile_aligned = !(render->area.offset.x & tile_alignment) &&
-                          !(render->area.offset.y & tile_alignment) &&
-                          !(render->area.extent.width & tile_alignment) &&
-                          !(render->area.extent.height & tile_alignment);
-
-   /* Rendering to the whole framebuffer */
-   is_tile_aligned |= is_whole_framebuffer;
-
-   /* There are 3 cases where we need to force a load instead of using the user
-    * defined load operation:
-    * 1. Render area is not tile aligned
-    * 2. Load operation is clear but doesn't render to the whole attachment
-    * 3. Resuming renderpass
-    */
+   /* renderTargetWidth/Height doesn't seem to guarantee
+    * that the attachments won't get touched outside the area
+    * so just checking for offset = 0 doesn't cut it. */
    bool force_attachment_load =
-      !is_tile_aligned ||
-      (!is_whole_framebuffer && does_any_attachment_clear) ||
-      (render->flags & VK_RENDERING_RESUMING_BIT);
+      !is_whole_framebuffer || (render->flags & VK_RENDERING_RESUMING_BIT);
+
+   render->force_attachment_store =
+      !is_whole_framebuffer || (render->flags & VK_RENDERING_SUSPENDING_BIT);
 
    kk_set_color_attachments(pass_descriptor, render, dyn,
                             force_attachment_load);
@@ -377,10 +386,6 @@ kk_CmdBeginRendering(VkCommandBuffer commandBuffer,
          attachment_descriptor,
          pRenderingInfo->pStencilAttachment->clearValue.depthStencil.stencil);
    }
-
-   /* Render targets are always arrays */
-   mtl_render_pass_descriptor_set_render_target_array_length(
-      pass_descriptor, layer_count ? layer_count : 1u);
 
    /* Set global visibility buffer */
    mtl_render_pass_descriptor_set_visibility_buffer(
@@ -556,6 +561,8 @@ kk_CmdEndRendering2KHR(VkCommandBuffer commandBuffer,
       .pStencilAttachment = &vk_stencil_att,
    };
 
+   kk_apply_attachment_store_ops(cmd, false);
+
    /* Clean up previous encoder */
    cs_end(cmd);
    mtl_release(cmd->state.gfx.render_pass_descriptor);
@@ -720,8 +727,17 @@ kk_flush_vp_state(struct kk_cmd_buffer *cmd)
       viewports[i].width = vp->width;
       viewports[i].height = -vp->height;
 
-      viewports[i].znear = vp->minDepth;
-      viewports[i].zfar = vp->maxDepth;
+      if (dyn->rs.depth_clamp_enable ||
+          vk_rasterization_state_depth_clip_enable(&dyn->rs)) {
+         viewports[i].znear = vp->minDepth;
+         viewports[i].zfar = vp->maxDepth;
+      } else {
+         /* When clamp and clip are disabled, we set the viewport Z range to
+          * [0, 1] to disable hardware clamping. The viewport transform will be
+          * applied in shader */
+         viewports[i].znear = 0.f;
+         viewports[i].zfar = 1.f;
+      }
    }
 
    mtl_set_viewports(encoder, viewports, count);
@@ -858,63 +874,39 @@ kk_flush_sample_locations(struct kk_cmd_buffer *cmd)
 }
 
 static void
-kk_force_attachment_load(struct kk_cmd_buffer *cmd)
-{
-   struct kk_rendering_state *render = &cmd->state.gfx.render;
-
-   for (uint32_t i = 0; i < render->color_att_count; i++) {
-      if (render->color_att[i].iview) {
-         mtl_render_pass_attachment_descriptor *att =
-            mtl_render_pass_descriptor_get_color_attachment(
-               cmd->state.gfx.render_pass_descriptor, i);
-         mtl_render_pass_attachment_descriptor_set_load_action(
-            att, MTL_LOAD_ACTION_LOAD);
-      }
-   }
-   if (render->depth_att.iview) {
-      mtl_render_pass_attachment_descriptor *att =
-         mtl_render_pass_descriptor_get_depth_attachment(
-            cmd->state.gfx.render_pass_descriptor);
-      mtl_render_pass_attachment_descriptor_set_load_action(
-         att, MTL_LOAD_ACTION_LOAD);
-   }
-   if (render->stencil_att.iview) {
-      mtl_render_pass_attachment_descriptor *att =
-         mtl_render_pass_descriptor_get_stencil_attachment(
-            cmd->state.gfx.render_pass_descriptor);
-      mtl_render_pass_attachment_descriptor_set_load_action(
-         att, MTL_LOAD_ACTION_LOAD);
-   }
-}
-
-static void
 kk_flush_render_pass(struct kk_cmd_buffer *cmd)
 {
    struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
    struct kk_rendering_state *render = &cmd->state.gfx.render;
    bool needs_restart = kk_flush_sample_locations(cmd);
+   bool color_attachment_map_changed = false;
 
    if (IS_DIRTY(COLOR_ATTACHMENT_MAP)) {
       if (memcmp(render->color_map, dyn->cal.color_map,
                  render->color_att_count * sizeof(render->color_map[0])) != 0) {
          assert(cmd->state.gfx.render_pass_descriptor);
+
+         /* Apply the store ops before the new color map is stored. */
+         kk_apply_attachment_store_ops(cmd, true);
+
          kk_set_color_attachments(cmd->state.gfx.render_pass_descriptor, render,
                                   dyn, true);
          needs_restart = true;
+         color_attachment_map_changed = true;
       }
    }
    /* If render pass state changes and the pass is currently active, end the
     * current encoder and prepare to restart it */
-   bool active_render = cmd->cs.gfx;
+   bool active_render = cmd->gfx.encoder != NULL;
    if (needs_restart && active_render) {
+      if (!color_attachment_map_changed) {
+         /* Sample locations changed and color attachment map didn't. */
+         kk_apply_attachment_store_ops(cmd, true);
+      }
+
       cs_end(cmd);
       kk_cmd_buffer_dirty_all_gfx(cmd);
       cmd->state.gfx.need_to_start_render_pass = true;
-
-      /* Override load action to prevent data loss between encoders.
-       * TODO_KOSMICKRISP: Handle store action if we stop always setting it to
-       * STORE. Metal allows it to be encoded later. */
-      kk_force_attachment_load(cmd);
    }
 }
 
@@ -1029,10 +1021,11 @@ struct kk_draw_command {
    bool indirect;
    bool indexed;
    bool restart;
+   bool flatshade_first;
+   uint8_t pad_[3];
    uint32_t predicate_count;
    enum kk_predicate_op predicate_op[2];
    uint32_t draw_count;
-   uint32_t pad_;
    uint64_t predicate_addr[2];
 
    union {
@@ -1231,7 +1224,8 @@ kk_flush_dynamic_state(struct kk_cmd_buffer *cmd)
    /* We enable raster discard by setting scissor to size (0, 0) */
    if (!(dyn->rs.rasterizer_discard_enable || gfx->is_cull_front_and_back) &&
        (IS_DIRTY(VP_VIEWPORT_COUNT) || IS_DIRTY(VP_VIEWPORTS) ||
-        IS_DIRTY(VP_SCISSOR_COUNT) || IS_DIRTY(VP_SCISSORS)))
+        IS_DIRTY(VP_SCISSOR_COUNT) || IS_DIRTY(VP_SCISSORS) ||
+        IS_DIRTY(RS_DEPTH_CLAMP_ENABLE) || IS_DIRTY(RS_DEPTH_CLIP_ENABLE)))
       kk_flush_vp_state(cmd);
 
    if (IS_DIRTY(VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE)) {
@@ -1262,11 +1256,60 @@ kk_flush_dynamic_state(struct kk_cmd_buffer *cmd)
          mtl_set_depth_bias(enc, 0.0f, 0.0f, 0.0f);
    }
 
-   if (IS_DIRTY(RS_DEPTH_CLAMP_ENABLE)) {
-      enum mtl_depth_clip_mode mode = dyn->rs.depth_clamp_enable
-                                         ? MTL_DEPTH_CLIP_MODE_CLAMP
-                                         : MTL_DEPTH_CLIP_MODE_CLIP;
+   if (IS_DIRTY(RS_DEPTH_CLAMP_ENABLE) || IS_DIRTY(RS_DEPTH_CLIP_ENABLE) ||
+       IS_DIRTY(VP_VIEWPORT_COUNT) || IS_DIRTY(VP_VIEWPORTS)) {
+      /* Mapping of Vulkan clamp/clip combinations to Metal:
+       * - Clamp Off, Clip Off:
+       *     Use Metal's clamp mode with the viewport depth range set to [0, 1],
+       *     effectively disabling both clip and clamp. Emulate the viewport Z
+       *     transform in the vertex shader.
+       * - Clamp Off, Clip On:
+       *     Exact match to Metal's clip mode.
+       * - Clamp On, Clip Off:
+       *     Exact match to Metal's clamp mode.
+       * - Clamp On, Clip On:
+       *     Use Metal's clip mode, and emulate clamp in the fragment shader.
+       */
+      bool clamp = dyn->rs.depth_clamp_enable;
+      bool clip = vk_rasterization_state_depth_clip_enable(&dyn->rs);
+
+      enum mtl_depth_clip_mode mode =
+         clip ? MTL_DEPTH_CLIP_MODE_CLIP : MTL_DEPTH_CLIP_MODE_CLAMP;
       mtl_set_depth_clip_mode(enc, mode);
+
+      desc->root.draw.emulate_depth_clamp = clamp && clip;
+      desc->root.draw.emulate_viewport_z = !clamp && !clip;
+      if (desc->root.draw.emulate_depth_clamp ||
+          desc->root.draw.emulate_viewport_z) {
+         /* Ensure viewport depth ranges are up to date now, since we are
+          * dirtying root anyway. */
+         for (uint32_t i = 0; i < dyn->vp.viewport_count; i++) {
+            const VkViewport *vp = &dyn->vp.viewports[i];
+
+            /* These are mutually exclusive. Clamp expects the actual minimum
+             * and maximum values, viewport transform supports inverted depth */
+            if (desc->root.draw.emulate_depth_clamp) {
+               desc->root.draw.viewport_z_range[i * 2] =
+                  MIN2(vp->minDepth, vp->maxDepth);
+               desc->root.draw.viewport_z_range[i * 2 + 1] =
+                  MAX2(vp->minDepth, vp->maxDepth);
+            } else {
+               desc->root.draw.viewport_z_range[i * 2] = vp->minDepth;
+               desc->root.draw.viewport_z_range[i * 2 + 1] = vp->maxDepth;
+            }
+         }
+      }
+      desc->root_dirty = true;
+   }
+
+   if (IS_DIRTY(DS_DEPTH_BOUNDS_TEST_ENABLE) ||
+       IS_DIRTY(DS_DEPTH_BOUNDS_TEST_BOUNDS)) {
+      /* Metal does not expose a separate flag for enabling the depth bounds
+       * test. Instead, it treats [0, 1] as disabled. */
+      bool bounds_enable = dyn->ds.depth.bounds_test.enable;
+      float bounds_min = bounds_enable ? dyn->ds.depth.bounds_test.min : 0.0f;
+      float bounds_max = bounds_enable ? dyn->ds.depth.bounds_test.max : 1.0f;
+      mtl_set_depth_test_bounds(enc, bounds_min, bounds_max);
    }
 
    if (IS_DIRTY(DS_STENCIL_REFERENCE))
@@ -1456,7 +1499,7 @@ kk_unroll_geometry(struct kk_cmd_buffer *cmd, struct kk_draw_command *data)
                        : 0u,
       .in_el_size_B = data->index_buffer_el_size_B,
       .out_el_size_B = 4u,
-      .flatshade_first = true,
+      .flatshade_first = data->flatshade_first,
       .mode = data->prim,
    };
 
@@ -1472,6 +1515,7 @@ kk_unroll_geometry(struct kk_cmd_buffer *cmd, struct kk_draw_command *data)
    data->indirect = true;
    data->indexed = true;
    data->restart = false;
+   data->flatshade_first = true;
    data->indirect_command.addr = out_draws.gpu;
    data->indirect_command.stride = sizeof(VkDrawIndexedIndirectCommand);
 
@@ -1585,7 +1629,7 @@ kk_dispatch_draw(struct kk_cmd_buffer *cmd, struct kk_draw_data data)
 }
 
 static bool
-requires_index_promotion(const struct kk_draw_command *data)
+requires_unroll_index_promotion(const struct kk_draw_command *data)
 {
    if (!data->indexed)
       return false;
@@ -1620,10 +1664,13 @@ requires_unroll_robustness(struct kk_cmd_buffer *cmd,
       return false;
 
    struct kk_device *dev = kk_cmd_buffer_device(cmd);
+   struct kk_physical_device *pdev = kk_device_physical(dev);
 
    /* KK_WORKAROUND_12, KK_WORKAROUND_13 */
-   bool workaround_12 = !(dev->disabled_workarounds & BITFIELD64_BIT(12));
-   bool workaround_13 = !(dev->disabled_workarounds & BITFIELD64_BIT(13));
+   bool workaround_12 =
+      !(pdev->settings.disabled_workarounds & BITFIELD64_BIT(12));
+   bool workaround_13 =
+      !(pdev->settings.disabled_workarounds & BITFIELD64_BIT(13));
 
    /* Do nothing if both workarounds are disabled */
    if (!workaround_12 && !workaround_13)
@@ -1692,6 +1739,38 @@ requires_unroll_restart(struct kk_cmd_buffer *cmd,
     * restart index is set by user */
    uint32_t default_idx = BITFIELD_RANGE(0, data->index_buffer_el_size_B * 8);
    return data->restart_index != default_idx;
+}
+
+static bool
+requires_unroll_flatshade(struct kk_cmd_buffer *cmd,
+                          struct kk_draw_command *data)
+{
+   struct kk_shader *fs = cmd->state.shaders[MESA_SHADER_FRAGMENT];
+
+   /* If the last vertex is provoking and the fragment shader uses flat inputs,
+    * we need to unroll to correct the vertex order */
+   return !data->flatshade_first && fs && fs->info.fs.uses_flat_varyings;
+}
+
+static bool
+requires_unroll(struct kk_cmd_buffer *cmd, struct kk_draw_command *data)
+{
+   /* No need to unroll for tessellation. Robustness is handled by tessellator,
+    * restart is not supported for patch lists, and flat-shading does not have a
+    * well-defined vertex used when tessellating. */
+   bool tess = cmd->state.shaders[MESA_SHADER_TESS_EVAL];
+   if (tess)
+      return false;
+
+   /* Metal does not support triangle fans */
+   if (data->prim == MESA_PRIM_TRIANGLE_FAN)
+      return true;
+
+   /* Check for remaining unroll conditions */
+   return requires_unroll_index_promotion(data) ||
+          requires_unroll_robustness(cmd, data) ||
+          requires_unroll_restart(cmd, data) ||
+          requires_unroll_flatshade(cmd, data);
 }
 
 static uint64_t
@@ -1901,11 +1980,14 @@ build_draw_data(struct kk_cmd_buffer *cmd, struct kk_draw_command *data,
 static void
 kk_draw(struct kk_cmd_buffer *cmd, struct kk_draw_command *data)
 {
+   struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
+
    kk_flush_gfx_state(cmd);
 
-   data->restart = cmd->vk.dynamic_graphics_state.ia.primitive_restart_enable;
-   data->restart_index =
-      cmd->vk.dynamic_graphics_state.ia.primitive_restart_index;
+   data->restart = dyn->ia.primitive_restart_enable;
+   data->restart_index = dyn->ia.primitive_restart_index;
+   data->flatshade_first =
+      dyn->rs.provoking_vertex == VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT;
 
    /* Convert to indirect and process predicates. Skip draw if we fail. */
    if (data->predicate_count > 0 && !kk_predicate_draws(cmd, data))
@@ -1913,13 +1995,8 @@ kk_draw(struct kk_cmd_buffer *cmd, struct kk_draw_command *data)
 
    bool tess = cmd->state.shaders[MESA_SHADER_TESS_EVAL];
 
-   /* Unroll geometry. Skip draw if we fail. No need to unroll if tessellation
-    * is present since it also handles unrolling. */
-   bool requires_unroll = !tess && (data->prim == MESA_PRIM_TRIANGLE_FAN ||
-                                    requires_index_promotion(data) ||
-                                    requires_unroll_robustness(cmd, data) ||
-                                    requires_unroll_restart(cmd, data));
-   if (requires_unroll && !kk_unroll_geometry(cmd, data))
+   /* Unroll geometry. Skip draw if we fail. */
+   if (requires_unroll(cmd, data) && !kk_unroll_geometry(cmd, data))
       return;
 
    for (uint32_t i = 0; i < data->draw_count; i++) {

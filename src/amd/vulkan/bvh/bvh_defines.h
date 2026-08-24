@@ -254,7 +254,7 @@ struct copy_args {
 };
 
 #define RADV_ENCODE_BUILD_FLAGS                                                                                        \
-   (VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS | RADV_BUILD_FLAG_USE_BOX16 | RADV_BUILD_FLAG_NO_INFS)
+   (VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS | VK_BUILD_FLAG_HAS_QUADS | RADV_BUILD_FLAG_USE_BOX16 | RADV_BUILD_FLAG_NO_INFS)
 
 struct encode_args {
    VOID_REF intermediate_bvh;
@@ -266,7 +266,7 @@ struct encode_args {
 };
 
 #define RADV_ENCODE_GFX12_BUILD_FLAGS                                                                                  \
-   (RADV_BUILD_FLAG_PAIR_COMPRESS_TRIANGLES | RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES |                               \
+   (VK_BUILD_FLAG_HAS_QUADS | RADV_BUILD_FLAG_PAIR_COMPRESS_TRIANGLES | RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES |     \
     RADV_BUILD_FLAG_WRITE_LEAF_NODE_OFFSETS)
 
 struct encode_gfx12_args {

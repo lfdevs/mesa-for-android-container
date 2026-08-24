@@ -28,7 +28,8 @@ void block_pool_grow_first_test(void);
 
 void block_pool_grow_first_test(void)
 {
-   struct anv_physical_device physical_device = {};
+   struct anv_instance instance = {};
+   struct anv_physical_device physical_device = { .instance = &instance };
    struct anv_device device = {};
    struct anv_block_pool pool;
 

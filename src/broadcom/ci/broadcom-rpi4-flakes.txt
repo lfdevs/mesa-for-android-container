@@ -177,3 +177,11 @@ spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=2
 dEQP-VK.glsl.operator.unary_operator.post_decrement_result.highp_uvec4_vertex
 dEQP-VK.image.format_reinterpret.1d.r8g8b8a8_sint_b10g11r11_ufloat_pack32
 dEQP-VK.synchronization2.timeline_semaphore.device_host.write_copy_image_to_buffer_read_vertex_input.buffer_262144
+
+dEQP-VK.synchronization.timeline_semaphore.device_host.write_copy_image_to_buffer_read_vertex_input.buffer_262144
+dEQP-VK.synchronization.timeline_semaphore.device_host.write_ssbo_compute_indirect_read_vertex_input.buffer_262144
+
+dEQP-VK.memory.device_memory_report.create_and_destroy_object.compute_pipeline
+dEQP-VK.memory.device_memory_report.create_and_destroy_object.graphics_pipeline
+dEQP-VK.robustness.robustness2.bind.notemplate.r32f.unroll.nonvolatile.storage_image.fmt_qual.null_descriptor.samples_1.1d_array.vert
+dEQP-VK.synchronization2.cross_instance.suballocated.write_ssbo_fragment_read_vertex_input.buffer_262144_binary_semaphore_fence_fd

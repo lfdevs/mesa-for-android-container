@@ -1092,7 +1092,8 @@ validate_ir(Program* program)
          // skipped check_block(num_p_logical_start == 1 || (block.index != 0 &&
          // block.logical_preds.empty()),
          //             "Missing p_logical_start / p_logical_end in logical block", &block);
-         check_block(num_p_logical_start == 0 || block.index == 0 || !block.logical_preds.empty(),
+         check_block(num_p_logical_start == 0 || block.index == 0 ||
+                        (block.kind & block_kind_resume) || !block.logical_preds.empty(),
                      "p_logical_start and p_logical_end are only allowed in logical blocks",
                      &block);
       }

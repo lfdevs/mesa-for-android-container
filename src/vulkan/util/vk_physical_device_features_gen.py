@@ -52,6 +52,10 @@ RENAMED_FEATURES = {
     ('FaultFeaturesEXT', 'deviceFaultVendorBinary'): 'deviceFaultVendorBinaryEXT',
 
     ('OpacityMicromapFeaturesEXT', 'micromap'): 'micromapEXT',
+
+    ('CooperativeMatrix2FeaturesNV', 'cooperativeMatrixConversions'): 'cooperativeMatrixConversionsNV',
+    ('CooperativeMatrix2FeaturesNV', 'cooperativeMatrixReductions'): 'cooperativeMatrixReductionsNV',
+    ('CooperativeMatrix2FeaturesNV', 'cooperativeMatrixPerElementOperations'): 'cooperativeMatrixPerElementOperationsNV',
 }
 
 KNOWN_ALIASES = [
@@ -254,9 +258,9 @@ vk_physical_device_check_device_features(struct vk_physical_device *physical_dev
 % endif
 % endfor
 
-   vk_foreach_struct_const(features, pCreateInfo->pNext) {
-      VkBaseOutStructure *supported = NULL;
-      switch (features->sType) {
+   vk_foreach_struct_const(stype, features, pCreateInfo->pNext) {
+      void *supported = NULL;
+      switch (stype) {
 % for f in feature_structs:
 % if f.guard != None:
 #ifdef ${f.guard}
@@ -266,7 +270,21 @@ vk_physical_device_check_device_features(struct vk_physical_device *physical_dev
          if (!${f.condition("physical_device")})
             break;
 % endif
-         supported = (VkBaseOutStructure *) &supported_${f.c_type};
+
+         /* Ignore duplicated structs instead of failing to create the device. */
+         if (supported_${f.c_type}.sType != 0) {
+            vk_logw(VK_LOG_OBJS(physical_device),
+                    "WARNING: Duplicate sType %s in the device creation chain.\\n",
+                    vk_StructureType_to_str(stype));
+            continue;
+         }
+
+         /* Check for cycles in the list */
+         if (supported_${f.c_type}.pNext != NULL)
+            return VK_ERROR_UNKNOWN;
+
+         supported_${f.c_type}.sType = stype;
+         supported = &supported_${f.c_type};
          break;
 % if f.guard != None:
 #endif
@@ -280,19 +298,6 @@ vk_physical_device_check_device_features(struct vk_physical_device *physical_dev
       if (!supported)
          continue;
 
-      /* Ignore duplicated structs instead of failing to create the device. */
-      if (supported->sType != 0) {
-         vk_logw(VK_LOG_OBJS(physical_device),
-                 "WARNING: Duplicate sType %s in the device creation chain.\\n",
-                 vk_StructureType_to_str(features->sType));
-         continue;
-      }
-
-      /* Check for cycles in the list */
-      if (supported->pNext != NULL)
-         return VK_ERROR_UNKNOWN;
-
-      supported->sType = features->sType;
       __vk_append_struct(&supported_features2, supported);
    }
 
@@ -310,11 +315,11 @@ vk_physical_device_check_device_features(struct vk_physical_device *physical_dev
    }
 
    /* Iterate through additional feature structs */
-   vk_foreach_struct_const(features, pCreateInfo->pNext) {
+   vk_foreach_struct_const(sType, features, pCreateInfo->pNext) {
       /* Check each feature boolean for given structure. */
-      switch (features->sType) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2: {
-         const VkPhysicalDeviceFeatures2 *features2 = (const void *)features;
+         const VkPhysicalDeviceFeatures2 *features2 = features;
          VkResult result =
             check_physical_device_features(physical_device,
                                            &supported_features2.features,
@@ -334,7 +339,7 @@ vk_physical_device_check_device_features(struct vk_physical_device *physical_dev
             break;
 % endif
          const ${f.c_type} *a = &supported_${f.c_type};
-         const ${f.c_type} *b = (const void *) features;
+         const ${f.c_type} *b = features;
 % for flag in f.features:
          if (b->${flag} && !a->${flag})
             return vk_errorf(physical_device, VK_ERROR_FEATURE_NOT_PRESENT,
@@ -363,14 +368,14 @@ vk_common_GetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
    pFeatures->features.${flag} = pdevice->supported_features.${flag};
 % endfor
 
-   vk_foreach_struct(ext, pFeatures) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pFeatures) {
+      switch (sType) {
 % for f in feature_structs:
 % if f.guard != None:
 #ifdef ${f.guard}
 % endif
       case ${f.s_type}: {
-         ${f.c_type} *features = (void *) ext;
+         ${f.c_type} *features = ext;
 % for flag in f.features:
          features->${flag} = pdevice->supported_features.${get_renamed_feature(f.c_type, flag)};
 % endfor
@@ -391,8 +396,8 @@ void
 vk_set_physical_device_features(struct vk_features *all_features,
                                 const VkPhysicalDeviceFeatures2 *pFeatures)
 {
-   vk_foreach_struct_const(ext, pFeatures) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pFeatures) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2: {
          const VkPhysicalDeviceFeatures2 *features = (const void *) ext;
          vk_set_physical_device_features_1_0(all_features, &features->features);
@@ -404,7 +409,7 @@ vk_set_physical_device_features(struct vk_features *all_features,
 #ifdef ${f.guard}
 % endif
       case ${f.s_type}: {
-         const ${f.c_type} *features = (const void *) ext;
+         const ${f.c_type} *features = ext;
 % for flag in f.features:
          if (features->${flag})
             all_features->${get_renamed_feature(f.c_type, flag)} = true;

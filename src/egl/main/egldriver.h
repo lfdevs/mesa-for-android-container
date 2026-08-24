@@ -84,10 +84,13 @@ typedef struct __GLsync *GLsync;
 struct egl_device_info {
    uint8_t device_uuid[EGL_UUID_SIZE];
    uint8_t driver_uuid[EGL_UUID_SIZE];
+
    /* Data below needs to be freed manually */
    char *vendor_name;
    char *renderer_name;
    char *driver_name;
+
+   EGLAttrib device_type;
 };
 
 /**

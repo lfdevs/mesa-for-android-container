@@ -279,7 +279,7 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv,
    fd6_image_init<CHIP>(pctx);
 
    /* after fd_context_init() to override memory_barrier/texture_barrier(): */
-   fd6_barrier_init(pctx);
+   fd6_barrier_init<CHIP>(pctx);
 
    util_blitter_set_texture_multisample(fd6_ctx->base.blitter, true);
 

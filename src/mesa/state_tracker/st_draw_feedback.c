@@ -109,7 +109,6 @@ st_feedback_draw_vbo(struct gl_context *ctx,
    struct cso_velems_state velements;
    struct pipe_transfer *vb_transfer[PIPE_MAX_ATTRIBS] = {NULL};
    struct pipe_transfer *ib_transfer = NULL;
-   GLuint i;
    const void *mapped_indices = NULL;
 
    if (!draw)
@@ -388,7 +387,7 @@ st_feedback_draw_vbo(struct gl_context *ctx,
    draw_set_images(draw, MESA_SHADER_VERTEX, images, prog->info.num_images);
 
    /* draw here */
-   for (i = 0; i < num_draws; i++) {
+   for (unsigned i = 0; i < num_draws; i++) {
       draw_vbo(draw, info, info->increment_draw_id ? i : 0, indirect,
                &draws[i], 1, ctx->TessCtrlProgram.patch_vertices);
    }

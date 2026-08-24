@@ -89,6 +89,7 @@ libvn_files = files(
   'vn_ring.c',
   'vn_renderer_internal.c',
   'vn_renderer_util.c',
+  'vn_sync.c',
 )
 
 vn_incs = [
@@ -99,6 +100,7 @@ vn_incs = [
 
 vn_deps = [
   dep_thread,
+  dep_venus_protocol,
   idep_mesautil,
   idep_vulkan_util,
   idep_vulkan_lite_runtime,
@@ -110,6 +112,7 @@ vn_c_args = [
   no_override_init_args,
   soong_compat_c_args,
 ] + cc.get_supported_arguments([
+  '-Werror=gnu-pointer-arith',
   '-Werror=switch',
 ])
 

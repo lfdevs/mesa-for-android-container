@@ -238,6 +238,7 @@ ir_expression::ir_expression(int op, ir_rvalue *op0)
    case ir_unop_cos:
    case ir_unop_asin:
    case ir_unop_acos:
+   case ir_unop_tanh:
    case ir_unop_dFdx:
    case ir_unop_dFdx_coarse:
    case ir_unop_dFdx_fine:

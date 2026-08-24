@@ -354,19 +354,6 @@ v3d_zsa_state_bind(struct pipe_context *pctx, void *hwcso)
 }
 
 
-static bool
-needs_default_attribute_values(void)
-{
-#if V3D_VERSION == 42
-        /* FIXME: on vulkan we are able to refine even further, as we know in
-         * advance when we create the pipeline if we have an integer vertex
-         * attrib. Pending to check if we could do something similar here.
-         */
-        return true;
-#endif
-        return false;
-}
-
 static void *
 v3d_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
                         const struct pipe_vertex_element *elements)
@@ -442,7 +429,11 @@ v3d_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
                 }
         }
 
-        if (needs_default_attribute_values()) {
+        /* FIXME: on vulkan we are able to refine even further, as we know in
+         * advance when we create the pipeline if we have an integer vertex
+         * attrib. Pending to check if we could do something similar here.
+         */
+        if (v3d_device_needs_default_attribute_values(&v3d->screen->devinfo)) {
                 /* Set up the default attribute values in case any of the vertex
                  * elements use them.
                  */

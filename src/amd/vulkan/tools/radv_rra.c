@@ -1238,7 +1238,7 @@ gamma_dump_acceleration_structure(const struct radv_physical_device *pdev,
 
    struct radv_accel_struct_geometry_info *geometry_infos = (void *)(data + sizeof(struct radv_accel_struct_header));
    for (uint32_t i = 0; i < radv_header->geometry_count; i++)
-      fwrite(&geometry_infos->primitive_count, sizeof(geometry_infos->primitive_count), 1, output);
+      fwrite(&geometry_infos[i].primitive_count, sizeof(geometry_infos[i].primitive_count), 1, output);
 
    fwrite(name, strlen(name), 1, output);
 

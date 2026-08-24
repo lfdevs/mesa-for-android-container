@@ -16,6 +16,7 @@ enum mtl_sampler_address_mode;
 enum mtl_sampler_border_color;
 enum mtl_sampler_min_mag_filter;
 enum mtl_sampler_mip_filter;
+enum mtl_sampler_reduction_mode;
 enum mtl_compare_function;
 enum mtl_winding;
 enum mtl_cull_mode;
@@ -32,6 +33,7 @@ enum VkSamplerAddressMode;
 enum VkBorderColor;
 enum VkFilter;
 enum VkSamplerMipmapMode;
+enum VkSamplerReductionMode;
 enum VkCompareOp;
 enum VkFrontFace;
 enum VkCullModeFlagBits;
@@ -67,6 +69,10 @@ vk_filter_to_mtl_sampler_min_mag_filter(enum VkFilter filter);
 
 enum mtl_sampler_mip_filter
 vk_sampler_mipmap_mode_to_mtl_sampler_mip_filter(enum VkSamplerMipmapMode mode);
+
+enum mtl_sampler_reduction_mode
+vk_sampler_reduction_mode_to_mtl_sampler_reduction_mode(
+   enum VkSamplerReductionMode mode);
 
 enum mtl_compare_function
 vk_compare_op_to_mtl_compare_function(enum VkCompareOp op);

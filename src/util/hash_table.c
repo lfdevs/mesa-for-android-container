@@ -245,6 +245,40 @@ _mesa_hash_table_copy(struct hash_table *dst, struct hash_table *src,
    return true;
 }
 
+/* Clone src into an initialized dst while retaining dst's backing storage.
+ * Both tables must use the same callbacks. Existing dst entries are discarded
+ * without calling a delete function. Returns false if growing dst fails.
+ */
+bool
+_mesa_hash_table_clone_into(struct hash_table *dst, struct hash_table *src)
+{
+   assert(dst != src);
+   assert(dst->table != NULL);
+   assert(src->table != NULL);
+   assert(dst->key_hash_function == src->key_hash_function);
+   assert(dst->key_equals_function == src->key_equals_function);
+   assert(dst->table_destructor == src->table_destructor);
+
+   if (dst->size < src->size) {
+      void *mem_ctx = dst->mem_ctx;
+      _mesa_hash_table_fini(dst, NULL);
+      return _mesa_hash_table_copy(dst, src, mem_ctx);
+   } else if (dst->size == src->size) {
+      memcpy(dst->table, src->table,
+             src->size * sizeof(struct hash_entry));
+      dst->entries = src->entries;
+      dst->deleted_entries = src->deleted_entries;
+   } else {
+      _mesa_hash_table_clear(dst, NULL);
+      hash_table_foreach(src, entry) {
+         _mesa_hash_table_insert_pre_hashed(dst, entry->hash,
+                                            entry->key, entry->data);
+      }
+   }
+
+   return true;
+}
+
 /* It's preferred to use _mesa_hash_table_copy instead of this to skip ralloc. */
 struct hash_table *
 _mesa_hash_table_clone(struct hash_table *src, void *dst_mem_ctx)

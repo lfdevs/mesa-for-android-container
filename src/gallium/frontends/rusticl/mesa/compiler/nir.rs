@@ -307,6 +307,10 @@ impl NirShader {
         nir_pass!(self, nir_inline_functions);
     }
 
+    pub fn fully_linked(&self) -> bool {
+        unsafe { nir_shader_fully_linked(self.nir.as_ptr()) }
+    }
+
     pub fn gather_info(&mut self) {
         unsafe { nir_shader_gather_info(self.nir.as_ptr(), self.entrypoint()) }
     }
@@ -315,8 +319,17 @@ impl NirShader {
         unsafe { nir_remove_non_entrypoints(self.nir.as_ptr()) };
     }
 
-    pub fn cleanup_functions(&mut self) {
+    // This functions returns None when it detects a not fully linked nir shader.
+    pub fn cleanup_functions(self) -> Option<Self> {
+        if !self.fully_linked() {
+            return None;
+        }
+
+        // SAFETY: This is only safe to call when all remaining call instructions call into
+        //         functions with a definition, a.k.a. the shader was linked resolving all
+        //         functions.
         unsafe { nir_cleanup_functions(self.nir.as_ptr()) };
+        Some(self)
     }
 
     pub fn variables(&mut self) -> ExecListIter<'_, nir_variable> {
@@ -487,6 +500,14 @@ impl NirShader {
             let var = nir_variable_create(self.nir.as_ptr(), mode, glsl_type, name.as_ptr());
             (*var).data.location = loc.try_into().unwrap();
         }
+    }
+
+    pub fn source_hash(&self) -> &[u8] {
+        &unsafe { self.nir.as_ref() }.info.source_blake3
+    }
+
+    pub fn has_function(&self, name: &CStr) -> bool {
+        unsafe { !nir_shader_get_function_for_name(self.nir.as_ptr(), name.as_ptr()).is_null() }
     }
 }
 

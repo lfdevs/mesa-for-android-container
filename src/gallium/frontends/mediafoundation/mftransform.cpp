@@ -442,17 +442,10 @@ CDX12EncHMFT::OnInputTypeChanged()
       CHECKHR_GOTO( hr, done );
    }
 
-   // when input type changes, clear m_spVideoSampleAllocator so we can recreate it later.
-   if( m_spVideoSampleAllocator )
-   {
-      m_spVideoSampleAllocator->UninitializeSampleAllocator();
-      m_spVideoSampleAllocator = nullptr;
-   }
-
 done:
    if( hr != S_OK )
    {
-      CleanupEncoder();
+      CleanupEncoder( true );
    }
    return hr;
 }
@@ -548,7 +541,7 @@ CDX12EncHMFT::OnOutputTypeChanged()
 
    if( bResolutionChange )
    {
-      CleanupEncoder();
+      CleanupEncoder( true );
    }
 
    if( m_gpuFeatureFlags.m_bDisableAsync )
@@ -644,7 +637,7 @@ CDX12EncHMFT::OnDrain()
    std::unique_lock<std::mutex> lock( m_lock );
    m_bDraining = true;
 
-   if( m_EncodingQueue.unsafe_size() )
+   if( m_EncodingQueue.unsafe_size() || m_bProcessDX12Context )
    {
       m_eventHaveInput.set();
       lock.unlock();
@@ -668,7 +661,7 @@ CDX12EncHMFT::OnFlush()
    m_bFlushing = true;
    m_bDraining = true;
 
-   if( m_EncodingQueue.unsafe_size() )
+   if( m_EncodingQueue.unsafe_size() || m_bProcessDX12Context )
    {
       m_eventHaveInput.set();
       lock.unlock();
@@ -822,7 +815,6 @@ CalculateMaxOutputBitstreamSize( UINT uiWidth, UINT uiHeight, enum pipe_format f
 
    const UINT MIN_BUFFER_SIZE = 128 * 128 * 2;       // Minimum buffer size for very small frames: 128x128 pixels at 2 bytes/pixel
    const UINT MAX_BUFFER_SIZE = 20 * 1024 * 1024;    // Maximum buffer size of 20MB
-   const float EXPECTED_COMPRESSION_FACTOR = 2.0f;   // Assume 50% of calculated size after compression of raw pixel sizes
 
    UINT alignedWidth = ( uiWidth + 15 ) & ~15;
    UINT alignedHeight = ( uiHeight + 15 ) & ~15;
@@ -846,9 +838,6 @@ CalculateMaxOutputBitstreamSize( UINT uiWidth, UINT uiHeight, enum pipe_format f
          bufferSize = ( ( ( alignedHeight ) * ( alignedWidth ) * 15 ) >> 3 );
          break;
    }
-
-   // Apply EXPECTED_COMPRESSION_FACTOR constant (% of calculated size)
-   bufferSize = static_cast<UINT>( std::ceil( bufferSize / EXPECTED_COMPRESSION_FACTOR ) );
 
    // Clamp buffer size between minimum and maximum limits
    bufferSize = std::max( MIN_BUFFER_SIZE, std::min( bufferSize, MAX_BUFFER_SIZE ) );
@@ -911,7 +900,6 @@ CDX12EncHMFT::InitializeEncoder( pipe_video_profile videoProfile, UINT32 Width, 
       encoderSettings.profile = videoProfile;
       encoderSettings.level = m_uiLevel;
       encoderSettings.entrypoint = PIPE_VIDEO_ENTRYPOINT_ENCODE;
-      encoderSettings.chroma_format = ConvertAVEncVProfileToPipeVideoChromaFormat( m_uiProfile, m_Codec );
       encoderSettings.width = Width;
       encoderSettings.height = Height;
       encoderSettings.max_references = m_uiMaxNumRefFrame;
@@ -995,19 +983,27 @@ done:
 
 // internal function to clean up adn destroy the encoder
 void
-CDX12EncHMFT::CleanupEncoder( void )
+CDX12EncHMFT::CleanupEncoder( bool apiLocked )
 {
    if( m_hThread )
    {
       m_bExitThread = true;
       m_eventHaveInput.set();
-      WaitForSingleObject( m_hThread, INFINITE );
+      if (apiLocked) {
+         m_lock.unlock();
+         WaitForSingleObject( m_hThread, INFINITE );
+         m_lock.lock();
+      } else {
+         WaitForSingleObject( m_hThread, INFINITE );
+      }
       m_eventHaveInput.reset();
       CloseHandle( m_hThread );
       m_hThread = NULL;
       m_dwThreadId = 0;
       m_bExitThread = false;
    }
+
+   ReleaseAllocators();
 
    if( m_pPipeFenceHandle )
    {
@@ -1270,8 +1266,7 @@ CDX12EncHMFT::ProcessSliceBitstreamZeroCopy( LPDX12EncodeContext pDX12EncodeCont
    // Create IMFMediaBuffer from the D3D12Resource (zero-copy)
    spMediaBuffer.Attach(
       new CD3D12BitstreamMFBuffer( this,
-                                   m_pPipeContext,
-                                   pDX12EncodeContext->pOutputBitRes[slice_idx],
+                                   pDX12EncodeContext->spOutputBitResourceHolders[slice_idx].Get(),
                                    static_cast<DWORD>( total_slice_size ),
                                    static_cast<DWORD>( mfsample_codec_unit_metadata[0 /*offset to first NAL*/].offset ) ) );
    return true;
@@ -1465,6 +1460,7 @@ CDX12EncHMFT::FinalizeAndEmitOutputSample( LPDX12EncodeContext pDX12EncodeContex
 
 HRESULT
 CDX12EncHMFT::ProcessDX12EncodeContext( CDX12EncHMFT *pThis,
+                                        bool bFlushing,
                                         LPDX12EncodeContext pDX12EncodeContext,
                                         pipe_enc_feedback_metadata &metadata,
                                         DWORD &dwReceivedInput,
@@ -1481,7 +1477,7 @@ CDX12EncHMFT::ProcessDX12EncodeContext( CDX12EncHMFT *pThis,
 
       // If sliced fences supported, we asynchronously copy here every slice as it is ready
       // Otherwise, let's copy all the sliced together here after full frame completion (see below)
-      if( !pThis->m_bFlushing &&
+      if( !bFlushing &&
           ( pDX12EncodeContext->sliceNotificationMode == D3D12_VIDEO_ENCODER_COMPRESSED_BITSTREAM_NOTIFICATION_MODE_SUBREGIONS ) )
       {
          //
@@ -1578,33 +1574,6 @@ CDX12EncHMFT::ProcessDX12EncodeContext( CDX12EncHMFT *pThis,
             pendingMetadata.reserve( 16 );
             uint32_t actual_slice_count = 0;
 
-            struct HandleCloser
-            {
-               void operator()( void *h )
-               {
-                  if( h )
-                     CloseHandle( h );
-               }
-            };
-
-            std::unique_ptr<void, HandleCloser> lastSliceFenceEvent(
-               pThis->m_pPipeContext->screen->fence_get_win32_event( pThis->m_pPipeContext->screen,
-                                                                     pDX12EncodeContext->pLastSliceFence ) );
-            assert( lastSliceFenceEvent );
-
-            // Pre-create all slice fence events to avoid per-iteration
-            // CreateEvent+SetEventOnCompletion kernel round-trips
-            // and so we don't wait between each WaitForMultipleObjects to create the next event
-            std::vector<std::unique_ptr<void, HandleCloser>> sliceFenceEvents;
-            sliceFenceEvents.reserve( num_slice_buffers );
-            for( uint32_t i = 0; i < num_slice_buffers; i++ )
-            {
-               sliceFenceEvents.emplace_back(
-                  pThis->m_pPipeContext->screen->fence_get_win32_event( pThis->m_pPipeContext->screen,
-                                                                        pDX12EncodeContext->pSliceFences[i] ) );
-               assert( sliceFenceEvents[i] );
-            }
-
             for( uint32_t slice_idx = 0; slice_idx < num_slice_buffers; slice_idx++ )
             {
                // Wait for the current slice fence to complete, using pLastSliceFence as a short-circuit.
@@ -1615,13 +1584,15 @@ CDX12EncHMFT::ProcessDX12EncodeContext( CDX12EncHMFT *pThis,
                // auto slice mode). pLastSliceFence acts as a "cancel token" to exit the wait loop when all actual slices are
                // ready to process.
                //
-               // Use WaitForMultipleObjects to block until either fence signals
+               // Use fence_wait_multiple to block until either fence signals
                //
 
-               HANDLE fenceEvents[2] = { sliceFenceEvents[slice_idx].get(), lastSliceFenceEvent.get() };
-               DWORD waitResult = WaitForMultipleObjects( 2, fenceEvents, FALSE /* bWaitAll */, INFINITE );
+               pipe_fence_handle *fences[] = {pDX12EncodeContext->pSliceFences[slice_idx], pDX12EncodeContext->pLastSliceFence};
+               HMFT_ETW_EVENT_START( "GPUSliceFenceWaitMultiple", pThis );
+               const int firstCompletedFenceIdx = pThis->m_pPipeContext->screen->fence_wait_multiple( pThis->m_pPipeContext->screen, fences, 2, false);
+               HMFT_ETW_EVENT_STOP( "GPUSliceFenceWaitMultiple", pThis );
 
-               if( waitResult == WAIT_OBJECT_0 + 0 /* slice fence signaled */ )
+               if( firstCompletedFenceIdx == 0 /* slice fence signaled */ )
                {
                   //
                   // The current slice_idx fence is completed - process this slice
@@ -1659,7 +1630,7 @@ CDX12EncHMFT::ProcessDX12EncodeContext( CDX12EncHMFT *pThis,
 
                   actual_slice_count++;
                }
-               else if( waitResult == WAIT_OBJECT_0 + 1 /* last slice fence signaled */ )
+               else if( firstCompletedFenceIdx == 1 /* last slice fence signaled */ )
                {
                   //
                   // If pLastSliceFence is completed but the slice_idx fence didn't, it means this pSliceFences slot
@@ -1669,19 +1640,15 @@ CDX12EncHMFT::ProcessDX12EncodeContext( CDX12EncHMFT *pThis,
                }
                else
                {
-                  // Unexpected WaitForMultipleObjects result on waitResult
-                  DWORD lastError = GetLastError();
-                  debug_printf( "[dx12 hmft 0x%p] WaitForMultipleObjects failed for slice %" PRIu32 " (result=0x%" PRIx32
-                                ", GetLastError=0x%" PRIx32 ")\n",
+                  // Unexpected fence completion result
+                  debug_printf( "[dx12 hmft 0x%p] fence_wait_multiple failed for slice %" PRIu32 " (result=%d)\n",
                                 pThis,
                                 slice_idx,
-                                static_cast<uint32_t>( waitResult ),
-                                static_cast<uint32_t>( lastError ) );
-                  MFE_ERROR( "[dx12 hmft 0x%p] WaitForMultipleObjects failed for slice %u (result=0x%x, GetLastError=0x%x)",
+                                firstCompletedFenceIdx );
+                  MFE_ERROR( "[dx12 hmft 0x%p] fence_wait_multiple failed for slice %u (result=%d)",
                              pThis,
                              slice_idx,
-                             static_cast<uint32_t>( waitResult ),
-                             static_cast<uint32_t>( lastError ) );
+                             firstCompletedFenceIdx );
                   assert( false );
                   hr = E_FAIL;
                   break;
@@ -1905,14 +1872,18 @@ CDX12EncHMFT::xThreadProc( void *pCtx )
          CloseHandle( fence_handle );
 
          {
+            bool bFlushing = pThis->m_bFlushing;
+            pThis->m_bProcessDX12Context = true;
             apiLock.unlock();
             HRESULT hr = pThis->ProcessDX12EncodeContext( pThis,
+                                                          bFlushing,
                                                           pDX12EncodeContext,
                                                           metadata,
                                                           dwReceivedInput,
                                                           ResolveStatsCompletionFenceValue,
                                                           encoded_bitstream_bytes );
             apiLock.lock();
+            pThis->m_bProcessDX12Context = false;
             if( FAILED( hr ) )
             {
                pThis->QueueEvent( MEError, GUID_NULL, E_FAIL, nullptr );
@@ -1964,8 +1935,7 @@ CDX12EncHMFT::xThreadProc( void *pCtx )
 
             // Create IMFMediaBuffer from the D3D12Resource (zero-copy)
             spMemoryBuffer.Attach( new CD3D12BitstreamMFBuffer( pThis,
-                                                                pThis->m_pPipeContext,
-                                                                pDX12EncodeContext->pOutputBitRes[0],
+                                                                pDX12EncodeContext->spOutputBitResourceHolders[0].Get(),
                                                                 static_cast<DWORD>( encoded_bitstream_bytes ),
                                                                 static_cast<DWORD>( metadata.codec_unit_metadata[0].offset ) ) );
 
@@ -2297,7 +2267,7 @@ CDX12EncHMFT::SetOutputType( DWORD dwOutputStreamIndex, IN IMFMediaType *pType, 
 
    if( !pType )
    {
-      CleanupEncoder();
+      CleanupEncoder( true );
       m_spOutputType.Reset();
       goto done;
    }
@@ -2530,7 +2500,7 @@ CDX12EncHMFT::ProcessMessage( MFT_MESSAGE_TYPE eMessage, ULONG_PTR ulParam )
       case MFT_MESSAGE_SET_D3D_MANAGER:
       {
          std::lock_guard<std::mutex> lock( m_lock );
-         CleanupEncoder();
+         CleanupEncoder( true );
          CHECKHR_GOTO( xOnSetD3DManager( ulParam ), done );
          if( m_pPipeContext )
          {

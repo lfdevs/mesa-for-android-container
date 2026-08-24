@@ -55,12 +55,22 @@ brw_emit_single_fb_write(brw_shader &s, const brw_builder &bld,
 }
 
 static void
-brw_do_emit_fb_writes(brw_shader &s, int nr_color_regions, bool replicate_alpha)
+brw_emit_fb_writes(brw_shader &s)
 {
+   assert(s.stage == MESA_SHADER_FRAGMENT);
+   brw_fs_prog_key *key = (brw_fs_prog_key*) s.key;
    const brw_builder bld = brw_builder(&s);
 
+   /* ANV doesn't know about sample mask output during the wm key creation
+    * so we compute if we need replicate alpha and emit alpha to coverage
+    * workaround here.
+    */
+   const bool replicate_alpha = key->alpha_test_replicate_alpha ||
+      (key->nr_color_regions > 1 && key->alpha_to_coverage &&
+       s.sample_mask.file == BAD_FILE);
+
    brw_fb_write_inst *write = NULL;
-   for (int target = 0; target < nr_color_regions; target++) {
+   for (int target = 0; target < key->nr_color_regions; target++) {
       /* Skip over outputs that weren't written, unless dual source
        * blending is at play. The results may be undefined depending
        * on the blending settings, but that's what the user signed
@@ -115,24 +125,6 @@ brw_do_emit_fb_writes(brw_shader &s, int nr_color_regions, bool replicate_alpha)
       write->eot = true;
    }
 }
-
-static void
-brw_emit_fb_writes(brw_shader &s)
-{
-   assert(s.stage == MESA_SHADER_FRAGMENT);
-   brw_fs_prog_key *key = (brw_fs_prog_key*) s.key;
-
-   /* ANV doesn't know about sample mask output during the wm key creation
-    * so we compute if we need replicate alpha and emit alpha to coverage
-    * workaround here.
-    */
-   const bool replicate_alpha = key->alpha_test_replicate_alpha ||
-      (key->nr_color_regions > 1 && key->alpha_to_coverage &&
-       s.sample_mask.file == BAD_FILE);
-
-   brw_do_emit_fb_writes(s, key->nr_color_regions, replicate_alpha);
-}
-
 
 /** Emits the interpolation for the varying inputs. */
 static void
@@ -381,8 +373,7 @@ brw_emit_interpolation_setup(brw_shader &s)
 
 
 /**
- * Once we've generated code, try to convert normal FS_OPCODE_FB_WRITE
- * instructions to FS_OPCODE_REP_FB_WRITE.
+ * Emit a special clear shader that uses a SIMD16 replicated data RT write.
  */
 static void
 brw_emit_repclear_shader(brw_shader &s)
@@ -390,7 +381,14 @@ brw_emit_repclear_shader(brw_shader &s)
    brw_fs_prog_key *key = (brw_fs_prog_key*) s.key;
    brw_send_inst *write = NULL;
 
-   assert(s.devinfo->ver < 20);
+   /* BSpec 47719 Replicate Data says:
+    *
+    * "Replicate Data Render Target Write message should not be used
+    *  on all projects TGL+."
+    *
+    * See 14017879046, 14017880152 for additional information.
+    */
+   assert(s.devinfo->ver < 12);
    assume(key->nr_color_regions > 0);
 
    brw_reg color_output = retype(brw_vec4_grf(127, 0), BRW_TYPE_UD);
@@ -884,6 +882,8 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
    calculate_urb_setup(devinfo, key, prog_data, shader, prev_stage_vue_map,
                        mue_map, per_primitive_offsets);
    brw_compute_flat_inputs(prog_data, shader);
+
+   prog_data->prefer_simd32 = key->prefer_simd32;
 }
 
 /* From the SKL PRM, Volume 16, Workarounds:
@@ -1324,6 +1324,9 @@ limit_fs_dispatch_width(const struct intel_device_info *devinfo,
    return limit;
 }
 
+#define INTEL_SIMD_FORCE(x) \
+   ((intel_simd_overridden & (1 << MESA_SHADER_FRAGMENT)) && INTEL_SIMD(FS, x))
+
 const unsigned *
 brw_compile_fs(const struct brw_compiler *compiler,
                struct brw_compile_fs_params *params)
@@ -1333,11 +1336,11 @@ brw_compile_fs(const struct brw_compiler *compiler,
       (const struct brw_fs_prog_key *)params->base.key;
    struct brw_fs_prog_data *prog_data =
       (struct brw_fs_prog_data *)params->base.prog_data;
-   bool allow_spilling = params->allow_spilling;
+   bool allow_spilling = true;
    const bool debug_enabled =
       brw_should_print_shader(nir, params->base.debug_flag ?
                                    params->base.debug_flag : DEBUG_WM,
-                                   params->base.source_hash);
+                                   prog_data->base.source_hash);
 
    brw_prog_data_init(&prog_data->base, &params->base);
 
@@ -1358,9 +1361,11 @@ brw_compile_fs(const struct brw_compiler *compiler,
    brw_nir_apply_key(pt, &key->base, max_subgroup_size);
 
    if (brw_nir_fragment_shader_needs_wa_18019110168(devinfo, key->mesh_input, nir)) {
-      if (params->mue_map && params->mue_map->wa_18019110168_active) {
-         brw_nir_frag_convert_attrs_prim_to_vert(
-            nir, params->mue_map->per_primitive_offsets);
+      if (params->mue_map) {
+         if (params->mue_map->wa_18019110168_active) {
+            brw_nir_frag_convert_attrs_prim_to_vert(
+               nir, params->mue_map->per_primitive_offsets);
+         }
       } else {
          BRW_NIR_PASS(brw_nir_frag_convert_attrs_prim_to_vert_indirect,
                       devinfo, params);
@@ -1435,8 +1440,13 @@ brw_compile_fs(const struct brw_compiler *compiler,
    const unsigned reqd_dispatch_width = brw_required_dispatch_width(&nir->info);
    assert(reqd_dispatch_width == 0 || reqd_dispatch_width == 16);
 
-   const unsigned dispatch_width_limit =
-      limit_fs_dispatch_width(devinfo, nir, key);
+   unsigned min_dispatch_width = devinfo->ver < 20 ? 8 : 16;
+   unsigned max_dispatch_width = limit_fs_dispatch_width(devinfo, nir, key);
+
+   if (reqd_dispatch_width) {
+      assert(reqd_dispatch_width == 16);
+      min_dispatch_width = max_dispatch_width = reqd_dispatch_width;
+   }
 
    std::unique_ptr<brw_shader> v8, v16, v32, vmulti;
    float throughput = 0;
@@ -1455,7 +1465,7 @@ brw_compile_fs(const struct brw_compiler *compiler,
       .archiver                = params->base.archiver,
    };
 
-   if (devinfo->ver < 20) {
+   if (min_dispatch_width == 8) {
       brw_shader_params shader_params = base_shader_params;
       shader_params.dispatch_width = 8;
       shader_params.num_polygons   = 1;
@@ -1484,8 +1494,6 @@ brw_compile_fs(const struct brw_compiler *compiler,
    }
 
    if (compiler->optimistic_simd_heuristic) {
-      unsigned max_dispatch_width = reqd_dispatch_width ? reqd_dispatch_width : 32;
-
       if (max_polygons >= 2 && !key->coarse_pixel) {
          if (max_polygons >= 4 && max_dispatch_width >= 32 &&
              4 * prog_data->num_varying_inputs <= MAX_VARYING &&
@@ -1593,9 +1601,11 @@ brw_compile_fs(const struct brw_compiler *compiler,
       }
 
    } else {
-      if ((!has_spilled && dispatch_width_limit >= 16 &&
-           !beyond_threshold[1] && INTEL_SIMD(FS, 16)) ||
-          reqd_dispatch_width == 16) {
+      bool simd16_failed = false;
+
+      if (min_dispatch_width <= 16 && max_dispatch_width >= 16 &&
+          (max_dispatch_width == 16 || INTEL_SIMD_FORCE(16) ||
+           (!has_spilled && !beyond_threshold[1] && INTEL_SIMD(FS, 16)))) {
          /* Try a SIMD16 compile */
          brw_shader_params shader_params = base_shader_params;
          shader_params.dispatch_width = 16;
@@ -1608,6 +1618,7 @@ brw_compile_fs(const struct brw_compiler *compiler,
                                 "SIMD16 shader failed to compile: %s\n",
                                 v16->fail_msg);
             v16.reset();
+            simd16_failed = true;
          } else {
             assert(v16->payload().num_regs % reg_unit(devinfo) == 0);
             prog_data->dispatch_grf_start_reg_16 = v16->payload().num_regs / reg_unit(devinfo);
@@ -1621,15 +1632,12 @@ brw_compile_fs(const struct brw_compiler *compiler,
          }
       }
 
-      const bool simd16_failed = !v16;
+      if (max_dispatch_width == 32 &&
+          (INTEL_SIMD_FORCE(32) ||
+           (!has_spilled && !beyond_threshold[2] &&
+            !simd16_failed && INTEL_SIMD(FS, 32)))) {
+         assert(!prog_data->base.ray_queries);
 
-      /* Currently, the compiler only supports SIMD32 on SNB+ */
-      if (!has_spilled &&
-          dispatch_width_limit >= 32 &&
-          !beyond_threshold[2] &&
-          reqd_dispatch_width == 0 &&
-          !simd16_failed && INTEL_SIMD(FS, 32) &&
-          !prog_data->base.ray_queries) {
          /* Try a SIMD32 compile */
          brw_shader_params shader_params = base_shader_params;
          shader_params.dispatch_width = 32;
@@ -1645,7 +1653,8 @@ brw_compile_fs(const struct brw_compiler *compiler,
          } else {
             const brw_performance &perf = v32->performance_analysis.require();
 
-            if (!INTEL_DEBUG(DEBUG_DO32) && throughput >= perf.throughput) {
+            if (!INTEL_SIMD_FORCE(32) && !key->prefer_simd32 &&
+                throughput >= perf.throughput) {
                brw_shader_perf_log(compiler, params->base.log_data,
                                    "SIMD32 shader inefficient\n");
                v32.reset();
@@ -1665,9 +1674,10 @@ brw_compile_fs(const struct brw_compiler *compiler,
           reqd_dispatch_width == 0) {
 
          if (devinfo->ver >= 20 && max_polygons >= 4 &&
-             dispatch_width_limit >= 32 && !beyond_threshold[2] &&
+             max_dispatch_width >= 32 &&
+             (!beyond_threshold[2] || INTEL_SIMD_FORCE(4X8)) &&
              4 * prog_data->num_varying_inputs <= MAX_VARYING &&
-             INTEL_SIMD(FS, 4X8)) {
+             INTEL_SIMD_FORCE(4X8)) {
             /* Try a quad-SIMD8 compile */
             brw_shader_params shader_params = base_shader_params;
             shader_params.dispatch_width = 32;
@@ -1685,9 +1695,10 @@ brw_compile_fs(const struct brw_compiler *compiler,
          }
 
          if (!vmulti && devinfo->ver >= 20 &&
-             dispatch_width_limit >= 32 && !beyond_threshold[2] &&
+             max_dispatch_width >= 32 &&
+             (!beyond_threshold[2] || INTEL_SIMD_FORCE(4X8)) &&
              2 * prog_data->num_varying_inputs <= MAX_VARYING &&
-             INTEL_SIMD(FS, 2X16)) {
+             INTEL_SIMD_FORCE(2X16)) {
             /* Try a dual-SIMD16 compile */
             brw_shader_params shader_params = base_shader_params;
             shader_params.dispatch_width = 32;
@@ -1704,9 +1715,10 @@ brw_compile_fs(const struct brw_compiler *compiler,
             }
          }
 
-         if (!vmulti && dispatch_width_limit >= 16 && !beyond_threshold[1] &&
+         if (!vmulti && max_dispatch_width >= 16 &&
+             (!beyond_threshold[1] || INTEL_SIMD_FORCE(2X8)) &&
              2 * prog_data->num_varying_inputs <= MAX_VARYING &&
-             INTEL_SIMD(FS, 2X8)) {
+             INTEL_SIMD_FORCE(2X8)) {
             /* Try a dual-SIMD8 compile */
             brw_shader_params shader_params = base_shader_params;
             shader_params.dispatch_width = 16;
@@ -1731,19 +1743,12 @@ brw_compile_fs(const struct brw_compiler *compiler,
                                       vmulti->grf_used);
    }
 
-   /* When the caller compiles a repclear or fast clear shader, they
-    * want SIMD16-only.
-    */
-   if (reqd_dispatch_width == 16)
-      v8.reset();
-
    brw_to_binary_params to_binary_params = {
       .compiler = compiler,
       .params = &params->base,
       .prog_data = &prog_data->base,
    };
 
-   uint32_t max_dispatch_width = 0;
    unsigned num_variants = 0;
 
    if (vmulti) {

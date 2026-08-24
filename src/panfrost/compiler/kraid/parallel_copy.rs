@@ -4,13 +4,14 @@
 use crate::builder::*;
 use crate::ir::*;
 use crate::ops::*;
+use crate::ssa_value::AllocSSA;
 use compiler::bitset::BitSet;
 use std::ops::Range;
 
 const MAX_COPY_SIZE_LOG2: u32 = 3; // COPY.i64 is the maximum
 const MAX_COPY_SIZE: u8 = 1 << MAX_COPY_SIZE_LOG2;
 
-fn copy(b: &mut impl Builder, dst_b: Range<u16>, src_b: Range<u16>) {
+fn copy_regs(b: &mut impl Builder, dst_b: Range<u16>, src_b: Range<u16>) {
     let bytes = dst_b.end - dst_b.start;
     debug_assert_eq!(src_b.end - src_b.start, bytes);
     debug_assert!(bytes <= u16::from(MAX_COPY_SIZE));
@@ -24,7 +25,7 @@ fn copy(b: &mut impl Builder, dst_b: Range<u16>, src_b: Range<u16>) {
 }
 
 fn imm_u8(b: &mut impl Builder, shift: u8) -> Src {
-    for sc in b.model().small_constants() {
+    for sc in &b.model().fau().small_constants {
         for b in 0..4 {
             if shift == ((sc.imm32 >> (b * 8)) as u8) {
                 return Src::from(FAURef::from(sc)).byte(b);
@@ -34,7 +35,7 @@ fn imm_u8(b: &mut impl Builder, shift: u8) -> Src {
     panic!("Failed to find small constant for shift: {shift}");
 }
 
-fn xor(b: &mut impl Builder, dst_b: Range<u16>, src_b: Range<u16>) {
+fn xor_regs(b: &mut impl Builder, dst_b: Range<u16>, src_b: Range<u16>) {
     let bytes = dst_b.end - dst_b.start;
     debug_assert_eq!(src_b.end - src_b.start, bytes);
     debug_assert!(bytes <= u16::from(MAX_COPY_SIZE));
@@ -76,8 +77,14 @@ fn xor(b: &mut impl Builder, dst_b: Range<u16>, src_b: Range<u16>) {
 
         let dst = RegRef::from_byte_range(dst_b).unwrap();
         let src = RegRef::from_byte_range(src_b).unwrap();
-        let mut src2 = Src::from(dst);
-        src2.swizzle = Swizzle::NONE;
+
+        // src2 isn't allowed to have a swizzle so we need to expand it out to
+        // a full register.  It lines up with dst so the mask will take care of
+        // selecting the right half
+        let mut src2 = dst;
+        if bytes < 4 {
+            src2.range = RegRange::Regs(1);
+        }
 
         b.push_op(OpShiftLop {
             dst: dst.into(),
@@ -86,16 +93,70 @@ fn xor(b: &mut impl Builder, dst_b: Range<u16>, src_b: Range<u16>) {
             logic_op: LogicOp::Xor,
             not_result: false,
             src0: src.into(),
-            shift: Src::imm_u8(0),
-            src2,
+            shift: 0_u8.into(),
+            src2: src2.into(),
         });
     }
 }
 
-fn swap(b: &mut impl Builder, dst_b: Range<u16>, src_b: Range<u16>) {
-    xor(b, dst_b.clone(), src_b.clone());
-    xor(b, src_b.clone(), dst_b.clone());
-    xor(b, dst_b.clone(), src_b.clone());
+fn swap_regs(b: &mut impl Builder, dst_b: Range<u16>, src_b: Range<u16>) {
+    xor_regs(b, dst_b.clone(), src_b.clone());
+    xor_regs(b, src_b.clone(), dst_b.clone());
+    xor_regs(b, dst_b.clone(), src_b.clone());
+}
+
+fn tls_ptr(b: &impl Builder) -> FAURef {
+    b.model()
+        .fau()
+        .special(SpecialFAU::ThreadLocalPointer)
+        .unwrap()
+}
+
+fn copy_mem<A: AllocSSA>(
+    b: &mut impl Builder,
+    ssa_alloc: &mut A,
+    dst_b: Range<u16>,
+    src_b: Range<u16>,
+) {
+    let bytes = dst_b.end - dst_b.start;
+    debug_assert_eq!(src_b.end - src_b.start, bytes);
+    debug_assert!(bytes <= u16::from(MAX_COPY_SIZE));
+    let bytes = u8::try_from(bytes).unwrap();
+    let data_type = DataType::i(bytes * 8);
+
+    let dst = MemRef::from_byte_range(dst_b).unwrap();
+    let src = MemRef::from_byte_range(src_b).unwrap();
+    let tmp = ssa_alloc.alloc_ref((bytes * 8).into());
+
+    b.copy_to(tmp.clone().into(), data_type, src.into());
+    b.copy_to(dst.into(), data_type, tmp.into());
+}
+
+// For memory swaps, we limit the max size to 4B so we can do a swap with
+// only two registers.
+const MAX_MEM_SWAP_SIZE: u8 = MAX_COPY_SIZE / 2;
+
+fn swap_mem<A: AllocSSA>(
+    b: &mut impl Builder,
+    ssa_alloc: &mut A,
+    dst_b: Range<u16>,
+    src_b: Range<u16>,
+) {
+    let bytes = dst_b.end - dst_b.start;
+    debug_assert_eq!(src_b.end - src_b.start, bytes);
+    debug_assert!(bytes <= u16::from(MAX_COPY_SIZE));
+    let bytes = u8::try_from(bytes).unwrap();
+    let data_type = DataType::i(bytes * 8);
+
+    let dst = MemRef::from_byte_range(dst_b).unwrap();
+    let src = MemRef::from_byte_range(src_b).unwrap();
+    let x = ssa_alloc.alloc_ref((bytes * 8).into());
+    let y = ssa_alloc.alloc_ref((bytes * 8).into());
+
+    b.copy_to(x.clone().into(), data_type, src.clone().into());
+    b.copy_to(y.clone().into(), data_type, dst.clone().into());
+    b.copy_to(dst.into(), data_type, x.into());
+    b.copy_to(src.into(), data_type, y.into());
 }
 
 #[derive(Clone)]
@@ -200,6 +261,7 @@ impl std::ops::IndexMut<u16> for ByteArr {
 
 pub struct ParallelCopy<'a> {
     model: &'a dyn Model,
+    is_mem: bool,
     #[cfg(debug_assertions)]
     dst_bytes: BitSet<usize>,
     max_b: u16,
@@ -208,9 +270,10 @@ pub struct ParallelCopy<'a> {
 }
 
 impl ParallelCopy<'_> {
-    pub fn new(model: &dyn Model) -> ParallelCopy<'_> {
+    pub fn new(model: &dyn Model, is_mem: bool) -> ParallelCopy<'_> {
         ParallelCopy {
             model,
+            is_mem,
             #[cfg(debug_assertions)]
             dst_bytes: Default::default(),
             max_b: 0,
@@ -220,8 +283,12 @@ impl ParallelCopy<'_> {
     }
 
     #[cfg(debug_assertions)]
-    fn validate_copy(&mut self, dst: &RegRef, src: &Src) {
-        let dst_b = dst.byte_range();
+    fn validate_copy(&mut self, dst: &Dst, src: &Src) {
+        let dst_b = match dst.dst_ref {
+            DstRef::Reg(reg) => reg.byte_range(),
+            DstRef::Mem(mem) => mem.byte_range(),
+            _ => panic!("Cannot copy to nothing"),
+        };
 
         // Validate that they don't overlap
         let dst_b = dst_b.start.into()..dst_b.end.into();
@@ -246,33 +313,45 @@ impl ParallelCopy<'_> {
         }
     }
 
-    pub fn add_copy(&mut self, dst: RegRef, src: Src) {
+    pub fn add_copy(&mut self, dst: Dst, src: Src) {
         #[cfg(debug_assertions)]
         self.validate_copy(&dst, &src);
 
-        if let SrcRef::Reg(src) = &src.src_ref {
-            let dst_b = dst.byte_range();
-            let src_b = src.byte_range();
-            self.max_b = self.max_b.max(src_b.end).max(dst_b.end);
-            self.copies.push(ByteCopy::from_bytes(dst_b, src_b));
-        } else {
-            // Technically, this does work since we won't be overwriting said
-            // SSA value.  However, if it ever does, it's a bug somewhere.
-            debug_assert!(src.src_ref.as_ssa().is_none());
-
-            // These copies have a constant source (such as an immediate or
-            // FAU) so we can do them all at the end without having to add them
-            // to the parallel copy.
-            let bytes = dst.bytes();
-            self.const_copies.push(Instr::from(OpCopy {
-                dst: dst.into(),
-                dst_type: DataType::i(bytes * 8),
-                src,
-            }));
+        match &src.src_ref {
+            SrcRef::Reg(src) => {
+                assert!(!self.is_mem);
+                let dst = dst.dst_ref.as_reg().unwrap();
+                let dst_b = dst.byte_range();
+                let src_b = src.byte_range();
+                self.max_b = self.max_b.max(src_b.end).max(dst_b.end);
+                self.copies.push(ByteCopy::from_bytes(dst_b, src_b));
+            }
+            SrcRef::Mem(src) => {
+                assert!(self.is_mem);
+                let dst = dst.dst_ref.as_mem().unwrap();
+                let dst_b = dst.byte_range();
+                let src_b = src.byte_range();
+                self.max_b = self.max_b.max(src_b.end).max(dst_b.end);
+                self.copies.push(ByteCopy::from_bytes(dst_b, src_b));
+            }
+            _ => {
+                // These copies have a constant source (such as an immediate or
+                // FAU) so we can do them all at the end without having to add
+                // them to the parallel copy.
+                let bytes = dst.dst_ref.bytes_written();
+                self.const_copies.push(Instr::from(OpCopy {
+                    dst,
+                    dst_type: DataType::i(bytes * 8),
+                    src,
+                }));
+            }
         }
     }
 
-    pub fn into_instrs(mut self) -> impl Iterator<Item = Instr> + use<> {
+    pub fn into_instrs<A: AllocSSA>(
+        mut self,
+        mut ssa_alloc: Option<&mut A>,
+    ) -> impl Iterator<Item = Instr> + use<A> {
         if self.copies.is_empty() {
             return MappedInstrs::new()
                 .into_iter()
@@ -375,7 +454,12 @@ impl ParallelCopy<'_> {
                         }
                     }
 
-                    copy(&mut b, dst, src);
+                    if self.is_mem {
+                        let ssa_alloc = ssa_alloc.as_mut().unwrap();
+                        copy_mem::<A>(&mut b, ssa_alloc, dst, src);
+                    } else {
+                        copy_regs(&mut b, dst, src);
+                    }
 
                     dst_b += u16::from(copy_size);
                 }
@@ -423,6 +507,9 @@ impl ParallelCopy<'_> {
                 dst_b = bytes[dst_b].src_byte;
             }
             debug_assert_eq!(dst_b, start_b);
+            if self.is_mem {
+                copy_size = copy_size.min(MAX_MEM_SWAP_SIZE);
+            }
             let copy_size = u16::from(copy_size);
 
             // Now emit N - 1 swaps
@@ -433,7 +520,12 @@ impl ParallelCopy<'_> {
                 let src = src_b..(src_b + copy_size);
 
                 needed.unset_range(dst.start.into()..dst.end.into());
-                swap(&mut b, dst, src);
+                if self.is_mem {
+                    let ssa_alloc = ssa_alloc.as_mut().unwrap();
+                    swap_mem::<A>(&mut b, ssa_alloc, dst, src);
+                } else {
+                    swap_regs(&mut b, dst, src);
+                }
 
                 dst_b = src_b;
             }

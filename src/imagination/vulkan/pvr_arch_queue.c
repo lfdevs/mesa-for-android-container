@@ -62,6 +62,19 @@
 #include "vk_sync_dummy.h"
 #include "vk_util.h"
 
+static inline enum pvr_winsys_ctx_priority
+pvr_winsys_from_vk_queue_priority(const VkQueueGlobalPriority priority)
+{
+   switch (priority) {
+   case VK_QUEUE_GLOBAL_PRIORITY_LOW:
+      return PVR_WINSYS_CTX_PRIORITY_LOW;
+   case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM:
+      return PVR_WINSYS_CTX_PRIORITY_MEDIUM;
+   default:
+      UNREACHABLE("Invalid queue global priority.");
+   }
+}
+
 static VkResult pvr_driver_queue_submit(struct vk_queue *queue,
                                         struct vk_queue_submit *submit);
 
@@ -76,6 +89,18 @@ static VkResult pvr_queue_init(struct pvr_device *device,
    struct pvr_render_ctx *gfx_ctx;
    VkResult result;
 
+   const VkDeviceQueueGlobalPriorityCreateInfo *gp =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO);
+
+   const VkQueueGlobalPriority global_priority =
+      gp ? gp->globalPriority : VK_QUEUE_GLOBAL_PRIORITY_MEDIUM;
+
+   if (global_priority == VK_QUEUE_GLOBAL_PRIORITY_REALTIME ||
+       global_priority == VK_QUEUE_GLOBAL_PRIORITY_HIGH) {
+      return VK_ERROR_NOT_PERMITTED;
+   }
+
    *queue = (struct pvr_queue){ 0 };
 
    result =
@@ -89,27 +114,31 @@ static VkResult pvr_queue_init(struct pvr_device *device,
          goto err_vk_queue_finish;
    }
 
-   result = pvr_arch_transfer_ctx_create(device,
-                                         PVR_WINSYS_CTX_PRIORITY_MEDIUM,
-                                         &transfer_ctx);
+   result = pvr_arch_transfer_ctx_create(
+      device,
+      pvr_winsys_from_vk_queue_priority(global_priority),
+      &transfer_ctx);
    if (result != VK_SUCCESS)
       goto err_vk_queue_finish;
 
-   result = pvr_arch_compute_ctx_create(device,
-                                        PVR_WINSYS_CTX_PRIORITY_MEDIUM,
-                                        &compute_ctx);
+   result = pvr_arch_compute_ctx_create(
+      device,
+      pvr_winsys_from_vk_queue_priority(global_priority),
+      &compute_ctx);
    if (result != VK_SUCCESS)
       goto err_transfer_ctx_destroy;
 
-   result = pvr_arch_compute_ctx_create(device,
-                                        PVR_WINSYS_CTX_PRIORITY_MEDIUM,
-                                        &query_ctx);
+   result = pvr_arch_compute_ctx_create(
+      device,
+      pvr_winsys_from_vk_queue_priority(global_priority),
+      &query_ctx);
    if (result != VK_SUCCESS)
       goto err_compute_ctx_destroy;
 
-   result = pvr_arch_render_ctx_create(device,
-                                       PVR_WINSYS_CTX_PRIORITY_MEDIUM,
-                                       &gfx_ctx);
+   result = pvr_arch_render_ctx_create(
+      device,
+      pvr_winsys_from_vk_queue_priority(global_priority),
+      &gfx_ctx);
    if (result != VK_SUCCESS)
       goto err_query_ctx_destroy;
 

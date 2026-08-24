@@ -88,12 +88,15 @@ jay_lower_spill(jay_function *func)
 
    /* We use a 32-bit strided stack: SP = scratch + (lane ID * 4) */
    unsigned disp_width = b.shader->dispatch_width;
-   jay_LANE_ID_8(&b, jay_bare_regs(UGPR, ugpr_reservation, 4));
+   jay_LANE_ID_8(&b, jay_bare_regs(UGPR, ugpr_reservation, 4), 0);
 
-   for (unsigned i = 8; i < disp_width; i *= 2) {
-      jay_ADD(&b, JAY_TYPE_U16,
-              jay_bare_regs(UGPR, ugpr_reservation + (i / 2), i / 2),
-              jay_bare_regs(UGPR, ugpr_reservation, i / 2), i);
+   if (disp_width >= 16) {
+      jay_LANE_ID_8(&b, jay_bare_regs(UGPR, ugpr_reservation + 4, 4), 8);
+   }
+
+   if (disp_width >= 32) {
+      jay_ADD(&b, JAY_TYPE_U16, jay_bare_regs(UGPR, ugpr_reservation + 8, 8),
+              jay_bare_regs(UGPR, ugpr_reservation, 8), 16);
    }
 
    jay_def lid = jay_bare_regs(UGPR, ugpr_reservation, disp_width / 2);

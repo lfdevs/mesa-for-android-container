@@ -70,6 +70,9 @@ vk_queue_init(struct vk_queue *queue, struct vk_device *device,
    if (queue->submit.mode == VK_QUEUE_SUBMIT_MODE_THREADED_ON_DEMAND)
       queue->submit.mode = VK_QUEUE_SUBMIT_MODE_IMMEDIATE;
 
+   queue->internally_synchronized =
+      pCreateInfo->flags & VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR;
+
    list_inithead(&queue->submit.submits);
 
    ret = mtx_init(&queue->submit.mutex, mtx_plain);

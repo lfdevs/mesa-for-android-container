@@ -125,14 +125,9 @@ radv_pipeline_get_shader_key(const struct radv_compiler_info *compiler_info,
       key.version = compiler_info->override_compute_shader_version;
    }
 
-   vk_pipeline_robustness_state_fill(compiler_info->device_robustness_state, &rs, pNext, stage->pNext);
+   vk_pipeline_robustness_state_fill(&compiler_info->device_robustness_state, &rs, pNext, stage->pNext);
 
    radv_set_stage_key_robustness(&rs, s, &key);
-
-   if (compiler_info->key.coop_matrix_robust_buffer_access) {
-      key.coop_matrix_storage_robustness = rs.storage_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED;
-      key.coop_matrix_uniform_robustness = rs.uniform_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED;
-   }
 
    const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo *const subgroup_size =
       vk_find_struct_const(stage->pNext, PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO);
@@ -172,8 +167,6 @@ radv_merge_shader_stage_key(struct radv_shader_stage_key *dst, const struct radv
    dst->storage_robustness2 |= src->storage_robustness2;
    dst->uniform_robustness2 |= src->uniform_robustness2;
    dst->vertex_robustness1 |= src->vertex_robustness1;
-   dst->coop_matrix_storage_robustness |= src->coop_matrix_storage_robustness;
-   dst->coop_matrix_uniform_robustness |= src->coop_matrix_uniform_robustness;
 
    dst->optimisations_disabled |= src->optimisations_disabled;
    dst->keep_statistic_info |= src->keep_statistic_info;
@@ -266,6 +259,9 @@ radv_postprocess_nir(const struct radv_compiler_info *compiler_info, const struc
    const bool use_llvm = compiler_info->key.use_llvm;
    bool progress;
 
+   if (stage->nir->info.uses_printf)
+      NIR_PASS(_, stage->nir, radv_nir_lower_printf, compiler_info->debug.debug_nir);
+
    /* Wave and workgroup size should already be filled. */
    assert(stage->info.wave_size && stage->info.workgroup_size);
 
@@ -280,8 +276,10 @@ radv_postprocess_nir(const struct radv_compiler_info *compiler_info, const struc
    radv_nir_opt_tid_function_options tid_options = {
       .use_masked_swizzle_amd = true,
       .use_dpp16_shift_amd = !use_llvm && gfx_level >= GFX8,
+      .use_quad_swap_broadcast = true,
       .use_clustered_rotate = !use_llvm,
-      .hw_subgroup_size = stage->info.wave_size,
+      .use_permute16_amd = !use_llvm && gfx_level >= GFX10,
+      .use_dpp8_swizzle_amd = !use_llvm && gfx_level >= GFX10,
       .hw_ballot_bit_size = stage->info.wave_size,
       .hw_ballot_num_comp = 1,
    };
@@ -450,11 +448,11 @@ radv_postprocess_nir(const struct radv_compiler_info *compiler_info, const struc
          .uses_discard = stage->info.ps.can_discard,
          .dcc_decompress_gfx11 = gfx_state->dcc_decompress_gfx11,
          .no_color_export = stage->info.ps.has_epilog,
-         .no_depth_export = stage->info.ps.exports_mrtz_via_epilog,
+         .no_depth_export = stage->info.ps.has_epilog,
 
       };
 
-      if (!late_options.no_color_export) {
+      if (!stage->info.ps.has_epilog) {
          late_options.dual_src_blend = gfx_state->ps.epilog.mrt0_is_dual_src;
          late_options.color_is_int8 = gfx_state->ps.epilog.color_is_int8;
          late_options.color_is_int10 = gfx_state->ps.epilog.color_is_int10;
@@ -464,15 +462,7 @@ radv_postprocess_nir(const struct radv_compiler_info *compiler_info, const struc
          late_options.spi_shader_col_format =
             gfx_state->ps.epilog.spi_shader_col_format & stage->info.ps.colors_written;
          late_options.alpha_to_one = gfx_state->ps.epilog.alpha_to_one;
-      }
-
-      if (!late_options.no_depth_export) {
-         /* Compared to gfx_state.ps.alpha_to_coverage_via_mrtz,
-          * radv_shader_info.ps.writes_mrt0_alpha need any depth/stencil/sample_mask exist.
-          * ac_nir_lower_ps() require this field to reflect whether alpha via mrtz is really
-          * present.
-          */
-         late_options.alpha_to_coverage_via_mrtz = stage->info.ps.writes_mrt0_alpha;
+         late_options.alpha_to_coverage_via_mrtz = stage->info.ps.writes_mrt0_alpha_to_mrtz;
       }
 
       NIR_PASS(_, stage->nir, ac_nir_lower_ps_late, &late_options);
@@ -981,7 +971,7 @@ radv_GetPipelineExecutableStatisticsKHR(VkDevice _device, const VkPipelineExecut
    case MESA_SHADER_FRAGMENT:
       stats.outputs += DIV_ROUND_UP(util_bitcount(shader->info.ps.colors_written), 4) + !!shader->info.ps.writes_z +
                        !!shader->info.ps.writes_stencil + !!shader->info.ps.writes_sample_mask +
-                       !!shader->info.ps.writes_mrt0_alpha;
+                       !!shader->info.ps.writes_mrt0_alpha_to_mrtz;
       break;
 
    default:

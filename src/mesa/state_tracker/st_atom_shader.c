@@ -37,6 +37,7 @@
 
 
 #include "main/mtypes.h"
+#include "main/fog.h"
 #include "main/framebuffer.h"
 #include "main/state.h"
 #include "main/texobj.h"
@@ -161,6 +162,12 @@ st_update_fp( struct st_context *st )
 
       if (fp->ati_fs) {
          key.fog = st->ctx->Fog._PackedEnabledMode;
+
+         /* When the fixed-function vertex program feeds the fog coordinate as
+          * signed eye-space Z, ATI_fragment_shader fog must take abs() of it
+          * per fragment (GL_EYE_PLANE_ABSOLUTE_NV).  See mesa #15407.
+          */
+         key.fog_coord_abs = _mesa_fog_coord_needs_deferred_abs(st->ctx);
 
          for (unsigned u = 0; u < MAX_NUM_FRAGMENT_REGISTERS_ATI; u++) {
             key.texture_index[u] = get_texture_index(st->ctx, u);

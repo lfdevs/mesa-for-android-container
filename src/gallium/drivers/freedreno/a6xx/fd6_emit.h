@@ -223,6 +223,8 @@ __event_write(fd_cs &cs, enum fd_gpu_event event,
    struct fd_gpu_event_info info = fd_gpu_events<CHIP>[event];
    unsigned len = info.needs_seqno ? 4 : 1;
 
+   assert(info.raw_event);
+
    if ((CHIP >= A7XX) && (event == FD_RB_DONE))
       len--;
 

@@ -8,5 +8,12 @@ test_undefined_structured_raw_read_typed_dxil,Fail
 test_undefined_typed_read_structured_raw_dxbc,Fail
 test_undefined_typed_read_structured_raw_dxil,Fail
 
+# This test invalidly aliases images with different formats.
+# It can be fixed by resolving the following work item.
+# https://gitlab.freedesktop.org/mesa/mesa/-/work_items/12086
+test_deferred_clears,Fail
+
 # xe 0000:00:02.0: [drm] GT0: Timedout job: seqno=4294967172, lrc_seqno=4294967172, guc_id=2, flags=0x0 in d3d12 [871]
 test_fence_pending_signal_cpu_rewind_plain,Crash
+
+test_structured_buffer_addressing_wrap,Fail

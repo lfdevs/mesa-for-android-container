@@ -93,13 +93,3 @@ dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat_s8_uint.transfer_dst_op
 dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat_s8_uint.transfer_dst_optimal.32x32x2_cq_regions_img2img_msaa,Fail
 dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat_s8_uint.transfer_dst_optimal.64x64x2_tq_img2img_msaa,Fail
 dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat_s8_uint.transfer_dst_optimal.64x64x2_tq_regions_img2img_msaa,Fail
-
-# CTS is missing -frounding-math: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6580
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.scalar.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.scalar.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec2.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec2.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec3.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec3.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec4.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec4.rte.denorm_flush.float_controls,Fail

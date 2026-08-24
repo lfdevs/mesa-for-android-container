@@ -8,3 +8,6 @@ KHR-GL46.tessellation_shader.tessellation_control_to_tessellation_evaluation.gl_
 KHR-GL46.texture_swizzle.smoke
 KHR-Single-GL46.arrays_of_arrays_gl.AtomicUsage
 KHR-Single-GL46.arrays_of_arrays_gl.AtomicDeclaration
+
+# Skip VK test on GL drivers
+vulkan@.*

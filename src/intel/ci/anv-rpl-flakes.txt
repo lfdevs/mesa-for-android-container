@@ -1,3 +1,4 @@
-
 # Maybe flaky as of CTS 1.4.4.2 -> 1.4.5.3 uprev
 dEQP-VK.video.encode.h265.resolution_change_dpb_separated_src_video_layout
+dEQP-VK.video.decode.av1.golden_frame_layered_dpb_video_layout
+dEQP-VK.video.decode.av1.golden_frame_separated_dpb_video_layout

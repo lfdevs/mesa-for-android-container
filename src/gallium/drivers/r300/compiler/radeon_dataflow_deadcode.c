@@ -65,8 +65,8 @@ or_updatemasks(struct updatemask_state *dst, struct updatemask_state *a, struct 
 static void
 push_loop(struct deadcode_state *s)
 {
-   memory_pool_array_reserve(&s->C->Pool, struct loopinfo, s->LoopStack, s->LoopStackSize,
-                             s->LoopStackReserved, 1);
+   rc_array_reserve(s->C->Pool, struct loopinfo, s->LoopStack, s->LoopStackSize,
+                    s->LoopStackReserved, 1);
    memset(&s->LoopStack[s->LoopStackSize++], 0, sizeof(struct loopinfo));
    memcpy(&s->LoopStack[s->LoopStackSize - 1].StoreEndloop, &s->R, sizeof(s->R));
 }
@@ -76,8 +76,8 @@ push_branch(struct deadcode_state *s)
 {
    struct branchinfo *branch;
 
-   memory_pool_array_reserve(&s->C->Pool, struct branchinfo, s->BranchStack, s->BranchStackSize,
-                             s->BranchStackReserved, 1);
+   rc_array_reserve(s->C->Pool, struct branchinfo, s->BranchStack, s->BranchStackSize,
+                    s->BranchStackReserved, 1);
 
    branch = &s->BranchStack[s->BranchStackSize++];
    branch->HaveElse = 0;
@@ -186,8 +186,7 @@ rc_dataflow_deadcode(struct radeon_compiler *c, void *user)
    s.C = c;
 
    nr_instructions = rc_recompute_ips(c);
-   s.Instructions =
-      memory_pool_malloc(&c->Pool, sizeof(struct instruction_state) * nr_instructions);
+   s.Instructions = linear_alloc_array(c->Pool, struct instruction_state, nr_instructions);
    memset(s.Instructions, 0, sizeof(struct instruction_state) * nr_instructions);
 
    for (struct rc_instruction *inst = c->Program.Instructions.Prev;

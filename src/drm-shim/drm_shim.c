@@ -944,3 +944,53 @@ drm_shim_platform_device_setup(const char *driver_name, const char *fullname, co
 
    free(uevent_content);
 }
+
+/* 32-bit glibc with _TIME_BITS=64 redirects callers of stat/fstat/ioctl to
+ * these symbols.  This file is built with _TIME_BITS=64 on such systems, so
+ * struct stat here already has the time64 layout.  The headers rename plain
+ * calls to the time64 names too, so bind the forwarders to the plain shim
+ * entry points explicitly by symbol name.
+ */
+extern int shim_plain_stat(const char *path, struct stat *stat_buf)
+   __asm__("stat");
+extern int shim_plain_fstat(int fd, struct stat *stat_buf) __asm__("fstat");
+extern int shim_plain_ioctl(int fd, unsigned long request, void *arg)
+   __asm__("ioctl");
+
+PUBLIC int __stat64_time64(const char *path, struct stat *stat_buf);
+PUBLIC int
+__stat64_time64(const char *path, struct stat *stat_buf)
+{
+   return shim_plain_stat(path, stat_buf);
+}
+
+PUBLIC int __fstat64_time64(int fd, struct stat *stat_buf);
+PUBLIC int
+__fstat64_time64(int fd, struct stat *stat_buf)
+{
+   return shim_plain_fstat(fd, stat_buf);
+}
+
+PUBLIC int __ioctl_time64(int fd, unsigned long request, ...);
+PUBLIC int
+__ioctl_time64(int fd, unsigned long request, ...)
+{
+   va_list args;
+   va_start(args, request);
+   void *arg = va_arg(args, void *);
+   va_end(args);
+   return shim_plain_ioctl(fd, request, arg);
+}
+
+extern int shim_plain_fcntl64(int fd, int cmd, ...) __asm__("fcntl64");
+
+PUBLIC int __fcntl_time64(int fd, int cmd, ...);
+PUBLIC int
+__fcntl_time64(int fd, int cmd, ...)
+{
+   va_list args;
+   va_start(args, cmd);
+   void *arg = va_arg(args, void *);
+   va_end(args);
+   return shim_plain_fcntl64(fd, cmd, arg);
+}

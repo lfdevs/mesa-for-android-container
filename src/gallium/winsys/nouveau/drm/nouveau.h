@@ -105,7 +105,10 @@ struct nouveau_pushbuf {
    struct nouveau_client *client;
    struct nouveau_object *channel;
    struct nouveau_bufctx *bufctx;
-   void (*kick_notify)(struct nouveau_pushbuf *);
+
+   /** Returns false on error */
+   MUST_CHECK bool (*kick_notify)(struct nouveau_pushbuf *);
+
    void *user_priv;
    uint32_t rsvd_kick;
    uint32_t flags;

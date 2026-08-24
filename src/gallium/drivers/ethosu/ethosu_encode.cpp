@@ -20,6 +20,7 @@
 #include <assert.h>
 #include "ethosu_encode_support.h"
 #include "ethosu_ml.h"
+#include "ethosu_encode.h"
 #include "mlw_encode.h"
 
 extern "C" {
@@ -60,7 +61,7 @@ ml_reorder_encode_weights(struct ethosu_subgraph *subgraph,
 {
    struct ethosu_ml_device *device = ethosu_ml_device(subgraph->base.device);
    int bit_depth = 8;
-   bool is_sparse = false;
+   bool is_sparse = operation->conv.weight_sparse;
    EthosUTraversal traversal;
    struct WeightTransformParam param;
    WeightTransformFunc transform_func = apply_zero_point_ohwi;
@@ -73,6 +74,10 @@ ml_reorder_encode_weights(struct ethosu_subgraph *subgraph,
    params.encoder_flags = MLW_ENCODE_FLAG_NONE;
    params.source_buffering_hint = 128 * 1024;
    params.realloc_func = NULL;
+
+   if (weight_cache_lookup(device, operation, input_weights,
+                           input_weights_size, weights, weights_size))
+      return;
 
    if (operation->kernel.depthwise) {
       traversal = EthosUTraversal::Depthwise;
@@ -142,6 +147,8 @@ ml_reorder_encode_weights(struct ethosu_subgraph *subgraph,
    *weights = res.encoded_data;
    res.encoded_data = NULL;
    *weights_size = res.encoded_length;
+   weight_cache_insert(device, operation, input_weights, input_weights_size,
+                       *weights, *weights_size);
    mle_free(&res);
    delete source;
 }

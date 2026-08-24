@@ -7,9 +7,9 @@
 /* Vertex shader setup for the swtcl (draw-based) path.
  *
  * NIR transforms applied before handing to the draw module:
- * 1) Secondary color output requires primary color — insert zero primary if absent.
- * 2) Any back-face color requires all 4 color outputs — insert zeros for missing ones.
- * 3) Append a generic output containing a copy of gl_Position, used as WPOS
+ * 1) Regular variants expand color outputs to satisfy r300 hardware layout rules.
+ *    FACE variants skip this because Draw consumes their synthetic back color.
+ * 2) Append a generic output containing a copy of gl_Position, used as WPOS
  *    by the hardware fragment shader.
  */
 
@@ -40,6 +40,7 @@ r300_draw_add_zero_output(nir_shader *nir, nir_builder *b, unsigned location,
     nir_variable *var = nir_variable_create(nir, nir_var_shader_out,
                                             glsl_vec4_type(), name);
     var->data.location = location;
+    var->data.driver_location = nir->num_outputs++;
     var->data.interpolation = INTERP_MODE_NOPERSPECTIVE;
     nir_store_var(b, var, nir_imm_zero(b, 4, 32), 0xf);
 }
@@ -163,9 +164,13 @@ r300_draw_init_vertex_shader(struct r300_context *r300,
     nir_shader *nir = nir_shader_clone(NULL, vs->state.ir.nir);
     ntr_fixup_varying_slots(nir, nir_var_shader_out);
 
-    NIR_PASS(_, nir, r300_nir_add_missing_color_outputs);
+    if (vs->shader->key.frontface)
+        NIR_PASS(_, nir, r300_nir_lower_frontface);
+    else
+        NIR_PASS(_, nir, r300_nir_add_missing_color_outputs);
     nir_variable *wpos_var = NULL;
-    NIR_PASS(_, nir, r300_nir_add_wpos, &wpos_var);
+    if (vs->shader->key.wpos)
+        NIR_PASS(_, nir, r300_nir_add_wpos, &wpos_var);
 
     /* Fill in the r300 rasterizer outputs and assign driver locations. */
     r300_draw_fill_vs_outputs(nir, wpos_var, vs->shader);
@@ -175,5 +180,5 @@ r300_draw_init_vertex_shader(struct r300_context *r300,
         .type = PIPE_SHADER_IR_NIR,
         .ir.nir = nir,
     };
-    vs->draw_vs = draw_create_vertex_shader(r300->draw, &new_vs);
+    vs->shader->draw_vs = draw_create_vertex_shader(r300->draw, &new_vs);
 }

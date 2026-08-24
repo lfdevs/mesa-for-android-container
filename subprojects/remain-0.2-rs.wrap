@@ -1,6 +1,6 @@
 [wrap-file]
 directory = remain-0.2.12
-source_url = https://crates.io/api/v1/crates/remain/0.2.12/download
+source_url = https://static.crates.io/crates/remain/0.2.12/download
 source_filename = remain-0.2.12.tar.gz
 source_hash = 1ad5e011230cad274d0532460c5ab69828ea47ae75681b42a841663efffaf794
 patch_directory = remain-0.2-rs

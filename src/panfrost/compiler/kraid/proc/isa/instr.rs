@@ -319,6 +319,7 @@ pub enum InstrField {
 pub struct Instr {
     pub name: String,
     pub arch: Range<u8>,
+    pub exec_unit: String,
     pub variant: Option<String>,
     pub fields: Vec<InstrField>,
     pub total_bits: u8,
@@ -346,6 +347,11 @@ impl Instr {
         let mut i = Instr {
             name,
             arch: xml.get_arch(arch.clone()),
+            exec_unit: xml
+                .attrs
+                .get("exec_unit")
+                .ok_or(err("Instruction has no exec_unit"))?
+                .to_string(),
             variant: xml.attrs.get("variant").cloned(),
             fields: Default::default(),
             total_bits: 0,

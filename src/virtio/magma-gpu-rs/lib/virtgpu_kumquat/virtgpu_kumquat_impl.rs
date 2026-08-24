@@ -13,9 +13,9 @@ use crate::util::Event;
 use crate::util::Handle;
 use crate::util::IntoRawDescriptor;
 use crate::util::MemoryMapping;
-use crate::util::MesaMapping;
 use crate::util::OwnedDescriptor;
 use crate::util::RawDescriptor;
+use crate::util::RawMapping;
 use crate::util::Reader;
 use crate::util::Result;
 use crate::util::SharedMemory;
@@ -304,15 +304,15 @@ impl VirtGpuKumquat {
         Ok(())
     }
 
-    pub fn map(&mut self, bo_handle: u32) -> Result<MesaMapping> {
+    pub fn map(&mut self, bo_handle: u32) -> Result<RawMapping> {
         let resource = self
             .resources
             .get_mut(&bo_handle)
             .ok_or(Error::Unsupported)?;
 
         if let Some(ref system_mapping) = resource.system_mapping {
-            let mesa_mapping = system_mapping.as_mesa_mapping();
-            Ok(mesa_mapping)
+            let raw_mapping = system_mapping.as_raw_mapping();
+            Ok(raw_mapping)
         } else {
             let clone = resource.handle.try_clone()?;
             let mapping = MemoryMapping::from_safe_descriptor(
@@ -321,9 +321,9 @@ impl VirtGpuKumquat {
                 MAGMA_MAP_CACHE_CACHED | MAGMA_MAP_ACCESS_RW,
             )?;
 
-            let mesa_mapping = mapping.as_mesa_mapping();
+            let raw_mapping = mapping.as_raw_mapping();
             resource.system_mapping = Some(mapping);
-            Ok(mesa_mapping)
+            Ok(raw_mapping)
         }
     }
 
@@ -497,7 +497,7 @@ impl VirtGpuKumquat {
 
         let new_fences: Vec<Handle> = std::mem::take(&mut resource.attached_fences);
         for fence in new_fences {
-            let mut event: Event = fence.try_into()?;
+            let event: Event = fence.try_into()?;
             event.wait()?;
         }
 
@@ -522,10 +522,10 @@ impl VirtGpuKumquat {
                 VIRTGPU_KUMQUAT_PAGE_SIZE,
                 MAGMA_MAP_CACHE_CACHED | MAGMA_MAP_ACCESS_RW,
             )?;
-            let mesa_mapping = mapping.as_mesa_mapping();
+            let raw_mapping = mapping.as_raw_mapping();
 
             let slice: &mut [u8] = unsafe {
-                from_raw_parts_mut(mesa_mapping.ptr as *mut u8, VIRTGPU_KUMQUAT_PAGE_SIZE)
+                from_raw_parts_mut(raw_mapping.ptr as *mut u8, VIRTGPU_KUMQUAT_PAGE_SIZE)
             };
             let mut writer = Writer::new(slice);
             writer.write_obj(resource.resource_id)?;
@@ -555,10 +555,10 @@ impl VirtGpuKumquat {
             MAGMA_MAP_CACHE_CACHED | MAGMA_MAP_ACCESS_RW,
         )?;
 
-        let mesa_mapping = mapping.as_mesa_mapping();
+        let raw_mapping = mapping.as_raw_mapping();
 
         let slice: &mut [u8] =
-            unsafe { from_raw_parts_mut(mesa_mapping.ptr as *mut u8, VIRTGPU_KUMQUAT_PAGE_SIZE) };
+            unsafe { from_raw_parts_mut(raw_mapping.ptr as *mut u8, VIRTGPU_KUMQUAT_PAGE_SIZE) };
 
         let mut reader = Reader::new(slice);
         *resource_handle = reader.read_obj()?;

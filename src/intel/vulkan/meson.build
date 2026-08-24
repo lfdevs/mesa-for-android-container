@@ -227,6 +227,7 @@ libanv_files = files(
   'anv_nir_push_constants_analysis.c',
   'anv_nir_push_descriptor_analysis.c',
   'anv_nir_realign_cbv.c',
+  'anv_nir_xe2_r11g11b10_atomic_wa.c',
   'anv_perf.c',
   'anv_physical_device.c',
   'anv_pipeline_cache.c',
@@ -262,6 +263,7 @@ anv_deps = [
   idep_intel_blorp,
   idep_mda,
   idep_anv_drirc,
+  idep_metrics_library_intel,
 ]
 
 if with_platform_x11

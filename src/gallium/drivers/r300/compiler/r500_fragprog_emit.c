@@ -401,7 +401,7 @@ emit_tex(struct r300_fragment_program_compiler *c, struct rc_sub_instruction *in
       (translate_strq_swizzle(inst->SrcReg[0].Swizzle) << 8) |
       R500_TEX_DST_ADDR(inst->DstReg.Index) | (GET_SWZ(inst->TexSwizzle, 0) << 24) |
       (GET_SWZ(inst->TexSwizzle, 1) << 26) | (GET_SWZ(inst->TexSwizzle, 2) << 28) |
-      (GET_SWZ(inst->TexSwizzle, 3) << 30);
+      ((uint32_t)(GET_SWZ(inst->TexSwizzle, 3)) << 30);
 
    if (inst->Opcode == RC_OPCODE_TXD) {
       use_temporary(code, inst->SrcReg[1].Index);
@@ -442,8 +442,8 @@ emit_flowcontrol(struct emit_state *s, struct rc_instruction *inst)
       struct branch_info *branch;
       struct r500_loop_info *loop;
    case RC_OPCODE_BGNLOOP:
-      memory_pool_array_reserve(&s->C->Pool, struct r500_loop_info, s->Loops, s->CurrentLoopDepth,
-                                s->LoopsReserved, 1);
+      rc_array_reserve(s->C->Pool, struct r500_loop_info, s->Loops, s->CurrentLoopDepth,
+                       s->LoopsReserved, 1);
 
       loop = &s->Loops[s->CurrentLoopDepth++];
       memset(loop, 0, sizeof(struct r500_loop_info));
@@ -455,7 +455,7 @@ emit_flowcontrol(struct emit_state *s, struct rc_instruction *inst)
       break;
    case RC_OPCODE_BRK:
       loop = &s->Loops[s->CurrentLoopDepth - 1];
-      memory_pool_array_reserve(&s->C->Pool, int, loop->Brks, loop->BrkCount, loop->BrkReserved, 1);
+      rc_array_reserve(s->C->Pool, int, loop->Brks, loop->BrkCount, loop->BrkReserved, 1);
 
       loop->Brks[loop->BrkCount++] = newip;
       s->Code->inst[newip].inst2 =
@@ -465,8 +465,7 @@ emit_flowcontrol(struct emit_state *s, struct rc_instruction *inst)
 
    case RC_OPCODE_CONT:
       loop = &s->Loops[s->CurrentLoopDepth - 1];
-      memory_pool_array_reserve(&s->C->Pool, int, loop->Conts, loop->ContCount, loop->ContReserved,
-                                1);
+      rc_array_reserve(s->C->Pool, int, loop->Conts, loop->ContCount, loop->ContReserved, 1);
       loop->Conts[loop->ContCount++] = newip;
       s->Code->inst[newip].inst2 =
          R500_FC_OP_CONTINUE | R500_FC_JUMP_FUNC(0xff) | R500_FC_B_OP1_DECR |
@@ -501,8 +500,8 @@ emit_flowcontrol(struct emit_state *s, struct rc_instruction *inst)
          rc_error(s->C, "Branch depth exceeds hardware limit");
          return;
       }
-      memory_pool_array_reserve(&s->C->Pool, struct branch_info, s->Branches, s->CurrentBranchDepth,
-                                s->BranchesReserved, 1);
+      rc_array_reserve(s->C->Pool, struct branch_info, s->Branches, s->CurrentBranchDepth,
+                       s->BranchesReserved, 1);
 
       branch = &s->Branches[s->CurrentBranchDepth++];
       branch->If = newip;
@@ -607,7 +606,7 @@ r500BuildFragmentProgramHwCode(struct radeon_compiler *c, void *user)
    }
 
    if (code->max_temp_idx >= compiler->Base.max_temp_regs)
-      rc_error(&compiler->Base, "Too many hardware temporaries used");
+      rc_error(&compiler->Base, "Ran out of temporaries");
 
    if (compiler->Base.Error)
       return;

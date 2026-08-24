@@ -928,17 +928,17 @@ void anv_GetPhysicalDeviceFormatProperties2(
       .bufferFeatures = vk_format_features2_to_features(buffer2),
    };
 
-   vk_foreach_struct(ext, pFormatProperties->pNext) {
+   vk_foreach_struct(sType, ext, pFormatProperties->pNext) {
       /* Use unsigned since some cases are not in the VkStructureType enum. */
-      switch ((unsigned)ext->sType) {
+      switch ((unsigned)sType) {
       case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT:
          get_drm_format_modifier_properties_list(physical_device, vk_format,
-                                                 (void *)ext);
+                                                 ext);
          break;
 
       case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT:
          get_drm_format_modifier_properties_list_2(physical_device, vk_format,
-                                                   (void *)ext);
+                                                   ext);
          break;
 
       case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3: {
@@ -949,7 +949,7 @@ void anv_GetPhysicalDeviceFormatProperties2(
          break;
       }
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -1350,10 +1350,10 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
    bool from_wsi = false;
 
    /* Extract input structs */
-   vk_foreach_struct_const(s, base_info->pNext) {
-      switch ((unsigned)s->sType) {
+   vk_foreach_struct_const(sType, s, base_info->pNext) {
+      switch ((unsigned)sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
-         external_info = (const void *) s;
+         external_info = s;
          break;
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT:
       case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
@@ -1366,25 +1366,25 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
          from_wsi = true;
          break;
       default:
-         vk_debug_ignored_stype(s->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
 
    /* Extract output structs */
-   vk_foreach_struct(s, base_props->pNext) {
-      switch (s->sType) {
+   vk_foreach_struct(sType, s, base_props->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES:
-         external_props = (void *) s;
+         external_props = s;
          break;
       case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES:
-         ycbcr_props = (void *) s;
+         ycbcr_props = s;
          break;
       case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_USAGE_ANDROID:
-         android_usage = (void *) s;
+         android_usage = s;
          break;
       default:
-         vk_debug_ignored_stype(s->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }

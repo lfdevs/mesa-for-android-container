@@ -458,7 +458,7 @@ lower_ms_set_vertex_and_primitive_count(nir_builder *b,
    /* Remember if the output vertex and primitive counts are both workgroup-uniform.
     * This assumes that the divergence info contains workgroup divergence.
     */
-   s->output_counts_workgroup_uniform =
+   s->output_counts_workgroup_uniform &=
       !nir_src_is_divergent(&intrin->src[0]) && !nir_src_is_divergent(&intrin->src[1]);
 
    /* If either the number of vertices or primitives is zero, set both of them to zero. */
@@ -1131,23 +1131,24 @@ handle_smaller_ms_api_workgroup(nir_builder *b,
                continue;
 
             nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-            bool is_workgroup_barrier =
-               intrin->intrinsic == nir_intrinsic_barrier &&
-               nir_intrinsic_execution_scope(intrin) == SCOPE_WORKGROUP;
-
-            if (!is_workgroup_barrier)
+            if (intrin->intrinsic != nir_intrinsic_barrier)
                continue;
 
-            if (can_shrink_barriers) {
-               /* Every API invocation runs in the first wave.
-                * In this case, we can change the barriers to subgroup scope
-                * and avoid adding additional barriers.
-                */
-               nir_intrinsic_set_memory_scope(intrin, SCOPE_SUBGROUP);
+            /* Every API invocation runs in the first wave.
+             * In this case, we can change the barriers to subgroup scope
+             * and avoid adding additional barriers.
+             */
+            if (can_shrink_barriers &&
+                nir_intrinsic_execution_scope(intrin) == SCOPE_WORKGROUP) {
                nir_intrinsic_set_execution_scope(intrin, SCOPE_SUBGROUP);
-            } else {
-               has_any_workgroup_barriers = true;
             }
+            if (can_shrink_barriers &&
+                nir_intrinsic_memory_scope(intrin) == SCOPE_WORKGROUP) {
+               nir_intrinsic_set_memory_scope(intrin, SCOPE_SUBGROUP);
+            }
+
+            if (nir_intrinsic_execution_scope(intrin) == SCOPE_WORKGROUP)
+               has_any_workgroup_barriers = true;
          }
       }
 
@@ -1418,6 +1419,7 @@ ac_nir_lower_ngg_mesh(nir_shader *shader, const ac_nir_lower_ngg_options *option
       .ac = options->compiler_info,
       .vert_multirow_export = fast_launch_2 && max_vertices > hw_workgroup_size,
       .prim_multirow_export = fast_launch_2 && max_primitives > hw_workgroup_size,
+      .output_counts_workgroup_uniform = true,
       .vs_output_param_offset = options->vs_output_param_offset,
       .has_param_exports = options->has_param_exports,
    };

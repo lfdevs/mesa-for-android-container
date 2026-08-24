@@ -1,19 +1,23 @@
 // Copyright © 2026 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
+use crate::debug::*;
 use crate::ir::*;
 use rustc_hash::FxHashSet;
 
 fn validate_instr(instr: &Instr, ssa_vals: &mut FxHashSet<SSAValue>) {
     for (src, src_type) in instr.srcs_types() {
-        if let SrcRef::SSA(ssa) = &src.src_ref {
-            for val in ssa {
-                assert!(ssa_vals.contains(val));
+        if let SrcRef::SSA(vec) = &src.src_ref {
+            for ssa in vec {
+                assert!(ssa_vals.contains(ssa), "Undefined SSA value: {ssa}");
             }
         }
 
+        assert_ne!(src.swizzle, Swizzle::ZERO);
         if src.swizzle.is_word_swizzle() {
             assert_eq!(src_type.bits(), 64);
+        } else if src.swizzle.is_byte_swizzle() {
+            assert!(src.src_ref.bytes_read() <= 4);
         }
 
         if src_type.comps() == 1 {
@@ -48,6 +52,7 @@ fn validate_instr(instr: &Instr, ssa_vals: &mut FxHashSet<SSAValue>) {
                     RegRange::Half1 => 0b1100,
                     RegRange::Regs(n) => u8::MAX >> (8 - (n * 4)),
                 },
+                SrcRef::Mem(mem) => u8::MAX >> (8 - mem.range),
             };
             let swizzle_byte_mask = src.swizzle.bytes_read(src_bytes);
             assert!(swizzle_byte_mask & !src_ref_byte_mask == 0);
@@ -55,7 +60,20 @@ fn validate_instr(instr: &Instr, ssa_vals: &mut FxHashSet<SSAValue>) {
     }
 
     for (dst, dst_type) in instr.dsts_types() {
-        if dst.dst_ref.is_none() {
+        match &dst.dst_ref {
+            DstRef::None => continue,
+            DstRef::SSA(vec) => {
+                for ssa in vec {
+                    ssa_vals.insert(*ssa);
+                }
+            }
+            DstRef::Reg(_) => (),
+            DstRef::Mem(_) => (),
+        }
+
+        if dst.lanes.is_f16_narrow() {
+            assert_eq!(dst_type, DataType::F32);
+            assert_eq!(dst.dst_ref.bytes_written(), 2);
             continue;
         }
 
@@ -72,41 +90,52 @@ fn validate_instr(instr: &Instr, ssa_vals: &mut FxHashSet<SSAValue>) {
             assert!(dst_type_bytes <= lane_bytes * 8);
             assert_eq!(lane_bytes, dst.dst_ref.bytes_written());
         }
-
-        if let DstRef::SSA(ssa) = &dst.dst_ref {
-            for val in ssa {
-                ssa_vals.insert(*val);
-            }
-        }
     }
 }
 
 impl Shader<'_> {
     pub fn validate(&self) {
+        if !cfg!(debug_assertions) && !DEBUG.contains(DebugFlags::VALIDATE) {
+            return;
+        }
+
         let mut blocks: FxHashSet<Label> = Default::default();
         for bb in &self.blocks {
             blocks.insert(bb.label);
         }
 
-        let mut allow_reg_in = true;
-        let mut allow_non_reg_out = true;
         let mut ssa_vals: FxHashSet<SSAValue> = Default::default();
-        for (bi, bb) in self.blocks.iter().enumerate() {
-            for i in &bb.instrs {
-                if matches!(&i.op, Op::RegIn(_)) {
-                    assert!(bi == 0);
-                    assert!(allow_reg_in);
-                } else if !matches!(&i.op, Op::Nop(_)) {
-                    allow_reg_in = false;
+        for (bi, block) in self.blocks.iter().enumerate() {
+            let mut is_prelude = true;
+            for instr in block.instrs.iter() {
+                if matches!(&instr.op, Op::RegIn(_)) {
+                    assert!(bi == 0, "OpRegIn is not in the start block");
                 }
 
-                if matches!(&i.op, Op::RegOut(_)) {
-                    allow_non_reg_out = false;
-                } else if !matches!(&i.op, Op::Nop(_)) {
-                    assert!(allow_non_reg_out);
+                if BasicBlock::is_prelude_instr(instr) {
+                    assert!(
+                        is_prelude,
+                        "Misplaced prelude instr in block {}: {}",
+                        block.label, instr,
+                    );
+                } else {
+                    is_prelude = false;
                 }
 
-                validate_instr(&i, &mut ssa_vals);
+                validate_instr(instr, &mut ssa_vals);
+            }
+
+            let mut is_postlude = true;
+            for instr in block.instrs.iter().rev() {
+                if BasicBlock::is_postlude_instr(instr) {
+                    assert!(
+                        is_postlude,
+                        "Misplaced postlude instr in block {}: {}",
+                        block.label, instr,
+                    );
+                } else {
+                    is_postlude = false;
+                }
             }
         }
     }

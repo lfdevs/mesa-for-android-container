@@ -12,9 +12,9 @@ set -o xtrace
 CROSS_FILE=/cross_file-"$CROSS".txt
 
 if [ -d install/bin ]; then
-  # Keep pps-producer binary for tests that need it.
+  # Keep pps-producer and amdgpu_list_devices binaries for tests that need them.
   # Remove all other binaries to save space.
-  find install/bin -type f -not -name 'pps-producer' -delete
+  find install/bin -type f -not -name 'pps-producer' -not -name 'amdgpu_list_devices' -delete
 fi
 
 # Delete unused includes from artifacts to save space.
@@ -54,6 +54,8 @@ for f in \
   .gitlab-ci/*-runner.sh \
   .gitlab-ci/bin/structured_logger.py \
   .gitlab-ci/bin/custom_logger.py \
+  src/amd/ci/radv-validate-cache.sh \
+  .gitlab-ci/opencl_conformance_tests_mesa.csv \
 ; do
   cp -Rp "$f" install/
 done

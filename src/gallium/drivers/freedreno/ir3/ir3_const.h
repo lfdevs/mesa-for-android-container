@@ -458,8 +458,6 @@ ir3_build_driver_params_vs(struct fd_context *ctx,
 static inline void
 ir3_emit_driver_params(const struct ir3_shader_variant *v,
                        struct fd_ringbuffer *ring, struct fd_context *ctx,
-                       const struct pipe_draw_info *info,
-                       const struct pipe_draw_indirect_info *indirect,
                        const struct ir3_driver_params_vs *vertex_params)
    assert_dt
 {
@@ -477,41 +475,7 @@ ir3_emit_driver_params(const struct ir3_shader_variant *v,
       MIN2(const_state->num_driver_params, (v->constlen - offset) * 4);
    assert(vertex_params_size <= dword_sizeof(*vertex_params));
 
-   /* for indirect draw, we need to copy VTXID_BASE from
-    * indirect-draw parameters buffer.. which is annoying
-    * and means we can't easily emit these consts in cmd
-    * stream so need to copy them to bo.
-    */
-   if (indirect && v->vtxid_base != INVALID_REG) {
-      uint32_t vertex_params_area = align(vertex_params_size, 16);
-      struct pipe_resource *vertex_params_rsc =
-         pipe_buffer_create(&ctx->screen->base, PIPE_BIND_CONSTANT_BUFFER,
-                            PIPE_USAGE_STREAM, vertex_params_area * 4);
-      unsigned src_off = indirect->offset;
-      void *ptr;
-
-      ptr = fd_bo_map(fd_resource(vertex_params_rsc)->bo);
-      memcpy(ptr, vertex_params, vertex_params_size * 4);
-
-      if (info->index_size) {
-         /* indexed draw, index_bias is 4th field: */
-         src_off += 3 * 4;
-      } else {
-         /* non-indexed draw, start is 3rd field: */
-         src_off += 2 * 4;
-      }
-
-      /* copy index_bias or start from draw params: */
-      ctx->screen->mem_to_mem(ring, vertex_params_rsc, 0, indirect->buffer,
-                              src_off, 1);
-
-      emit_const_prsc(ring, v, offset * 4, 0, vertex_params_area,
-                      vertex_params_rsc);
-
-      pipe_resource_reference(&vertex_params_rsc, NULL);
-   } else {
-      emit_const_user(ring, v, offset * 4, vertex_params_size, (uint32_t *)vertex_params);
-   }
+   emit_const_user(ring, v, offset * 4, vertex_params_size, (uint32_t *)vertex_params);
 
    /* if needed, emit stream-out buffer addresses: */
    if (vertex_params->vtxcnt_max > 0) {
@@ -577,7 +541,7 @@ ir3_emit_vs_consts(const struct ir3_shader_variant *v,
       struct ir3_driver_params_vs p =
          ir3_build_driver_params_vs(ctx, info, draw, 0, v->key.ucp_enables);
 
-      ir3_emit_driver_params(v, ring, ctx, info, indirect, &p);
+      ir3_emit_driver_params(v, ring, ctx, &p);
    }
 }
 

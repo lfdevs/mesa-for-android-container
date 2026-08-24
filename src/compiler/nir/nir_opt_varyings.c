@@ -713,6 +713,7 @@ struct linkage_info {
    bool always_interpolate_convergent_fs_inputs;
    bool group_tes_inputs_into_pos_var_groups;
    bool can_compact_to_higher_16;
+   bool non_interpolated_as_uint;
 
    mesa_shader_stage producer_stage;
    mesa_shader_stage consumer_stage;
@@ -1583,19 +1584,18 @@ gather_outputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_
 {
    struct linkage_info *linkage = (struct linkage_info *)cb_data;
 
-   /* Track the index of emit_vertex in the same block, so that we can identify
-    * which GS output stores belong to which emit_vertex section in the same
-    * block.
+   if (linkage->gather_outputs_state.last_gs_emit_block != intr->instr.block) {
+      /* Reset the emit index for a new block. */
+      linkage->gather_outputs_state.last_gs_emit_block = intr->instr.block;
+      linkage->gather_outputs_state.gs_emit_index = 0;
+   }
+
+   /* Count emit_vertex within the block, so that we can identify which GS
+    * output stores belong to which emit_vertex section in the same block.
     */
    if (intr->intrinsic == nir_intrinsic_emit_vertex ||
        intr->intrinsic == nir_intrinsic_emit_vertex_with_counter) {
-      if (linkage->gather_outputs_state.last_gs_emit_block ==
-          intr->instr.block) {
-         linkage->gather_outputs_state.gs_emit_index++;
-      } else {
-         linkage->gather_outputs_state.last_gs_emit_block = intr->instr.block;
-         linkage->gather_outputs_state.gs_emit_index = 0;
-      }
+      linkage->gather_outputs_state.gs_emit_index++;
       return false;
    }
 
@@ -4840,6 +4840,28 @@ link_no_signed_zero(struct linkage_info *linkage,
  * COMPACTION
  ******************************************************************/
 
+/* Returns the type that a varying should be converged to, primarily based on
+ * whether it is interpolated between stages. */
+static nir_alu_type
+fs_vec4_type_get_converged_type(enum fs_vec4_type type,
+                                bool non_interpolated_as_uint)
+{
+   /* Don't bother if the hardware is fine with all floats */
+   if (!non_interpolated_as_uint)
+      return nir_type_float;
+
+   switch (type) {
+   case FS_VEC4_TYPE_NONE:
+   case FS_VEC4_TYPE_FLAT:
+   case FS_VEC4_TYPE_INTERP_EXPLICIT:
+   case FS_VEC4_TYPE_INTERP_EXPLICIT_STRICT:
+   case FS_VEC4_TYPE_PER_PRIMITIVE:
+      return nir_type_uint;
+   default:
+      return nir_type_float;
+   }
+}
+
 /* Relocate a slot to a new index. Used by compaction. new_index is
  * the component index at 16-bit granularity, so the size of vec4 is 8
  * in that representation.
@@ -4889,8 +4911,11 @@ relocate_slot(struct linkage_info *linkage, struct scalar_slot *slot,
 
          nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
 
-         /* Set all types to float to facilitate full IO vectorization.
-          * This is skipped only if mediump is not lowered to 16 bits.
+         /* Converge types to facilitate full IO vectorization. Interpolated
+          * values should be floats, otherwise values may be changed to uint if
+          * the hardware does not properly preserve bit-exact representations
+          * of integers changed to floats. This is skipped only if mediump is
+          * not lowered to 16 bits.
           *
           * Set nir_io_mediump_is_32bit if you never lower mediump IO to 16
           * bits, which sets nir_io_semantics::mediump_precision = 0 during
@@ -4901,7 +4926,8 @@ relocate_slot(struct linkage_info *linkage, struct scalar_slot *slot,
           */
          if (!sem.medium_precision) {
             nir_alu_type type = nir_intrinsic_has_src_type(intr) ? nir_intrinsic_src_type(intr) : nir_intrinsic_dest_type(intr);
-            type = nir_alu_type_get_type_size(type) | nir_type_float;
+            type = nir_alu_type_get_type_size(type) |
+                   fs_vec4_type_get_converged_type(fs_vec4_type, linkage->non_interpolated_as_uint);
 
             if (nir_intrinsic_has_src_type(intr))
                nir_intrinsic_set_src_type(intr, type);
@@ -5941,6 +5967,9 @@ init_linkage(nir_shader *producer, nir_shader *consumer, bool spirv,
       .can_compact_to_higher_16 = producer->options->io_options &
                                   consumer->options->io_options &
                                   nir_io_compact_to_higher_16,
+      .non_interpolated_as_uint = producer->options->io_options &
+                                  consumer->options->io_options &
+                                  nir_io_non_interpolated_as_uint,
       .producer_stage = producer->info.stage,
       .consumer_stage = consumer->info.stage,
       .producer_builder =

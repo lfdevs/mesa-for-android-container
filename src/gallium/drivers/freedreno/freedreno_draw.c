@@ -77,13 +77,21 @@ batch_draw_tracking_for_dirty_bits(struct fd_batch *batch) assert_dt
       }
 
       if (fd_stencil_enabled(ctx)) {
-         if (fd_resource(pfb->zsbuf.texture)->valid) {
+         struct fd_resource *zbuf = fd_resource(pfb->zsbuf.texture);
+         struct fd_resource *sbuf = zbuf;
+
+         if (zbuf->stencil)
+            sbuf = zbuf->stencil;
+
+         if (sbuf->valid) {
             restore_buffers |= FD_BUFFER_STENCIL;
             /* storing packed d/s stencil also stores depth, so we need
              * the depth restored too to avoid invalidating it.
              */
-            if (pfb->zsbuf.texture->format == PIPE_FORMAT_Z24_UNORM_S8_UINT)
+            if (pfb->zsbuf.texture->format == PIPE_FORMAT_Z24_UNORM_S8_UINT) {
+               assert(zbuf == sbuf);
                restore_buffers |= FD_BUFFER_DEPTH;
+            }
          } else {
             batch->invalidated |= FD_BUFFER_STENCIL;
          }
@@ -292,6 +300,23 @@ update_draw_stats(struct fd_context *ctx, const struct pipe_draw_info *info,
    }
 }
 
+static bool
+needs_indirect_barrier(struct fd_batch *batch, struct pipe_resource *prsc)
+{
+   if (!prsc)
+      return false;
+
+   struct fd_resource_tracking *track = fd_resource(prsc)->track;
+
+   bool needs_barrier = (track->write_batch == batch) &&
+      !(track->executed_barriers & PIPE_BARRIER_INDIRECT_BUFFER);
+
+   if (needs_barrier)
+      track->executed_barriers |= PIPE_BARRIER_INDIRECT_BUFFER;
+
+   return needs_barrier;
+}
+
 static void
 fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
             unsigned drawid_offset,
@@ -343,6 +368,22 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    }
 
    struct fd_batch *batch = fd_context_batch_draw(ctx);
+
+   /* We won't necessarily get a memory barrier for indirect buffer usage,
+    * Eg. if xfb is used to write the indirect buffer.  Detect this and
+    * insert the needed barrier.  If the buffer writes happen in a different
+    * batch, there should already be sufficient barriers.
+    */
+   if (indirect &&
+       (needs_indirect_barrier(batch, indirect->buffer) ||
+        needs_indirect_barrier(batch, indirect->indirect_draw_count) ||
+        (indirect->count_from_stream_output &&
+         needs_indirect_barrier(
+            batch,
+            fd_stream_output_target(indirect->count_from_stream_output)->offset_buf
+         )))) {
+      pctx->memory_barrier(pctx, PIPE_BARRIER_INDIRECT_BUFFER);
+   }
 
    batch_draw_tracking(batch, info, indirect);
 

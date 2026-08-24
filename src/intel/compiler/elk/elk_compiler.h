@@ -79,6 +79,11 @@ struct elk_compiler {
    bool precise_trig;
 
    /**
+    * Whether to limit sin/cos inputs to [-2pi, 2pi] to improve accuracy.
+    */
+   bool limit_trig_input_range;
+
+   /**
     * Is 3DSTATE_CONSTANT_*'s Constant Buffer 0 relative to Dynamic State
     * Base Address?  (If not, it's a normal GPU address.)
     */
@@ -192,14 +197,7 @@ struct elk_base_prog_key {
 
    enum elk_robustness_flags robust_flags:2;
 
-   unsigned padding:22;
-
-   /**
-    * Apply workarounds for SIN and COS input range problems.
-    * This limits input range for SIN and COS to [-2p : 2p] to
-    * avoid precision issues.
-    */
-   bool limit_trig_input_range;
+   unsigned padding:30;
 
    struct elk_sampler_prog_key_data tex;
 };
@@ -644,8 +642,6 @@ struct elk_stage_prog_data {
     * push reg i if
     *
     *    reg_used & zero_push_reg & ~*push_reg_mask_param & (1ull << i)
-    *
-    * If this field is set, elk_compiler::compact_params must be false.
     */
    uint64_t zero_push_reg;
    unsigned push_reg_mask_param;

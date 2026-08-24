@@ -52,8 +52,15 @@ brw_emit_gs_thread_end(brw_shader &s)
       brw_reg srcs[URB_LOGICAL_NUM_SRCS];
       srcs[URB_LOGICAL_SRC_HANDLE] = s.gs_payload().urb_handles;
       srcs[URB_LOGICAL_SRC_DATA] = brw_imm_ud(0);
-      srcs[URB_LOGICAL_SRC_CHANNEL_MASK] = brw_imm_ud(0);
-      urb = abld.URB_WRITE(srcs, ARRAY_SIZE(srcs));
+
+      if (s.devinfo->ver >= 20) {
+         abld.uniform().MOV(brw_flag_reg(0, 0), brw_imm_uw(0));
+         urb = abld.URB_WRITE(srcs, ARRAY_SIZE(srcs));
+         urb->predicate = BRW_PREDICATE_NORMAL;
+      } else {
+         srcs[URB_LOGICAL_SRC_CHANNEL_MASK] = brw_imm_ud(0);
+         urb = abld.URB_WRITE(srcs, ARRAY_SIZE(srcs));
+      }
       urb->components = 1;
    } else {
       brw_reg srcs[URB_LOGICAL_NUM_SRCS];
@@ -131,7 +138,8 @@ brw_compile_gs(const struct brw_compiler *compiler,
    unsigned control_data_bits_per_vertex = 0;
    unsigned control_data_header_size_bits = 0;
 
-   const bool debug_enabled = brw_should_print_shader(nir, DEBUG_GS, params->base.source_hash);
+   const bool debug_enabled = brw_should_print_shader(
+      nir, DEBUG_GS, prog_data->base.base.source_hash);
 
    brw_pass_tracker pt_ = {
       .nir = nir,

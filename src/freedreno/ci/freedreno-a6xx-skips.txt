@@ -81,8 +81,8 @@ spec@nv_copy_image@nv_copy_image.*
 # If we find any non-piglit users of these features, then maybe a driconf
 # way to force fall-over to zink for that app could make sense.  Until
 # then, just pretend that this stuff doesn't exist:
-.*edgeflag.*
-.*stipple.*
+spec@.*edgeflag.*
+spec@.*stipple.*
 # uses edgeflags:
 shaders@point-vertex-id.*
 # uses stipple:

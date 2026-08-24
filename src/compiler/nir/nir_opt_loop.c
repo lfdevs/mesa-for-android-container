@@ -416,6 +416,12 @@ opt_loop_peel_initial_break(nir_loop *loop)
    nir_block *prev_block = nir_cf_node_cf_tree_prev(&loop->cf_node);
    nir_block *exit_block = nir_cf_node_cf_tree_next(&loop->cf_node);
 
+   /* If we immediately continue/break out from the header block,
+    * we can't extract it since we'd be extracting the break as well.
+    * Instead, let nir_opt_dead_cf clean up the rest of the loop. */
+   if (nir_block_ends_in_jump(header_block))
+      return false;
+
    /* The loop must have exactly one continue block. */
    if (nir_block_num_preds(header_block) != 2)
       return false;

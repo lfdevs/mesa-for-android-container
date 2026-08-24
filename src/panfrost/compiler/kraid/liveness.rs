@@ -8,10 +8,41 @@ use compiler::dataflow::BackwardDataflow;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::{Ord, Ordering};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LiveBytes {
+    pub reg: u32,
+    pub mem: u32,
+}
+
+impl std::ops::Add<LiveBytes> for LiveBytes {
+    type Output = LiveBytes;
+
+    fn add(self, other: LiveBytes) -> LiveBytes {
+        LiveBytes {
+            reg: self.reg + other.reg,
+            mem: self.mem + other.mem,
+        }
+    }
+}
+
+impl LiveBytes {
+    fn get_mut(&mut self, is_mem: bool) -> &mut u32 {
+        if is_mem { &mut self.mem } else { &mut self.reg }
+    }
+
+    fn max(self, other: LiveBytes) -> LiveBytes {
+        LiveBytes {
+            reg: self.reg.max(other.reg),
+            mem: self.mem.max(other.mem),
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct LiveSet {
-    bytes: u32,
+    bytes: LiveBytes,
     set: FxHashSet<SSAValue>,
+    bit_set: BitSet<u32>,
 }
 
 impl LiveSet {
@@ -19,39 +50,108 @@ impl LiveSet {
         Default::default()
     }
 
+    pub fn as_bit_set(&self) -> &BitSet<u32> {
+        &self.bit_set
+    }
+
     pub fn clear(&mut self) {
-        self.bytes = 0;
+        self.bytes = Default::default();
         self.set.clear();
+        self.bit_set.clear();
     }
 
     pub fn contains(&self, ssa: &SSAValue) -> bool {
-        self.set.contains(ssa)
+        self.bit_set.contains(ssa.idx())
     }
 
-    pub fn bytes(&self) -> u32 {
+    pub fn bytes(&self) -> LiveBytes {
         self.bytes
     }
 
     pub fn insert(&mut self, ssa: SSAValue) -> bool {
-        if self.set.insert(ssa) {
-            self.bytes += u32::from(ssa.bytes());
+        if self.bit_set.insert(ssa.idx()) {
+            let inserted = self.set.insert(ssa);
+            debug_assert!(inserted);
+            *self.bytes.get_mut(ssa.is_mem()) += u32::from(ssa.bytes());
             true
         } else {
             false
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = SSAValue> + use<'_> {
-        self.set.iter().cloned()
+    pub fn iter(&self) -> impl Iterator<Item = &SSAValue> + use<'_> {
+        self.set.iter()
     }
 
     pub fn remove(&mut self, ssa: &SSAValue) -> bool {
-        if self.set.remove(ssa) {
-            self.bytes -= u32::from(ssa.bytes());
+        if self.bit_set.remove(ssa.idx()) {
+            let removed = self.set.remove(ssa);
+            debug_assert!(removed);
+            *self.bytes.get_mut(ssa.is_mem()) -= u32::from(ssa.bytes());
             true
         } else {
             false
         }
+    }
+
+    pub fn insert_instr_top_down<L: BlockLiveness>(
+        &mut self,
+        ip: usize,
+        instr: &Instr,
+        bl: &L,
+    ) -> LiveBytes {
+        if let Op::Copy(op) = &instr.op {
+            // Copy is a special case and we always lower it to something
+            // that has exact copy semantics and is able to fully handle
+            // 8 and 16-bit destinations.  As such, we can treat it as
+            // killing its sources before making its destinaion live.
+            for ssa in op.iter_ssa_uses() {
+                if !bl.is_live_after_ip(ssa, ip) {
+                    self.remove(ssa);
+                }
+            }
+            let mut extra: LiveBytes = Default::default();
+            for ssa in op.iter_ssa_defs() {
+                if bl.is_live_after_ip(ssa, ip) {
+                    self.insert(*ssa);
+                } else {
+                    *extra.get_mut(ssa.is_mem()) += u32::from(ssa.bytes());
+                }
+            }
+            self.bytes + extra
+        } else {
+            let mut extra: LiveBytes = Default::default();
+            for ssa in instr.iter_ssa_defs() {
+                // For sub-register destinations, we assume that they
+                // instantaneously use an entire register.  See also
+                // BlockLiveness::get_instr_pressure().
+                if bl.is_live_after_ip(ssa, ip) {
+                    *extra.get_mut(ssa.is_mem()) +=
+                        4_u32.saturating_sub(ssa.bytes().into());
+                    self.insert(*ssa);
+                } else {
+                    *extra.get_mut(ssa.is_mem()) += 4;
+                }
+            }
+
+            let live = self.bytes + extra;
+
+            for ssa in instr.iter_ssa_uses() {
+                if !bl.is_live_after_ip(ssa, ip) {
+                    self.remove(ssa);
+                }
+            }
+
+            live
+        }
+    }
+}
+
+impl std::fmt::Debug for LiveSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut vec: Vec<_> = self.set.iter().cloned().collect();
+        vec.sort_by_key(|ssa| ssa.idx());
+        write!(f, "{vec:?}")
     }
 }
 
@@ -97,14 +197,31 @@ pub trait BlockLiveness {
         self.live_out_set().contains(val.idx())
     }
 
-    fn get_instr_pressure(&self, _ip: usize, instr: &Instr) -> u8 {
+    fn get_instr_pressure(&self, ip: usize, instr: &Instr) -> u8 {
         let mut bytes = 0_u8;
-        for dst in instr.dsts() {
-            if let DstRef::SSA(vec) = &dst.dst_ref {
-                if vec.comps() > 1 {
-                    for ssa in vec.iter() {
-                        bytes += ssa.bytes();
-                    }
+        if let Op::Copy(op) = &instr.op {
+            // Copy is a special case and we always lower it to something
+            // that has exact copy semantics and is able to fully handle
+            // 8 and 16-bit destinations.  As such, we can treat it as
+            // killing its sources before making its destinaion live.
+            for ssa in op.iter_ssa_defs() {
+                bytes += ssa.bytes();
+            }
+            for ssa in op.iter_ssa_uses() {
+                if !self.is_live_after_ip(ssa, ip) {
+                    bytes = bytes.saturating_sub(ssa.bytes());
+                }
+            }
+        } else {
+            // For sub-register destinations, we assume that they
+            // instantaneously use an entire register.  This restriction is
+            // only really needed for message instructions but the increase
+            // in pressure of 1/2 or 3/4 of a register isn't important and
+            // we have don't have access to the model here to be able to
+            // tell the difference.
+            for dst in instr.dsts() {
+                if let DstRef::SSA(vec) = &dst.dst_ref {
+                    bytes += vec.comps() * 4;
                 }
             }
         }
@@ -116,6 +233,37 @@ pub trait Liveness {
     type PerBlock: BlockLiveness;
 
     fn block(&self, idx: usize) -> &Self::PerBlock;
+
+    fn calc_max_live_bytes(&self, s: &Shader) -> LiveBytes {
+        let mut max_live: LiveBytes = Default::default();
+        let mut block_live_out: Vec<LiveSet> = Vec::new();
+
+        for (bi, bb) in s.blocks.iter().enumerate() {
+            let bl = self.block(bi);
+            let mut live = LiveSet::new();
+
+            // Predecessors are added block order so we can just grab the first
+            // one (if any) and it will be a block we've processed.
+            if let Some(pred_idx) = s.blocks.pred_indices(bi).first() {
+                let pred_out = &block_live_out[*pred_idx];
+                live = pred_out
+                    .iter()
+                    .cloned()
+                    .filter(|ssa| !ssa.is_mem() && bl.is_live_in(ssa))
+                    .collect();
+            }
+
+            for (ip, instr) in bb.instrs.iter().enumerate() {
+                let live_at_instr = live.insert_instr_top_down(ip, instr, bl);
+                max_live = max_live.max(live_at_instr);
+            }
+
+            assert!(block_live_out.len() == bi);
+            block_live_out.push(live);
+        }
+
+        max_live
+    }
 }
 
 #[derive(Default)]

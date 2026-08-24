@@ -74,7 +74,7 @@ nv30_fragprog_validate(struct nv30_context *nv30)
    int i;
 
    if (!fp->translated) {
-      _nvfx_fragprog_translate(eng3d->oclass, fp);
+      _nvfx_fragprog_translate(eng3d->oclass, fp, &nv30->base.debug);
       if (!fp->translated)
          return;
 
@@ -138,6 +138,7 @@ static void *
 nv30_fp_state_create(struct pipe_context *pipe,
                      const struct pipe_shader_state *cso)
 {
+   struct nv30_context *nv30 = nv30_context(pipe);
    struct nv30_fragprog *fp = CALLOC_STRUCT(nv30_fragprog);
    if (!fp)
       return NULL;
@@ -151,6 +152,12 @@ nv30_fp_state_create(struct pipe_context *pipe,
    }
 
    tgsi_scan_shader(fp->pipe.tokens, &fp->info);
+
+   // unfortunetly currently nv30 is switching between using hwtcl/swtcl during rendering
+   // this is hack for being able to use shader-db with drm-shim
+   if (debug_get_bool_option("NVFX_SHADER_STATS", false))
+      _nvfx_fragprog_translate(nv30->screen->eng3d->oclass, fp, &nv30->base.debug);
+
    return fp;
 }
 

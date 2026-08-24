@@ -17,7 +17,7 @@ files_panfrost = files(
   'pan_resource.h',
   'pan_context.c',
   'pan_blend_cso.c',
-  'pan_blit.c',
+  'pan_blitter.c',
   'pan_job.c',
   'pan_shader.c',
   'pan_mempool.c',

@@ -859,22 +859,7 @@ ac_sqtt_fill_clock_calibration(struct sqtt_file_chunk_clock_calibration *chunk,
    chunk->header.size_in_bytes = sizeof(*chunk);
 }
 
-/* Below values are from from llvm project
- * llvm/include/llvm/BinaryFormat/ELF.h
- */
-enum elf_gfxip_level
-{
-   EF_AMDGPU_MACH_AMDGCN_GFX801 = 0x028,
-   EF_AMDGPU_MACH_AMDGCN_GFX900 = 0x02c,
-   EF_AMDGPU_MACH_AMDGCN_GFX1010 = 0x033,
-   EF_AMDGPU_MACH_AMDGCN_GFX1030 = 0x036,
-   EF_AMDGPU_MACH_AMDGCN_GFX1100 = 0x041,
-   EF_AMDGPU_MACH_AMDGCN_GFX1150 = 0x043,
-   EF_AMDGPU_MACH_AMDGCN_GFX1170 = 0x05d,
-   EF_AMDGPU_MACH_AMDGCN_GFX1200 = 0x04e,
-};
-
-static enum elf_gfxip_level ac_gfx_level_to_elf_gfxip_level(enum amd_gfx_level gfx_level)
+enum elf_gfxip_level ac_gfx_level_to_elf_gfxip_level(enum amd_gfx_level gfx_level)
 {
    switch (gfx_level) {
    case GFX8:

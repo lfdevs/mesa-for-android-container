@@ -74,9 +74,9 @@ typedef int (*cfunc)(const void *, const void *);
  * \param a  Pointer to the desired enum name.
  * \param b  Pointer into the \c enum_string_table_offsets array.
  */
-static int compar_nr( const int *a, enum_elt *b )
+static int compar_nr(const void *a, const void *b)
 {
-   return a[0] - b->n;
+   return ((const int *)a)[0] - ((enum_elt *)b)->n;
 }
 
 

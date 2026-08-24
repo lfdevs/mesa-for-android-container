@@ -123,10 +123,10 @@ hk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
       .bufferFeatures = vk_format_features2_to_features(buffer2),
    };
 
-   vk_foreach_struct(ext, pFormatProperties->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pFormatProperties->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3: {
-         VkFormatProperties3 *p = (void *)ext;
+         VkFormatProperties3 *p = ext;
          p->linearTilingFeatures = linear2;
          p->optimalTilingFeatures = optimal2;
          p->bufferFeatures = buffer2;
@@ -135,16 +135,16 @@ hk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
 
       case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT:
          get_drm_format_modifier_properties_list(
-            pdevice, format, (void *)ext, &pFormatProperties->formatProperties);
+            pdevice, format, ext, &pFormatProperties->formatProperties);
          break;
 
       case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT:
          get_drm_format_modifier_properties_list_2(
-            pdevice, format, (void *)ext, &pFormatProperties->formatProperties);
+            pdevice, format, ext, &pFormatProperties->formatProperties);
          break;
 
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }

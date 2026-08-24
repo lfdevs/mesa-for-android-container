@@ -1062,6 +1062,9 @@ emit_bpermute_shared_vgpr(Builder& bld, aco_ptr<Instruction>& instr)
    assert(bld.program->wave_size == 64);
 
    unsigned shared_vgpr_reg_0 = align(bld.program->config->num_vgprs, 4) + 256;
+   assert(bld.program->config->num_shared_vgprs != 0);
+   assert(shared_vgpr_reg_0 < 512);
+
    Definition dst = instr->definitions[0];
    Definition tmp_exec = instr->definitions[1];
    Definition clobber_scc = instr->definitions[2];
@@ -1133,6 +1136,9 @@ emit_permlane64_shared_vgpr(Builder& bld, aco_ptr<Instruction>& instr)
    assert(bld.program->wave_size == 64);
 
    unsigned shared_vgpr_reg_0 = align(bld.program->config->num_vgprs, 4) + 256;
+   assert(bld.program->config->num_shared_vgprs != 0);
+   assert(shared_vgpr_reg_0 < 512);
+
    PhysReg shared_vgpr_lo(shared_vgpr_reg_0);
    PhysReg shared_vgpr_hi(shared_vgpr_reg_0 + 1);
 
@@ -1883,7 +1889,8 @@ handle_operands(std::map<PhysReg, copy_operation>& copy_map, lower_context* ctx,
                                                      other->second.op.physReg() == it->first);
             bool unused_hi = !other->second.is_used ||
                              (other->second.is_used == 0x0101 && it->second.op.physReg() == reg_hi);
-            if (unused_lo && unused_hi) {
+            if (unused_lo && unused_hi && it->second.op.physReg().byte() % 2 == 0 &&
+                other->second.op.physReg().byte() % 2 == 0) {
                Operand lo = it->second.op;
                Operand hi = other->second.op;
                do_pack_2x16(ctx, bld, Definition(it->first, v1), lo, hi);

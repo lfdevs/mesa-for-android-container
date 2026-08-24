@@ -147,7 +147,7 @@ option(
   'gallium-rusticl-enable-drivers',
   type : 'array',
   value : ['auto'],
-  choices : ['auto', 'asahi', 'freedreno', 'radeonsi'],
+  choices : ['auto', 'asahi', 'freedreno', 'panfrost', 'radeonsi'],
   description : 'List of gallium drivers for which rusticl will be enabled ' +
                 'by default',
 )

@@ -529,6 +529,22 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
                 vc4_flush(pctx);
 }
 
+/* The quads the blitter draws for a clear sample nothing, but leaving the
+ * textures bound makes vc4_predraw_check_textures() refresh their shadow
+ * textures from inside the blitter. As u_blitter is not re-entrant, unbind
+ * the textures for the duration of the clear.
+ */
+static void
+vc4_blitter_clear_save(struct pipe_context *pctx, enum vc4_blitter_op op)
+{
+        struct vc4_context *vc4 = vc4_context(pctx);
+
+        vc4_blitter_save(vc4, op | VC4_SAVE_TEXTURES);
+
+        pctx->set_sampler_views(pctx, MESA_SHADER_FRAGMENT, 0, 0, 0, NULL);
+        pctx->bind_sampler_states(pctx, MESA_SHADER_FRAGMENT, 0, 0, NULL);
+}
+
 static uint32_t
 pack_rgba(enum pipe_format format, const float *rgba)
 {
@@ -568,7 +584,7 @@ vc4_clear(struct pipe_context *pctx, unsigned buffers,
 
                         perf_debug("Partial clear of Z+stencil buffer, "
                                    "drawing a quad instead of fast clearing\n");
-                        vc4_blitter_save(vc4, VC4_CLEAR);
+                        vc4_blitter_clear_save(pctx, VC4_CLEAR);
                         util_blitter_clear(vc4->blitter,
                                            vc4->framebuffer.width,
                                            vc4->framebuffer.height,
@@ -576,6 +592,7 @@ vc4_clear(struct pipe_context *pctx, unsigned buffers,
                                            zsclear,
                                            &dummy_color, depth, stencil,
                                            false);
+                        util_blitter_restore_textures(vc4->blitter);
                         buffers &= ~zsclear;
                         if (!buffers)
                                 return;
@@ -650,8 +667,9 @@ vc4_clear_render_target(struct pipe_context *pctx, struct pipe_surface *ps,
 {
         struct vc4_context *vc4 = vc4_context(pctx);
 
-        vc4_blitter_save(vc4, VC4_CLEAR_SURFACE);
+        vc4_blitter_clear_save(pctx, VC4_CLEAR_SURFACE);
         util_blitter_clear_render_target(vc4->blitter, ps, color, x, y, w, h);
+        util_blitter_restore_textures(vc4->blitter);
 }
 
 static void
@@ -662,9 +680,10 @@ vc4_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *ps,
 {
         struct vc4_context *vc4 = vc4_context(pctx);
 
-        vc4_blitter_save(vc4, VC4_CLEAR_SURFACE);
+        vc4_blitter_clear_save(pctx, VC4_CLEAR_ZS_SURFACE);
         util_blitter_clear_depth_stencil(vc4->blitter, ps, buffers, depth,
                                          stencil, x, y, w, h);
+        util_blitter_restore_textures(vc4->blitter);
 }
 
 void

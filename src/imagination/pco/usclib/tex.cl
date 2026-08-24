@@ -125,6 +125,29 @@ usclib_tex_lod_dval_post_clamp_resource_to_view_space(uint4 tex_state, uint4 smp
    return MAX2(lod_dval_post_clamp, 0.0f);
 }
 
+uint32_t
+usclib_twiddle2d(uint2 coords, uint2 size)
+{
+   /* Round the dimensions up to be a power of two. */
+   size.x = util_next_power_of_two(size.x);
+   size.y = util_next_power_of_two(size.y);
+
+   /* Shift the coords right by the number of common bits.
+    * The coords with the smaller dimension will end up as zero.
+    */
+   uint common_bits = nir_ufind_msb(MIN2(size.x, size.y));
+   uint32_t remaining = ((coords.x >> common_bits) | (coords.y >> common_bits));
+
+   /* Interleave the common parts of the coords. */
+   uint32_t common_mask = (1u << common_bits) - 1u;
+   uint32_t common = nir_interleave(coords.y & common_mask, coords.x & common_mask);
+
+   /* Insert the remaining parts of the coords above the common interleaved
+    * parts.
+    */
+   return nir_bitfield_insert(common, remaining, common_bits * 2u, 32u - common_bits);
+}
+
 /* TODO: this can probably be optimized with nir_interleave. */
 uint32_t
 usclib_twiddle3d(uint3 coords, uint3 size)

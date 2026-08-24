@@ -35,6 +35,7 @@
 #include "vk_pipeline.h"
 
 #include "util/format/u_format.h"
+#include "vulkan/vulkan_core.h"
 
 struct vk_meta_fill_buffer_key {
    enum vk_meta_object_key_type key_type;
@@ -1202,9 +1203,9 @@ static VkResult
 copy_buffer_image_prepare_gfx_push_const(
    struct vk_command_buffer *cmd, struct vk_meta_device *meta,
    const struct vk_meta_copy_buffer_image_key *key,
-   VkPipelineLayout pipeline_layout, VkBuffer buffer,
+   VkPipelineLayout pipeline_layout,
    const struct vk_image_buffer_layout *buf_layout, struct vk_image *img,
-   const VkBufferImageCopy2 *region)
+   const VkDeviceMemoryImageCopyKHR *region)
 {
    struct vk_device *dev = cmd->base.device;
    const struct vk_device_dispatch_table *disp = &dev->dispatch_table;
@@ -1219,8 +1220,7 @@ copy_buffer_image_prepare_gfx_push_const(
       .buf = {
          .row_stride = buf_layout->row_stride_B,
          .image_stride = buf_layout->image_stride_B,
-         .addr = vk_meta_buffer_address(dev, buffer, region->bufferOffset,
-                                        VK_WHOLE_SIZE),
+         .addr = region->addressRange.address,
       },
       .img.offset = {
          .x = region->imageOffset.x,
@@ -1238,9 +1238,9 @@ static VkResult
 copy_buffer_image_prepare_compute_push_const(
    struct vk_command_buffer *cmd, struct vk_meta_device *meta,
    const struct vk_meta_copy_buffer_image_key *key,
-   VkPipelineLayout pipeline_layout, VkBuffer buffer,
+   VkPipelineLayout pipeline_layout,
    const struct vk_image_buffer_layout *buf_layout, struct vk_image *img,
-   const VkBufferImageCopy2 *region, uint32_t *wg_count)
+   const VkDeviceMemoryImageCopyKHR *region, uint32_t *wg_count)
 {
    struct vk_device *dev = cmd->base.device;
    const struct vk_device_dispatch_table *disp = &dev->dispatch_table;
@@ -1257,8 +1257,7 @@ copy_buffer_image_prepare_compute_push_const(
       .buf = {
          .row_stride = buf_layout->row_stride_B,
          .image_stride = buf_layout->image_stride_B,
-         .addr = vk_meta_buffer_address(dev, buffer, region->bufferOffset,
-                                        VK_WHOLE_SIZE),
+         .addr = region->addressRange.address,
       },
       .img.offset = {
          .x = img_offs.x,
@@ -1352,9 +1351,9 @@ static void
 copy_image_to_buffer_region(
    struct vk_command_buffer *cmd, struct vk_meta_device *meta,
    struct vk_image *img, VkImageLayout img_layout,
-   const struct vk_meta_copy_image_properties *img_props, VkBuffer buffer,
+   const struct vk_meta_copy_image_properties *img_props,
    const struct vk_image_buffer_layout *buf_layout,
-   const VkBufferImageCopy2 *region)
+   const VkDeviceMemoryImageCopyKHR *region)
 {
    struct vk_device *dev = cmd->base.device;
    const struct vk_device_dispatch_table *disp = &dev->dispatch_table;
@@ -1406,7 +1405,7 @@ copy_image_to_buffer_region(
    uint32_t wg_count[3] = {0};
 
    result = copy_buffer_image_prepare_compute_push_const(
-      cmd, meta, &key, pipeline_layout, buffer, buf_layout, img, region,
+      cmd, meta, &key, pipeline_layout, buf_layout, img, region,
       wg_count);
    if (unlikely(result != VK_SUCCESS)) {
       vk_command_buffer_set_error(cmd, result);
@@ -1418,25 +1417,42 @@ copy_image_to_buffer_region(
 }
 
 void
-vk_meta_copy_image_to_buffer(
+vk_meta_copy_image_to_memory(
    struct vk_command_buffer *cmd, struct vk_meta_device *meta,
-   const VkCopyImageToBufferInfo2 *info,
+   const VkCopyDeviceMemoryImageInfoKHR *info,
    const struct vk_meta_copy_image_properties *img_props)
 {
-   VK_FROM_HANDLE(vk_image, img, info->srcImage);
+   VK_FROM_HANDLE(vk_image, img, info->image);
 
    for (uint32_t i = 0; i < info->regionCount; i++) {
-      VkBufferImageCopy2 region = info->pRegions[i];
+      VkDeviceMemoryImageCopyKHR region = info->pRegions[i];
       struct vk_image_buffer_layout buf_layout =
-         vk_image_buffer_copy_layout(img, &region);
+         vk_image_memory_copy_layout(img, &region);
 
       region.imageExtent = vk_image_extent_to_elements(img, region.imageExtent);
       region.imageOffset = vk_image_offset_to_elements(img, region.imageOffset);
 
-      copy_image_to_buffer_region(cmd, meta, img, info->srcImageLayout,
-                                  img_props, info->dstBuffer, &buf_layout,
+      copy_image_to_buffer_region(cmd, meta, img, region.imageLayout,
+                                  img_props, &buf_layout,
                                   &region);
    }
+}
+
+void
+vk_meta_copy_image_to_buffer(
+   struct vk_command_buffer *cmd, struct vk_meta_device *meta,
+   const VkCopyImageToBufferInfo2 *pCopyImageToBufferInfo,
+   const struct vk_meta_copy_image_properties *img_props)
+{
+   STACK_ARRAY(VkDeviceMemoryImageCopyKHR, regions,
+               pCopyImageToBufferInfo->regionCount);
+
+   VkCopyDeviceMemoryImageInfoKHR info =
+      vk_upgrade_copy_image_to_buffer2(pCopyImageToBufferInfo, regions);
+
+   vk_meta_copy_image_to_memory(cmd, meta, &info, img_props);
+
+   STACK_ARRAY_FINISH(regions);
 }
 
 static void
@@ -1521,9 +1537,9 @@ static void
 copy_buffer_to_image_region_gfx(
    struct vk_command_buffer *cmd, struct vk_meta_device *meta,
    struct vk_image *img, VkImageLayout img_layout,
-   const struct vk_meta_copy_image_properties *img_props, VkBuffer buffer,
+   const struct vk_meta_copy_image_properties *img_props,
    const struct vk_image_buffer_layout *buf_layout,
-   const VkBufferImageCopy2 *region)
+   const VkDeviceMemoryImageCopyKHR *region)
 {
    struct vk_device *dev = cmd->base.device;
    const struct vk_device_dispatch_table *disp = &dev->dispatch_table;
@@ -1560,7 +1576,7 @@ copy_buffer_to_image_region_gfx(
                          VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
    result = copy_buffer_image_prepare_gfx_push_const(
-      cmd, meta, &key, pipeline_layout, buffer, buf_layout, img, region);
+      cmd, meta, &key, pipeline_layout, buf_layout, img, region);
    if (unlikely(result != VK_SUCCESS)) {
       vk_command_buffer_set_error(cmd, result);
       return;
@@ -1574,9 +1590,9 @@ static void
 copy_buffer_to_image_region_compute(
    struct vk_command_buffer *cmd, struct vk_meta_device *meta,
    struct vk_image *img, VkImageLayout img_layout,
-   const struct vk_meta_copy_image_properties *img_props, VkBuffer buffer,
+   const struct vk_meta_copy_image_properties *img_props,
    const struct vk_image_buffer_layout *buf_layout,
-   const VkBufferImageCopy2 *region)
+   const VkDeviceMemoryImageCopyKHR *region)
 {
    struct vk_device *dev = cmd->base.device;
    const struct vk_device_dispatch_table *disp = &dev->dispatch_table;
@@ -1630,7 +1646,7 @@ copy_buffer_to_image_region_compute(
    uint32_t wg_count[3] = {0};
 
    result = copy_buffer_image_prepare_compute_push_const(
-      cmd, meta, &key, pipeline_layout, buffer, buf_layout, img, region,
+      cmd, meta, &key, pipeline_layout, buf_layout, img, region,
       wg_count);
    if (unlikely(result != VK_SUCCESS)) {
       vk_command_buffer_set_error(cmd, result);
@@ -1642,33 +1658,50 @@ copy_buffer_to_image_region_compute(
 }
 
 void
-vk_meta_copy_buffer_to_image(
+vk_meta_copy_memory_to_image(
    struct vk_command_buffer *cmd, struct vk_meta_device *meta,
-   const VkCopyBufferToImageInfo2 *info,
+   const VkCopyDeviceMemoryImageInfoKHR *info,
    const struct vk_meta_copy_image_properties *img_props,
    VkPipelineBindPoint bind_point)
 {
-   VK_FROM_HANDLE(vk_image, img, info->dstImage);
+   VK_FROM_HANDLE(vk_image, img, info->image);
 
    for (uint32_t i = 0; i < info->regionCount; i++) {
-      VkBufferImageCopy2 region = info->pRegions[i];
+      VkDeviceMemoryImageCopyKHR region = info->pRegions[i];
       struct vk_image_buffer_layout buf_layout =
-         vk_image_buffer_copy_layout(img, &region);
+         vk_image_memory_copy_layout(img, &region);
 
       region.imageExtent = vk_image_extent_to_elements(img, region.imageExtent);
       region.imageOffset = vk_image_offset_to_elements(img, region.imageOffset);
 
       if (bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS) {
-         copy_buffer_to_image_region_gfx(cmd, meta, img, info->dstImageLayout,
-                                         img_props, info->srcBuffer,
-                                         &buf_layout, &region);
+         copy_buffer_to_image_region_gfx(cmd, meta, img, region.imageLayout,
+                                         img_props, &buf_layout, &region);
       } else {
          copy_buffer_to_image_region_compute(cmd, meta, img,
-                                             info->dstImageLayout, img_props,
-                                             info->srcBuffer, &buf_layout,
+                                             region.imageLayout, img_props,
+                                             &buf_layout,
                                              &region);
       }
    }
+}
+
+void
+vk_meta_copy_buffer_to_image(
+   struct vk_command_buffer *cmd, struct vk_meta_device *meta,
+   const VkCopyBufferToImageInfo2 *pCopyBufferToImageInfo,
+   const struct vk_meta_copy_image_properties *img_props,
+   VkPipelineBindPoint bind_point)
+{
+   STACK_ARRAY(VkDeviceMemoryImageCopyKHR, regions,
+               pCopyBufferToImageInfo->regionCount);
+
+   VkCopyDeviceMemoryImageInfoKHR info =
+      vk_upgrade_copy_buffer_to_image2(pCopyBufferToImageInfo, regions);
+
+   vk_meta_copy_memory_to_image(cmd, meta, &info, img_props, bind_point);
+
+   STACK_ARRAY_FINISH(regions);
 }
 
 static nir_shader *
@@ -2394,8 +2427,8 @@ get_copy_buffer_pipeline(struct vk_device *device, struct vk_meta_device *meta,
 }
 
 static void
-copy_buffer_region(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
-                   VkBuffer src, VkBuffer dst, const VkBufferCopy2 *region)
+copy_memory_region(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
+                   const VkDeviceMemoryCopyKHR *region)
 {
    struct vk_device *dev = cmd->base.device;
    const struct vk_physical_device *pdev = dev->physical;
@@ -2406,11 +2439,15 @@ copy_buffer_region(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
       .key_type = VK_META_OBJECT_KEY_COPY_BUFFER,
    };
 
-   VkDeviceSize size = region->size;
-   VkDeviceAddress src_addr =
-      vk_meta_buffer_address(dev, src, region->srcOffset, size);
-   VkDeviceAddress dst_addr =
-      vk_meta_buffer_address(dev, dst, region->dstOffset, size);
+   /*
+    * srcRange is the right size to use here due to
+    * VUID-VkDeviceMemoryCopyKHR-size-13016
+    * The size member of dstRange must be greater than or equal to the
+    * size member of srcRange
+    */
+   VkDeviceSize size = region->srcRange.size;
+   VkDeviceAddress src_addr = region->srcRange.address;
+   VkDeviceAddress dst_addr = region->dstRange.address;
 
    /* Combine the size and src/dst address to extract the alignment. */
    uint64_t align = src_addr | dst_addr | size;
@@ -2463,14 +2500,28 @@ copy_buffer_region(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
 }
 
 void
-vk_meta_copy_buffer(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
-                    const VkCopyBufferInfo2 *info)
+vk_meta_copy_memory(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
+                    const VkCopyDeviceMemoryInfoKHR *info)
 {
    for (unsigned i = 0; i < info->regionCount; i++) {
-      const VkBufferCopy2 *region = &info->pRegions[i];
+      const VkDeviceMemoryCopyKHR *region = &info->pRegions[i];
 
-      copy_buffer_region(cmd, meta, info->srcBuffer, info->dstBuffer, region);
+      copy_memory_region(cmd, meta, region);
    }
+}
+
+void
+vk_meta_copy_buffer(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
+                    const VkCopyBufferInfo2 *pCopyBufferInfo)
+{
+   STACK_ARRAY(VkDeviceMemoryCopyKHR, regions, pCopyBufferInfo->regionCount);
+
+   VkCopyDeviceMemoryInfoKHR info =
+      vk_upgrade_copy_buffer2(pCopyBufferInfo, regions);
+
+   vk_meta_copy_memory(cmd, meta, &info);
+
+   STACK_ARRAY_FINISH(regions);
 }
 
 void
@@ -2572,11 +2623,11 @@ get_fill_buffer_pipeline(struct vk_device *device, struct vk_meta_device *meta,
 }
 
 void
-vk_meta_fill_buffer(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
-                    VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size,
-                    uint32_t data)
+vk_meta_fill_memory(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
+                    const VkDeviceAddressRangeKHR* dst_range,
+                    const VkAddressCommandFlagsKHR dstFlags,
+                    const uint32_t data)
 {
-   VK_FROM_HANDLE(vk_buffer, buf, buffer);
    struct vk_device *dev = cmd->base.device;
    const struct vk_physical_device *pdev = dev->physical;
    const struct vk_device_dispatch_table *disp = &dev->dispatch_table;
@@ -2598,14 +2649,8 @@ vk_meta_fill_buffer(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
    disp->CmdBindPipeline(vk_command_buffer_to_handle(cmd),
                          VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
-   /* From the Vulkan 1.3.290 spec:
-    *
-    *   "If VK_WHOLE_SIZE is used and the remaining size of the buffer is not a
-    *    multiple of 4, then the nearest smaller multiple is used."
-    *
-    * hence the mask to align the size on 4 bytes here.
-    */
-   size = vk_buffer_range(buf, offset, size) & ~3u;
+   VkDeviceAddress addr = dst_range->address;
+   VkDeviceSize size = dst_range->size;
 
    const uint32_t optimal_wg_size = vk_meta_buffer_access_wg_size(meta, 4);
    const uint32_t per_wg_copy_size = optimal_wg_size * 4;
@@ -2615,7 +2660,7 @@ vk_meta_fill_buffer(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
    while (size > 0) {
       struct vk_meta_fill_buffer_info args = {
          .size = MIN2(size, max_per_dispatch_size),
-         .buf_addr = vk_meta_buffer_address(dev, buffer, offset, size),
+         .buf_addr = addr,
          .data = data,
       };
       uint32_t wg_count = DIV_ROUND_UP(args.size, per_wg_copy_size);
@@ -2626,7 +2671,7 @@ vk_meta_fill_buffer(struct vk_command_buffer *cmd, struct vk_meta_device *meta,
 
       disp->CmdDispatch(vk_command_buffer_to_handle(cmd), wg_count, 1, 1);
 
-      offset += args.size;
+      addr += args.size;
       size -= args.size;
    }
 }

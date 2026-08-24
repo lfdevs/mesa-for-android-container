@@ -85,7 +85,7 @@ nir_remove_outputs(nir_shader *shader, mesa_shader_stage next_stage,
 
    if (next_stage == MESA_SHADER_FRAGMENT) {
       /* These are always sysvals but never varyings, ie. can't be read by FS. */
-      state.remove_varying |= VARYING_BIT_LAYER | VARYING_BIT_PSIZ | VARYING_BIT_EDGE;
+      state.remove_varying |= VARYING_BIT_PSIZ | VARYING_BIT_EDGE;
    }
 
    return nir_shader_intrinsics_pass(shader, try_remove_shader_output_write,

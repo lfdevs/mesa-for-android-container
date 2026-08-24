@@ -90,6 +90,11 @@ struct anv_shader_data {
 
    uint64_t source_hash;
 
+   /* Per-shader workaround from source_hash (NULL if none), for compile-time
+    * options read before shader->workaround exists.
+    */
+   const struct anv_shader_workaround *workaround;
+
    const nir_xfb_info *xfb_info;
 
    uint32_t num_stats;

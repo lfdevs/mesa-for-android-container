@@ -505,7 +505,7 @@ void si_compute_clear_image_dcc_single(struct si_context *sctx, struct si_textur
    struct pipe_grid_info info = {0};
    unsigned wg_dim = set_work_size(&info, 8, 8, 1, width, height, depth);
 
-   void **shader = &sctx->cs_clear_image_dcc_single[is_msaa][wg_dim];
+   void **shader = &sctx->cs_clear_image_dcc_single[is_msaa][wg_dim - 1];
    if (!*shader)
       *shader = si_clear_image_dcc_single_shader(sctx, is_msaa, wg_dim);
 

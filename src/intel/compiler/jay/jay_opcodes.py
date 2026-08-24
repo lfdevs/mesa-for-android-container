@@ -69,6 +69,8 @@ op('xor', 2, 'u1 u16 u32', Props.NEGATE | Props.CMOD | Props.COMMUTATIVE)
 
 op('add',   2, 'u32 s32 u64 s64 f32 f64 f16 bf16 u16 s16',
    Props.SAT | Props.CMOD | Props.COMMUTATIVE | Props.NEGATE)
+op('add_rtne',   2, 'f32 f64',
+   Props.SAT | Props.CMOD | Props.COMMUTATIVE | Props.NEGATE)
 op('add3',  3, 'u32 s32 u64 s64 u16 s16', Props.SAT |
    Props.CMOD | Props.COMMUTATIVE | Props.NEGATE)
 op('asr',   2, 's32 s64 s16', Props.CMOD | Props.NEGATE0)
@@ -113,14 +115,15 @@ op('mul_high',   2, 'u32 s32', Props.COMMUTATIVE)
 op('mul_32x16',  2, 'u32 s32')
 op('mul_32',     2, 'u32 s32', Props.COMMUTATIVE, ['bool high'])
 op('sel',        3, 'u32 f32 s32 u1 s16 u16 f16', Props.NEGATE)
-op('csel',       3, 'u32 s32 f32', Props.NEGATE)
+op('csel',       3, 'u16 u32 s32 f16 f32', Props.NEGATE)
 op('dp4a_uu',    3, 'u32', Props.SAT)
 op('dp4a_ss',    3, 's32', Props.SAT)
 op('dp4a_su',    3, 's32', Props.SAT)
 op('rndd',       1, 'f16 f32 f64', Props.NEGATE | Props.SAT)
 op('rndz',       1, 'f16 f32 f64', Props.NEGATE | Props.SAT)
 op('rnde',       1, 'f16 f32 f64', Props.NEGATE | Props.SAT)
-op('math', 1, 'f16 f32',     Props.NEGATE | Props.SAT, ['enum jay_math op'])
+op('math', 1, 'f16 f32',     Props.NEGATE | Props.SAT,
+   ['enum jay_math op', 'uint8_t sbid'])
 
 op('rol', 2, 'u32 u64 u16 s16 s32 s64', Props.CMOD)
 op('ror', 2, 'u32 u64 u16 s16 s32 s64', Props.CMOD)
@@ -130,10 +133,11 @@ op('shr', 2, 'u32 u64 u16 s16 s32 s64', Props.CMOD | Props.NEGATE0)
 op('quad_swizzle', 1, 'u1 u32', 0, ['enum jay_quad_swizzle swizzle'])
 op('sync', 1, 'u32', Props.NO_DEST, ['enum tgl_sync_function op'])
 op('schedule_barrier', 0, None, Props.NO_DEST)
+op('check_tdr', 0, None, Props.NO_DEST)
 
 for n in ['brd', 'illegal', 'goto', 'join', 'if', 'else',
           'endif', 'while', 'break', 'cont', 'call', 'calla', 'jmpi', 'ret',
-          'loop_once', 'halt_target']:
+          'loop_once', 'halt_target', 'loop_once_halt']:
     op(n, 0, None, Props.NO_DEST)
 
 op('halt', 0, None, Props.NO_DEST, ['bool predicate_all'])
@@ -143,7 +147,6 @@ op('send', 4, None, Props.SIDE_EFFECTS, [
     'uint8_t sbid',
     'bool eot',
     'bool check_tdr',
-    'bool uniform',
     'bool bindless',
     'bool pure',
     'bool skip_helpers',
@@ -151,6 +154,7 @@ op('send', 4, None, Props.SIDE_EFFECTS, [
     'enum jay_type type_1',
     'uint8_t mlen',
     'uint8_t ex_mlen',
+    'bool pad[1]',
     'uint32_t ex_desc_imm',
 ])
 
@@ -159,8 +163,8 @@ op('preload', 0, 'u32',     0, ['unsigned reg'])
 op('deswizzle_odd', 2, 'f32', 0, ['bool src2_hi'])
 op('deswizzle_even', 1, 'f32', 0, ['bool src_hi'])
 
-# Return the UGPR[4] vector (0, 1, 2, 3, 4, 5, 6, 7) as packed 16-bit.
-op('lane_id_8', 0, 'u16')
+# Return the UGPR[4] vector base + (0, 1, 2, 3, 4, 5, 6, 7) as packed 16-bit.
+op('lane_id_8', 0, 'u16', 0, ['unsigned base'])
 
 # Build a GPR from two UGPR[16] ranges.
 op('zip_ugpr16', 2, 'u32')
@@ -169,6 +173,7 @@ op('zip_ugpr16', 2, 'u32')
 op('extract_byte_per_8lanes', 2, 'u32')
 op('shr_odd_subspans_by_4', 1, 'u16')
 op('and_u32_u16', 2, 'u32')
+op('and_sN_s32', 2, 's32', 0, ['unsigned n'])
 
 # Pixel coord calculations. expand_quad replicates out the per-2x2 values from
 # its source g0.[10...13] and - in the case of SIMD32 - g1.[10...13] into a
@@ -214,10 +219,8 @@ op('unit_test', 1, 'u32', Props.NO_DEST)
 op('undef', 0, 'u1 u32')
 
 op('not', 1, 'u1 u32', Props.CMOD)
-op('cast_canonical_to_flag', 1, 'u1')
 
 op('mov_imm64', 0, 'u64', 0, ['uint64_t imm'])
-op('zero_flag', 0, 'u1', Props.NO_DEST, ['unsigned reg'])
 
 # Cross-lane shuffle. src0=data, src1=offset in bytes. Clobbers an address reg.
 op('shuffle', 2, 'u1 u32')
@@ -243,16 +246,16 @@ op('dpas', 3, 'u32', 0, [
 op('slice_repack', 1, 'u32', 0, [
    'uint8_t factor_log2',
    'bool unpack',
-])
+   ])
 
-# Initialize helper invocations. Takes 16-bit halves of the dispatch mask.
-op('init_helpers', 2, 'u16', Props.NO_DEST)
+# Active lanes select source 0, inactive lanes select the constant value
+op('sel_active', 1, 'u32 u64', 0, ['uint64_t value'])
 
 # Compare the arguments and demote based on the result.
 op('demote', 2, 'u1 u16 u32 u64 s16 s32 s64 f16 f32 f64', Props.NEGATE | Props.NO_DEST)
 
-# Equivalent to NIR bcsel(@is_helper_invocation, source 0, source 1)
-op('helper_sel', 2, 'u1 u32')
+# Copy the is_helper flag.
+op('is_helper', 0, 'u1 u32')
 
 OPCODES = _opcodes
 

@@ -82,6 +82,9 @@ radv_pad_cmdbuf(const struct radv_device *device, uint32_t size, enum amd_ip_typ
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const uint32_t ib_alignment = (pdev->info.ip[ip_type].ib_pad_dw_mask + 1) * 4;
 
+   if (!ib_alignment)
+      return 0;
+
    return align(size, ib_alignment);
 }
 
@@ -90,6 +93,9 @@ radv_align_cmdbuf(const struct radv_device *device, uint32_t size, enum amd_ip_t
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const uint32_t ib_alignment = pdev->info.ip[ip_type].ib_alignment;
+
+   if (!ib_alignment)
+      return 0;
 
    return align(size, ib_alignment);
 }
@@ -287,6 +293,11 @@ radv_get_sequence_size_compute(const struct radv_indirect_command_layout *layout
       } else if (ies->descriptor_heap) {
          /* PKT3_SET_SH_REG for resource/sampler heap pointers */
          *cmd_size += 6 * 4;
+      }
+
+      if (ies->uses_cs_state_sgpr) {
+         /* PKT3_SET_SH_REG for cs_state */
+         *cmd_size += 3 * 4;
       }
 
       uses_grid_base_sgpr = ies->uses_grid_base_sgpr;
@@ -2579,6 +2590,19 @@ dgc_emit_descriptors(struct dgc_cmdbuf *cs)
       nir_pop_if(b, NULL);
    }
    nir_pop_if(b, NULL);
+
+   nir_def *cs_state_sgpr = load_shader_metadata32(cs, cs_state_sgpr);
+   nir_push_if(b, nir_ine_imm(b, cs_state_sgpr, 0));
+   {
+      nir_def *is_compute_queue = nir_ieq_imm(b, load_param8(b, queue_family), RADV_QUEUE_COMPUTE);
+
+      dgc_cs_begin(cs);
+      dgc_cs_emit_imm(PKT3(PKT3_SET_SH_REG, 1, 0));
+      dgc_cs_emit(cs_state_sgpr);
+      dgc_cs_emit(nir_b2i32(b, is_compute_queue));
+      dgc_cs_end();
+   }
+   nir_pop_if(b, NULL);
 }
 
 static void
@@ -3282,12 +3306,17 @@ radv_prepare_dgc(struct radv_cmd_buffer *cmd_buffer, const VkGeneratedCommandsIn
    get_dgc_cmdbuf_layout(device, layout, ies, pGeneratedCommandsInfo->pNext, sequences_count, use_preamble,
                          &cmdbuf_layout);
 
-   assert((cmdbuf_layout.main_offset + pGeneratedCommandsInfo->preprocessAddress) %
-             pdev->info.ip[AMD_IP_GFX].ib_alignment ==
-          0);
-   assert((cmdbuf_layout.ace_main_offset + pGeneratedCommandsInfo->preprocessAddress) %
-             pdev->info.ip[AMD_IP_COMPUTE].ib_alignment ==
-          0);
+   if (radv_graphics_queue_enabled(pdev)) {
+      assert((cmdbuf_layout.main_offset + pGeneratedCommandsInfo->preprocessAddress) %
+                pdev->info.ip[AMD_IP_GFX].ib_alignment ==
+             0);
+   }
+
+   if (radv_compute_queue_enabled(pdev)) {
+      assert((cmdbuf_layout.ace_main_offset + pGeneratedCommandsInfo->preprocessAddress) %
+                pdev->info.ip[AMD_IP_COMPUTE].ib_alignment ==
+             0);
+   }
 
    struct radv_dgc_params params = {
       .cmd_buf_preamble_offset = cmdbuf_layout.main_preamble_offset,
@@ -3457,7 +3486,7 @@ radv_update_ies_shader(struct radv_device *device, struct radv_indirect_executio
       return;
    }
 
-   radv_emit_compute_shader(pdev, &cs, shader);
+   radv_emit_compute_shader(pdev, &cs, shader, false);
    if (pdev->info.gfx_level >= GFX12)
       radv_gfx12_emit_buffered_regs(device, &cs);
 
@@ -3474,6 +3503,7 @@ radv_update_ies_shader(struct radv_device *device, struct radv_indirect_executio
    set->uses_grid_base_sgpr |= md.grid_base_sgpr;
    set->uses_upload_sgpr |= !!(md.push_const_sgpr & 0xffff);
    set->uses_indirect_descriptors_sgpr |= md.indirect_descriptors_sgpr;
+   set->uses_cs_state_sgpr |= !!md.cs_state_sgpr;
    set->push_constant_size = MAX2(set->push_constant_size, shader->info.push_constant_size);
    set->compute_scratch_size_per_wave = MAX2(set->compute_scratch_size_per_wave, shader->config.scratch_bytes_per_wave);
    set->compute_scratch_waves = MAX2(set->compute_scratch_waves, radv_get_max_scratch_waves(device, shader));

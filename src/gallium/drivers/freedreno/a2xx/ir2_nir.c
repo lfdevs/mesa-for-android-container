@@ -13,12 +13,14 @@
 #include "nir_legacy.h"
 
 static const nir_shader_compiler_options options = {
+   .io_options = nir_io_has_intrinsics,
    .compact_arrays = true,
    .lower_fpow = true,
    .lower_flrp32 = true,
    .lower_fmod = true,
    .lower_fdiv = true,
    .lower_fceil = true,
+   .lower_fsign = true,
    .float_mul_add16 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
    .float_mul_add32 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
    .float_mul_add64 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
@@ -109,8 +111,6 @@ ir2_optimize_nir(nir_shader *s, bool lower)
    }
 
    OPT_V(s, nir_lower_vars_to_ssa);
-   OPT_V(s, nir_lower_indirect_derefs_to_if_else_trees,
-         nir_var_shader_in | nir_var_shader_out, UINT32_MAX);
 
    if (lower) {
       OPT_V(s, ir3_nir_apply_trig_workarounds);
@@ -123,12 +123,9 @@ ir2_optimize_nir(nir_shader *s, bool lower)
    OPT_V(s, nir_opt_sink, nir_move_const_undef);
 
    /* TODO we dont want to get shaders writing to depth for depth textures */
-   if (s->info.stage == MESA_SHADER_FRAGMENT) {
-      nir_foreach_shader_out_variable (var, s) {
-         if (var->data.location == FRAG_RESULT_DEPTH)
-            return -1;
-      }
-   }
+   if (s->info.stage == MESA_SHADER_FRAGMENT &&
+       (s->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH)))
+      return -1;
 
    return 0;
 }
@@ -305,7 +302,6 @@ instr_create_alu(struct ir2_context *ctx, nir_op opcode, unsigned ncomp)
       [nir_op_fneg] = {MAXs, MAXv},
       [nir_op_fabs] = {MAXs, MAXv},
       [nir_op_fsat] = {MAXs, MAXv},
-      [nir_op_fsign] = {-1, CNDGTEv},
       [nir_op_fadd] = {ADDs, ADDv},
       [nir_op_fsub] = {ADDs, ADDv},
       [nir_op_fmul] = {MULs, MULv},
@@ -479,32 +475,29 @@ emit_alu(struct ir2_context *ctx, nir_alu_instr *alu)
       instr->src_count = 3;
       instr->src[2] = ir2_zero(ctx);
       break;
-   case nir_op_fsign: {
-      /* we need an extra instruction to deal with the zero case */
-      struct ir2_instr *tmp;
-
-      /* tmp = x == 0 ? 0 : 1 */
-      tmp = instr_create_alu(ctx, nir_op_fcsel, ncomp);
-      tmp->src[0] = instr->src[0];
-      tmp->src[1] = ir2_zero(ctx);
-      tmp->src[2] = load_const(ctx, (float[]){1.0f}, 1);
-
-      /* result = x >= 0 ? tmp : -tmp */
-      instr->src[1] = ir2_src(tmp->idx, 0, IR2_SRC_SSA);
-      instr->src[2] = instr->src[1];
-      instr->src[2].negate = true;
-      instr->src_count = 3;
-   } break;
    default:
       break;
    }
 }
 
+/* an access can start at any component of a slot: build the swizzle that
+ * reads component comp + i in channel i
+ */
+static unsigned
+swiz_shift(unsigned comp)
+{
+   unsigned swiz = 0;
+   for (int i = 0; i < 4; i++)
+      swiz |= swiz_set(comp + i, i);
+   return swiz;
+}
+
 static void
-load_input(struct ir2_context *ctx, nir_def *def, unsigned idx)
+load_input(struct ir2_context *ctx, nir_intrinsic_instr *intr)
 {
    struct ir2_instr *instr;
-   int slot = -1;
+   nir_def *def = &intr->def;
+   unsigned idx = nir_intrinsic_base(intr);
 
    if (ctx->so->type == MESA_SHADER_VERTEX) {
       instr = ir2_instr_create_fetch(ctx, def, 0);
@@ -514,14 +507,7 @@ load_input(struct ir2_context *ctx, nir_def *def, unsigned idx)
       return;
    }
 
-   /* get slot from idx */
-   nir_foreach_shader_in_variable (var, ctx->nir) {
-      if (var->data.driver_location == idx) {
-         slot = var->data.location;
-         break;
-      }
-   }
-   assert(slot >= 0);
+   unsigned slot = nir_intrinsic_io_semantics(intr).location;
 
    switch (slot) {
    case VARYING_SLOT_POS:
@@ -544,7 +530,8 @@ load_input(struct ir2_context *ctx, nir_def *def, unsigned idx)
 
       unsigned reg_idx = instr->reg - ctx->reg; /* XXX */
       instr = instr_create_alu_dest(ctx, nir_op_mov, def);
-      instr->src[0] = ir2_src(reg_idx, 0, IR2_SRC_REG);
+      instr->src[0] = ir2_src(reg_idx, swiz_shift(nir_intrinsic_component(intr)),
+                              IR2_SRC_REG);
       break;
    default:
       instr = instr_create_alu_dest(ctx, nir_op_mov, def);
@@ -556,16 +543,7 @@ load_input(struct ir2_context *ctx, nir_def *def, unsigned idx)
 static unsigned
 output_slot(struct ir2_context *ctx, nir_intrinsic_instr *intr)
 {
-   int slot = -1;
-   unsigned idx = nir_intrinsic_base(intr);
-   nir_foreach_shader_out_variable (var, ctx->nir) {
-      if (var->data.driver_location == idx) {
-         slot = var->data.location;
-         break;
-      }
-   }
-   assert(slot != -1);
-   return slot;
+   return nir_intrinsic_io_semantics(intr).location;
 }
 
 static void
@@ -617,8 +595,18 @@ emit_intrinsic(struct ir2_context *ctx, nir_intrinsic_instr *intr)
       /* Nothing to do for these */
       break;
 
+   case nir_intrinsic_load_barycentric_pixel:
+   case nir_intrinsic_load_barycentric_centroid:
+   case nir_intrinsic_load_barycentric_sample:
+      /* the result feeds load_interpolated_input, which ignores it */
+      break;
+
    case nir_intrinsic_load_input:
-      load_input(ctx, &intr->def, nir_intrinsic_base(intr));
+   case nir_intrinsic_load_interpolated_input:
+      /* a2xx has no interpolation modes, so the barycentric source of
+       * load_interpolated_input can simply be ignored
+       */
+      load_input(ctx, intr);
       break;
    case nir_intrinsic_store_output:
       store_output(ctx, intr->src[0], output_slot(ctx, intr),
@@ -774,14 +762,12 @@ emit_tex(struct ir2_context *ctx, nir_tex_instr *tex)
 }
 
 static void
-setup_input(struct ir2_context *ctx, nir_variable *in)
+setup_input(struct ir2_context *ctx, nir_intrinsic_instr *intr)
 {
    struct fd2_shader_stateobj *so = ctx->so;
-   unsigned n = in->data.driver_location;
-   unsigned slot = in->data.location;
-
-   assert(glsl_type_is_vector_or_scalar(in->type) ||
-          glsl_type_is_unsized_array(in->type));
+   unsigned n = nir_intrinsic_base(intr);
+   unsigned slot = nir_intrinsic_io_semantics(intr).location;
+   unsigned ncomp = nir_intrinsic_component(intr) + intr->num_components;
 
    /* handle later */
    if (ctx->so->type == MESA_SHADER_VERTEX)
@@ -790,7 +776,14 @@ setup_input(struct ir2_context *ctx, nir_variable *in)
    if (ctx->so->type != MESA_SHADER_FRAGMENT)
       compile_error(ctx, "unknown shader type: %d\n", ctx->so->type);
 
-   n = ctx->f->inputs_count++;
+   /* load_input() uses nir_intrinsic_base() as the input register
+    * number, so index the linkage by driver location to match
+    */
+   if (n >= ARRAY_SIZE(ctx->f->inputs)) {
+      compile_error(ctx, "driver location %u out of range\n", n);
+      return;
+   }
+   ctx->f->inputs_count = MAX2(ctx->f->inputs_count, n + 1);
 
    /* half of fragcoord from param reg, half from a varying */
    if (slot == VARYING_SLOT_POS) {
@@ -798,12 +791,34 @@ setup_input(struct ir2_context *ctx, nir_variable *in)
       so->need_param = true;
    }
 
+   /* a varying can be read by more than one intrinsic, each covering
+    * only part of it, so accumulate the components
+    */
    ctx->f->inputs[n].slot = slot;
-   ctx->f->inputs[n].ncomp = glsl_get_components(in->type);
+   ctx->f->inputs[n].ncomp = MAX2(ctx->f->inputs[n].ncomp, ncomp);
 
-   /* in->data.interpolation?
+   /* nir_intrinsic_io_semantics(intr).interp_mode?
     * opengl ES 2.0 can't do flat mode, but we still get it from GALLIUM_HUD
     */
+}
+
+/* IO is lowered, so the inputs have to be collected from the intrinsics
+ * reading them rather than from the variable list
+ */
+static void
+setup_inputs(struct ir2_context *ctx)
+{
+   nir_foreach_block (block, nir_shader_get_entrypoint(ctx->nir)) {
+      nir_foreach_instr (instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         if (intr->intrinsic == nir_intrinsic_load_input ||
+             intr->intrinsic == nir_intrinsic_load_interpolated_input)
+            setup_input(ctx, intr);
+      }
+   }
 }
 
 static void
@@ -1168,11 +1183,15 @@ ir2_nir_compile(struct ir2_context *ctx, bool binning)
       ctx->f->fragcoord = -1;
       ctx->f->inputs_count = 0;
       memset(ctx->f->inputs, 0, sizeof(ctx->f->inputs));
+      /* driver locations may be sparse, and store_output() must not
+       * match one of the resulting gaps against a real varying slot
+       */
+      for (unsigned i = 0; i < ARRAY_SIZE(ctx->f->inputs); i++)
+         ctx->f->inputs[i].slot = IR2_INPUT_SLOT_UNUSED;
    }
 
    /* Setup inputs: */
-   nir_foreach_shader_in_variable (in, ctx->nir)
-      setup_input(ctx, in);
+   setup_inputs(ctx);
 
    if (so->type == MESA_SHADER_FRAGMENT) {
       unsigned idx;

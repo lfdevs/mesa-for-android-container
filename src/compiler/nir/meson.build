@@ -106,6 +106,7 @@ else
   'nir_builtin_builder.c',
   'nir_builtin_builder.h',
   'nir_conversion_builder.h',
+  'nir_convert_address_format.c',
   'nir_clip_cull_distance_io_utils.c',
   'nir_clone.c',
   'nir_constant_expressions.h',
@@ -243,6 +244,7 @@ else
   'nir_lower_wpos_center.c',
   'nir_lower_wpos_ytransform.c',
   'nir_lower_wrmasks.c',
+  'nir_lower_xfb_to_stores.c',
   'nir_lower_bit_size.c',
   'nir_lower_ubo_vec4.c',
   'nir_lower_uniforms_to_ubo.c',
@@ -374,16 +376,6 @@ if not with_nir_headers_only
 ]
 endif
 
-_libnir = static_library(
-  'nir',
-  [files_libnir, custom_targets_libnir],
-  include_directories : [inc_include, inc_src],
-  c_args : [c_msvc_compat_args, soong_compat_c_args, no_override_init_args, no_misleading_indentation],
-  gnu_symbol_visibility : 'hidden',
-  dependencies : [idep_compiler, dep_valgrind, idep_mesautil],
-  build_by_default : false,
-)
-
 inc_nir = include_directories('.')
 
 # Headers-only dependency
@@ -391,6 +383,16 @@ idep_nir_headers = declare_dependency(
   sources : [nir_opcodes_h, nir_builder_opcodes_h, nir_intrinsics_h, nir_intrinsics_indices_h,
              ir_expression_operation_h, builtin_types_h],
   include_directories : [inc_nir, inc_compiler, inc_src, inc_include],
+)
+
+_libnir = static_library(
+  'nir',
+  [files_libnir, custom_targets_libnir],
+  include_directories : [inc_include, inc_src],
+  c_args : [c_msvc_compat_args, soong_compat_c_args, no_override_init_args, no_misleading_indentation],
+  gnu_symbol_visibility : 'hidden',
+  dependencies : [idep_compiler, dep_valgrind, idep_mesautil, idep_nir_headers],
+  build_by_default : false,
 )
 
 # Also link with nir
@@ -456,6 +458,7 @@ if with_tests and not with_nir_headers_only
           'tests/opt_loop_tests.cpp',
           'tests/opt_peephole_select.cpp',
           'tests/opt_shrink_vectors_tests.cpp',
+          'tests/opt_vectorize_tests.cpp',
           'tests/opt_varyings_tests_bicm_binary_alu.cpp',
           'tests/opt_varyings_tests_bicm_sysval.cpp',
           'tests/opt_varyings_tests_dead_input.cpp',

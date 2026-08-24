@@ -122,6 +122,9 @@ handle_intermediate_float_result(double value, unsigned execution_mode, unsigned
         } else {
             const_val.u16 = _mesa_float_to_float16_rtne(value);
         }
+        break;
+    default:
+        UNREACHABLE("Unsupported bit_size. Should be 64, 32, or 16");
     }
 
     return get_float_source(const_val, execution_mode, bit_size);

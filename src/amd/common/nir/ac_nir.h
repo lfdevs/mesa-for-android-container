@@ -335,10 +335,11 @@ typedef struct {
 
    /* Outputs. */
    bool clamp_color;                /* GL only */
-   bool alpha_test_alpha_to_one;    /* GL only, this only affects alpha test */
+   bool alpha_to_one;               /* kill mrt0.alpha if it has no other use, force 1 for alpha test */
    enum compare_func alpha_func;    /* GL only */
    bool keep_alpha_for_mrtz;        /* this prevents killing alpha based on spi_shader_col_format_hint */
-   unsigned spi_shader_col_format_hint; /* this only shrinks and eliminates output stores */
+   uint32_t color_mask;             /* this shrinks/eliminates output stores */
+   uint8_t color_no_signed_zero;    /* whether it matters if color values are -0.0 or +0.0 */
    bool kill_z;
    bool kill_stencil;
    bool kill_samplemask;

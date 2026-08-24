@@ -571,10 +571,8 @@ ac_nir_mem_vectorize_callback(unsigned align_mul, unsigned align_offset, unsigne
                               nir_intrinsic_instr *high, void *data)
 {
    struct ac_nir_config *config = (struct ac_nir_config *)data;
-   bool uses_smem = (nir_intrinsic_has_access(low) &&
-                     nir_intrinsic_access(low) & ACCESS_SMEM_AMD) ||
-                    /* These don't have the "access" field. */
-                    low->intrinsic == nir_intrinsic_load_push_constant;
+   bool uses_smem = nir_intrinsic_has_access(low) &&
+                    nir_intrinsic_access(low) & ACCESS_SMEM_AMD;
    bool is_store = !nir_intrinsic_infos[low->intrinsic].has_dest;
    bool swizzled = low->intrinsic == nir_intrinsic_load_stack ||
                     low->intrinsic == nir_intrinsic_store_stack ||
@@ -1073,6 +1071,15 @@ max_alu_src_identity_swizzle(const nir_alu_instr *alu, const nir_alu_src *src)
 uint8_t
 ac_nir_opt_vectorize_cb(const nir_instr *instr, const void *data)
 {
+   if (instr->type == nir_instr_type_phi) {
+      nir_phi_instr *phi = nir_instr_as_phi(instr);
+
+      if (phi->def.bit_size != 1 && phi->def.bit_size < 32)
+         return 32 / phi->def.bit_size;
+
+      return 1;
+   }
+
    if (instr->type != nir_instr_type_alu)
       return 0;
 

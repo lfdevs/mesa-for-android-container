@@ -2701,8 +2701,8 @@
       </name>
       <staging name="sr" direction="input"/>
       <src name="src0"/>
-      <src name="src2"/>
       <pc_rel_label_unsigned name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="src0" type="SourceEncoding64">
       <expression operator="bitwise_or">
@@ -4921,6 +4921,7 @@
         <modifier name="dest_width"/>
       </dest>
       <src name="src0"/>
+      <float name="imm1w"/>
     </syntax>
     <virtual name="src0" type="SourceEncoding">
       <expression operator="bitwise_or">
@@ -4962,6 +4963,7 @@
         <modifier name="dest_width"/>
       </dest>
       <src name="src0"/>
+      <float name="imm1w"/>
     </syntax>
     <virtual name="src0" type="SourceEncoding">
       <expression operator="bitwise_or">
@@ -10031,6 +10033,7 @@
         <modifier name="dest_width"/>
       </dest>
       <src name="src0"/>
+      <uint name="imm1w"/>
     </syntax>
     <virtual name="src0" type="SourceEncoding">
       <expression operator="bitwise_or">
@@ -14045,8 +14048,8 @@
       </name>
       <staging name="sw" direction="output"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -14153,8 +14156,8 @@
       </name>
       <staging name="sw" direction="output"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="lane" type="load_lane_16_m" exact="h0" default="h0"/>
     <virtual name="offset" type="uint">
@@ -14261,8 +14264,8 @@
       </name>
       <staging name="sw" direction="output"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -14368,8 +14371,8 @@
       </name>
       <staging name="sw" direction="output"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -14475,8 +14478,8 @@
       </name>
       <staging name="sw" direction="output"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -14582,8 +14585,8 @@
       </name>
       <staging name="sw" direction="output"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -14690,8 +14693,8 @@
       </name>
       <staging name="sw" direction="output"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="lane" type="lane_all_m" exact="b0" default="b0"/>
     <virtual name="offset" type="uint">
@@ -14798,8 +14801,8 @@
       </name>
       <staging name="sw" direction="output"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -14906,8 +14909,8 @@
       </name>
       <staging name="sw" direction="output"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="src0" type="SourceEncoding64">
       <expression operator="bitwise_or">
@@ -21136,6 +21139,395 @@
       </expression>
     </field>
   </instruction>
+  <instruction name="MMUL" variant="f16" exec_unit="fma" since="15" until="15">
+    <syntax>
+      <name>
+        <modifier name="flow"/>
+      </name>
+      <dest>
+        <modifier name="dest_width"/>
+      </dest>
+      <src name="src0">
+        <modifier name="sub0"/>
+      </src>
+      <src name="src1"/>
+      <src name="src2"/>
+    </syntax>
+    <virtual name="src0" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src0_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src0_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <field name="src0_lo" pos="0" width="8">
+      <expression operator="slice">
+        <expression identifier="src0"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+    <virtual name="src1" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src1_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src1_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <virtual name="src2" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src2_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src2_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <field name="src2_lo" pos="16" width="8">
+      <expression operator="slice">
+        <expression identifier="src2"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+    <reserved pos="24" width="2" type="zero"/>
+    <field name="sub1" pos="26" width="2" type="submatrix_sel_m" exact="none"/>
+    <field name="sub0" pos="28" width="2" type="submatrix_sel_m" restrict="f0 f1"/>
+    <field name="opcode2" pos="30" width="4" type="R3_misc_opcode2_t" exact="MMUL"/>
+    <reserved pos="34" width="2" type="zero"/>
+    <field name="mmul_variant" pos="36" width="4" type="mmul_variant_t" exact="MMUL_F16"/>
+    <field name="dest_register_index" pos="40" width="8" type="uint" max="127"/>
+    <field name="src0_hi" pos="48" width="1">
+      <expression operator="slice">
+        <expression identifier="src0"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="src1_hi" pos="49" width="1">
+      <expression operator="slice">
+        <expression identifier="src1"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="src2_hi" pos="50" width="1">
+      <expression operator="slice">
+        <expression identifier="src2"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="opcode1" pos="51" width="2" type="R3_opcode1_wide_t" exact="MISC"/>
+    <field name="dest_width" pos="53" width="2" type="dest_width_m" exact="none"/>
+    <field name="instruction_class" pos="55" width="3" type="instruction_major_class_t" exact="dst32_operands3"/>
+    <field name="flow" pos="58" width="4" type="flow_control_m"/>
+    <field name="fau_page_index" pos="62" width="2" type="uint" exact="0"/>
+    <field name="src1_lo" pos="8" width="8">
+      <expression operator="slice">
+        <expression identifier="src1"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+  </instruction>
+  <instruction name="MMUL" variant="f32" exec_unit="fma" since="15" until="15">
+    <syntax>
+      <name>
+        <modifier name="flow"/>
+      </name>
+      <dest>
+        <modifier name="dest_width"/>
+      </dest>
+      <src name="src0">
+        <modifier name="sub0"/>
+      </src>
+      <src name="src1">
+        <modifier name="sub1"/>
+      </src>
+      <src name="src2"/>
+    </syntax>
+    <virtual name="src0" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src0_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src0_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <field name="src0_lo" pos="0" width="8">
+      <expression operator="slice">
+        <expression identifier="src0"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+    <virtual name="src1" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src1_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src1_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <virtual name="src2" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src2_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src2_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <field name="src2_lo" pos="16" width="8">
+      <expression operator="slice">
+        <expression identifier="src2"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+    <reserved pos="24" width="2" type="zero"/>
+    <field name="sub1" pos="26" width="2" type="submatrix_sel_m"/>
+    <field name="sub0" pos="28" width="2" type="submatrix_sel_m"/>
+    <field name="opcode2" pos="30" width="4" type="R3_misc_opcode2_t" exact="MMUL"/>
+    <reserved pos="34" width="2" type="zero"/>
+    <field name="mmul_variant" pos="36" width="4" type="mmul_variant_t" exact="MMUL_F32"/>
+    <field name="dest_register_index" pos="40" width="8" type="uint" max="127"/>
+    <field name="src0_hi" pos="48" width="1">
+      <expression operator="slice">
+        <expression identifier="src0"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="src1_hi" pos="49" width="1">
+      <expression operator="slice">
+        <expression identifier="src1"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="src2_hi" pos="50" width="1">
+      <expression operator="slice">
+        <expression identifier="src2"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="opcode1" pos="51" width="2" type="R3_opcode1_wide_t" exact="MISC"/>
+    <field name="dest_width" pos="53" width="2" type="dest_width_m" exact="none"/>
+    <field name="instruction_class" pos="55" width="3" type="instruction_major_class_t" exact="dst32_operands3"/>
+    <field name="flow" pos="58" width="4" type="flow_control_m"/>
+    <field name="fau_page_index" pos="62" width="2" type="uint" exact="0"/>
+    <field name="src1_lo" pos="8" width="8">
+      <expression operator="slice">
+        <expression identifier="src1"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+  </instruction>
+  <instruction name="MMUL" variant="v4s8" exec_unit="fma" since="15" until="15">
+    <syntax>
+      <name>
+        <modifier name="flow"/>
+      </name>
+      <dest>
+        <modifier name="dest_width"/>
+      </dest>
+      <src name="src0">
+        <modifier name="unsigned0"/>
+      </src>
+      <src name="src1">
+        <modifier name="unsigned1"/>
+      </src>
+      <src name="src2"/>
+    </syntax>
+    <virtual name="src0" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src0_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src0_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <field name="src0_lo" pos="0" width="8">
+      <expression operator="slice">
+        <expression identifier="src0"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+    <virtual name="src1" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src1_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src1_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <virtual name="src2" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src2_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src2_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <field name="src2_lo" pos="16" width="8">
+      <expression operator="slice">
+        <expression identifier="src2"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+    <field name="signedness" pos="24" width="1" type="signedness_t" exact="op_signed"/>
+    <field name="saturate" pos="25" width="1" type="saturate_m" exact="none" default="none"/>
+    <field name="unsigned0" pos="26" width="1" type="v4u8_m"/>
+    <field name="unsigned1" pos="27" width="1" type="v4u8_m"/>
+    <reserved pos="28" width="2" type="zero"/>
+    <field name="opcode2" pos="30" width="4" type="R3_misc_opcode2_t" exact="MMUL"/>
+    <reserved pos="34" width="2" type="zero"/>
+    <field name="mmul_variant" pos="36" width="4" type="mmul_variant_t" exact="MMUL_V4I8"/>
+    <field name="dest_register_index" pos="40" width="8" type="uint" max="127"/>
+    <field name="src0_hi" pos="48" width="1">
+      <expression operator="slice">
+        <expression identifier="src0"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="src1_hi" pos="49" width="1">
+      <expression operator="slice">
+        <expression identifier="src1"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="src2_hi" pos="50" width="1">
+      <expression operator="slice">
+        <expression identifier="src2"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="opcode1" pos="51" width="2" type="R3_opcode1_wide_t" exact="MISC"/>
+    <field name="dest_width" pos="53" width="2" type="dest_width_m" exact="none"/>
+    <field name="instruction_class" pos="55" width="3" type="instruction_major_class_t" exact="dst32_operands3"/>
+    <field name="flow" pos="58" width="4" type="flow_control_m"/>
+    <field name="fau_page_index" pos="62" width="2" type="uint" exact="0"/>
+    <field name="src1_lo" pos="8" width="8">
+      <expression operator="slice">
+        <expression identifier="src1"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+  </instruction>
+  <instruction name="MMUL" variant="v4u8" exec_unit="fma" since="15" until="15">
+    <syntax>
+      <name>
+        <modifier name="flow"/>
+        <modifier name="saturate"/>
+      </name>
+      <dest>
+        <modifier name="dest_width"/>
+      </dest>
+      <src name="src0"/>
+      <src name="src1"/>
+      <src name="src2"/>
+    </syntax>
+    <virtual name="src0" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src0_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src0_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <field name="src0_lo" pos="0" width="8">
+      <expression operator="slice">
+        <expression identifier="src0"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+    <virtual name="src1" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src1_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src1_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <virtual name="src2" type="SourceEncoding">
+      <expression operator="bitwise_or">
+        <expression identifier="src2_lo"/>
+        <expression operator="lshift">
+          <expression identifier="src2_hi"/>
+          <expression literal="8" type="uint"/>
+        </expression>
+      </expression>
+    </virtual>
+    <field name="src2_lo" pos="16" width="8">
+      <expression operator="slice">
+        <expression identifier="src2"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+    <field name="signedness" pos="24" width="1" type="signedness_t" exact="op_unsigned"/>
+    <field name="saturate" pos="25" width="1" type="saturate_m" default="none"/>
+    <reserved pos="26" width="4" type="zero"/>
+    <field name="opcode2" pos="30" width="4" type="R3_misc_opcode2_t" exact="MMUL"/>
+    <reserved pos="34" width="2" type="zero"/>
+    <field name="mmul_variant" pos="36" width="4" type="mmul_variant_t" exact="MMUL_V4I8"/>
+    <field name="dest_register_index" pos="40" width="8" type="uint" max="127"/>
+    <field name="src0_hi" pos="48" width="1">
+      <expression operator="slice">
+        <expression identifier="src0"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="src1_hi" pos="49" width="1">
+      <expression operator="slice">
+        <expression identifier="src1"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="src2_hi" pos="50" width="1">
+      <expression operator="slice">
+        <expression identifier="src2"/>
+        <expression literal="8" type="uint"/>
+        <expression literal="8" type="uint"/>
+      </expression>
+    </field>
+    <field name="opcode1" pos="51" width="2" type="R3_opcode1_wide_t" exact="MISC"/>
+    <field name="dest_width" pos="53" width="2" type="dest_width_m" exact="none"/>
+    <field name="instruction_class" pos="55" width="3" type="instruction_major_class_t" exact="dst32_operands3"/>
+    <field name="flow" pos="58" width="4" type="flow_control_m"/>
+    <field name="fau_page_index" pos="62" width="2" type="uint" exact="0"/>
+    <field name="src1_lo" pos="8" width="8">
+      <expression operator="slice">
+        <expression identifier="src1"/>
+        <expression literal="7" type="uint"/>
+        <expression literal="0" type="uint"/>
+      </expression>
+    </field>
+  </instruction>
   <instruction name="MOV" variant="i32" exec_unit="cvt" since="15" until="15">
     <syntax>
       <name>
@@ -21208,6 +21600,7 @@
       <dest>
         <modifier name="dest_width"/>
       </dest>
+      <uint name="imm1w"/>
     </syntax>
     <field name="src0_lo" pos="0" width="8" exact="192"/>
     <field name="dest_register_index" pos="40" width="8" type="uint" max="127"/>
@@ -26775,8 +27168,8 @@
       </name>
       <staging name="sr" direction="input"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -26882,8 +27275,8 @@
       </name>
       <staging name="sr" direction="input"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="lane" type="lane16_m" exact="h0" default="h0"/>
     <virtual name="offset" type="uint">
@@ -26989,8 +27382,8 @@
       </name>
       <staging name="sr" direction="input"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -27095,8 +27488,8 @@
       </name>
       <staging name="sr" direction="input"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -27201,8 +27594,8 @@
       </name>
       <staging name="sr" direction="input"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -27307,8 +27700,8 @@
       </name>
       <staging name="sr" direction="input"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -27414,8 +27807,8 @@
       </name>
       <staging name="sr" direction="input"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="lane" type="lane8_m" exact="b0" default="b0"/>
     <virtual name="offset" type="uint">
@@ -27521,8 +27914,8 @@
       </name>
       <staging name="sr" direction="input"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="offset" type="uint">
       <expression operator="bitwise_or">
@@ -27629,8 +28022,8 @@
       </name>
       <staging name="sr" direction="input"/>
       <src name="src0"/>
-      <src name="src2"/>
       <uint name="offset"/>
+      <src name="src2"/>
     </syntax>
     <virtual name="src0" type="SourceEncoding64">
       <expression operator="bitwise_or">
@@ -30795,6 +31188,7 @@
     <value name="MUX" canonical="1" value="2"/>
     <value name="MKVEC_V2I8" canonical="1" value="3"/>
     <value name="IDPADD_V4I8" canonical="1" value="4"/>
+    <value name="MMUL" canonical="1" value="5"/>
     <value name="CUBEFACE1" canonical="1" value="12"/>
     <value name="CUBEFACE2" canonical="1" value="13"/>
     <value name="CUBE" canonical="1" value="15"/>
@@ -31024,6 +31418,32 @@
     <value name="store" canonical="1" value="0"/>
     <value name="retrieve" canonical="1" value="1"/>
     <value name="clobber_or_none" canonical="1" value="3"/>
+  </enum>
+  <enum name="fau_special_index_page0_t" since="15" until="15">
+    <value name="warp_id" canonical="1" value="2"/>
+    <value name="framebuffer_size" canonical="1" value="4"/>
+    <value name="atest_datum" canonical="1" value="5"/>
+    <value name="sample" canonical="1" value="6"/>
+    <value name="blend_descriptor_0" canonical="1" value="8"/>
+    <value name="blend_descriptor_1" canonical="1" value="9"/>
+    <value name="blend_descriptor_2" canonical="1" value="10"/>
+    <value name="blend_descriptor_3" canonical="1" value="11"/>
+    <value name="blend_descriptor_4" canonical="1" value="12"/>
+    <value name="blend_descriptor_5" canonical="1" value="13"/>
+    <value name="blend_descriptor_6" canonical="1" value="14"/>
+    <value name="blend_descriptor_7" canonical="1" value="15"/>
+  </enum>
+  <enum name="fau_special_index_page1_t" since="15" until="15">
+    <value name="thread_local_pointer" canonical="1" value="1"/>
+    <value name="workgroup_local_pointer" canonical="1" value="3"/>
+    <value name="resource_table_pointer" canonical="1" value="7"/>
+  </enum>
+  <enum name="fau_special_index_page3_t" since="15" until="15">
+    <value name="lane_id" canonical="1" value="1"/>
+    <value name="core_id" canonical="1" value="3"/>
+    <value name="shader_output" canonical="1" value="4"/>
+    <value name="prepass_state" canonical="1" value="5"/>
+    <value name="pc" canonical="1" value="15"/>
   </enum>
   <enum name="fexp_adj_m" since="15" until="15">
     <value name="none" canonical="1" value="0"/>
@@ -31308,6 +31728,11 @@
     <value name="slot2" canonical="1" value="2"/>
     <value name="slot7" canonical="1" value="3"/>
   </enum>
+  <enum name="mmul_variant_t" since="15" until="15">
+    <value name="MMUL_V4I8" canonical="1" value="0"/>
+    <value name="MMUL_F32" canonical="1" value="1"/>
+    <value name="MMUL_F16" canonical="1" value="2"/>
+  </enum>
   <enum name="mux_cmpf_m" since="15" until="15">
     <value name="neg" canonical="1" value="0"/>
     <value name="int_zero" canonical="1" value="1"/>
@@ -31478,6 +31903,11 @@
   <enum name="stencil_m" since="15" until="15">
     <value name="none" canonical="1" value="0"/>
     <value name="stencil" canonical="1" value="1"/>
+  </enum>
+  <enum name="submatrix_sel_m" since="15" until="15">
+    <value name="f0" canonical="1" value="0"/>
+    <value name="f1" canonical="1" value="1"/>
+    <value name="none" canonical="1" value="2"/>
   </enum>
   <enum name="swiz8_2_full_m" since="15" until="15">
     <value name="b00" canonical="1" value="0"/>

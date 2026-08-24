@@ -54,14 +54,15 @@ static bool lower_load_vulkan_descriptor(nir_builder *b,
 
    unsigned desc_set = nir_intrinsic_desc_set(vk_res_idx);
    unsigned binding = nir_intrinsic_binding(vk_res_idx);
-   unsigned elem = nir_src_as_uint(vk_res_idx->src[0]);
+   nir_def *elem = vk_res_idx->src[0].ssa;
 
    set_resource_used(common, desc_set, binding);
 
    b->cursor = nir_before_instr(&intr->instr);
 
    uint32_t desc_set_binding = pco_pack_desc(desc_set, binding);
-   nir_def *desc_ref = nir_imm_ivec3(b, desc_set_binding, elem, 0);
+   nir_def *desc_ref =
+      nir_vec3(b, nir_imm_int(b, desc_set_binding), elem, nir_imm_int(b, 0));
    nir_def_rewrite_uses(&intr->def, desc_ref);
    nir_instr_remove(&intr->instr);
    return true;
@@ -69,17 +70,17 @@ static bool lower_load_vulkan_descriptor(nir_builder *b,
 
 static nir_def *array_elem_from_deref(nir_builder *b, nir_deref_instr *deref)
 {
-   unsigned array_elem = 0;
+   nir_def *array_elem = nir_imm_int(b, 0);
    if (deref->deref_type != nir_deref_type_var) {
       assert(deref->deref_type == nir_deref_type_array);
 
-      array_elem = nir_src_as_uint(deref->arr.index);
+      array_elem = deref->arr.index.ssa;
 
       deref = nir_deref_instr_parent(deref);
    }
 
    assert(deref->deref_type == nir_deref_type_var);
-   return nir_imm_int(b, array_elem);
+   return array_elem;
 }
 
 static inline bool is_comb_img_smp(unsigned desc_set,
@@ -292,7 +293,7 @@ lower_vk_intr(nir_builder *b, nir_intrinsic_instr *intr, void *cb_data)
 {
    pco_data *data = cb_data;
    pco_common_data *common = &data->common;
-   
+
    b->cursor = nir_before_instr(&intr->instr);
 
    switch (intr->intrinsic) {

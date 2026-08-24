@@ -10,9 +10,9 @@
 
 #include "vn_command_buffer.h"
 
-#include "venus-protocol/vn_protocol_driver_command_buffer.h"
-#include "venus-protocol/vn_protocol_driver_command_pool.h"
 #include "vk_synchronization.h"
+#include "vn_protocol_driver_command_buffer.h"
+#include "vn_protocol_driver_command_pool.h"
 
 #include "vn_descriptor_set.h"
 #include "vn_device.h"
@@ -126,10 +126,10 @@ vn_cmd_get_cached_storage(struct vn_command_buffer *cmd,
    memset(out_storage, 0, sizeof(*out_storage));
    if (dep_info_count) {
       out_storage->dep_infos = data;
-      data += dep_infos_size;
+      data = (char *)data + dep_infos_size;
    }
    out_storage->barriers = data;
-   data += barriers_size;
+   data = (char *)data + barriers_size;
 
    out_storage->acquire_unmodified_count = barrier_count;
    out_storage->acquire_unmodified_infos = data;
@@ -991,9 +991,9 @@ vn_fix_command_buffer_begin_info(struct vn_command_buffer *cmd,
     */
    VkBaseOutStructure *head = NULL;
    VkBaseOutStructure *tail = NULL;
-   vk_foreach_struct_const(src, local->inheritance.pNext) {
+   vk_foreach_struct_const(sType, src, local->inheritance.pNext) {
       void *pnext = NULL;
-      switch (src->sType) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT:
          memcpy(
             &local->conditional_rendering, src,
@@ -1314,6 +1314,15 @@ VKAPI_ATTR void VKAPI_CALL
 vn_CmdEndRendering(VkCommandBuffer commandBuffer)
 {
    VN_CMD_ENQUEUE(vkCmdEndRendering, commandBuffer);
+
+   vn_cmd_end_rendering(vn_command_buffer_from_handle(commandBuffer));
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vn_CmdEndRendering2KHR(VkCommandBuffer commandBuffer,
+                       const VkRenderingEndInfoKHR *pRenderingEndInfo)
+{
+   VN_CMD_ENQUEUE(vkCmdEndRendering2KHR, commandBuffer, pRenderingEndInfo);
 
    vn_cmd_end_rendering(vn_command_buffer_from_handle(commandBuffer));
 }
@@ -2838,4 +2847,12 @@ vn_CmdPushDataEXT(VkCommandBuffer commandBuffer,
                   const VkPushDataInfoEXT *pPushDataInfo)
 {
    VN_CMD_ENQUEUE(vkCmdPushDataEXT, commandBuffer, pPushDataInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vn_CmdSetPrimitiveRestartIndexEXT(VkCommandBuffer commandBuffer,
+                                  uint32_t primitiveRestartIndex)
+{
+   VN_CMD_ENQUEUE(vkCmdSetPrimitiveRestartIndexEXT, commandBuffer,
+                  primitiveRestartIndex);
 }

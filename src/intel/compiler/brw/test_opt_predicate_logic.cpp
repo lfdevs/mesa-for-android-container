@@ -254,3 +254,40 @@ TEST_F(predicate_logic_test, mov_flag_subreg_mismatch)
 
    EXPECT_NO_PROGRESS(brw_opt_predicate_logic, bld);
 }
+
+TEST_F(predicate_logic_test, and_flag_subreg_mismatch)
+{
+   brw_builder bld = make_shader();
+   brw_builder exp = make_shader();
+
+   brw_reg src0 = vgrf(bld, exp, BRW_TYPE_D);
+   brw_reg src1 = vgrf(bld, exp, BRW_TYPE_D);
+   brw_reg src2 = vgrf(bld, exp, BRW_TYPE_D);
+   brw_reg dst0 = vgrf(bld, exp, BRW_TYPE_D);
+   brw_reg dst1 = vgrf(bld, exp, BRW_TYPE_D);
+
+   brw_inst *inst;
+
+   inst = bld.CMP(dst0, src0, src1, BRW_CONDITIONAL_L);
+   inst->flag_subreg = 1;
+
+   bld.ASR(dst1, src2, brw_imm_d(31));
+
+   bld.AND(bld.null_reg_d(), dst0, dst1)
+      ->conditional_mod = BRW_CONDITIONAL_NZ;
+
+   EXPECT_PROGRESS(brw_opt_predicate_logic, bld);
+
+   inst = exp.CMP(dst0, src0, src1, BRW_CONDITIONAL_L);
+   inst->flag_subreg = 1;
+
+   exp.ASR(dst1, src2, brw_imm_d(31))
+      ->conditional_mod = BRW_CONDITIONAL_NZ;
+
+   inst = exp.MOV(exp.null_reg_d(), dst0);
+
+   inst->conditional_mod = BRW_CONDITIONAL_NZ;
+   set_predicate(BRW_PREDICATE_NORMAL, inst);
+
+   EXPECT_SHADERS_MATCH(bld, exp);
+}

@@ -222,8 +222,8 @@ upload_vertices(struct gl_context *ctx, unsigned user_buffer_mask,
 
    /* Faster path where all attribs are separate. */
    while (attrib_mask_iter) {
-      unsigned i = u_bit_scan(&attrib_mask_iter);
-      unsigned binding_index = vao->Attrib[i].BufferIndex;
+      unsigned attrib_index = u_bit_scan(&attrib_mask_iter);
+      unsigned binding_index = vao->Attrib[attrib_index].BufferIndex;
 
       if (!(user_buffer_mask & (1 << binding_index)))
          continue;
@@ -232,8 +232,8 @@ upload_vertices(struct gl_context *ctx, unsigned user_buffer_mask,
       unsigned upload_offset = 0;
       unsigned stride = vao->Attrib[binding_index].Stride;
       unsigned instance_div = vao->Attrib[binding_index].Divisor;
-      unsigned element_size = vao->Attrib[i].ElementSize;
-      unsigned offset = vao->Attrib[i].RelativeOffset;
+      unsigned element_size = vao->Attrib[attrib_index].ElementSize;
+      unsigned offset = vao->Attrib[attrib_index].RelativeOffset;
       unsigned size;
 
       if (instance_div) {
@@ -755,7 +755,7 @@ should_convert_to_begin_end(struct gl_context *ctx, unsigned count,
     * Others prevent syncing, such as disallowing buffer objects because we
     * can't map them without syncing.
     */
-   return !_mesa_is_desktop_gl_compat(ctx) &&
+   return _mesa_is_desktop_gl_compat(ctx) &&
           util_is_vbo_upload_ratio_too_large(count, num_upload_vertices) &&
           instance_count == 1 &&                /* no instancing */
           vao->CurrentElementBufferName == 0 && /* only user indices */

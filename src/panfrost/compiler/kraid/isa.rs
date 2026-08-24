@@ -1,7 +1,7 @@
 // Copyright © 2026 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
-use crate::ir::SmallConstant;
+use crate::ir::{DataType, SmallConstant};
 use compiler::enum_as_u8::*;
 
 #[derive(Debug)]
@@ -87,11 +87,23 @@ pub trait SmallConstantTable: TryDecode<u8> {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ExecUnit {
+    Cvt,
+    Fma,
+    Msg,
+    Sfu,
+}
+
 pub struct InstructionSrcInfo<S: EnumAsU8> {
     pub allowed_swizzles: U8EnumSet<S, 2>,
+    pub is_src64: bool,
     pub has_abs: bool,
     pub has_neg: bool,
     pub has_not: bool,
+    // If it's a staging-register that reads
+    // register_format/vecsize
+    pub has_vecsize: bool,
 }
 
 impl<S: EnumAsU8> InstructionSrcInfo<S> {
@@ -103,9 +115,13 @@ impl<S: EnumAsU8> InstructionSrcInfo<S> {
 pub struct InstructionDstInfo<L: EnumAsU8> {
     pub is_sr: bool,
     pub allowed_lanes: U8EnumSet<L, 1>,
+    // If it's a staging-register that reads
+    // register_format/vecsize
+    pub has_vecsize: bool,
 }
 
 pub struct InstructionInfo<S: EnumAsU8 + 'static, L: EnumAsU8 + 'static> {
+    pub exec_unit: ExecUnit,
     pub is_message: bool,
     pub srcs: &'static [InstructionSrcInfo<S>],
     pub sr_src: Option<InstructionSrcInfo<S>>,
@@ -148,14 +164,28 @@ pub struct EncodedDst<L: Copy> {
 }
 
 #[derive(Clone, Copy)]
-pub struct SrRead<S: Copy> {
+pub struct SrRead {
+    pub index: u8,
+    pub count: u8,
+    pub data_type: DataType,
+}
+
+#[derive(Clone, Copy)]
+pub struct SrReadSwizzle<S: Copy> {
     pub index: u8,
     pub count: u8,
     pub swizzle: S,
 }
 
 #[derive(Clone, Copy)]
-pub struct SrWrite<L: Copy> {
+pub struct SrWrite {
+    pub index: u8,
+    pub count: u8,
+    pub data_type: DataType,
+}
+
+#[derive(Clone, Copy)]
+pub struct SrWriteLanes<L: Copy> {
     pub index: u8,
     pub count: u8,
     pub lanes: L,

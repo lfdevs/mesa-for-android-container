@@ -1154,10 +1154,9 @@ instr_is_load_new_reg(nir_instr *instr, unsigned old_num_ssa)
 
 /** Lower all of the SSA defs in a block to registers
  *
- * This performs the very simple operation of blindly replacing all of the SSA
- * defs in the given block with registers.  If not used carefully, this may
- * result in phi nodes with register sources which is technically invalid.
- * Fortunately, the register-based into-SSA pass handles them anyway.
+ * This performs the very simple operation of blindly replacing many of the
+ * SSA defs in the given block with registers. It replaces SSA defs used
+ * outside the block, undef, and constants.
  */
 bool
 nir_lower_ssa_defs_to_regs_block(nir_block *block)

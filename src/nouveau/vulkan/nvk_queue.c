@@ -9,6 +9,7 @@
 #include "nvk_device.h"
 #include "nvk_image.h"
 #include "nvk_physical_device.h"
+#include "nvk_rust.h"
 #include "nv_push.h"
 
 #include "nv_push_cl9039.h"
@@ -235,14 +236,14 @@ nvk_queue_submit_exec(struct nvk_queue *queue,
          };
          result = nvkmd_ctx_wait(queue->exec_ctx, &queue->vk.base, 1, &wait);
          if (result != VK_SUCCESS)
-            goto fail;
+            return result;
       }
    }
 
    result = nvkmd_ctx_wait(queue->exec_ctx, &queue->vk.base,
                            submit->wait_count, submit->waits);
    if (result != VK_SUCCESS)
-      goto fail;
+      return result;
 
    for (unsigned i = 0; i < submit->command_buffer_count; i++) {
       struct nvk_cmd_buffer *cmd =
@@ -271,16 +272,15 @@ nvk_queue_submit_exec(struct nvk_queue *queue,
       STACK_ARRAY_FINISH(execs);
 
       if (result != VK_SUCCESS)
-         goto fail;
+         return result;
    }
 
    result = nvkmd_ctx_signal(queue->exec_ctx, &queue->vk.base,
                              submit->signal_count, submit->signals);
    if (result != VK_SUCCESS)
-      goto fail;
+      return result;
 
-fail:
-   return result;
+   return VK_SUCCESS;
 }
 
 static VkResult
@@ -361,6 +361,12 @@ nvk_queue_init_context_state(struct nvk_queue *queue)
          return result;
    }
 
+   if (queue->engines & NVKMD_ENGINE_VDEC) {
+      result = nvk_push_video_decode_state_init(queue, p);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
    return nvk_queue_push(queue, &push);
 }
 
@@ -419,6 +425,9 @@ nvk_queue_create(struct nvk_device *dev,
 
    queue->engines =
       nvk_queue_engines_from_queue_flags(queue_family->queue_flags);
+
+   if (queue_family->queue_flags & VK_QUEUE_VIDEO_DECODE_BIT_KHR)
+      queue->engines |= NVKMD_ENGINE_VDEC;
 
    if (queue->engines) {
       result = nvkmd_dev_create_ctx(dev->nvkmd, &dev->vk.base,

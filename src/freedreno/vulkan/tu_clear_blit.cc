@@ -1094,7 +1094,7 @@ r3d_common(struct tu_cmd_buffer *cmd, struct tu_cs *cs, enum r3d_type type,
 
    tu_cs_emit_regs(cs, VPC_RAST_STREAM_CNTL(CHIP));
    if (CHIP == A6XX) {
-      tu_cs_emit_regs(cs, VPC_UNKNOWN_9107(CHIP));
+      tu_cs_emit_regs(cs, PC_RAST_STREAM_CNTL(CHIP));
    } else {
       if (CHIP == A7XX)
          tu_cs_emit_regs(cs, VPC_RAST_STREAM_CNTL_V2(CHIP));
@@ -2243,6 +2243,7 @@ tu6_clear_lrz(struct tu_cmd_buffer *cmd,
     * writing whole cache lines we assume to be 64 bytes.
     */
    tu_emit_event_write<CHIP>(cmd, &cmd->cs, FD_CACHE_CLEAN);
+   tu_cs_emit_wfi(cs);
 
    const unsigned lrz_buffers = CHIP >= A7XX ? 2 : 1;
    for (unsigned i = 0; i < lrz_buffers; i++) {
@@ -2271,6 +2272,104 @@ tu6_clear_lrz(struct tu_cmd_buffer *cmd,
    trace_end_slow_clear_lrz(&cmd->trace, &cmd->cs);
 }
 TU_GENX(tu6_clear_lrz);
+
+/* Clear only the LRZ rows that the fast-clear buffer does not cover.
+ *
+ * When the flag RAM is too small for the whole LRZ image we keep fast clear
+ * enabled for the prefix it does cover and clear the rest here. Blocks with no
+ * flag bit fall back to reading LRZ memory, so writing the depth clear value
+ * into those rows is what makes the result correct -- and it is also correct if
+ * the hardware instead reads a stale flag bit and takes it as "dirty", since
+ * either path then lands on cleared LRZ.
+ */
+template <chip CHIP>
+void
+tu6_clear_lrz_partial(struct tu_cmd_buffer *cmd,
+                      struct tu_cs *cs,
+                      struct tu_image *image,
+                      const VkClearValue *value)
+{
+   const struct blit_ops *ops = &r2d_ops<CHIP>;
+   const struct fdl_lrz_layout *lrz = &image->lrz_layout;
+
+   /* This runs after FD_LRZ_CLEAR, so unlike tu6_clear_lrz there is LRZ work
+    * already in flight. The fast clear is processed by the LRZ block and its
+    * cache is separate from the CCU these writes go through, so without an
+    * explicit LRZ flush and an idle wait the two race and clobber each other at
+    * cache-line granularity -- which shows up as scattered, run-to-run-varying
+    * over-culling rather than a clean missing region.
+    *
+    * Emit into `cs`, the same stream as the blit below, so the ordering is
+    * actually guaranteed.
+    */
+   tu_emit_event_write<CHIP>(cmd, cs, FD_LRZ_FLUSH);
+   tu_emit_event_write<CHIP>(cmd, cs, FD_CACHE_CLEAN);
+   cmd->state.cache.flush_bits |= TU_CMD_FLAG_WAIT_FOR_IDLE;
+   tu_emit_cache_flush<CHIP>(cmd);
+
+   const unsigned lrz_buffers = CHIP >= A7XX ? 2 : 1;
+   bool any = false;
+
+   for (unsigned i = 0; i < lrz_buffers; i++) {
+      for (unsigned layer = 0; layer < image->vk.array_layers; layer++) {
+         uint32_t first = fdl6_lrz_fc_first_uncovered_offset(lrz, layer);
+         if (first >= lrz->lrz_layer_size)
+            continue;
+
+         const uint32_t clear_block_bytes = 2048;
+         /* LRZ FC layer stride alignment is 64 bytes, or 512 bits. Each bit
+          * is a FC block that covers 128 bytes.
+          */
+         assert(first % (512 * 128) == 0);
+         /* LRZ layer stride is a multiple of 2048 bytes on all gens currently.
+          */
+         assert(lrz->lrz_layer_size % clear_block_bytes == 0);
+
+         /* The LRZ FC layout is based on the LRZ layout. Each bit in the LRZ
+          * fast-clear RAM corresponds to 1 fast-clear block of 128 bytes, or
+          * 64 LRZ tiles. Therefore we just need to clear from the first
+          * uncovered block to the end.
+          */
+         uint64_t iova = image->iova + lrz->lrz_offset +
+                         i * lrz->lrz_buffer_size +
+                         (uint64_t) layer * lrz->lrz_layer_size +
+                         (uint64_t) first;
+         uint64_t size_remaining =
+            lrz->lrz_layer_size - first;
+         assert(size_remaining % clear_block_bytes == 0);
+
+         if (!any) {
+            ops->setup(cmd, cs, PIPE_FORMAT_Z16_UNORM, PIPE_FORMAT_Z16_UNORM,
+                       VK_IMAGE_ASPECT_DEPTH_BIT, 0, true, false,
+                       VK_SAMPLE_COUNT_1_BIT, VK_SAMPLE_COUNT_1_BIT);
+            ops->clear_value(cmd, cs, PIPE_FORMAT_Z16_UNORM, value);
+            any = true;
+         }
+
+         while (size_remaining > 0) {
+            uint32_t blocks = MIN2(size_remaining / clear_block_bytes,
+                                   0x4000);
+
+            ops->dst_buffer(cs, PIPE_FORMAT_Z16_UNORM, iova,
+                            clear_block_bytes, PIPE_FORMAT_Z16_UNORM);
+            ops->coords(cmd, cs, (VkOffset2D) {}, blt_no_coord,
+                        (VkExtent2D) { clear_block_bytes / 2, blocks });
+            ops->run(cmd, cs);
+
+            size_remaining -= blocks * clear_block_bytes;
+            iova += blocks * clear_block_bytes;
+         }
+      }
+   }
+
+   if (any)
+      ops->teardown(cmd, cs);
+
+   cmd->state.cache.flush_bits |=
+      TU_CMD_FLAG_CCU_CLEAN_COLOR | TU_CMD_FLAG_CACHE_INVALIDATE |
+      TU_CMD_FLAG_WAIT_FOR_IDLE;
+}
+TU_GENX(tu6_clear_lrz_partial);
 
 template <chip CHIP>
 void
@@ -3714,6 +3813,10 @@ tu_CmdResolveImage2(VkCommandBuffer commandBuffer,
 
    ops->teardown(cmd, cs);
 
+   if (dst_image->lrz_layout.lrz_total_size) {
+      tu_disable_lrz<CHIP>(cmd, &cmd->cs, dst_image);
+   }
+
    trace_end_resolve_image(&cmd->trace, &cmd->cs);
 }
 TU_GENX(tu_CmdResolveImage2);
@@ -3869,12 +3972,6 @@ clear_image_cp_blit(struct tu_cmd_buffer *cmd,
    uint32_t level_count = vk_image_subresource_level_count(&image->vk, range);
    uint32_t layer_count = vk_image_subresource_layer_count(&image->vk, range);
    struct tu_cs *cs = &cmd->cs;
-   enum pipe_format format;
-   if (image->vk.format == VK_FORMAT_E5B9G9R9_UFLOAT_PACK32) {
-      format = PIPE_FORMAT_R32_UINT;
-   } else {
-      format = tu_aspects_to_plane(image->vk.format, aspect_mask);
-   }
 
    if (image->layout[0].depth0 > 1) {
       assert(layer_count == 1);
@@ -3882,11 +3979,24 @@ clear_image_cp_blit(struct tu_cmd_buffer *cmd,
    }
 
    const struct blit_ops *ops = image->layout[0].nr_samples > 1 ? &r3d_ops<CHIP> : &r2d_ops<CHIP>;
+   const bool e5b9g9r9_as_u32 =
+      image->vk.format == VK_FORMAT_E5B9G9R9_UFLOAT_PACK32 &&
+      ops == &r2d_ops<CHIP>;
+
+   enum pipe_format format;
+   if (e5b9g9r9_as_u32) {
+      format = PIPE_FORMAT_R32_UINT;
+   } else {
+      format = tu_aspects_to_plane(image->vk.format, aspect_mask);
+   }
+   if (format == PIPE_FORMAT_R64_SINT || format == PIPE_FORMAT_R64_UINT) {
+      format = PIPE_FORMAT_R32G32_UINT;
+   }
 
    ops->setup(cmd, cs, format, format, aspect_mask, 0, true, image->layout[0].ubwc,
               (VkSampleCountFlagBits) image->layout[0].nr_samples,
               (VkSampleCountFlagBits) image->layout[0].nr_samples);
-   if (image->vk.format == VK_FORMAT_E5B9G9R9_UFLOAT_PACK32)
+   if (e5b9g9r9_as_u32)
       ops->clear_value(cmd, cs, PIPE_FORMAT_R9G9B9E5_FLOAT, clear_value);
    else
       ops->clear_value(cmd, cs, format, clear_value);
@@ -5241,7 +5351,8 @@ tu_emit_blit(struct tu_cmd_buffer *cmd,
    const struct fdl6_view *fdl_view = tu_image_view_fdl_view(iview, separate_stencil);
 
    for_each_layer(i, attachment->used_views, cmd->state.framebuffer->layers) {
-      if (cmd->state.pass->has_fdm && cmd->state.fdm_subsampled) {
+      if (cmd->state.pass->has_fdm &&
+          (iview->image->vk.create_flags & VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT)) {
             struct apply_blit_scissor_state state = {
                .view = i,
                .render_area = scissor_per_layer ?
@@ -5701,7 +5812,7 @@ tu_attachment_store_unaligned(struct tu_cmd_buffer *cmd, uint32_t a)
     * conditionally use A2D for the unaligned blits at the edge. Just return
     * false here.
     */
-   if (cmd->state.fdm_subsampled)
+   if (iview->image->vk.create_flags & VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT)
       return false;
 
    for (unsigned i = 0; i < render_area_count; i++) {
@@ -5775,6 +5886,9 @@ tu_choose_gmem_layout(struct tu_cmd_buffer *cmd)
 
    for (unsigned i = 0; i < cmd->state.pass->subpass_count; i++) {
       const struct tu_subpass *subpass = &cmd->state.pass->subpasses[i];
+      if (subpass->custom_resolve)
+         cmd->state.gmem_layout = TU_GMEM_LAYOUT_AVOID_CCU;
+
       for (unsigned j = 0; j < subpass->resolve_count; j++) {
          uint32_t a = subpass->resolve_attachments[j].attachment;
          if (a == VK_ATTACHMENT_UNUSED)
@@ -5784,8 +5898,6 @@ tu_choose_gmem_layout(struct tu_cmd_buffer *cmd)
                subpass->depth_stencil_attachment.attachment :
                subpass->color_attachments[j].attachment;
          if (tu_attachment_store_mismatched_mutability(cmd, a, gmem_a))
-            cmd->state.gmem_layout = TU_GMEM_LAYOUT_AVOID_CCU;
-         if (subpass->custom_resolve)
             cmd->state.gmem_layout = TU_GMEM_LAYOUT_AVOID_CCU;
       }
    }
@@ -5798,6 +5910,7 @@ tu_choose_gmem_layout(struct tu_cmd_buffer *cmd)
 
 struct apply_store_coords_state {
    unsigned view;
+   bool subsampled;
 };
 
 template <chip CHIP>
@@ -5839,8 +5952,8 @@ fdm_apply_store_coords(struct tu_cmd_buffer *cmd,
                       GRAS_A2D_SRC_YMAX(CHIP, 0));
    } else {
       VkOffset2D start =
-         tile->subsampled ? tile->subsampled_pos[view].offset : bin.offset;
-      if (tile->subsampled_views & (1u << view)) {
+         (state->subsampled && tile->subsampled) ? tile->subsampled_pos[view].offset : bin.offset;
+      if (state->subsampled && (tile->subsampled_views & (1u << view))) {
          /* Subsampled blits don't scale up the bin, and go to the subsampled
           * destination.
           */
@@ -5964,11 +6077,20 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
       tu_begin_load_store_cond_exec(cmd, cs, false);
    }
 
+   bool fdm_subsampled = dst_iview->image->vk.create_flags &
+      VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT;
+   unsigned fast_store_predicate = fdm_subsampled ?
+      TU_PREDICATE_SUBSAMPLED_FAST_STORE :
+      TU_PREDICATE_NON_SUBSAMPLED_FAST_STORE;
+   unsigned no_fast_store_predicate = fdm_subsampled ?
+      TU_PREDICATE_SUBSAMPLED_NO_FAST_STORE :
+      TU_PREDICATE_NON_SUBSAMPLED_NO_FAST_STORE;
+
    /* use fast path when render area is aligned, except for unsupported resolve cases */
    if (use_fast_path) {
       if (fast_path_conditional) {
          tu_cond_exec_start(cs, CP_COND_REG_EXEC_0_MODE(PRED_TEST) |
-                            CP_COND_REG_EXEC_0_PRED_BIT(TU_PREDICATE_FAST_STORE));
+                            CP_COND_REG_EXEC_0_PRED_BIT(fast_store_predicate));
       }
 
       if (store_common)
@@ -5994,7 +6116,7 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
 
    if (fast_path_conditional) {
       tu_cond_exec_start(cs, CP_COND_REG_EXEC_0_MODE(PRED_TEST) |
-                         CP_COND_REG_EXEC_0_PRED_BIT(TU_PREDICATE_NO_FAST_STORE));
+                         CP_COND_REG_EXEC_0_PRED_BIT(no_fast_store_predicate));
    }
 
    enum pipe_format src_format = vk_format_to_pipe_format(src->format);
@@ -6036,7 +6158,7 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
          if (!cmd->state.pass->has_fdm) {
             r2d_coords<CHIP>(cmd, cs, render_area->offset, render_area->offset,
                              render_area->extent);
-         } else if (!cmd->state.fdm_subsampled) {
+         } else if (!fdm_subsampled) {
             /* Usually GRAS_2D_RESOLVE_CNTL_* clips the destination to the bin
              * area and the coordinates span the entire render area, but for
              * FDM we need to scale the coordinates so we need to take the
@@ -6058,7 +6180,7 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
             if (!cmd->state.pass->has_fdm) {
                r2d_coords<CHIP>(cmd, cs, render_area->offset, render_area->offset,
                                 render_area->extent);
-            } else if (!cmd->state.fdm_subsampled) {
+            } else if (!fdm_subsampled) {
                tu_cs_emit_regs(cs,
                                GRAS_A2D_SCISSOR_TL(CHIP, .x = render_area->offset.x,
                                                          .y = render_area->offset.y,),
@@ -6068,7 +6190,7 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
          }
 
          if (cmd->state.pass->has_fdm) {
-            if (cmd->state.fdm_subsampled) {
+            if (fdm_subsampled) {
                struct apply_render_area_state state {
                   .view = i,
                   .render_area =
@@ -6081,6 +6203,7 @@ tu_store_gmem_attachment(struct tu_cmd_buffer *cmd,
             }
             struct apply_store_coords_state state = {
                .view = i,
+               .subsampled = fdm_subsampled,
             };
             tu_create_fdm_bin_patchpoint(cmd, cs, 8, TU_FDM_SKIP_BINNING,
                                          fdm_apply_store_coords<CHIP>, state);
@@ -6149,16 +6272,18 @@ void
 tu_blit_subsampled_apron(struct tu_cmd_buffer *cmd,
                          struct tu_cs *cs,
                          const struct tu_image_view *iview,
+                         bool store,
+                         bool store_stencil,
                          unsigned layer,
                          const VkRect2D *dst_coord,
                          const tu_rect2d_float *src_coord,
                          unsigned count)
 {
    if (iview->image->vk.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
-      blit_subsampled_apron<CHIP>(cmd, cs, iview, VK_FORMAT_D32_SFLOAT, layer,
-                                  dst_coord, src_coord, count);
-      blit_subsampled_apron<CHIP>(cmd, cs, iview, VK_FORMAT_S8_UINT, layer,
-                                  dst_coord, src_coord, count);
+      if (store)
+         blit_subsampled_apron<CHIP>(cmd, cs, iview, VK_FORMAT_D32_SFLOAT, layer, dst_coord, src_coord, count);
+      if (store_stencil)
+         blit_subsampled_apron<CHIP>(cmd, cs, iview, VK_FORMAT_S8_UINT, layer, dst_coord, src_coord, count);
    } else {
       blit_subsampled_apron<CHIP>(cmd, cs, iview, iview->vk.format, layer,
                                   dst_coord, src_coord, count);

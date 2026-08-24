@@ -119,23 +119,23 @@ _math_horner_bezier_surf(GLfloat * cn, GLfloat * out, GLfloat u, GLfloat v,
 			 GLuint dim, GLuint uorder, GLuint vorder)
 {
    GLfloat *cp = cn + uorder * vorder * dim;
-   GLuint i, uinc = vorder * dim;
+   GLuint uinc = vorder * dim;
 
    if (vorder > uorder) {
       if (uorder >= 2) {
 	 GLfloat s, poweru, bincoeff;
-	 GLuint j, k;
 
 	 /* Compute the control polygon for the surface-curve in u-direction */
-	 for (j = 0; j < vorder; j++) {
+	 for (GLuint j = 0; j < vorder; j++) {
 	    GLfloat *ucp = &cn[j * dim];
+	    GLuint i;
 
 	    /* Each control point is the point for parameter u on a */
 	    /* curve defined by the control polygons in u-direction */
 	    bincoeff = (GLfloat) (uorder - 1);
 	    s = 1.0F - u;
 
-	    for (k = 0; k < dim; k++)
+	    for (GLuint k = 0; k < dim; k++)
 	       cp[j * dim + k] = s * ucp[k] + bincoeff * u * ucp[uinc + k];
 
 	    for (i = 2, ucp += 2 * uinc, poweru = u * u; i < uorder;
@@ -143,7 +143,7 @@ _math_horner_bezier_surf(GLfloat * cn, GLfloat * out, GLfloat u, GLfloat v,
 	       bincoeff *= (GLfloat) (uorder - i);
 	       bincoeff *= inv_tab[i];
 
-	       for (k = 0; k < dim; k++)
+	       for (GLuint k = 0; k < dim; k++)
 		  cp[j * dim + k] =
 		     s * cp[j * dim + k] + bincoeff * poweru * ucp[k];
 	    }
@@ -158,10 +158,8 @@ _math_horner_bezier_surf(GLfloat * cn, GLfloat * out, GLfloat u, GLfloat v,
    else {			/* vorder <= uorder */
 
       if (vorder > 1) {
-	 GLuint i;
-
 	 /* Compute the control polygon for the surface-curve in u-direction */
-	 for (i = 0; i < uorder; i++, cn += uinc) {
+	 for (GLuint i = 0; i < uorder; i++, cn += uinc) {
 	    /* For constant i all cn[i][j] (j=0..vorder) are located */
 	    /* on consecutive memory locations, so we can use        */
 	    /* horner_bezier_curve to compute the control points     */

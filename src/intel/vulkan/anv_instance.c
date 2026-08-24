@@ -11,7 +11,6 @@ static const struct debug_control debug_control[] = {
    { "dgc-dump",                  ANV_DEBUG_DGC_DUMP},
    { "experimental",              ANV_DEBUG_EXPERIMENTAL},
    { "no-gpl",                    ANV_DEBUG_NO_GPL},
-   { "no-alloc-oversubscription", ANV_DEBUG_NO_ALLOC_OVER_SUBSCRIPTION},
    { "no-slab",                   ANV_DEBUG_NO_SLAB},
    { "no-sparse",                 ANV_DEBUG_NO_SPARSE},
    { "sparse-trtt",               ANV_DEBUG_SPARSE_TRTT},
@@ -92,127 +91,6 @@ VkResult anv_EnumerateInstanceExtensionProperties(
       &instance_extensions, pPropertyCount, pProperties);
 }
 
-static void
-anv_drirc_shader_cb(const void *hash_data,
-                    uint32_t hash_size,
-                    const driOptionInfo *option,
-                    const driOptionValue *value,
-                    void *shaderOptionCallbackData)
-{
-   /* Should always be 8 bytes or more. Our compiler prog_data only holds the
-    * first 64bits, so just use that for the hash table.
-    */
-   assert(hash_size >= 8);
-   uint64_t shader_hash = ((uint64_t *)hash_data)[0];
-
-   struct anv_instance *instance = shaderOptionCallbackData;
-
-   if (instance->shader_workarounds == NULL)
-      instance->shader_workarounds = _mesa_hash_table_u64_create(NULL);
-
-   struct anv_shader_workaround *workaround =
-      _mesa_hash_table_u64_search(instance->shader_workarounds, shader_hash);
-   if (workaround == NULL) {
-      workaround = vk_zalloc(&instance->vk.alloc,
-                             sizeof(*workaround), 8,
-                             VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-      if (workaround == NULL) {
-         instance->drirc_status = vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
-         return;
-      }
-      _mesa_hash_table_u64_insert(instance->shader_workarounds,
-                                  shader_hash, workaround);
-   }
-
-   assert(workaround != NULL);
-
-   if (strcmp(option->name, "force_vk_typed_barrier_after_dispatch_to_compute") == 0)
-      workaround->force_typed_barrier_after_dispatch_to_compute = true;
-   else if (strcmp(option->name, "force_vk_untyped_barrier_after_dispatch_to_compute") == 0)
-      workaround->force_untyped_barrier_after_dispatch_to_compute = true;
-   else if (strcmp(option->name, "force_vk_typed_barrier_after_dispatch_to_top") == 0)
-      workaround->force_typed_barrier_after_dispatch_to_top = true;
-   else if (strcmp(option->name, "force_vk_untyped_barrier_after_dispatch_to_top") == 0)
-      workaround->force_untyped_barrier_after_dispatch_to_top = true;
-   else
-      UNREACHABLE("invalid shader option");
-}
-
-static VkResult
-anv_init_dri_options(struct anv_instance *instance)
-{
-   instance->drirc_status = VK_SUCCESS;
-
-   anv_parse_dri_options(&instance->drirc,
-                         &(driConfigFileParseParams) {
-                            .driverName = "anv",
-                            .applicationName = instance->vk.app_info.app_name,
-                            .applicationVersion = instance->vk.app_info.app_version,
-                            .engineName = instance->vk.app_info.engine_name,
-                            .engineVersion = instance->vk.app_info.engine_version,
-                            .shaderOptionCallback = anv_drirc_shader_cb,
-                            .shaderOptionCallbackData = instance,
-                         });
-
-   if (instance->drirc_status != VK_SUCCESS)
-      return instance->drirc_status;
-
-    if (instance->vk.app_info.engine_name &&
-        !strcmp(instance->vk.app_info.engine_name, "DXVK")) {
-       /* Since 2.3.1+, DXVK uses the application version to signal D3D9. */
-       const bool is_d3d9 = instance->vk.app_info.app_version & 0x1;
-
-       /* This driconf bit enables D3D10+ behaviour for texture coordinate
-        * rounding. As D3D9 wants the Vulkan behaviour instead, apply the
-        * workaround only to D3D10+.
-        */
-       instance->drirc.debug.force_filter_addr_rounding &= !is_d3d9;
-    }
-
-    switch (instance->drirc.perf.stack_ids) {
-    case 256:
-    case 512:
-    case 1024:
-    case 2048:
-       break;
-    default:
-       mesa_logw("Invalid value provided for drirc anv_stack_id=%u, reverting to 512.",
-                 instance->drirc.perf.stack_ids);
-       instance->drirc.perf.stack_ids = 512;
-       break;
-    }
-
-   switch(instance->drirc.perf.rt_dispatch_timeout) {
-   case 64:
-   case 128:
-   case 192:
-   case 256:
-   case 384:
-   case 512:
-   case 640:
-   case 768:
-   case 896:
-   case 1024:
-   case 1152:
-   case 1280:
-   case 1408:
-   case 1536:
-   case 1664:
-   case 1792:
-   case 1920:
-   case 2048:
-   case 4096:
-      break;
-   default:
-       mesa_logw("Invalid value provided for drirc anv_rt_dispatch_timeout=%u, reverting to 512.",
-                 instance->drirc.perf.rt_dispatch_timeout);
-       instance->drirc.perf.rt_dispatch_timeout = 512;
-       break;
-   }
-
-   return VK_SUCCESS;
-}
-
 VkResult anv_CreateInstance(
     const VkInstanceCreateInfo*                 pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -244,10 +122,6 @@ VkResult anv_CreateInstance(
       return vk_error(NULL, result);
    }
 
-   result = anv_init_dri_options(instance);
-   if (result != VK_SUCCESS)
-      goto fail_init;
-
    instance->vk.physical_devices.try_create_for_drm = anv_physical_device_try_create;
    instance->vk.physical_devices.destroy = anv_physical_device_destroy;
 
@@ -265,12 +139,6 @@ VkResult anv_CreateInstance(
    *pInstance = anv_instance_to_handle(instance);
 
    return VK_SUCCESS;
-
- fail_init:
-   vk_instance_finish(&instance->vk);
-   vk_free(&instance->vk.alloc, instance);
-
-   return result;
 }
 
 void anv_DestroyInstance(
@@ -283,15 +151,6 @@ void anv_DestroyInstance(
       return;
 
    VG(VALGRIND_DESTROY_MEMPOOL(instance));
-
-   driDestroyOptionCache(&instance->drirc.options);
-   driDestroyOptionInfo(&instance->drirc.available_options);
-
-   if (instance->shader_workarounds) {
-      hash_table_u64_foreach(instance->shader_workarounds, entry)
-         vk_free(&instance->vk.alloc, entry.data);
-      _mesa_hash_table_u64_destroy(instance->shader_workarounds);
-   }
 
    vk_instance_finish(&instance->vk);
    vk_free(&instance->vk.alloc, instance);

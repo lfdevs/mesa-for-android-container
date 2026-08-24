@@ -243,10 +243,9 @@ brw_opt_register_coalesce(brw_shader &s)
    bool progress = false;
    brw_live_variables &live = s.live_analysis.require();
    brw_ip_ranges &ips = s.ip_ranges_analysis.require();
-   int src_size = 0;
-   int channels_remaining = 0;
+   unsigned src_size = 0;
    unsigned src_reg = ~0u, dst_reg = ~0u;
-   int *dst_reg_offset = new int[live.max_vgrf_size];
+   unsigned *dst_reg_offset = new unsigned[live.max_vgrf_size];
    brw_inst **mov = new brw_inst *[live.max_vgrf_size];
    int *dst_var = new int[live.max_vgrf_size];
    int *src_var = new int[live.max_vgrf_size];
@@ -280,9 +279,8 @@ brw_opt_register_coalesce(brw_shader &s)
          src_reg = inst->src[0].nr;
 
          src_size = s.alloc.sizes[inst->src[0].nr];
-         assert(src_size <= (int) live.max_vgrf_size);
+         assert(src_size <= live.max_vgrf_size);
 
-         channels_remaining = src_size;
          memset(mov, 0, sizeof(*mov) * live.max_vgrf_size);
 
          dst_reg = inst->dst.nr;
@@ -291,39 +289,50 @@ brw_opt_register_coalesce(brw_shader &s)
       if (dst_reg != inst->dst.nr)
          continue;
 
+      unsigned offset;
+      unsigned written;
       if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
-         for (int i = 0; i < src_size; i++) {
-            dst_reg_offset[i] = inst->dst.offset / REG_SIZE + i;
-            mov[i] = inst;
-         }
-         channels_remaining -= regs_written(inst);
+         offset = 0;
+         written = src_size;
       } else {
-         const int offset = inst->src[0].offset / REG_SIZE;
-         if (mov[offset]) {
-            /* This is the second time that this offset in the register has
-             * been set.  This means, in particular, that inst->dst was
-             * live before this instruction and that the live ranges of
-             * inst->dst and inst->src[0] overlap and we can't coalesce the
-             * two variables.  Let's ensure that doesn't happen.
-             */
-            channels_remaining = -1;
+         offset = inst->src[0].offset / REG_SIZE;
+         written = regs_written(inst);
+
+         if (offset + written > src_size) {
+            src_reg = ~0u;
             continue;
          }
-         for (unsigned i = 0; i < MAX2(inst->size_written / REG_SIZE, 1); i++) {
-            dst_reg_offset[offset + i] = inst->dst.offset / REG_SIZE + i;
-            mov[offset + i] = inst;
-         }
-         channels_remaining -= regs_written(inst);
       }
 
-      if (channels_remaining)
-         continue;
+      /* If any source slot covered by this instruction has already been
+       * set, then inst->dst was live before this instruction and the live
+       * ranges of inst->dst and inst->src[0] overlap.  We can't coalesce
+       * the two variables in that case.
+       */
+      bool duplicate = false;
+      for (unsigned i = 0; i < written; i++)
+         duplicate |= mov[offset + i] != NULL;
 
-      for (int i = 0; i < src_size; i++)
-         assert(mov[i]);
+      if (duplicate) {
+         src_reg = ~0u;
+         continue;
+      }
+
+      for (unsigned i = 0; i < written; i++) {
+         dst_reg_offset[offset + i] = inst->dst.offset / REG_SIZE + i;
+         mov[offset + i] = inst;
+      }
 
       bool can_coalesce = true;
-      for (int i = 0; i < src_size; i++) {
+      for (unsigned i = 0; i < src_size; i++) {
+         if (!mov[i]) {
+            can_coalesce = false;
+            /* Don't reset src_reg, will continue to fill mov[] with next
+             * instruction.
+             */
+            break;
+         }
+
          if (dst_reg_offset[i] != dst_reg_offset[0] + i) {
             /* Registers are out-of-order. */
             can_coalesce = false;
@@ -347,9 +356,9 @@ brw_opt_register_coalesce(brw_shader &s)
 
       progress = true;
 
-      for (int i = 0; i < src_size; ) {
+      for (unsigned i = 0; i < src_size; ) {
          assert(mov[i]);
-         const unsigned written = regs_written(mov[i]);
+         const unsigned mov_written = regs_written(mov[i]);
 
          if (mov[i]->conditional_mod == BRW_CONDITIONAL_NONE) {
             mov[i] = brw_transform_inst(s, mov[i], BRW_OPCODE_NOP);
@@ -370,11 +379,11 @@ brw_opt_register_coalesce(brw_shader &s)
             mov[i]->dst = retype(brw_null_reg(), mov[i]->dst.type);
          }
 
-         i += written;
+         i += mov_written;
       }
 
       brw_range rewrite_range = { 0, 0 };
-      for (int i = 0; i < src_size; i++)
+      for (unsigned i = 0; i < src_size; i++)
          rewrite_range = merge(rewrite_range, live.vars_range[src_var[i]]);
       assert(!rewrite_range.is_empty());
 
@@ -411,7 +420,7 @@ brw_opt_register_coalesce(brw_shader &s)
          }
       }
 
-      for (int i = 0; i < src_size; i++) {
+      for (unsigned i = 0; i < src_size; i++) {
          live.vars_range[dst_var[i]] = merge(live.vars_range[dst_var[i]],
                                              live.vars_range[src_var[i]]);
       }

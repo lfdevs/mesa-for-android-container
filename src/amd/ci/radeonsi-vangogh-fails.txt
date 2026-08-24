@@ -6,15 +6,12 @@ spec@arb_fragment_layer_viewport@layer-gs-writes-out-of-range,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
-spec@arb_shading_language_packing@execution@built-in-functions@fs-packhalf2x16,Fail
-spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16,Fail
 spec@arb_tessellation_shader@arb_tessellation_shader-tes-gs-max-output -small -scan 1 50,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@ext_external_objects@vk-image-display,Crash
 spec@ext_external_objects@vk-semaphores,Crash
 spec@ext_external_objects@vk-semaphores-2,Crash
-spec@glsl-es-3.00@execution@built-in-functions@fs-packhalf2x16,Fail
 spec@glsl-es-3.00@execution@built-in-functions@vs-packhalf2x16,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp@sRGB decode full precision,Fail

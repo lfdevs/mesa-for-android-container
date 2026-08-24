@@ -18,6 +18,7 @@
 #include "kk_sampler.h"
 
 #include "util/format/u_format.h"
+#include "util/half_float.h"
 
 static inline uint32_t
 align_u32(uint32_t v, uint32_t a)
@@ -75,6 +76,10 @@ get_sampled_image_view_desc(VkDescriptorType descriptor_type,
             desc[plane].image_gpu_resource_id =
                view->planes[plane].sampled_gpu_resource_id;
          }
+
+         float min_lod = MAX2(view->vk.min_lod - view->vk.base_mip_level, 0.0);
+         desc[plane].image_min_lod_fp16 = _mesa_float_to_half(min_lod);
+         desc[plane].image_min_lod_uint16 = min_lod;
       }
    }
 
@@ -82,7 +87,10 @@ get_sampled_image_view_desc(VkDescriptorType descriptor_type,
        descriptor_type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
       VK_FROM_HANDLE(kk_sampler, sampler, info->sampler);
 
-      plane_count = MAX2(plane_count, sampler->plane_count);
+      if (sampler->has_border)
+         assert(plane_count == 1);
+      else
+         plane_count = MAX2(plane_count, sampler->plane_count);
 
       for (uint8_t plane = 0; plane < plane_count; plane++) {
          /* We need to replicate the last sampler plane out to all image
@@ -92,9 +100,25 @@ get_sampled_image_view_desc(VkDescriptorType descriptor_type,
          uint8_t sampler_plane = MIN2(plane, sampler->plane_count - 1u);
          assert(sampler->planes[sampler_plane].hw->handle);
          desc[plane].sampler_index = sampler->planes[sampler_plane].hw->index;
-         desc[plane].lod_bias_fp16 = sampler->lod_bias_fp16;
-         desc[plane].lod_min_fp16 = sampler->lod_min_fp16;
-         desc[plane].lod_max_fp16 = sampler->lod_max_fp16;
+         desc[plane].sampler_lod_bias_fp16 = sampler->lod_bias_fp16;
+         desc[plane].sampler_lod_min_fp16 = sampler->lod_min_fp16;
+         desc[plane].sampler_lod_max_fp16 = sampler->lod_max_fp16;
+         desc[plane].clamp_0_sampler_index_or_negative = -1;
+      }
+
+      if (sampler->has_border) {
+         assert(sampler->plane_count == 2);
+         desc[0].clamp_0_sampler_index_or_negative =
+            sampler->planes[1].hw->index;
+
+         assert(desc[0].clamp_0_sampler_index_or_negative >= 0 &&
+                "we have a border colour");
+
+         static_assert(sizeof(desc[0].border) == sizeof(sampler->custom_border),
+                       "fixed format");
+
+         memcpy(desc[0].border, sampler->custom_border.uint32,
+                sizeof(sampler->custom_border));
       }
    }
 

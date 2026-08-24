@@ -1476,6 +1476,7 @@ pvr_sub_cmd_gfx_align_ds_subtiles(struct pvr_cmd_buffer *const cmd_buffer,
     */
    ds->has_alignment_transfers = true;
    ds->addr = buffer->dev_addr;
+   ds->base_array_layer = 0;
    ds->physical_extent = rounded_size;
 
    gfx_sub_cmd->wait_on_previous_transfer = true;
@@ -5788,6 +5789,12 @@ static VkResult pvr_setup_descriptor_mappings(
                    .alpha_to_coverage_enable)
                fs_meta |= BITFIELD_BIT(PVR_FS_META_ALPHA_TO_COVERAGE_OFFSET);
 
+            if (data->fs.uses.sample_shading &&
+                cmd_buffer->vk.dynamic_graphics_state.ms.rasterization_samples >
+                   VK_SAMPLE_COUNT_1_BIT) {
+               fs_meta |= BITFIELD_BIT(PVR_FS_META_SAMPLE_SHADING);
+            }
+
             struct pvr_suballoc_bo *fs_meta_bo;
             result = pvr_arch_cmd_buffer_upload_general(cmd_buffer,
                                                         &fs_meta,
@@ -7231,7 +7238,6 @@ setup_pds_fragment_program(struct pvr_cmd_buffer *const cmd_buffer,
       &pds_fragment_program_buffer[program->doutu_offset],
       &doutu_src);
 
-   /* TODO: VkPipelineMultisampleStateCreateInfo.sampleShadingEnable? */
    doutu_src.sample_rate = dynamic_state->ms.rasterization_samples >
                                  VK_SAMPLE_COUNT_1_BIT
                               ? ROGUE_PDSINST_DOUTU_SAMPLE_RATE_FULL
@@ -9674,8 +9680,8 @@ void PVR_PER_ARCH(CmdPipelineBarrier2)(VkCommandBuffer commandBuffer,
    struct pvr_cmd_buffer_state *const state = &cmd_buffer->state;
    const struct pvr_render_pass *const render_pass =
       state->render_pass_info.pass;
-   VkPipelineStageFlags vk_src_stage_mask = 0U;
-   VkPipelineStageFlags vk_dst_stage_mask = 0U;
+   VkPipelineStageFlags2 vk_src_stage_mask = 0U;
+   VkPipelineStageFlags2 vk_dst_stage_mask = 0U;
    bool is_stencil_store_load_needed;
    uint32_t required_stage_mask = 0U;
    uint32_t src_stage_mask;

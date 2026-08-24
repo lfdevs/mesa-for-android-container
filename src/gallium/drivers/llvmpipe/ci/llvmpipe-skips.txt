@@ -32,3 +32,6 @@ spec@arb_timer_query@query gl_timestamp
 # These tests started hitting timeouts when we upgraded LLVM from v11 to 13
 spec@arb_texture_rg@fbo-blending-formats
 spec@ext_framebuffer_object@fbo-blending-formats
+
+# Skip VK test on GL drivers
+vulkan@.*

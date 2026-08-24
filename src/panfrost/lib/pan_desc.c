@@ -112,9 +112,12 @@ pan_fb_color_attachment_should_crc(const struct pan_fb_color_attachment *rt,
    if (!drm_is_afbc(mod))
       return true;
 
-   /* Disallow CRC on sparse AFBC images */
-   if (mod & AFBC_FORMAT_MOD_SPARSE)
+   /* TODO: Temporarily disallow CRC on v14+ with AFBC, re-enable after fix. */
+   if (PAN_ARCH >= 14)
       return false;
+   
+   /* Only sparse AFBC can be render targets. */
+   assert(mod & AFBC_FORMAT_MOD_SPARSE);
 
    /* AFBC render block size must fit in a single pass. */
    if (pan_afbc_superblock_exceeds_tile_size(mod, tile_size))
@@ -627,12 +630,16 @@ GENX(pan_select_tile_size)(struct pan_fb_info *fb)
 
 #if PAN_ARCH != 6
    /* Check if we're using too much tile-memory; if we are, try disabling
-    * pipelining. This works because we're starting with an optimistic half
-    * of the tile-budget, so we actually have another half that can be used.
+    * pipelining (the tile buffer should ideally be double-buffered to
+    * increase fragment shading perf). This works because we're starting with
+    * an optimistic half of the tile-budget, so we actually have another half
+    * that can be used. This is also sometimes needed for downscaling (mipmap
+    * gen) which requires the highest square effective tile sizes.
     *
     * On v6 GPUs, doing this is not allowed; they *have* to pipeline.
     */
-    if (fb->tile_size < 4 * 4)
+    if (fb->tile_size < 4 * 4 ||
+        (fb->downscale_rts && fb->tile_size < 32 * 32))
        fb->tile_size *= 2;
 #endif
 
@@ -1032,6 +1039,10 @@ pan_emit_rt(const struct pan_fb_info *fb, unsigned layer_idx, unsigned idx,
       cfg.clear = rt_clear(&fb->rts[idx]);
       cfg.dithering_enable = true;
       cfg.writeback_msaa = mali_sampling_mode(fb->rts[idx].view);
+#if PAN_ARCH >= 10
+      if (fb->downscale_rts && idx == 1)
+         cfg.downscale_mode = MALI_DOWNSCALE_2X;
+#endif
    }
 
    struct pan_image_plane_ref pref = pan_image_view_get_color_plane(rt);
@@ -1317,6 +1328,17 @@ check_fb_attachments(const struct pan_fb_info *fb)
    }
    if (fb->zs.view.s)
       pan_image_view_check(fb->zs.view.s);
+
+#if PAN_ARCH >= 10
+   if (fb->downscale_rts) {
+      assert(fb->rt_count == 2);
+#if PAN_ARCH < 12
+      assert(fb->tile_size == 32 * 32);
+#else
+      assert((fb->tile_size == 32 * 32) || (fb->tile_size == 64 * 64));
+#endif
+   }
+#endif
 #endif
 }
 
@@ -1334,9 +1356,12 @@ pan_emit_rts(const struct pan_fb_info *fb, unsigned layer_idx, int crc_rt,
       if (!fb->rts[i].view)
          continue;
 
-      cbuf_offset += pan_bytes_per_pixel_tib(fb->rts[i].view->format) *
-                     fb->tile_size *
-                     pan_image_view_get_nr_samples(fb->rts[i].view);
+      /* The internal buffer offset must be the same for all RTs when
+       * downscaling is enabled. */
+      if (!fb->downscale_rts)
+         cbuf_offset += pan_bytes_per_pixel_tib(fb->rts[i].view->format) *
+            fb->tile_size *
+            pan_image_view_get_nr_samples(fb->rts[i].view);
 
    }
 }

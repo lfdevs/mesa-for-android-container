@@ -1,0 +1,188 @@
+KHR-GLES31.core.polygon_offset_clamp.PolygonOffsetClampMinMax,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_atomic_functions,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_operations_buffer_load,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_operations_cpu_writes,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_operations_framebuffer_readback,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_operations_image_store,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_operations_ssbo_writes,Fail
+KHR-GLES31.core.texture_buffer.texture_buffer_operations_transform_feedback,Fail
+dEQP-GLES2.functional.texture.mipmap.2d.projected.linear_nearest_clamp,Fail
+dEQP-GLES2.functional.texture.mipmap.2d.projected.linear_nearest_mirror,Fail
+dEQP-GLES2.functional.texture.mipmap.2d.projected.linear_nearest_repeat,Fail
+dEQP-GLES2.functional.texture.mipmap.2d.projected.nearest_nearest_clamp,Fail
+dEQP-GLES2.functional.texture.mipmap.2d.projected.nearest_nearest_mirror,Fail
+dEQP-GLES2.functional.texture.mipmap.2d.projected.nearest_nearest_repeat,Fail
+dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines,Fail
+dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.lines,Fail
+dEQP-GLES31.functional.shaders.helper_invocation.derivate.lines_4_samples_dfdx,Fail
+dEQP-GLES31.functional.shaders.helper_invocation.derivate.lines_max_samples_dfdy,Fail
+
+multisample-dEQP-GLES3.functional.clipping.line.line_clip_viewport_center,Fail
+multisample-dEQP-GLES3.functional.clipping.line.line_clip_viewport_corner,Fail
+multisample-dEQP-GLES3.functional.rasterization.primitives.lines,Fail
+
+# OpenCL tests below
+#
+## rusticl-core issues:
+#
+#Unexpected CL error: CL_SUCCESS 0
+#Expected CL error: CL_INVALID_LINKER_OPTIONS -67
+#Failed (error code: CL_SUCCESS): Trigger CL_INVALID_LINKER_OPTIONS if the linker options specified by options are invalid.
+#Unexpected CL error: CL_LINK_PROGRAM_FAILURE -17
+#Expected CL error: CL_INVALID_OPERATION -59
+#Failed (error code: CL_LINK_PROGRAM_FAILURE): Trigger CL_INVALID_OPERATION if the rules for devices containing compiled binaries or libraries as described in input_programs argument above are not followed.
+#Unexpected CL error: CL_SUCCESS 0
+#Expected CL error: CL_LINK_PROGRAM_FAILURE -17
+api@cllinkprogram,Fail
+
+#
+## freedreno issues:
+#
+#Error at data[0]
+custom@r600 create release buffer bug,Fail
+
+#
+## works on OnePlus 6:
+#
+#Failed: return NULL if platform is not a valid platform
+api@clgetextensionfunctionaddressforplatform,Fail
+
+#
+## Not our problem:
+#
+# CL_DEVICE_MAX_READ_IMAGE_ARGS: failed, expected at least 128, got 16
+api@clgetdeviceinfo,Fail
+
+# broken piglit test (doesn't account for FTZ)
+program@execute@builtin@builtin-float-nextafter-1.0.generated,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float1,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float16,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float2,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float4,Fail
+program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float8,Fail
+
+# (file=input,line=0,column=0,index=0): Unresolved external reference to "_Z21convert_char4_sat_rteDv4_i".
+program@execute@vector-conversion,Fail
+
+#
+## A702-specific
+#
+
+#   Build options: -D WORKSIZE=256 -cl-std=CL1.2
+# Unexpected CL error: CL_INVALID_WORK_GROUP_SIZE -54
+program@bitcoin: phatk kernel,Fail
+
+#  Global work size and local work size is: {512, 0, 0}
+# Unexpected CL error: CL_INVALID_WORK_GROUP_SIZE -54
+#  Global work size and local work size is: {1, 512, 0}
+# Unexpected CL error: CL_INVALID_WORK_GROUP_SIZE -54
+program@run kernel with max work item sizes,Fail
+
+# Expecting 0.500000 (0x3f000000) with tolerance 0.000000 (0 ulps), but got 1.000000 (0x3f800000)
+program@execute@sampler@read from image using linear filtering and normalized coords,Fail
+# Expecting 0.500000 (0x3f000000) with tolerance 0.000000 (0 ulps), but got 1.000000 (0x3f800000)
+program@execute@sampler@read from image using linear filtering and unnormalized coords,Fail
+# because of the two failures above
+program@execute@sampler,Fail
+
+# Required core version for xVK_KHR_surface_protected_capabilities not met (1.1)
+# https://github.com/KhronosGroup/VK-GL-CTS/issues/620
+dEQP-VK.api.info.extension_core_versions.extension_core_versions,Fail
+
+# Enabling unsupported features didn't return VK_ERROR_FEATURE_NOT_PRESENT.
+dEQP-VK.api.device_init.create_device_unsupported_features.protected_memory_features,Fail
+
+# missing deps for VK_KHR_create_renderpass2
+dEQP-VK.info.device_extension_dependencies,Fail
+
+# missing deps for VK_KHR_surface_protected_capabilities
+dEQP-VK.info.instance_extension_dependencies,Fail
+
+dEQP-VK.conditional_rendering.draw_clear.draw.update_with_rendering_discard_host_memory,Crash
+dEQP-VK.conditional_rendering.draw_clear.draw.update_with_rendering_discard_local_memory,Crash
+dEQP-VK.conditional_rendering.draw_clear.draw.update_with_rendering_no_discard_host_memory,Crash
+dEQP-VK.conditional_rendering.draw_clear.draw.update_with_rendering_no_discard_local_memory,Crash
+
+# Early-fragment multisample autotune regression
+dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_2,Fail
+
+dEQP-VK.glsl.logical_copy.initialized_struct,Crash
+dEQP-VK.glsl.logical_copy.undefined_memory,Crash
+gmem-dEQP-VK.glsl.logical_copy.undefined_memory,Crash
+
+dEQP-VK.glsl.shader_clock.compute.clock2x32ARB,Crash
+dEQP-VK.glsl.shader_clock.compute.clockRealtimeEXT,Crash
+dEQP-VK.glsl.shader_clock.fragment.clock2x32ARB,Crash
+dEQP-VK.glsl.shader_clock.fragment.clockARB,Crash
+dEQP-VK.glsl.shader_clock.fragment.clockRealtime2x32EXT,Crash
+dEQP-VK.glsl.shader_clock.fragment.clockRealtimeEXT,Crash
+dEQP-VK.glsl.shader_clock.vertex.clockARB,Crash
+dEQP-VK.glsl.shader_clock.vertex.clockRealtimeEXT,Crash
+gmem-dEQP-VK.glsl.shader_clock.vertex.clockARB,Crash
+
+dEQP-VK.pipeline.monolithic.push_descriptor.compute.incremental_updates,Crash
+dEQP-VK.pipeline.monolithic.push_descriptor.compute.incremental_updates_template,Crash
+
+dEQP-VK.shader_object.misc.state.pipeline.vert.depth.bias,Fail
+dEQP-VK.shader_object.misc.state.pipeline.vert_frag.depth.bias,Fail
+gmem-dEQP-VK.shader_object.misc.state.pipeline.vert.depth.bias,Fail
+
+# A702 has no multiview.  The CTS only checks for multiview support in one of
+# its three multiview test types, so the other two run here regardless and fail.
+dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_buffer_offset_16,Fail
+dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_buffer_offset_244,Fail
+dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_buffer_offset_508,Fail
+dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
+dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_244,Fail
+dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_508,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_buffer_offset_16,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_buffer_offset_244,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_buffer_offset_508,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_16,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_244,Fail
+dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_508,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_buffer_offset_16,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_buffer_offset_244,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_buffer_offset_508,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_16,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_244,Fail
+dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_508,Fail
+gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_buffer_offset_16,Fail
+gmem-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_16,Fail
+gmem-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_buffer_offset_244,Fail
+nobin-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_buffer_offset_16,Fail
+nobin-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_16,Fail
+nobin-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_buffer_offset_244,Fail
+
+dEQP-VK.ycbcr.copy.a1b5g5r5_unorm_pack16.g8_b8r8_2plane_420_unorm.optimal_optimal,Fail
+dEQP-VK.ycbcr.copy.a4b4g4r4_unorm_pack16.g8_b8r8_2plane_420_unorm.optimal_optimal,Fail
+dEQP-VK.ycbcr.copy.b5g6r5_unorm_pack16.g8_b8r8_2plane_420_unorm.optimal_optimal,Fail
+dEQP-VK.ycbcr.copy.r16_unorm.g8_b8r8_2plane_420_unorm.optimal_optimal,Fail
+gmem-dEQP-VK.ycbcr.copy.a4b4g4r4_unorm_pack16.g8_b8r8_2plane_420_unorm.optimal_optimal,Fail
+
+# Only failing with GMEM
+gmem-dEQP-VK.memory.pipeline_barrier.host_write_storage_buffer.1048576,Fail
+gmem-dEQP-VK.memory.pipeline_barrier.host_write_storage_texel_buffer.1024,Fail
+gmem-dEQP-VK.memory.pipeline_barrier.host_write_storage_texel_buffer.1048576,Fail
+gmem-dEQP-VK.memory.pipeline_barrier.host_write_storage_texel_buffer.65536,Fail
+gmem-dEQP-VK.memory.pipeline_barrier.host_write_uniform_texel_buffer.1024,Fail
+gmem-dEQP-VK.memory.pipeline_barrier.host_write_uniform_texel_buffer.65536,Fail
+
+# Some buffer values were incorrect
+dEQP-VK.sparse_resources.buffer.ssbo.read_write.sparse_residency_non_resident_strict,Fail
+
+#
+# OpenCL-CTS
+#
+
+# Test bug, doesn't check for CL_FP_DENORM:
+SPIRV new,Fail
+SPIRV new@op_neg_half,Fail
+SPIRV new@op_spec_constant_half_simple,Fail
+
+Atomics,Fail
+Atomics@atomic_and,Fail
+Atomics@atomic_or,Fail
+
+# Unhandled intrinsic type: quad_vote_all
+Subgroups,Crash

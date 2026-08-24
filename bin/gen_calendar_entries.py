@@ -82,7 +82,7 @@ def _calculate_release_start(major: str, minor: str) -> datetime.date:
 
     This is quarterly, on the second wednesday, in January, April, July, and October.
     """
-    quarter = datetime.date.fromisoformat(f'20{major}-0{[1, 4, 7, 10][int(minor)]}-01')
+    quarter = datetime.date.fromisoformat(f'20{major}-{['01', '04', '07', '10'][int(minor)]}-01')
 
     # Wednesday is 3
     day = quarter.isoweekday()

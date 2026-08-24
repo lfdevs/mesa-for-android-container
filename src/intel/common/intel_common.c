@@ -263,3 +263,48 @@ intel_compute_threads_group_dispatch_size(uint32_t hw_threads_in_wg)
       return 2;
    }
 }
+
+static unsigned
+intel_register_blocks_bits(const struct intel_device_info *devinfo)
+{
+#define BIT_FOR_NUM_GRF(GRFS) (1u << (((GRFS) / 32) - 1))
+   if (INTEL_DEBUG(DEBUG_NO_VRT) || devinfo->ver < 30)
+      return BIT_FOR_NUM_GRF(128); /* No VRT, so only 128 grfs */
+
+   const unsigned xe3_bits =
+      BIT_FOR_NUM_GRF(32) |
+      BIT_FOR_NUM_GRF(64) |
+      BIT_FOR_NUM_GRF(96) |
+      BIT_FOR_NUM_GRF(128) |
+      BIT_FOR_NUM_GRF(160) |
+      BIT_FOR_NUM_GRF(192) |
+      /* 224 GRFs is not supported */
+      BIT_FOR_NUM_GRF(256);
+
+   return xe3_bits;
+#undef BIT_FOR_NUM_GRF
+}
+
+unsigned
+intel_register_blocks(const struct intel_device_info *devinfo,
+                      unsigned grf_used)
+{
+   if (INTEL_DEBUG(DEBUG_NO_VRT))
+      return (128 / 32) - 1; /* 3 => 128 regs */
+
+   const unsigned hw_blocks = intel_register_blocks_bits(devinfo);
+   const unsigned n_bit = 1u << (DIV_ROUND_UP(grf_used, 32) - 1);
+   const unsigned usable = hw_blocks & ~(n_bit - 1);
+   return (usable ? ffs(usable) : util_last_bit(hw_blocks)) - 1;
+}
+
+bool
+intel_register_blocks_supported(const struct intel_device_info *devinfo,
+                                int num_regs)
+{
+   if ((num_regs % 32) != 0)
+      return false;
+
+   const unsigned n = (num_regs / 32) - 1;
+   return intel_register_blocks_bits(devinfo) & (1u << n);
+}

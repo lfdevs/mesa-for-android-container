@@ -21,7 +21,7 @@ const char *gen_arf_to_string(unsigned arf);
 const char *gen_condition_to_string(enum gen_condition cmod);
 const char *gen_predicate_to_string(const struct intel_device_info *devinfo,
                                     bool align16, gen_predicate pred);
-const char *gen_math_function_to_string(gen_math func);
+const char *gen_math_function_to_string(const struct intel_device_info *devinfo, gen_math func);
 const char *gen_sync_function_to_string(gen_sync_func func);
 const char *gen_pipe_to_string(gen_pipe pipe);
 const char *gen_sfid_to_string(const struct intel_device_info *devinfo,
@@ -56,7 +56,7 @@ gen_predicate gen_predicate_from_string(const struct intel_device_info *devinfo,
                                         bool align16,
                                         const char *str, int size,
                                         bool *valid);
-gen_math gen_math_function_from_string(const char *str, int size, bool *valid);
+gen_math gen_math_function_from_string(const struct intel_device_info *devinfo, const char *str, int size, bool *valid);
 gen_sync_func gen_sync_function_from_string(const char *str, int size, bool *valid);
 gen_pipe gen_pipe_from_string(const char *str, int size, bool *valid);
 gen_sfid gen_sfid_from_string(const struct intel_device_info *devinfo,
@@ -75,6 +75,10 @@ enum lsc_flush_type gen_lsc_flush_type_from_string(const char *str, int size,
 unsigned gen_lsc_cache_ctrl_from_string(const struct intel_device_info *devinfo,
                                         enum lsc_opcode op,
                                         const char *str, int size, bool *valid);
+
+unsigned gen_sampler_msg_type_from_string(const struct intel_device_info *devinfo,
+                                          const char *str, int size,
+                                          bool *valid);
 
 #ifdef __cplusplus
 } /* extern "C" */

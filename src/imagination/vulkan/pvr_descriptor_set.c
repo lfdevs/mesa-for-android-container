@@ -102,6 +102,9 @@ static unsigned pvr_descriptor_size(VkDescriptorType type)
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
       return sizeof(struct pvr_image_descriptor);
 
+   case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
+      return 1u;
+
    default:
       mesa_loge("Unsupported descriptor type %s.\n",
                 vk_DescriptorType_to_str(type));
@@ -129,14 +132,14 @@ VkResult pvr_CreateDescriptorSetLayout(
    assert(pCreateInfo->sType ==
           VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO);
 
-   vk_foreach_struct_const (ext, pCreateInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const (sType, ext, pCreateInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO:
          binding_flags_create_info =
             (const VkDescriptorSetLayoutBindingFlagsCreateInfo *)ext;
          break;
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
       }
    }
 
@@ -461,8 +464,8 @@ pvr_AllocateDescriptorSets(VkDevice _device,
    VkResult result;
    uint32_t i;
 
-   vk_foreach_struct_const (ext, pAllocateInfo->pNext) {
-      vk_debug_ignored_stype(ext->sType);
+   vk_foreach_struct_const (sType, ext, pAllocateInfo->pNext) {
+      vk_debug_ignored_stype(sType);
    }
 
    for (i = 0; i < pAllocateInfo->descriptorSetCount; i++) {

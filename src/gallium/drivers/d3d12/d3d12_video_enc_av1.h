@@ -75,4 +75,8 @@ void
 d3d12_video_encoder_store_current_picture_references_av1(d3d12_video_encoder *pD3D12Enc,
                                                          uint64_t current_metadata_slot);
 
+uint32_t
+d3d12_video_encoder_build_codec_sequence_headers_av1(struct d3d12_video_encoder *pD3D12Enc,
+                                                     std::vector<uint64_t> &pWrittenCodecUnitsSizes);
+
 #endif

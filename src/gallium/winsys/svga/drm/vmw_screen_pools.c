@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009-2024 Broadcom. All Rights Reserved.
+ * Copyright (c) 2009-2026 Broadcom. All Rights Reserved.
  * The term “Broadcom” refers to Broadcom Inc.
  * and/or its subsidiaries.
  * SPDX-License-Identifier: MIT
@@ -37,8 +37,6 @@ vmw_pools_cleanup(struct vmw_winsys_screen *vws)
    if (vws->pools.query_mm)
       vws->pools.query_mm->destroy(vws->pools.query_mm);
 
-   if (vws->pools.dma_mm)
-      vws->pools.dma_mm->destroy(vws->pools.dma_mm);
    if (vws->pools.dma_base)
       vws->pools.dma_base->destroy(vws->pools.dma_base);
 }
@@ -96,15 +94,6 @@ vmw_pools_init(struct vmw_winsys_screen *vws)
 
    vws->pools.dma_base = vmw_dma_bufmgr_create(vws);
    if (!vws->pools.dma_base)
-      goto error;
-
-   /*
-    * A managed pool for DMA buffers.
-    */
-   vws->pools.dma_mm = mm_bufmgr_create(vws->pools.dma_base,
-                                        VMW_GMR_POOL_SIZE,
-                                        12 /* 4096 alignment */);
-   if (!vws->pools.dma_mm)
       goto error;
 
    vws->pools.dma_cache =

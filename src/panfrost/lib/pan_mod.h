@@ -39,6 +39,10 @@ struct pan_mod_handler {
                                       const struct pan_image_props *iprops,
                                       const struct pan_image_usage *iusage);
 
+   /* Check if the writeback MSAA field of a render target supports the
+    * average MSAA value for a given format. */
+   bool (*supports_msaa_average)(enum pipe_format format);
+
    /* Optional method used to initialize modifier-specific per-plane layout
     * data. This is called before init_slice_layout().
     */

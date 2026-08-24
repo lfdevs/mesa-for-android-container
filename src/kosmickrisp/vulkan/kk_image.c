@@ -50,11 +50,8 @@ kk_get_image_plane_format_features(struct kk_physical_device *pdev,
 
    if (va_format->filter) {
       features |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
-      features |=
-         VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_MINMAX_BIT; // TODO_KOSMICKRISP
-                                                              // Understand if
-                                                              // we want to
-                                                              // expose this
+      if (pdev->vk.supported_extensions.EXT_sampler_filter_minmax)
+         features |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_MINMAX_BIT;
    }
 
    /* TODO: VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_DEPTH_COMPARISON_BIT */
@@ -366,8 +363,9 @@ kk_GetPhysicalDeviceImageFormatProperties2(
        pImageFormatInfo->type == VK_IMAGE_TYPE_2D && ycbcr_info == NULL &&
        (features & (VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT |
                     VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT)) &&
-       !(pImageFormatInfo->flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)) {
-      sampleCounts = pdev->supported_sample_counts;
+       !(pImageFormatInfo->flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) &&
+       !(pImageFormatInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT)) {
+      sampleCounts = pdev->info.supported_sample_counts;
    }
 
    /* From the Vulkan 1.2.199 spec:
@@ -468,10 +466,10 @@ kk_GetPhysicalDeviceImageFormatProperties2(
       .maxResourceSize = UINT32_MAX, /* TODO */
    };
 
-   vk_foreach_struct(s, pImageFormatProperties->pNext) {
-      switch (s->sType) {
+   vk_foreach_struct(sType, s, pImageFormatProperties->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES: {
-         VkExternalImageFormatProperties *p = (void *)s;
+         VkExternalImageFormatProperties *p = s;
          /* From the Vulkan 1.3.256 spec:
           *
           *    "If handleType is 0, vkGetPhysicalDeviceImageFormatProperties2
@@ -486,19 +484,19 @@ kk_GetPhysicalDeviceImageFormatProperties2(
          break;
       }
       case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES: {
-         VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = (void *)s;
+         VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = s;
          ycbcr_props->combinedImageSamplerDescriptorCount = plane_count;
          break;
       }
       case VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY_EXT: {
-         VkHostImageCopyDevicePerformanceQueryEXT *host_props = (void *)s;
+         VkHostImageCopyDevicePerformanceQueryEXT *host_props = s;
          /* Optimal device access and identical memory layout if optimization
           * is the same both with and without host transfer usage */
          bool with_host_transfer = kk_image_layout_can_optimize(
-            pImageFormatInfo->usage, pImageFormatInfo->tiling,
+            pdev, pImageFormatInfo->usage, pImageFormatInfo->tiling,
             pImageFormatInfo->flags, p_format);
          bool without_host_transfer = kk_image_layout_can_optimize(
-            pImageFormatInfo->usage & ~VK_IMAGE_USAGE_HOST_TRANSFER_BIT,
+            pdev, pImageFormatInfo->usage & ~VK_IMAGE_USAGE_HOST_TRANSFER_BIT,
             pImageFormatInfo->tiling, pImageFormatInfo->flags, p_format);
          host_props->optimalDeviceAccess =
             with_host_transfer == without_host_transfer;
@@ -506,7 +504,7 @@ kk_GetPhysicalDeviceImageFormatProperties2(
          break;
       }
       default:
-         vk_debug_ignored_stype(s->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -698,10 +696,10 @@ kk_get_image_memory_requirements(struct kk_device *dev, struct kk_image *image,
    pMemoryRequirements->memoryRequirements.alignment = align_B;
    pMemoryRequirements->memoryRequirements.size = size_B;
 
-   vk_foreach_struct_const(ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
-         VkMemoryDedicatedRequirements *dedicated = (void *)ext;
+         VkMemoryDedicatedRequirements *dedicated = ext;
          dedicated->prefersDedicatedAllocation =
             image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
          dedicated->requiresDedicatedAllocation =
@@ -709,7 +707,7 @@ kk_get_image_memory_requirements(struct kk_device *dev, struct kk_image *image,
          break;
       }
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }

@@ -72,7 +72,7 @@ brw_nir_lower_launch_mesh_workgroups_instr(nir_builder *b,
    return true;
 }
 
-static bool
+bool
 brw_nir_lower_launch_mesh_workgroups(nir_shader *nir)
 {
    return nir_shader_intrinsics_pass(nir,
@@ -88,7 +88,7 @@ brw_nir_lower_launch_mesh_workgroups(nir_shader *nir)
  */
 #define BRW_PER_TASK_DATA_START_DW 8
 
-static void
+void
 brw_nir_lower_tue_outputs(brw_pass_tracker *pt, brw_tue_map *map)
 {
    nir_shader *nir = pt->nir;
@@ -134,7 +134,7 @@ brw_nir_align_launch_mesh_workgroups_instr(nir_builder *b,
    return true;
 }
 
-static bool
+bool
 brw_nir_align_launch_mesh_workgroups(nir_shader *nir)
 {
    return nir_shader_intrinsics_pass(nir,
@@ -166,7 +166,7 @@ lower_set_vtx_and_prim_to_temp_write(nir_builder *b,
    return true;
 }
 
-static bool
+bool
 brw_nir_lower_mesh_primitive_count(nir_shader *nir)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
@@ -280,7 +280,8 @@ brw_compile_task(const struct brw_compiler *compiler,
       (const struct brw_task_prog_key *)params->base.key;
    struct brw_task_prog_data *prog_data =
       (struct brw_task_prog_data *)params->base.prog_data;
-   const bool debug_enabled = brw_should_print_shader(nir, DEBUG_TASK, params->base.source_hash);
+   const bool debug_enabled = brw_should_print_shader(nir, DEBUG_TASK,
+                                                      prog_data->base.base.source_hash);
 
    brw_pass_tracker pt_ = {
       .nir = nir,
@@ -360,6 +361,7 @@ brw_compile_task(const struct brw_compiler *compiler,
       BRW_NIR_SNAPSHOT("first");
       brw_nir_apply_key(pt, &key->base, dispatch_width);
 
+      brw_nir_opt_vectorize_urb(pt);
       brw_nir_optimize(pt);
       /* brw_nir_optimize undoes late lowerings. */
       BRW_NIR_PASS(nir_opt_algebraic_late);
@@ -421,7 +423,7 @@ brw_compile_task(const struct brw_compiler *compiler,
    return brw_to_binary(&to_binary_params);
 }
 
-static void
+void
 brw_nir_lower_tue_inputs(brw_pass_tracker *pt, const brw_tue_map *map)
 {
    /* See brw_nir_lower_tue_outputs. If a task payload is read by this shader,
@@ -463,7 +465,7 @@ enum {
    VERT_FLAT, /* per vertex flat */
 };
 
-static void
+void
 brw_compute_mue_map(const struct brw_compiler *compiler,
                     nir_shader *nir, struct brw_mue_map *map,
                     enum brw_mesh_index_format index_format,
@@ -616,7 +618,7 @@ brw_print_mue_map(FILE *fp, const struct brw_mue_map *map, struct nir_shader *ni
    brw_print_vue_map(fp, &map->vue_map, MESA_SHADER_MESH);
 }
 
-static bool
+bool
 brw_nir_initialize_mue(nir_shader *nir, const struct brw_mue_map *map)
 {
    nir_builder b;
@@ -709,13 +711,7 @@ brw_nir_initialize_mue(nir_shader *nir, const struct brw_mue_map *map)
    return true;
 }
 
-struct index_packing_state {
-   unsigned vertices_per_primitive;
-   nir_variable *original_prim_indices;
-   nir_variable *packed_prim_indices;
-};
-
-static bool
+bool
 brw_can_pack_primitive_indices(nir_shader *nir, struct index_packing_state *state)
 {
    /* can single index fit into one byte of U888X format? */
@@ -854,7 +850,7 @@ brw_pack_primitive_indices_instr(nir_builder *b, nir_intrinsic_instr *intrin,
    return true;
 }
 
-static bool
+bool
 brw_pack_primitive_indices(nir_shader *nir, void *data)
 {
    struct index_packing_state *state = (struct index_packing_state *)data;
@@ -876,7 +872,7 @@ brw_pack_primitive_indices(nir_shader *nir, void *data)
                                        data);
 }
 
-static bool
+bool
 brw_mesh_autostrip_enable(const struct brw_compiler *compiler, struct nir_shader *nir,
                           struct brw_mue_map *map)
 {
@@ -962,7 +958,8 @@ brw_compile_mesh(const struct brw_compiler *compiler,
       (const struct brw_mesh_prog_key *)params->base.key;
    struct brw_mesh_prog_data *prog_data =
       (struct brw_mesh_prog_data *)params->base.prog_data;
-   const bool debug_enabled = brw_should_print_shader(nir, DEBUG_MESH, params->base.source_hash);
+   const bool debug_enabled = brw_should_print_shader(nir, DEBUG_MESH,
+                                                      prog_data->base.base.source_hash);
 
    brw_pass_tracker pt_ = {
       .nir = nir,
@@ -1044,7 +1041,7 @@ brw_compile_mesh(const struct brw_compiler *compiler,
       .per_primitive_byte_offsets = prog_data->map.per_primitive_offsets,
    };
    BRW_NIR_PASS(brw_nir_lower_outputs_to_urb_intrinsics, &cb_data);
-   brw_nir_opt_vectorize_urb(pt);
+
    struct nir_opt_offsets_options offset_options = {};
    BRW_NIR_PASS(nir_opt_offsets, &offset_options);
 
@@ -1077,6 +1074,8 @@ brw_compile_mesh(const struct brw_compiler *compiler,
 
       BRW_NIR_SNAPSHOT("first");
       brw_nir_apply_key(pt, &key->base, dispatch_width);
+
+      brw_nir_opt_vectorize_urb(pt);
 
       /* Load uniforms can do a better job for constants, so fold before it. */
       BRW_NIR_PASS(nir_opt_constant_folding);

@@ -591,8 +591,20 @@ def decode_vkFlushMappedMemoryRanges(typeInfo: VulkanTypeInfo, api, cgen):
     cgen.stmt("return ptr - (unsigned char*)buf")
     cgen.endIf()
     cgen.stmt("sizeLeft -= readStream")
+    cgen.stmt("auto memorySize = m_state->getDeviceMemorySize(memory)")
+    cgen.beginIf("offset > memorySize || readStream > memorySize - offset")
+    cgen.stmt(
+        "GFXSTREAM_ERROR("
+        "\"vkFlushMappedMemoryRanges: dropping out-of-bounds guest range \""
+        "\"[offset %llu, size %llu] for memory size %llu\", "
+        "(unsigned long long)offset, (unsigned long long)readStream, "
+        "(unsigned long long)memorySize)")
+    cgen.endIf()
+    cgen.beginElse()
     cgen.stmt("uint8_t* targetRange = hostPtr + offset")
-    cgen.stmt("memcpy(targetRange, *readStreamPtrPtr, readStream); *readStreamPtrPtr += readStream")
+    cgen.stmt("memcpy(targetRange, *readStreamPtrPtr, readStream)")
+    cgen.endElse()
+    cgen.stmt("*readStreamPtrPtr += readStream")
     cgen.stmt("packetLen += 8 + readStream")
     cgen.endFor()
     cgen.endIf()
@@ -618,9 +630,21 @@ def decode_vkInvalidateMappedMemoryRanges(typeInfo, api, cgen):
     cgen.stmt("auto size = range.size")
     cgen.stmt("auto offset = range.offset")
     cgen.stmt("auto hostPtr = m_state->getMappedHostPointer(memory)")
-    cgen.stmt("auto actualSize = size == VK_WHOLE_SIZE ? m_state->getDeviceMemorySize(memory) : size")
+    cgen.stmt("auto memorySize = m_state->getDeviceMemorySize(memory)")
+    cgen.stmt("auto actualSize = size == VK_WHOLE_SIZE ? "
+              "(offset <= memorySize ? memorySize - offset : 0) : size")
     cgen.stmt("uint64_t writeStream = 0")
     cgen.stmt("if (!hostPtr) { %s->write(&writeStream, sizeof(uint64_t)); continue; }" % WRITE_STREAM)
+    cgen.beginIf("offset > memorySize || actualSize > memorySize - offset")
+    cgen.stmt(
+        "GFXSTREAM_ERROR("
+        "\"vkInvalidateMappedMemoryRanges: dropping out-of-bounds guest range \""
+        "\"[offset %llu, size %llu] for memory size %llu\", "
+        "(unsigned long long)offset, (unsigned long long)actualSize, "
+        "(unsigned long long)memorySize)")
+    cgen.stmt("%s->write(&writeStream, sizeof(uint64_t))" % WRITE_STREAM)
+    cgen.stmt("continue")
+    cgen.endIf()
     cgen.stmt("uint8_t* targetRange = hostPtr + offset")
     cgen.stmt("writeStream = actualSize")
     cgen.stmt("%s->write(&writeStream, sizeof(uint64_t))" % WRITE_STREAM)

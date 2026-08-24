@@ -102,8 +102,8 @@ vk_device_memory_report_init(struct vk_device *device,
    struct vk_device_memory_report *mem_reports = NULL;
    uint32_t count = 0;
 
-   vk_foreach_struct_const(pnext, pCreateInfo->pNext) {
-      if (pnext->sType == VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT)
+   vk_foreach_struct_const(sType, pnext, pCreateInfo->pNext) {
+      if (sType == VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT)
          count++;
    }
 
@@ -116,9 +116,9 @@ vk_device_memory_report_init(struct vk_device *device,
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
    count = 0;
-   vk_foreach_struct_const(pnext, pCreateInfo->pNext) {
-      if (pnext->sType == VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT) {
-         const struct VkDeviceDeviceMemoryReportCreateInfoEXT *report = (void *)pnext;
+   vk_foreach_struct_const(sType, pnext, pCreateInfo->pNext) {
+      if (sType == VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT) {
+         const struct VkDeviceDeviceMemoryReportCreateInfoEXT *report = pnext;
          mem_reports[count].callback = report->pfnUserCallback;
          mem_reports[count].data = report->pUserData;
          count++;
@@ -256,10 +256,10 @@ vk_device_init(struct vk_device *device,
 
    simple_mtx_init(&device->trace_mtx, mtx_plain);
 
-   vk_foreach_struct_const (ext, pCreateInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const (sType, ext, pCreateInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_DEVICE_PIPELINE_BINARY_INTERNAL_CACHE_CONTROL_KHR: {
-         const VkDevicePipelineBinaryInternalCacheControlKHR *cache_control = (const void *)ext;
+         const VkDevicePipelineBinaryInternalCacheControlKHR *cache_control = ext;
          if (cache_control->disableInternalCache)
             device->disable_internal_cache = true;
          break;

@@ -11,13 +11,13 @@
 #include "util/ralloc.h"
 #include "util/u_inlines.h"
 #include "util/format/u_format.h"
+#include "util/u_sample_positions.h"
 #include "util/u_upload_mgr.h"
 #include "iris_context.h"
 #include "iris_perf.h"
 #include "iris_resource.h"
 #include "iris_screen.h"
 #include "iris_utrace.h"
-#include "common/intel_sample_positions.h"
 
 /**
  * The pipe->set_debug_callback() driver hook.
@@ -112,41 +112,6 @@ iris_set_device_reset_callback(struct pipe_context *ctx,
       ice->reset = *cb;
    else
       memset(&ice->reset, 0, sizeof(ice->reset));
-}
-
-static void
-iris_get_sample_position(struct pipe_context *ctx,
-                         unsigned sample_count,
-                         unsigned sample_index,
-                         float *out_value)
-{
-   union {
-      struct {
-         float x[16];
-         float y[16];
-      } a;
-      struct {
-         float  _0XOffset,  _1XOffset,  _2XOffset,  _3XOffset,
-                _4XOffset,  _5XOffset,  _6XOffset,  _7XOffset,
-                _8XOffset,  _9XOffset, _10XOffset, _11XOffset,
-               _12XOffset, _13XOffset, _14XOffset, _15XOffset;
-         float  _0YOffset,  _1YOffset,  _2YOffset,  _3YOffset,
-                _4YOffset,  _5YOffset,  _6YOffset,  _7YOffset,
-                _8YOffset,  _9YOffset, _10YOffset, _11YOffset,
-               _12YOffset, _13YOffset, _14YOffset, _15YOffset;
-      } v;
-   } u;
-   switch (sample_count) {
-   case 1:  INTEL_SAMPLE_POS_1X(u.v._);  break;
-   case 2:  INTEL_SAMPLE_POS_2X(u.v._);  break;
-   case 4:  INTEL_SAMPLE_POS_4X(u.v._);  break;
-   case 8:  INTEL_SAMPLE_POS_8X(u.v._);  break;
-   case 16: INTEL_SAMPLE_POS_16X(u.v._); break;
-   default: UNREACHABLE("invalid sample count");
-   }
-
-   out_value[0] = u.a.x[sample_index];
-   out_value[1] = u.a.y[sample_index];
 }
 
 static bool
@@ -325,7 +290,7 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->set_debug_callback = iris_set_debug_callback;
    ctx->set_device_reset_callback = iris_set_device_reset_callback;
    ctx->get_device_reset_status = iris_get_device_reset_status;
-   ctx->get_sample_position = iris_get_sample_position;
+   ctx->get_sample_position = u_default_get_sample_position;
 
    iris_init_context_fence_functions(ctx);
    iris_init_blit_functions(ctx);

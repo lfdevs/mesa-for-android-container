@@ -17,6 +17,7 @@
 #include "util/macros.h"
 #include "util/u_math.h"
 #include "util/os_misc.h"
+#include "util/format/u_format.h"
 
 #include <stdio.h>
 #include <ctype.h>
@@ -239,7 +240,7 @@ ac_fill_compiler_info(struct radeon_info *info, const struct drm_amdgpu_info_dev
 {
    /* We use ac_compiler_info for shader cache keys, so make sure there is no padding. */
    STATIC_ASSERT(sizeof(enum amd_gfx_level) == 4);
-   STATIC_ASSERT(sizeof(struct ac_compiler_info) == 56);
+   STATIC_ASSERT(sizeof(struct ac_compiler_info) == 60);
 
    struct ac_compiler_info *out = &info->compiler_info;
 
@@ -295,12 +296,16 @@ ac_fill_compiler_info(struct radeon_info *info, const struct drm_amdgpu_info_dev
          out->num_physical_wave64_vgprs_per_simd = 256;
       }
    }
-   if (info->gfx_level >= GFX10_3)
+   if (info->gfx_level >= GFX10_3) {
       out->wave64_vgpr_alloc_granularity = out->num_physical_wave64_vgprs_per_simd / 64;
-   else if (info->gfx_level == GFX9 && info->family >= CHIP_MI200)
+      out->wave64_vgpr_encode_granularity = 4;
+   } else if (info->gfx_level == GFX9 && info->family >= CHIP_MI200) {
       out->wave64_vgpr_alloc_granularity = 8;
-   else
+      out->wave64_vgpr_encode_granularity = 8;
+   } else {
       out->wave64_vgpr_alloc_granularity = 4;
+      out->wave64_vgpr_encode_granularity = 4;
+   }
    out->min_wave64_vgpr_alloc = out->wave64_vgpr_alloc_granularity;
    out->max_vgpr_alloc = 256;
 
@@ -485,8 +490,6 @@ ac_fill_hw_ip_info(struct radeon_info *info, const struct drm_amdgpu_info_device
          return false;
 
       info->ip[ip_type].num_queues = util_bitcount(ip_info->available_rings);
-   } else {
-      return false;
    }
 
    /* Gfx6-8 don't set ip_discovery_version. */
@@ -498,18 +501,21 @@ ac_fill_hw_ip_info(struct radeon_info *info, const struct drm_amdgpu_info_device
       info->ip[ip_type].ver_major = ip_info->hw_ip_version_major;
       info->ip[ip_type].ver_minor = ip_info->hw_ip_version_minor;
 
-      /* Fix incorrect IP versions reported by the kernel. */
-      if (device_info->family == FAMILY_NV &&
-            (ASICREV_IS(device_info->external_rev, NAVI10) ||
-            ASICREV_IS(device_info->external_rev, NAVI12) ||
-            ASICREV_IS(device_info->external_rev, NAVI14)))
-         info->ip[AMD_IP_GFX].ver_minor = info->ip[AMD_IP_COMPUTE].ver_minor = 1;
-      else if (device_info->family == FAMILY_NV ||
-               device_info->family == FAMILY_VGH ||
-               device_info->family == FAMILY_RMB ||
-               device_info->family == FAMILY_RPL ||
-               device_info->family == FAMILY_MDN)
-         info->ip[AMD_IP_GFX].ver_minor = info->ip[AMD_IP_COMPUTE].ver_minor = 3;
+      if (ip_type == AMD_IP_GFX) {
+         /* Fix incorrect IP versions reported by the kernel. */
+         if (device_info->family == FAMILY_NV &&
+               (ASICREV_IS(device_info->external_rev, NAVI10) ||
+               ASICREV_IS(device_info->external_rev, NAVI12) ||
+               ASICREV_IS(device_info->external_rev, NAVI14) ||
+               ASICREV_IS(device_info->external_rev, GFX1013)))
+            info->ip[AMD_IP_GFX].ver_minor = info->ip[AMD_IP_COMPUTE].ver_minor = 1;
+         else if (device_info->family == FAMILY_NV ||
+                  device_info->family == FAMILY_VGH ||
+                  device_info->family == FAMILY_RMB ||
+                  device_info->family == FAMILY_RPL ||
+                  device_info->family == FAMILY_MDN)
+            info->ip[AMD_IP_GFX].ver_minor = info->ip[AMD_IP_COMPUTE].ver_minor = 3;
+      }
    }
 
    /* According to the kernel, only SDMA and VPE require 256B alignment, but use it
@@ -738,6 +744,7 @@ ac_identify_chip(struct radeon_info *info, const struct drm_amdgpu_info_device *
          break;
       case FAMILY_GFX1170:
          identify_chip(GFX1170);
+         identify_chip(GFX1171);
          break;
       case FAMILY_NV4:
          if (info->ip[AMD_IP_GFX].ver_minor == 0) {
@@ -861,6 +868,9 @@ ac_identify_chip(struct radeon_info *info, const struct drm_amdgpu_info_device *
          break;
       case VCN_IP_VERSION(5, 0, 1):
          info->vcn_ip_version = VCN_5_0_1;
+         break;
+      case VCN_IP_VERSION(5, 0, 2):
+         info->vcn_ip_version = VCN_5_0_2;
          break;
       case VCN_IP_VERSION(5, 3, 0):
          info->vcn_ip_version = VCN_5_3_0;
@@ -1487,6 +1497,13 @@ ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    }
 
    info->userq_ip_mask = debug_get_bool_option("AMD_USERQ", false) ? device_info.userq_ip_mask : 0;
+   /* Incomplete userq syncobj timeline support until .65 */
+   if (info->userq_ip_mask && info->drm_minor < 65) {
+      fprintf(stderr, "amdgpu: DRM version is %u.%u.%u, but userq support "
+                      "requires 3.65.0 or later.\n",
+              info->drm_major, info->drm_minor, info->drm_patchlevel);
+      return AC_QUERY_GPU_INFO_FAIL;
+   }
 
    for (unsigned ip_type = 0; ip_type < AMD_NUM_IP_TYPES; ip_type++) {
       struct drm_amdgpu_info_hw_ip ip_info = {0};
@@ -1856,6 +1873,32 @@ void ac_compute_device_uuid(const struct radeon_info *info, char *uuid, size_t s
    uint_uuid[3] = info->pci.func;
 }
 
+static void ac_print_gpu_modifiers(FILE *f, const struct radeon_info *const info,
+                                   const enum pipe_format format)
+{
+   const uint32_t bpp = util_format_get_blocksizebits(format);
+   struct ac_modifier_options modifier_options = {
+      .dcc = true,
+      .dcc_retile = true,
+   };
+   uint64_t modifiers[256];
+   unsigned modifier_count = ARRAY_SIZE(modifiers);
+
+   /* Get the number of modifiers. */
+   if (ac_get_supported_modifiers(info, &modifier_options, format,
+                                  &modifier_count, modifiers)) {
+      if (modifier_count)
+         fprintf(f, "Modifiers (%u bpp):\n", bpp);
+
+      for (unsigned i = 0; i < modifier_count; i++) {
+         char *name = drmGetFormatModifierName(modifiers[i]);
+
+         fprintf(f, "    0x%" PRIx64 " - %s\n", modifiers[i], name);
+         free(name);
+      }
+   }
+}
+
 void ac_print_gpu_info(FILE *f, const struct radeon_info *info, int fd)
 {
    fprintf(f, "Device info:\n");
@@ -2200,26 +2243,9 @@ void ac_print_gpu_info(FILE *f, const struct radeon_info *info, int fd)
       fprintf(f, "    num_lower_pipes = %u (raw)\n", G_0098F8_NUM_LOWER_PIPES(info->gb_addr_config));
    }
 
-   struct ac_modifier_options modifier_options = {
-      .dcc = true,
-      .dcc_retile = true,
-   };
-   uint64_t modifiers[256];
-   unsigned modifier_count = ARRAY_SIZE(modifiers);
-
-   /* Get the number of modifiers. */
-   if (ac_get_supported_modifiers(info, &modifier_options, PIPE_FORMAT_R8G8B8A8_UNORM,
-                                  &modifier_count, modifiers)) {
-      if (modifier_count)
-         fprintf(f, "Modifiers (32bpp):\n");
-
-      for (unsigned i = 0; i < modifier_count; i++) {
-         char *name = drmGetFormatModifierName(modifiers[i]);
-
-         fprintf(f, "    %s\n", name);
-         free(name);
-      }
-   }
+   ac_print_gpu_modifiers(f, info, PIPE_FORMAT_R8G8_UNORM);
+   ac_print_gpu_modifiers(f, info, PIPE_FORMAT_R8G8B8A8_UNORM);
+   ac_print_gpu_modifiers(f, info, PIPE_FORMAT_R16G16B16A16_UNORM);
 }
 
 int ac_get_gs_table_depth(enum amd_gfx_level gfx_level, enum radeon_family family)

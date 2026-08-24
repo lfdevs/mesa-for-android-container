@@ -1,0 +1,5 @@
+# llvm-spirv-translator bug?  Same fail on other drivers.  Passes on fedora
+# with spirv-llvm-translator-22.1.2-1.fc44
+Basic@get_enqueued_local_size,Fail
+Basic@get_global_linear_id,Fail
+Basic@get_local_linear_id,Fail

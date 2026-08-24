@@ -116,12 +116,6 @@ spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
-spec@ext_framebuffer_multisample@accuracy 4 srgb depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy 4 srgb depthstencil linear,Fail
-spec@ext_framebuffer_multisample@accuracy 8 srgb depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy 8 srgb depthstencil linear,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil,Fail
-spec@ext_framebuffer_multisample@accuracy all_samples srgb depthstencil linear,Fail
 spec@ext_framebuffer_multisample@interpolation 2 centroid-edges,Fail
 spec@ext_framebuffer_multisample@interpolation 4 centroid-edges,Fail
 spec@ext_framebuffer_multisample@interpolation 6 centroid-edges,Fail
@@ -147,9 +141,9 @@ spec@ext_transform_feedback@tessellation quads wireframe,Fail
 spec@ext_transform_feedback@tessellation quad_strip wireframe,Fail
 
 # uprev Piglit in Mesa
-glx@glx-make-current,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
+vulkan@shaders@cmat-uniform-ctor,Fail
 
 # EGL
 wayland-dEQP-EGL.functional.resize.surface_size.grow,Fail

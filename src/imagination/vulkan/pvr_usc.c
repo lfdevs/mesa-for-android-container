@@ -40,7 +40,7 @@
  */
 static pco_shader *build_shader(pco_ctx *ctx, nir_shader *nir, pco_data *data)
 {
-   pco_preprocess_nir(ctx, nir);
+   pco_preprocess_nir(ctx, nir, data);
    pco_lower_nir(ctx, nir, data);
    pco_postprocess_nir(ctx, nir, data);
 
@@ -71,7 +71,8 @@ nir_shader *pvr_usc_fs_pfo_passthrough_nir(pco_ctx *ctx)
    nir_frag_store_pco(&b, nir_imm_int(&b, 0), .base = 0);
    nir_jump(&b, nir_jump_return);
 
-   pco_preprocess_nir(ctx, b.shader);
+   pco_data data = { 0 };
+   pco_preprocess_nir(ctx, b.shader, &data);
 
    return b.shader;
 }

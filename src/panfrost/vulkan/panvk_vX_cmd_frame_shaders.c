@@ -164,11 +164,13 @@ lower_sysval(nir_builder *b, nir_intrinsic_instr *intr,
       break;
    case nir_intrinsic_load_layer_id:
       /* On v9+, we have real layered rendering */
-      if (PAN_ARCH >= 9)
-         return false;
-
-      offset = offsetof(struct panvk_fb_sysvals, layer_id);
-      val = nir_u2u32(b, load_sysval(b, 1, 16, offset));
+      if (PAN_ARCH >= 9) {
+         val = nir_load_frame_arg_pan(b);
+         val = nir_extract_u8_imm(b, nir_u2u32(b, val), 0);
+      } else {
+         offset = offsetof(struct panvk_fb_sysvals, layer_id);
+         val = nir_u2u32(b, load_sysval(b, 1, 16, offset));
+      }
       break;
    default:
       return false;
@@ -206,7 +208,8 @@ get_frame_shader(struct panvk_device *dev,
       goto out;
 
    const struct nir_shader_compiler_options *nir_options =
-      pan_get_nir_shader_compiler_options(PAN_ARCH, false);
+      pan_get_nir_shader_compiler_options(PAN_ARCH, MESA_SHADER_FRAGMENT,
+                                          false);
    nir_shader *nir = GENX(pan_get_fb_shader)(&key->key, nir_options);
    PAN_NIR_SET_BLAKE3_INTERNAL(nir, key);
 
@@ -219,6 +222,7 @@ get_frame_shader(struct panvk_device *dev,
       .gpu_id = phys_dev->kmod.dev->props.gpu_id,
       .gpu_variant = phys_dev->kmod.dev->props.gpu_variant,
       .is_blit = true,
+      .fau.reserved = DIV_ROUND_UP(sizeof(struct panvk_fb_sysvals), 4),
    };
 
    pan_preprocess_nir(nir, inputs.gpu_id);

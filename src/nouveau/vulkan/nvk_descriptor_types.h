@@ -7,12 +7,35 @@
 
 #include "nvk_private.h"
 
+#include "nvk_instance.h"
 #include "nvk_physical_device.h"
 
 #include "nil.h"
 
 #define NVK_IMAGE_DESCRIPTOR_IMAGE_INDEX_MASK   0x000fffff
 #define NVK_IMAGE_DESCRIPTOR_SAMPLER_INDEX_MASK 0xfff00000
+
+/** Hardware(ish) descriptor type used for images and buffer views.
+ *
+ * For all textures and Maxwell+ storage images, this is the hardware
+ * descriptor placed in the texture header pool.  For Kepler storage images,
+ * it's the su_info produced by NIL and consumed by NAK.
+ *
+ * All other image descriptor types used by NVK are for descriptor sets and
+ * contain indices which indirectly reference the texture header pool.  The
+ * only exception is that, on Kepler, we can put the su_info directly in the
+ * descriptor set because it's all software anyway.
+ */
+union nvk_image_descriptor {
+   struct nil_descriptor desc;
+   struct nil_su_info su_info;
+};
+static_assert(sizeof(struct nil_descriptor) == NVK_TEXTURE_HEADER_SIZE,
+              "All image heap descriptors are 32 bytes");
+static_assert(sizeof(struct nil_su_info) == NVK_TEXTURE_HEADER_SIZE,
+              "All image heap descriptors are 32 bytes");
+static_assert(sizeof(union nvk_image_descriptor) == NVK_TEXTURE_HEADER_SIZE,
+              "All image descriptors are 32 bytes");
 
 PRAGMA_DIAGNOSTIC_PUSH
 PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
@@ -129,6 +152,36 @@ nvk_use_bindless_cbuf_2(const struct nv_device_info *info)
    return info->cls_eng3d >= 0xCB97 /* HOPPER_A */;
 }
 
+static inline union nvk_buffer_descriptor
+nvk_ubo_descriptor(const struct nvk_physical_device *pdev,
+                   VkDeviceAddressRangeEXT addr_range)
+{
+   const uint32_t min_cbuf_alignment = nvk_min_cbuf_alignment(&pdev->info);
+
+   assert(addr_range.address % min_cbuf_alignment == 0);
+   assert(addr_range.size <= NVK_MAX_CBUF_SIZE);
+
+   addr_range.address = ROUND_DOWN_TO(addr_range.address, min_cbuf_alignment);
+   addr_range.size = align(addr_range.size, min_cbuf_alignment);
+
+   if (nvk_use_bindless_cbuf_2(&pdev->info)) {
+      return (union nvk_buffer_descriptor) { .cbuf2 = {
+         .base_addr_shift_6 = addr_range.address >> 6,
+         .size_shift_4 = addr_range.size >> 4,
+      }};
+   } else if (nvk_use_bindless_cbuf(&pdev->info)) {
+      return (union nvk_buffer_descriptor) { .cbuf = {
+         .base_addr_shift_4 = addr_range.address >> 4,
+         .size_shift_4 = addr_range.size >> 4,
+      }};
+   } else {
+      return (union nvk_buffer_descriptor) { .addr = {
+         .base_addr = addr_range.address,
+         .size = addr_range.size,
+      }};
+   }
+}
+
 static inline struct nvk_buffer_address
 nvk_ubo_descriptor_addr(const struct nvk_physical_device *pdev,
                         union nvk_buffer_descriptor desc)
@@ -146,6 +199,24 @@ nvk_ubo_descriptor_addr(const struct nvk_physical_device *pdev,
    } else {
       return desc.addr;
    }
+}
+
+static inline union nvk_buffer_descriptor
+nvk_ssbo_descriptor(const struct nvk_physical_device *pdev,
+                    VkDeviceAddressRangeEXT addr_range)
+{
+   const struct nvk_instance *instance = nvk_physical_device_instance(pdev);
+   const uint32_t min_ssbo_alignment = nvk_min_ssbo_alignment(instance);
+   assert(addr_range.address % min_ssbo_alignment == 0);
+   assert(addr_range.size <= UINT32_MAX);
+
+   addr_range.address = ROUND_DOWN_TO(addr_range.address, min_ssbo_alignment);
+   addr_range.size = align(addr_range.size, NVK_SSBO_BOUNDS_CHECK_ALIGNMENT);
+
+   return (union nvk_buffer_descriptor) { .addr = {
+      .base_addr = addr_range.address,
+      .size = addr_range.size,
+   }};
 }
 
 #endif /* NVK_DESCRIPTOR_TYPES */

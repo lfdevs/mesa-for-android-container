@@ -32,11 +32,15 @@ static nir_def *
 _load_param(nir_builder *b, unsigned bit_size, unsigned base, unsigned range)
 {
    return
-      (b->shader->info.stage == MESA_SHADER_COMPUTE &&
-       GFX_VERx10 >= 125) ?
-      nir_load_shader_indirect_data_intel(
-         b, 1, bit_size, nir_load_indirect_address_intel(b),
-         .base = base, .range = range) :
+      (b->shader->info.stage == MESA_SHADER_COMPUTE && GFX_VERx10 >= 125) ?
+      nir_load_global_constant_uniform_block_intel(
+         b, 1, bit_size,
+         nir_iadd_imm(b,
+                      nir_load_inline_data_intel(b, 1, 64, nir_imm_int(b, 0),
+                                                 .base = 0, .range = 8),
+                      base),
+         .access = ACCESS_CAN_REORDER | ACCESS_NON_WRITEABLE,
+         .align_mul = 64) :
       nir_load_push_data_intel(b, 1, bit_size, nir_imm_int(b, 0),
                                .base = base, .range = range);
 }

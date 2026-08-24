@@ -24,9 +24,9 @@ gen_finish_structured_cf(gen_inst *insts, int num_insts, int final_halt_idx)
       int jip_idx;
 
       /* For loop headers. */
-      int loop_end_idx;
+      int loop_end_idx = -1;
 
-      bool is_loop_header() const { return loop_end_idx != 0; }
+      bool is_loop_header() const { return loop_end_idx != -1; }
    };
 
    /* Collect information about the control flow instructions and any
@@ -47,7 +47,7 @@ gen_finish_structured_cf(gen_inst *insts, int num_insts, int final_halt_idx)
          assert(inst->src[0].file == GEN_IMM);
          assert((int32_t)inst->src[0].imm % 16 == 0);
          const int jip_idx = idx + (int32_t)inst->src[0].imm / 16;
-         assert(jip_idx < idx);
+         assert(jip_idx <= idx);
          infos.push_back({
             .inst = inst,
             .idx = idx,
@@ -98,7 +98,7 @@ gen_finish_structured_cf(gen_inst *insts, int num_insts, int final_halt_idx)
 
    for (unsigned i = 0; i < infos.size(); i++) {
       /* This is a loop header for one or more loops. */
-      while (i < infos.size() && infos[i].loop_end_idx) {
+      while (i < infos.size() && infos[i].is_loop_header()) {
          loop_stack.push_back(&infos[i]);
          i++;
       }
@@ -250,6 +250,9 @@ gen_finish_structured_cf(gen_inst *insts, int num_insts, int final_halt_idx)
     * as relative byte offsets.
     */
    for (auto &info : infos) {
+      if (info.is_loop_header())
+         continue;
+
       gen_inst *inst = info.inst;
       const int idx = info.idx;
 

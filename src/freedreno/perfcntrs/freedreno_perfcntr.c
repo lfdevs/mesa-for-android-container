@@ -219,16 +219,20 @@ fd_perfcntr_reserve(struct fd_perfcntr_state *perfcntrs,
    simple_mtx_lock(&perfcntrs->lock);
 
    /* Check if requested countable is already configured: */
-   BITSET_FOREACH_SET (c, perfcntrs->assigned_counters[g], MAX_COUNTERS_PER_GROUP) {
-      struct hash_entry *e =
-         _mesa_hash_table_search(perfcntrs->counter_state, &group->counters[c]);
+   if (countable) {
+      BITSET_FOREACH_SET (c, perfcntrs->assigned_counters[g],
+                          MAX_COUNTERS_PER_GROUP) {
+         struct hash_entry *e =
+            _mesa_hash_table_search(perfcntrs->counter_state, &group->counters[c]);
 
-      assert(e);
-      struct fd_perfcntr_counter_state *s = e->data;
+         assert(e);
+         struct fd_perfcntr_counter_state *s = e->data;
 
-      if (&group->countables[s->countable] == countable) {
-         state = s;
-         break;
+         if (s->countable >= 0 &&
+             &group->countables[s->countable] == countable) {
+            state = s;
+            break;
+         }
       }
    }
 
@@ -248,7 +252,7 @@ fd_perfcntr_reserve(struct fd_perfcntr_state *perfcntrs,
          state = rzalloc(perfcntrs, struct fd_perfcntr_counter_state);
          state->group = g;
          state->counter = c;
-         state->countable = find_countable_idx(group, countable);
+         state->countable = countable ? find_countable_idx(group, countable) : -1;
 
          assert(!BITSET_TEST(*assigned_counters, state->counter));
 

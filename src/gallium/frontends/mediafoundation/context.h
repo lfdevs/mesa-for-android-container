@@ -29,6 +29,7 @@
 #include "macros.h"
 #include "mfpipeinterop.h"
 #include "reference_frames_tracker.h"
+#include "d3d12_suballoc_mediabuffer_manager.h"
 
 typedef class DX12EncodeContext
 {
@@ -38,6 +39,7 @@ typedef class DX12EncodeContext
    struct pipe_fence_handle *pAsyncFence = NULL;
    ComPtr<ID3D12Fence> spAsyncFence;
    std::vector<struct pipe_resource *> pOutputBitRes;
+   std::vector<ComPtr<CD3D12ResourceHolder>> spOutputBitResourceHolders;
    std::vector<struct pipe_fence_handle *> pSliceFences;
    struct pipe_fence_handle *pLastSliceFence;
    D3D12_VIDEO_ENCODER_COMPRESSED_BITSTREAM_NOTIFICATION_MODE sliceNotificationMode =
@@ -261,6 +263,11 @@ typedef class DX12EncodeContext
 
       for( uint32_t slice_idx = 0; slice_idx < static_cast<uint32_t>( pOutputBitRes.size() ); slice_idx++ )
          pipe_resource_reference( &pOutputBitRes[slice_idx], nullptr );
+
+      for( uint32_t slice_idx = 0; slice_idx < static_cast<uint32_t>( spOutputBitResourceHolders.size() ); slice_idx++ )
+      {
+         spOutputBitResourceHolders[slice_idx].Reset();
+      }
 
       if( pPipeResourceQPMapStats )
       {

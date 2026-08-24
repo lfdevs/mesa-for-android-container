@@ -54,7 +54,7 @@ namespace
       ~gl_nir_lower_mediump_test();
 
       struct gl_shader *compile_shader(GLenum type, const char *source);
-      void compile(const char *source);
+      void compile(const char *source, const char *vs_source = NULL);
 
       struct gl_context local_ctx;
       struct gl_context *ctx;
@@ -99,6 +99,22 @@ namespace
             EXPECT_EQ(alu->src[i].src.ssa->bit_size, alu->src[0].src.ssa->bit_size);
          }
          return alu->src[0].src.ssa->bit_size;
+      }
+
+      int count_float_input_precision(unsigned prec)
+      {
+         int count = 0;
+         if (!nir)
+            return 0;
+
+         nir_foreach_variable_with_modes(var, nir, nir_var_shader_in) {
+            const struct glsl_type *type = glsl_without_array(var->type);
+            enum glsl_base_type base = glsl_get_base_type(type);
+            if ((base == GLSL_TYPE_FLOAT || base == GLSL_TYPE_FLOAT16) &&
+                var->data.precision == prec)
+               count++;
+         }
+         return count;
       }
 
       nir_shader *nir;
@@ -159,7 +175,7 @@ namespace
    }
 
    void
-   gl_nir_lower_mediump_test::compile(const char *source)
+   gl_nir_lower_mediump_test::compile(const char *source, const char *vs_source)
    {
       ctx = &local_ctx;
 
@@ -190,11 +206,11 @@ namespace
       whole_program = standalone_create_shader_program();
       whole_program->IsES = true;
 
-      const char *vs_source = R"(#version 310 es
+      const char *def_vs_source = R"(#version 310 es
       void main() {
          gl_Position = vec4(0.0);
       })";
-      compile_shader(GL_VERTEX_SHADER, vs_source);
+      compile_shader(GL_VERTEX_SHADER, vs_source ? vs_source : def_vs_source);
 
       compile_shader(GL_FRAGMENT_SHADER, source);
 
@@ -603,6 +619,48 @@ TEST_F(gl_nir_lower_mediump_test, struct_default_precision_lvalue)
    // Enable these checks once we fix the GLSL.
    //EXPECT_EQ(op_dest_bits(nir_op_fmul), 16);
    //EXPECT_EQ(op_dest_bits(nir_op_imul), 32);
+}
+
+TEST_F(gl_nir_lower_mediump_test, struct_member_varying_precision)
+{
+   ASSERT_NO_FATAL_FAILURE(compile(
+       R"(#version 310 es
+         precision mediump float;
+         struct S {
+            vec4 v;
+         };
+         in S a;
+         in vec4 ref;
+         out vec4 result;
+
+         void main()
+         {
+            /* Although not strictly mandated by the spec, users expect the same
+             * precision between structs and global varyings, see for example:
+             * spec@glsl-es-3.00@execution@varying-struct-centroid_gles3
+             */
+            result = a.v + ref;
+         }
+    )",
+       R"(#version 310 es
+         precision mediump float;
+         struct S {
+            vec4 v;
+         };
+         in vec4 piglit_vertex;
+         out S a;
+         out vec4 ref;
+
+         void main()
+         {
+            gl_Position = piglit_vertex;
+            a.v = piglit_vertex;
+            ref = piglit_vertex;
+         }
+    )"));
+
+   EXPECT_EQ(count_float_input_precision(GLSL_PRECISION_HIGH), 0);
+   EXPECT_GE(count_float_input_precision(GLSL_PRECISION_MEDIUM), 2);
 }
 
 TEST_F(gl_nir_lower_mediump_test, float_constructor)

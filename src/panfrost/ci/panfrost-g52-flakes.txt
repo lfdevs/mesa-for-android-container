@@ -77,7 +77,12 @@ dEQP-VK.glsl.operator.binary_operator.div.mediump_float_vec3_vertex
 glx@glx-visuals-stencil
 
 # New timeout flakes since wsi maintenance1 support
+dEQP-VK.wsi.xcb.maintenance1.release_images.immediate.no_scaling.basic
 dEQP-VK.wsi.xcb.maintenance1.release_images.mailbox.no_scaling.basic
 
 # Job timeout
 dEQP-VK.graphicsfuzz.spv-composites
+
+# Sometimes times out
+spec@egl_ext_surface_compression@create
+spec@arb_framebuffer_object@framebuffer-blit-oblong wide

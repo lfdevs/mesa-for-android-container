@@ -42,6 +42,9 @@ enum nvk_debug {
 
    /* Force all memory allocations to go to GART */
    NVK_DEBUG_FORCE_COHERENT = 1ull << 8,
+
+   /* Disable image compression */
+   NVK_DEBUG_NO_COMPRESSION = 1ull << 9,
 };
 
 enum nvk_experimental {
@@ -54,6 +57,9 @@ enum nvk_experimental {
     * smaller minor number than the device.
     */
    NVK_EXPERIMENTAL_DLSS_BACK_COMPAT = 1ull << 1,
+
+   /* Enable video support */
+   NVK_EXPERIMENTAL_VIDEO = 1ull << 2,
 };
 
 #endif /* NVK_DEBUG_H */

@@ -28,7 +28,7 @@ pass(nir_builder *b, nir_intrinsic_instr *instr, void *state)
 
    nir_deref_instr *packed_args = nir_src_as_deref(instr->src[0]);
    for (uint32_t i = 0; i < info->num_args; i++)
-      args[i] = nir_load_deref(b, nir_build_deref_struct(b, packed_args, i));
+      args[i] = nir_load_struct_field(b, packed_args, i);
 
    radv_build_printf_args(debug_nir, b, info->strings, info->num_args, args);
 

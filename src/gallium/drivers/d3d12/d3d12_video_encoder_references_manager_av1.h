@@ -32,11 +32,11 @@ class d3d12_video_encoder_references_manager_av1 : public d3d12_video_encoder_re
 {
  public:
    void end_frame();
-   void begin_frame(const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1& curFrameData,
+   void begin_frame(const d3d12_video_encoder_picture_control_codec_data_mutable& curFrameData,
                     bool bUsedAsReference,
                     struct pipe_picture_desc *picture);
    D3D12_VIDEO_ENCODER_RECONSTRUCTED_PICTURE get_current_frame_recon_pic_output_allocation();
-   bool get_current_frame_picture_control_data(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation);
+   bool get_current_frame_picture_control_data(d3d12_video_encoder_picture_control_codec_data_mutable &codecAllocation);
    bool is_current_frame_used_as_reference();
    D3D12_VIDEO_ENCODE_REFERENCE_FRAMES get_current_reference_frames();
 

@@ -170,6 +170,7 @@ lima_init_screen_caps(struct pipe_screen *screen)
    caps->max_texture_3d_levels =
    caps->max_texture_cube_levels = LIMA_MAX_MIP_LEVELS;
 
+   caps->device_type = PIPE_DEVICE_TYPE_INTEGRATED_GPU;
    caps->vendor_id = ARM_VENDOR_ID;
 
    caps->video_memory = 0;

@@ -68,6 +68,9 @@ panfrost_ioctl_get_param(int fd, unsigned long request, void *arg)
       /* Assume an MP4 GPU */
       gp->value = 0xF;
       return 0;
+   case DRM_PANFROST_PARAM_L2_FEATURES:
+      gp->value = 0x7120306;
+      return 0;
    case DRM_PANFROST_PARAM_TILER_FEATURES:
       gp->value = 0x809;
       return 0;
@@ -129,6 +132,8 @@ panfrost_ioctl_mmap_bo(int fd, unsigned long request, void *arg)
 
    mmap_bo->offset = drm_shim_bo_get_mmap_offset(shim_fd, bo);
 
+   drm_shim_bo_put(bo);
+
    return 0;
 }
 
@@ -162,7 +167,7 @@ panthor_ioctl_dev_query(int fd, unsigned long request, void *arg)
    switch (dev_query->type) {
    case DRM_PANTHOR_DEV_QUERY_GPU_INFO: {
       struct drm_panthor_gpu_info *gpu_info =
-         (struct drm_panthor_gpu_info *)dev_query->pointer;
+         (struct drm_panthor_gpu_info *)(uintptr_t)dev_query->pointer;
 
       gpu_info->gpu_id = pan_get_gpu_id() << 16;
       gpu_info->gpu_rev = 0;
@@ -191,7 +196,7 @@ panthor_ioctl_dev_query(int fd, unsigned long request, void *arg)
    }
    case DRM_PANTHOR_DEV_QUERY_CSIF_INFO: {
       struct drm_panthor_csif_info *csif_info =
-         (struct drm_panthor_csif_info *)dev_query->pointer;
+         (struct drm_panthor_csif_info *)(uintptr_t)dev_query->pointer;
 
       unsigned arch = pan_get_gpu_id() >> 12;
 
@@ -204,7 +209,7 @@ panthor_ioctl_dev_query(int fd, unsigned long request, void *arg)
    }
    case DRM_PANTHOR_DEV_QUERY_TIMESTAMP_INFO: {
       struct drm_panthor_timestamp_info *timestamp_info =
-         (struct drm_panthor_timestamp_info *)dev_query->pointer;
+         (struct drm_panthor_timestamp_info *)(uintptr_t)dev_query->pointer;
 
       /* Noop values */
       timestamp_info->timestamp_frequency = 0;
@@ -215,7 +220,7 @@ panthor_ioctl_dev_query(int fd, unsigned long request, void *arg)
    }
    case DRM_PANTHOR_DEV_QUERY_GROUP_PRIORITIES_INFO: {
       struct drm_panthor_group_priorities_info *priorities_info =
-         (struct drm_panthor_group_priorities_info *)dev_query->pointer;
+         (struct drm_panthor_group_priorities_info *)(uintptr_t)dev_query->pointer;
 
       /* Default values */
       priorities_info->allowed_mask =
@@ -259,6 +264,8 @@ panthor_ioctl_bo_mmap_offset(int fd, unsigned long request, void *arg)
    struct shim_bo *bo = drm_shim_bo_lookup(shim_fd, mmap_offset->handle);
 
    mmap_offset->offset = drm_shim_bo_get_mmap_offset(shim_fd, bo);
+
+   drm_shim_bo_put(bo);
 
    return 0;
 }

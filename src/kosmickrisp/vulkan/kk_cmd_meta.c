@@ -29,9 +29,9 @@ kk_cmd_bind_map_buffer(struct vk_command_buffer *vk_cmd,
    if (unlikely(!buf.gpu))
       return VK_ERROR_OUT_OF_POOL_MEMORY;
 
-   /* Need to retain since VkBuffers release the mtl_handle too */
+   /* Need to retain since VkBuffers release the metal.handle too */
    mtl_retain(buf.buffer);
-   buffer->mtl_handle = buf.buffer;
+   buffer->metal.handle = buf.buffer;
    buffer->vk.device_address = buf.gpu;
    *map_out = buf.cpu;
 
@@ -189,16 +189,16 @@ kk_meta_end(struct kk_cmd_buffer *cmd, struct kk_meta_save *save,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-kk_CmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
-                 VkDeviceSize dstOffset, VkDeviceSize dstRange, uint32_t data)
+kk_CmdFillMemoryKHR(VkCommandBuffer commandBuffer,
+                    const VkDeviceAddressRangeKHR *dstRange,
+                    VkAddressCommandFlagsKHR dstFlags, uint32_t data)
 {
    VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
    struct kk_device *dev = kk_cmd_buffer_device(cmd);
 
    struct kk_meta_save save;
    kk_meta_begin(cmd, &save, VK_PIPELINE_BIND_POINT_COMPUTE);
-   vk_meta_fill_buffer(&cmd->vk, &dev->meta, dstBuffer, dstOffset, dstRange,
-                       data);
+   vk_meta_fill_memory(&cmd->vk, &dev->meta, dstRange, dstFlags, data);
    kk_meta_end(cmd, &save, VK_PIPELINE_BIND_POINT_COMPUTE);
 }
 
@@ -277,7 +277,7 @@ kk_CmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
 
    uint32_t view_mask = cmd->state.gfx.render.view_mask;
    uint32_t layer_ids[KK_MAX_MULTIVIEW_VIEW_COUNT] = {};
-   mtl_set_vertex_amplification_count(cmd->cs.gfx, layer_ids, 1u);
+   mtl_set_vertex_amplification_count(cmd->gfx.encoder, layer_ids, 1u);
 
    /* Preserve conditional rendering state for clearing attachments */
    struct kk_conditional_rendering_state cond_render = cmd->state.cond_render;
@@ -295,7 +295,7 @@ kk_CmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
    if (view_mask == 0u) {
       layer_ids[count++] = 0;
    }
-   mtl_set_vertex_amplification_count(cmd->cs.gfx, layer_ids, count);
+   mtl_set_vertex_amplification_count(cmd->gfx.encoder, layer_ids, count);
 }
 
 void

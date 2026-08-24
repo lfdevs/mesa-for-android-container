@@ -1716,7 +1716,7 @@ void si_rebind_buffer(struct si_context *sctx, struct pipe_resource *buf)
 
    /* Shader images */
    if (!buffer || buffer->bind_history & SI_BIND_IMAGE_BUFFER_ALL) {
-      unsigned mask = buffer ? (buffer->bind_history & SI_BIND_IMAGE_BUFFER_SHIFT) >>
+      unsigned mask = buffer ? (buffer->bind_history & SI_BIND_IMAGE_BUFFER_ALL) >>
                                SI_BIND_IMAGE_BUFFER_SHIFT : BITFIELD_MASK(SI_NUM_SHADERS);
       u_foreach_bit(shader, mask) {
          struct si_images *images = &sctx->images[shader];

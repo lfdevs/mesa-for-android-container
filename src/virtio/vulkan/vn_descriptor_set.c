@@ -10,10 +10,10 @@
 
 #include "vn_descriptor_set.h"
 
-#include "venus-protocol/vn_protocol_driver_descriptor_pool.h"
-#include "venus-protocol/vn_protocol_driver_descriptor_set.h"
-#include "venus-protocol/vn_protocol_driver_descriptor_set_layout.h"
-#include "venus-protocol/vn_protocol_driver_descriptor_update_template.h"
+#include "vn_protocol_driver_descriptor_pool.h"
+#include "vn_protocol_driver_descriptor_set.h"
+#include "vn_protocol_driver_descriptor_set_layout.h"
+#include "vn_protocol_driver_descriptor_update_template.h"
 
 #include "vn_device.h"
 #include "vn_pipeline.h"

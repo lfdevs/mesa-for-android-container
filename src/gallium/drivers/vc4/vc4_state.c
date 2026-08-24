@@ -101,6 +101,11 @@ vc4_create_rasterizer_state(struct pipe_context *pctx,
         if (!(cso->cull_face & PIPE_FACE_BACK))
                 so->config_bits[0] |= VC4_CONFIG_BITS_ENABLE_PRIM_BACK;
 
+        if (cso->fill_front != PIPE_POLYGON_MODE_FILL ||
+            cso->fill_back != PIPE_POLYGON_MODE_FILL) {
+                mesa_logw_once("Selecting a polygon rasterization mode other than GL_FILL is not supported");
+        }
+
         /* Workaround: HW-2726 PTB does not handle zero-size points (BCM2835,
          * BCM21553).
          */

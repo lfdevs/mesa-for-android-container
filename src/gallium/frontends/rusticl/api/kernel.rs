@@ -460,7 +460,10 @@ fn set_kernel_arg(
                         return Err(CL_INVALID_ARG_VALUE);
                     }
 
-                    KernelArgValue::Buffer(Arc::downgrade(&buffer))
+                    KernelArgValue::Buffer {
+                        buffer: Arc::downgrade(&buffer),
+                        offset: 0,
+                    }
                 }
             }
             KernelArgType::MemLocal if !arg.dead => KernelArgValue::LocalMem(arg_size),
@@ -804,7 +807,7 @@ fn enqueue_ndrange_kernel(
         Box::new(|_, _| Ok(()))
     } else {
         k.launch(
-            &q,
+            q.device,
             work_dim,
             local_work_size,
             global_work_size,

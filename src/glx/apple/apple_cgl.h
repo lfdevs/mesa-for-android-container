@@ -58,6 +58,11 @@ struct apple_cgl_api
      CGLContextObj(*get_current_context) (void);
    const char *(*error_string) (CGLError error);
 
+     CGLError(*set_parameter) (CGLContextObj ctx, CGLContextParameter pname,
+                               const GLint * params);
+     CGLError(*get_parameter) (CGLContextObj ctx, CGLContextParameter pname,
+                               GLint * params);
+
      CGLError(*set_off_screen) (CGLContextObj ctx,
                                 GLsizei width, GLsizei height, GLint rowbytes,
                                 void *baseaddr);

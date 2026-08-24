@@ -15,7 +15,7 @@ _hw_runner_bindings_rs = rust.bindgen(
     '--allowlist-type', 'pan_kmod_.*',
     '--allowlist-type', 'pandecode_.*',
     '--allowlist-type', 'drm.*',
-    '--allowlist-type', '.*',
+    '--allowlist-type', 'hw_runner_.*',
     '--allowlist-function', 'pan_arch',
     '--allowlist-function', 'munmap',
     '--allowlist-function', 'pan_kmod_.*',

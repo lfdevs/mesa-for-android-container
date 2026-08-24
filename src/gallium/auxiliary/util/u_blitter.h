@@ -72,13 +72,11 @@ struct blitter_context
     *
     * \param type   Semantics of the attributes "attrib".
     *               If type is UTIL_BLITTER_ATTRIB_NONE, ignore them.
-    *               If type is UTIL_BLITTER_ATTRIB_COLOR, the attributes
-    *               make up a constant RGBA color, and should go
-    *               to the GENERIC0 varying slot of a fragment shader.
-    *               If type is UTIL_BLITTER_ATTRIB_TEXCOORD, {a1, a2} and
-    *               {a3, a4} specify top-left and bottom-right texture
-    *               coordinates of the rectangle, respectively, and should go
-    *               to the GENERIC0 varying slot of a fragment shader.
+    *               If type is UTIL_BLITTER_ATTRIB_TEXCOORD_XY or
+    *               UTIL_BLITTER_ATTRIB_TEXCOORD_XYZW, attrib stores the
+    *               2-component or 4-component texture coordinates of the
+    *               rectangle, and should go to the GENERIC0 varying slot of a
+    *               fragment shader.
     *
     * \param attrib See type.
     *
@@ -294,7 +292,8 @@ void util_blitter_generate_mipmap(struct blitter_context *blitter,
                                   struct pipe_resource *tex,
                                   enum pipe_format format,
                                   unsigned base_level, unsigned last_level,
-                                  unsigned first_layer, unsigned last_layer);
+                                  unsigned first_layer, unsigned last_layer,
+                                  unsigned num_downscales);
 
 /**
  * Helper function to initialize a view for copy_texture_view.

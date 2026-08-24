@@ -196,14 +196,14 @@ nv50_create_texture_view(struct pipe_context *pipe,
 
    tic[3] = (flags & NV50_TEXVIEW_FILTER_MSAA8) ? 0x20000000 : 0x00300000;
 
-   tic[4] = (1 << 31) | (mt->base.base.width0 << mt->ms_x);
+   tic[4] = (1u << 31) | (mt->base.base.width0 << mt->ms_x);
 
    tic[5] = (mt->base.base.height0 << mt->ms_y) & 0xffff;
    tic[5] |= depth << 16;
    if (class_3d > NV50_3D_CLASS)
-      tic[5] |= mt->base.base.last_level << G80_TIC_5_MAP_MIP_LEVEL__SHIFT;
+      tic[5] |= (uint32_t)(mt->base.base.last_level) << G80_TIC_5_MAP_MIP_LEVEL__SHIFT;
    else
-      tic[5] |= view->pipe.u.tex.last_level << G80_TIC_5_MAP_MIP_LEVEL__SHIFT;
+      tic[5] |= (uint32_t)(view->pipe.u.tex.last_level) << G80_TIC_5_MAP_MIP_LEVEL__SHIFT;
 
    tic[6] = (mt->ms_x > 1) ? 0x88000000 : 0x03000000; /* sampling points */
 
@@ -302,7 +302,7 @@ nv50_validate_tic(struct nv50_context *nv50, int s)
          PUSH_DATA (push, 0x20);
       }
 
-      nv50->screen->tic.lock[tic->id / 32] |= 1 << (tic->id % 32);
+      nv50->screen->tic.lock[tic->id / 32] |= 1u << (tic->id % 32);
 
       res->status &= ~NOUVEAU_BUFFER_STATUS_GPU_WRITING;
       res->status |= NOUVEAU_BUFFER_STATUS_GPU_READING;

@@ -94,10 +94,12 @@ uint32_t MinigbmGralloc::getHostHandle(const native_handle_t* handle) {
 
     auto resource = mDevice->importBlob(hnd);
     if (!resource) {
+        mesa_loge("%s: failed to importBlob for fd %" PRId64, __func__, hnd.osHandle);
         return 0;
     }
 
     if (resource->wait()) {
+        mesa_loge("%s: resource wait failed for fd %" PRId64, __func__, hnd.osHandle);
         return 0;
     }
 

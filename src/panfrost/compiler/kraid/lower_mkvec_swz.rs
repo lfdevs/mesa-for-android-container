@@ -30,7 +30,7 @@ impl Byte {
     // NOTE: This method does not resolve sign extension
     fn as_src(&self) -> Src {
         match self {
-            Byte::Imm8(imm8) => Src::imm_u8(*imm8),
+            Byte::Imm8(imm8) => (*imm8).into(),
             Byte::Src(src) => src.as_src(),
         }
     }
@@ -81,7 +81,7 @@ fn src_as_byte(src: &Src) -> Byte {
 fn v2i8_as_i16_src(bytes: [&Byte; 2]) -> Option<Src> {
     if let [Byte::Imm8(lo), Byte::Imm8(hi)] = bytes {
         let imm16 = (*lo as u16) | ((*hi as u16) << 8);
-        return Some(Src::imm_u16(imm16 as u16));
+        return Some(imm16.into());
     }
 
     let [Byte::Src(lo), Byte::Src(hi)] = bytes else {
@@ -115,28 +115,15 @@ fn filter_dst_types(
 }
 
 fn try_swizzle_with_copy(b: &mut impl SSABuilder, dst: Dst, src: Src) -> bool {
-    let dst_types = filter_dst_types(OpCopy::VARIANTS, &dst);
-    let swz = src.swizzle;
-    let mut op = Op::from(OpCopy {
-        dst,
-        dst_type: DataType::I8,
-        src,
-    });
-    for dst_type in dst_types {
-        // Borrow mutable
-        let Op::Copy(copy) = &mut op else {
-            unreachable!();
-        };
-        copy.dst_type = dst_type;
+    let DstRef::SSA(dst_vec) = &dst.dst_ref else {
+        return false;
+    };
+    let dst_type = DataType::i(dst_vec.bytes() * 8);
 
-        // Re-borrow shared
-        let Op::Copy(copy) = &op else {
-            unreachable!();
-        };
-        if b.model().op_src_supports_swizzle(&op, &copy.src, swz) {
-            b.push_op(op);
-            return true;
-        }
+    let op = OpCopy { dst, dst_type, src };
+    if op.src_supports_swizzle(&op.src, op.src.swizzle) {
+        b.push_op(op);
+        return true;
     }
     false
 }
@@ -148,7 +135,7 @@ fn try_swizzle_with_iadd(b: &mut impl SSABuilder, dst: Dst, src: Src) -> bool {
         dst,
         dst_type: DataType::V2U16,
         saturate: false,
-        srcs: [src, 0.into()],
+        srcs: [src, 0_u32.into()],
     });
     for dst_type in dst_types {
         // Borrow mutable
@@ -183,8 +170,8 @@ fn try_swizzle_with_shift_lop(
         logic_op: LogicOp::None,
         not_result: false,
         src0: src,
-        shift: Src::imm_u8(0),
-        src2: 0.into(),
+        shift: 0_u8.into(),
+        src2: 0_u32.into(),
     });
     for dst_type in dst_types {
         // Borrow mutable
@@ -230,6 +217,7 @@ fn try_sign_extend_with_arshift(
     };
 
     src.swizzle = swizzle;
+    let shift: u8 = dst_type.bits() - 1;
     let op = Op::from(OpShiftLop {
         dst,
         dst_type,
@@ -237,8 +225,8 @@ fn try_sign_extend_with_arshift(
         logic_op: LogicOp::None,
         not_result: false,
         src0: src,
-        shift: Src::imm_u8(dst_type.bits() - 1),
-        src2: 0.into(),
+        shift: shift.into(),
+        src2: 0_u32.into(),
     });
     let Op::ShiftLop(lop) = &op else {
         unreachable!();
@@ -293,9 +281,9 @@ fn mkvec_vni8<const N: usize>(
 
     if all_imm_or_zero {
         if N == 1 {
-            b.copy_i8_to(dst, Src::imm_u8(imm32 as u8));
+            b.copy_i8_to(dst, (imm32 as u8).into());
         } else if N == 2 {
-            b.copy_i16_to(dst, Src::imm_u16(imm32 as u16));
+            b.copy_i16_to(dst, (imm32 as u16).into());
         } else {
             b.copy_i32_to(dst, imm32.into());
         }
@@ -349,8 +337,8 @@ fn mkvec_vni8<const N: usize>(
                     logic_op: LogicOp::None,
                     not_result: false,
                     src0: src_byte.as_src(),
-                    shift: Src::imm_u8(7),
-                    src2: 0.into(),
+                    shift: 7_u8.into(),
+                    src2: 0_u32.into(),
                 });
                 let sext_byte = Byte::Src(SrcByte {
                     src_ref: tmp.into(),
@@ -378,7 +366,7 @@ fn mkvec_vni8<const N: usize>(
         b.push_op(OpMkVecV2I8I16 {
             dst,
             srcs: [bytes[0].as_src(), bytes[1].as_src()],
-            accum: Src::imm_u16(0),
+            accum: 0_u16.into(),
         });
     } else {
         if let Some(y16) = v2i8_as_i16_src([&bytes[2], &bytes[3]]) {
@@ -400,7 +388,7 @@ fn mkvec_vni8<const N: usize>(
                 lanes: DstLanes::H0,
             },
             srcs: [bytes[2].as_src(), bytes[3].as_src()],
-            accum: Src::imm_u16(0),
+            accum: 0_u16.into(),
         });
         b.push_op(OpMkVecV2I8I16 {
             dst,
@@ -440,7 +428,7 @@ fn lower_swz(b: &mut impl SSABuilder, op: Box<OpSwz>) {
             dst_type: DataType::F32,
             round: FRound::NearestEven,
             clamp: FClamp::None,
-            srcs: [op.src, Src::from(0).fneg()],
+            srcs: [op.src, Src::fneg_zero(32)],
         });
         return;
     }

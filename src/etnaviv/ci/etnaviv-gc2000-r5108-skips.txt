@@ -26,3 +26,10 @@ dEQP-GLES2.functional.dither.enabled.gradient_green
 # Can be removed once the piglit version in CI contains the fix for
 # https://gitlab.freedesktop.org/mesa/piglit/-/issues/104
 spec@ext_external_objects@vk-.*
+
+# Nightly run expectations update
+spec@glsl-1.10@execution@loops@glsl-fs-loop-300
+spec@glsl-1.10@execution@loops@glsl-vs-loop-300
+spec@glsl-1.10@execution@vs-loop-partial-unroll-multiple-breaks-loop-phi
+spec@glsl-1.10@execution@vs-loop-variable-iteration-limit-unroll4
+

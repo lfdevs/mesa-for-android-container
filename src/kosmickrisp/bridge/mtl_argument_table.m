@@ -13,7 +13,7 @@ mtl_argument_table_descriptor *
 mtl_new_argument_table_descriptor()
 {
    @autoreleasepool {
-      return [[MTL4ArgumentTableDescriptor new] init];
+      return [MTL4ArgumentTableDescriptor new];
    }
 }
 

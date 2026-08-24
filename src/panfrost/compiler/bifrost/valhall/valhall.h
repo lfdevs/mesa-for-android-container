@@ -169,6 +169,7 @@ va_op_dest_modifier_does_convert(enum bi_opcode op)
    case BI_OPCODE_FADD_F32:
    case BI_OPCODE_FADD_LSCALE_F32:
    case BI_OPCODE_FABSNEG_F32:
+   case BI_OPCODE_FCLAMP_F32:
    case BI_OPCODE_FMA_F32:
       return true;
    default:

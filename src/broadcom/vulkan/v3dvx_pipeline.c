@@ -721,28 +721,6 @@ v3dX(pipeline_pack_compile_state)(struct v3dv_pipeline *pipeline,
    }
 }
 
-#if V3D_VERSION == 42
-static bool
-pipeline_has_integer_vertex_attrib(struct v3dv_pipeline *pipeline)
-{
-   for (uint8_t i = 0; i < pipeline->va_count; i++) {
-      if (vk_format_is_int(pipeline->va[i].vk_format))
-         return true;
-   }
-   return false;
-}
-#endif
-
-bool
-v3dX(pipeline_needs_default_attribute_values)(struct v3dv_pipeline *pipeline)
-{
-#if V3D_VERSION == 42
-   return pipeline_has_integer_vertex_attrib(pipeline);
-#endif
-
-   return false;
-}
-
 /* @pipeline can be NULL. In that case we assume the most common case. For
  * example, for v42 we assume in that case that all the attributes have a
  * float format (we only create an all-float BO once and we reuse it with all
@@ -760,8 +738,14 @@ v3dX(create_default_attribute_values)(struct v3dv_device *device,
    uint32_t size = MAX_VERTEX_ATTRIBS * sizeof(float) * 4;
    struct v3dv_bo *bo;
 
-   bo = v3dv_bo_alloc(device, size, "default_vi_attributes", true);
+   const VkObjectType obj_type = pipeline != NULL ? VK_OBJECT_TYPE_PIPELINE :
+                                                    VK_OBJECT_TYPE_DEVICE;
+   const uint64_t obj_handle = pipeline != NULL ?
+                                           vk_object_to_u64_handle(&pipeline->base) :
+                                           vk_object_to_u64_handle(&device->vk.base);
 
+   bo = v3dv_bo_alloc(device, size, "default_vi_attributes", true,
+                      obj_type, obj_handle);
    if (!bo) {
       mesa_loge("failed to allocate memory for the default "
                 "attribute values\n");
@@ -771,6 +755,7 @@ v3dX(create_default_attribute_values)(struct v3dv_device *device,
    bool ok = v3dv_bo_map(device, bo, size);
    if (!ok) {
       mesa_loge("failed to map default attribute values buffer\n");
+      v3dv_bo_free(device, bo, 0);
       return NULL;
    }
 

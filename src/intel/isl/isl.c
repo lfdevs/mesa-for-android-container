@@ -513,13 +513,10 @@ isl_device_get_supported_tilings(const struct isl_device *dev)
 isl_sample_count_mask_t ATTRIBUTE_CONST
 isl_device_get_sample_counts(const struct isl_device *dev)
 {
-   if (ISL_GFX_VER(dev) >= 9 && ISL_GFX_VER(dev) < 30) {
-      return ISL_SAMPLE_COUNT_1_BIT |
-             ISL_SAMPLE_COUNT_2_BIT |
-             ISL_SAMPLE_COUNT_4_BIT |
-             ISL_SAMPLE_COUNT_8_BIT |
-             ISL_SAMPLE_COUNT_16_BIT;
-   } else if (ISL_GFX_VER(dev) >= 8) {
+   if (ISL_GFX_VER(dev) >= 8) {
+      /* MSAA 16x is supported in some HW generations from Gfx9 but we choose
+       * not to support it.
+       */
       return ISL_SAMPLE_COUNT_1_BIT |
              ISL_SAMPLE_COUNT_2_BIT |
              ISL_SAMPLE_COUNT_4_BIT |
@@ -4140,8 +4137,8 @@ _isl_surf_info_supports_ccs(const struct isl_device *dev,
          return false;
    }
 
-   /* With depth surfaces on gfx12, HIZ is required for CCS. */
-   if (ISL_GFX_VER(dev) == 12 && isl_surf_usage_is_depth(usage) &&
+   /* With depth surfaces on gfx12.0, HIZ is required for CCS. */
+   if (ISL_GFX_VERX10(dev) == 120 && isl_surf_usage_is_depth(usage) &&
        INTEL_DEBUG(DEBUG_NO_HIZ))
       return false;
 
@@ -5756,6 +5753,7 @@ isl_aux_usage_to_name(enum isl_aux_usage usage)
       [ISL_AUX_USAGE_CCS_E]      = "ccs-e",
       [ISL_AUX_USAGE_FCV_CCS_E]  = "fcv-ccs-e",
       [ISL_AUX_USAGE_MC]         = "mc",
+      [ISL_AUX_USAGE_ZCS]        = "zcs",
       [ISL_AUX_USAGE_HIZ_CCS_WT] = "hiz-ccs-wt",
       [ISL_AUX_USAGE_HIZ_CCS]    = "hiz-ccs",
       [ISL_AUX_USAGE_MCS_CCS]    = "mcs-ccs",

@@ -6,8 +6,10 @@
 
 #include "mtl_command_buffer.h"
 
-#include <Metal/MTL4CommandBuffer.h>
+#include <Metal/MTL4BufferRange.h>
 #include <Metal/MTL4CommandAllocator.h>
+#include <Metal/MTL4CommandBuffer.h>
+#include <Metal/MTL4Counters.h>
 
 void
 mtl_command_allocator_reset(mtl_command_allocator *allocator)
@@ -35,5 +37,25 @@ mtl_end_command_buffer(mtl_command_buffer *command_buffer)
    @autoreleasepool {
       id<MTL4CommandBuffer> cmd_buf = (id<MTL4CommandBuffer>)command_buffer;
       [cmd_buf endCommandBuffer];
+   }
+}
+
+void
+mtl_command_resolve_counter_heap(mtl_command_buffer *command_buffer,
+                                 mtl_counter_heap *heap, uint32_t first_index,
+                                 uint32_t count, uint64_t dst_addr)
+{
+   @autoreleasepool {
+      id<MTL4CommandBuffer> cmd_buf = (id<MTL4CommandBuffer>)command_buffer;
+      id<MTL4CounterHeap> h = (id<MTL4CounterHeap>)heap;
+      MTL4BufferRange range = {
+         .bufferAddress = dst_addr,
+         .length = count * sizeof(MTL4TimestampHeapEntry),
+      };
+      [cmd_buf resolveCounterHeap:h
+                        withRange:NSMakeRange(first_index, count)
+                       intoBuffer:range
+                        waitFence:nil
+                      updateFence:nil];
    }
 }

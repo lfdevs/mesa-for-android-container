@@ -96,6 +96,38 @@ static const char *defer_modes_str[] = {
 #define assert_no_progress_inc(I) do {} while (0)
 #endif
 
+static uint64_t
+print_cs_dbg_str(FILE *fp, const uint64_t *instr)
+{
+   cs_unpack(instr, CS_NOP, I);
+   if (I.metadata_type != CS_NOP_TYPE_DBG_STR_START)
+      return 0;
+
+   const uint32_t str_len = I.metadata_payload;
+   assert(str_len < CS_DBG_STR_MAX_LEN);
+
+   const uint64_t buf_nops_len = DIV_ROUND_UP(str_len, CS_NOP_CHAR_COUNT);
+   char str_buf[CS_DBG_STR_MAX_LEN];
+   for (uint32_t nth_str_buf = 0; nth_str_buf < buf_nops_len; nth_str_buf++) {
+      cs_unpack(&instr[nth_str_buf + 1], CS_NOP, BI);
+      assert(BI.metadata_type == CS_NOP_TYPE_DBG_STR_BUF);
+
+      const uint32_t str_index = nth_str_buf * CS_NOP_CHAR_COUNT;
+      const uint32_t rem_bytes = str_len - str_index;
+      const uint32_t cpy_bytes = MIN2(CS_NOP_CHAR_COUNT, rem_bytes);
+      memcpy(&str_buf[str_index], &BI.metadata_payload, cpy_bytes);
+   }
+
+   /* Add delimiter to buffer */
+   str_buf[str_len] = 0;
+
+   fprintf(fp, "NOP_STR, %s", str_buf);
+
+   /* Caller should skip the parsed str buf, and presumably the initial str
+    * start */
+   return buf_nops_len;
+}
+
 static void
 print_cs_instr(FILE *fp, const uint64_t *instr)
 {
@@ -103,10 +135,20 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
    switch (base.opcode) {
    case MALI_CS_OPCODE_NOP: {
       cs_unpack(instr, CS_NOP, I);
-      if (I.ignored)
-         fprintf(fp, "NOP // 0x%" PRIX64, I.ignored);
-      else
+      switch (I.metadata_type) {
+      case CS_NOP_TYPE_NOP:
          fprintf(fp, "NOP");
+         break;
+      /* The full NOP debug string sequence must be decoded together which is
+       * not viable in print_cs_instr */
+      case CS_NOP_TYPE_DBG_STR_START:
+      case CS_NOP_TYPE_DBG_STR_BUF:
+         break;
+      default:
+         fprintf(fp, "NOP: t%u, 0x%" PRIX64, I.metadata_type,
+                 I.metadata_payload);
+         break;
+      }
       break;
    }
 
@@ -2474,6 +2516,9 @@ print_cs_binary(struct pandecode_context *ctx, uint64_t bin,
       print_cs_instr(ctx->dump_stream, &cfg->instrs[i]);
       cs_unpack(&cfg->instrs[i], CS_BASE, base);
       switch (base.opcode) {
+      case MALI_CS_OPCODE_NOP:
+         i += print_cs_dbg_str(ctx->dump_stream, &cfg->instrs[i]);
+         break;
       case MALI_CS_OPCODE_JUMP:
       case MALI_CS_OPCODE_CALL: {
          struct cs_indirect_branch *ibranch = util_dynarray_element(
@@ -2577,7 +2622,7 @@ GENX(pandecode_cs_trace)(struct pandecode_context *ctx, uint64_t trace,
 
       uint64_t *instr = pandecode_fetch_gpu_mem(ctx, *ip, sizeof(*instr));
 
-      /* v10 has 96 registers. v12+ have 128. */
+      /* v10 and v11 has 96 registers. v12+ have 128. */
       struct queue_ctx qctx = {
          .nr_regs = PAN_ARCH >= 12 ? 128 : 96,
          .regs = regs,

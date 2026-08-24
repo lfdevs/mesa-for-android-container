@@ -234,6 +234,35 @@ debug_get_num_option(const char *name, int64_t dfault)
    return result;
 }
 
+uint64_t
+debug_parse_unsigned_option(const char *str, uint64_t dfault)
+{
+   uint64_t result;
+   if (!str) {
+      result = dfault;
+   } else {
+      char *endptr;
+
+      result = strtoull(str, &endptr, 0);
+      if (str == endptr) {
+         /* Restore the default value when no digits were found. */
+         result = dfault;
+      }
+   }
+   return result;
+}
+
+uint64_t
+debug_get_unsigned_option(const char *name, uint64_t dfault)
+{
+   uint64_t result = debug_parse_unsigned_option(os_get_option(name), dfault);
+
+   if (debug_get_option_should_print())
+      debug_printf("%s: %s = %"PRIu64"\n", __func__, name, result);
+
+   return result;
+}
+
 void
 debug_get_version_option(const char *name, unsigned *major, unsigned *minor)
 {

@@ -163,6 +163,9 @@ struct pan_fb_info {
 
    /* indicates whether pixel local storage is enabled */
    bool pls_enabled;
+
+   /* indicates whether 2x mipmap downscaling is enabled */
+   bool downscale_rts;
 };
 
 struct pan_crc {

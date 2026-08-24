@@ -220,11 +220,12 @@ anv_shader_heap_upload(struct anv_shader_heap *heap,
         i <= MAX2(bo_begin_idx, bo_end_idx); i++) {
       const uint64_t bo_offset =
          MAX2(upload_addr, heap->bos[i].addr) - heap->bos[i].addr;
-      const uint32_t data_offset =
-         upload_addr - (heap->bos[i].addr + bo_offset);
+      const uint64_t data_offset =
+         (heap->bos[i].addr + bo_offset) - upload_addr;
       const uint64_t copy_size =
          MIN2(heap->bos[i].size - bo_offset, size - data_offset);
 
-      memcpy(heap->bos[i].bo->map + bo_offset, data, copy_size);
+      memcpy(heap->bos[i].bo->map + bo_offset,
+             (const char *)data + data_offset, copy_size);
    }
 }

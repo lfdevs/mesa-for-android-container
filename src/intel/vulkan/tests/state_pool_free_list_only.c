@@ -36,7 +36,8 @@ void state_pool_free_list_only_test(void)
    const unsigned states_per_thread = 1 << 12;
    const uint32_t _1Gb = 1024 * 1024 * 1024;
 
-   struct anv_physical_device physical_device = { };
+   struct anv_instance instance = {};
+   struct anv_physical_device physical_device = { .instance = &instance };
    struct anv_device device = {};
    struct anv_state_pool state_pool;
 

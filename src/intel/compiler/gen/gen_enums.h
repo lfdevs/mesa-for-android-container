@@ -121,7 +121,8 @@ typedef enum ENUM_PACKED gen_math {
    GEN_MATH_SIN               = 6,
    GEN_MATH_COS               = 7,
    /* 8 is reserved. */
-   GEN_MATH_FDIV              = 9,
+   GEN_MATH_FDIV              = 9, /* Older than GFX12.5 */
+   GEN_MATH_TANH              = 9, /* GFX35+ */
    GEN_MATH_POW               = 10,
    GEN_MATH_INT_DIV_BOTH      = 11,
    GEN_MATH_INT_DIV_QUOTIENT  = 12,
@@ -240,8 +241,10 @@ typedef enum ENUM_PACKED gen_sfid {
 enum ENUM_PACKED lsc_opcode {
    LSC_OP_LOAD            = 0,
    LSC_OP_LOAD_CMASK      = 2,
+   LSC_OP_LOAD_2D_BLOCK   = 3,
    LSC_OP_STORE           = 4,
    LSC_OP_STORE_CMASK     = 6,
+   LSC_OP_STORE_2D_BLOCK  = 7,
    LSC_OP_ATOMIC_INC      = 8,
    LSC_OP_ATOMIC_DEC      = 9,
    LSC_OP_ATOMIC_LOAD     = 10,

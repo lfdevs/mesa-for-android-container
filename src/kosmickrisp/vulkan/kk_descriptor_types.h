@@ -13,11 +13,20 @@
 struct kk_sampled_image_descriptor {
    uint64_t image_gpu_resource_id;
    uint16_t sampler_index;
-   uint16_t lod_bias_fp16;
-   uint16_t lod_min_fp16;
-   uint16_t lod_max_fp16;
-   uint32_t has_border;
-   uint32_t pad_to_64_bits;
+
+   /* Negative if there is no border color, else the clamp=0 sampler index used
+    * for custom border color emulation.
+    */
+   int16_t clamp_0_sampler_index_or_negative;
+
+   uint16_t sampler_lod_bias_fp16;
+   uint16_t sampler_lod_min_fp16;
+   uint16_t sampler_lod_max_fp16;
+
+   uint16_t image_min_lod_fp16;
+   uint16_t image_min_lod_uint16;
+
+   uint16_t pad_to_64_bits;
    uint32_t border[4];
    uint64_t pad_to_power_2[3];
 };

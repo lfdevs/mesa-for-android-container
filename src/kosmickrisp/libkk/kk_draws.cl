@@ -86,5 +86,5 @@ libkk_unroll_geometry(
    POLY_DECL_UNROLL_RESTART_SCRATCH(scratch, 1024);
    poly_unroll_geometry(out_draw, heap, in_draw, index_buffer,
                         index_buffer_size_el, in_el_size_B, out_el_size_B,
-                        restart_index, flatshade_first, mode, scratch);
+                        restart_index, flatshade_first, true, mode, scratch);
 }

@@ -16,56 +16,11 @@ spec@glsl-es-3.20.*
 
 # Slow CL tests (> 5 minute to run)
 
-# Slow CTS tests (> 1 minute to run)
-asan-dEQP-VK.ssbo.phys.layout.random.scalar.3
+# Slow CTS tests (close to or over the 60s test timeout)
 # Slow GS compile: register allocator spills heavily on these f16 vec4 shuffles.
 dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.244_geom
-dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.334_geom
-dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.343_geom
 dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.344_geom
-dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.434_geom
-dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.443_geom
 dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.444_geom
-dEQP-VK.ssbo.layout.random.8bit.all_per_block_buffers.5
-dEQP-VK.ssbo.layout.random.8bit.scalar.78
-dEQP-VK.ssbo.layout.random.nested_structs_arrays.17
-dEQP-VK.ssbo.layout.random.scalar.75
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.column_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.column_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.column_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.column_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat4_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat4_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.scalar.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.3_level_array.std430.column_major_mat4
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.scalar.column_major_mat4x3_comp_access
-dEQP-VK.ssbo.phys.layout.3_level_unsized_array.std140.row_major_mat4_store_cols
-dEQP-VK.ssbo.phys.layout.random.8bit.all_per_block_buffers.46
-dEQP-VK.ssbo.phys.layout.random.8bit.nested_structs_arrays.17
-dEQP-VK.ssbo.phys.layout.random.8bit.scalar.78
-dEQP-VK.ssbo.phys.layout.random.8bit.scalar.96
-dEQP-VK.ssbo.phys.layout.random.all_shared_buffer.3
-dEQP-VK.ssbo.phys.layout.random.scalar.3
-dEQP-VK.ssbo.phys.layout.random.scalar.93
-dEQP-VK.ssbo.phys.layout.random.scalar.97
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.scalar_instance_array
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.scalar_instance_array_comp_access
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.scalar_instance_array_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.single_struct_array.per_block_buffer.scalar_instance_array_store_cols
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.scalar_instance_array
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.scalar_instance_array_comp_access
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.scalar_instance_array_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.single_struct_array.single_buffer.scalar_instance_array_store_cols
-dEQP-VK.ssbo.phys.layout.unsized_struct_array.per_block_buffer.scalar_instance_array
-dEQP-VK.ssbo.phys.layout.unsized_struct_array.per_block_buffer.scalar_instance_array_comp_access
-dEQP-VK.ssbo.phys.layout.unsized_struct_array.per_block_buffer.scalar_instance_array_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.unsized_struct_array.per_block_buffer.scalar_instance_array_store_cols
-dEQP-VK.ssbo.phys.layout.unsized_struct_array.single_buffer.scalar_instance_array
-dEQP-VK.ssbo.phys.layout.unsized_struct_array.single_buffer.scalar_instance_array_comp_access
-dEQP-VK.ssbo.phys.layout.unsized_struct_array.single_buffer.scalar_instance_array_comp_access_store_cols
-dEQP-VK.ssbo.phys.layout.unsized_struct_array.single_buffer.scalar_instance_array_store_cols
 
 # WSI tests are too flaky to be useful
 dEQP-VK.image.swapchain_mutable.*

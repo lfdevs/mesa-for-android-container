@@ -130,8 +130,8 @@ find_matching_paren(std::string_view s)
    if (s.empty() || s[0] != '(')
       return {};
 
-   unsigned depth = 0;
-   for (size_t i = 0; i < s.size(); i++) {
+   unsigned depth = 1;
+   for (size_t i = 1; i < s.size(); i++) {
       if (s[i] == '(') {
          depth++;
       } else if (s[i] == ')') {
@@ -185,19 +185,24 @@ struct gen_parser {
    bool src_has_swizzle[3] = {};
 
    struct lsc_parse_info {
-      enum lsc_opcode            op          = LSC_OP_LOAD;
-      enum lsc_addr_surface_type addr_type   = LSC_ADDR_SURFTYPE_FLAT;
-      enum lsc_addr_size         addr_size   = LSC_ADDR_SIZE_A32;
-      enum lsc_data_size         data_size   = LSC_DATA_SIZE_D32;
-      enum lsc_cmask             cmask       = LSC_CMASK_X;
-      enum lsc_fence_scope       fence_scope = LSC_FENCE_LOCAL;
-      enum lsc_flush_type        flush_type  = LSC_FLUSH_TYPE_NONE;
+      gen_lsc_desc desc = {
+         .op = LSC_OP_LOAD,
+         .addr_type = LSC_ADDR_SURFTYPE_FLAT,
+         .addr_size = LSC_ADDR_SIZE_A32,
+         .data_size = LSC_DATA_SIZE_D32,
+         .cache_ctrl = 0,
+         .vect_size = LSC_VECT_SIZE_V1,
+         .transpose = false,
+         .vnni = false,
+         .cmask = LSC_CMASK_X,
+         .fence = {
+            .scope = LSC_FENCE_LOCAL,
+            .flush_type = LSC_FLUSH_TYPE_NONE,
+            .route_to_lsc = false,
+         },
+      };
 
-      unsigned num_values   = 1;
-      unsigned cache_ctrl   = 0;
-      bool     transpose    = false;
-      bool     route_to_lsc = false;
-      bool     valid        = false;
+      bool valid = false;
    };
 
    lsc_parse_info lsc;
@@ -388,7 +393,7 @@ struct gen_parser {
       } else if (devinfo->has_lsc) {
          inst.opcode = GEN_OP_SEND;
 
-         lsc.op = gen_lsc_opcode_from_string(SV_ARGS(opcode), &valid);
+         lsc.desc.op = gen_lsc_opcode_from_string(SV_ARGS(opcode), &valid);
          if (!valid)
             return errorf("unknown LSC symbolic opcode '%.*s'", SV_FMT(opcode));
 
@@ -403,8 +408,11 @@ struct gen_parser {
 
          lsc.valid = true;
 
-         if (lsc.op == LSC_OP_FENCE) {
+         if (lsc.desc.op == LSC_OP_FENCE) {
             if (!parse_lsc_fence_suffixes())
+               return false;
+         } else if (lsc_opcode_is_2d_block(lsc.desc.op)) {
+            if (!parse_lsc_block2d_suffixes())
                return false;
          } else {
             if (!parse_lsc_memory_suffixes())
@@ -432,7 +440,7 @@ struct gen_parser {
       if (consume('.')) {
          if (inst.opcode == GEN_OP_MATH) {
             auto func = consume_ident_token();
-            inst.math.func = gen_math_function_from_string(SV_ARGS(func), &valid);
+            inst.math.func = gen_math_function_from_string(devinfo, SV_ARGS(func), &valid);
             if (!valid)
                return errorf("invalid math function '%.*s'", SV_FMT(func));
 
@@ -496,23 +504,87 @@ struct gen_parser {
       consume('.');
 
       auto fence_scope = consume_ident_token();
-      lsc.fence_scope = gen_lsc_fence_scope_from_string(SV_ARGS(fence_scope), &valid);
+      lsc.desc.fence.scope = gen_lsc_fence_scope_from_string(SV_ARGS(fence_scope), &valid);
       if (!valid)
          return errorf("unknown LSC fence scope '%.*s'", SV_FMT(fence_scope));
 
       consume('.');
 
       auto flush_type = consume_ident_token();
-      lsc.flush_type = gen_lsc_flush_type_from_string(SV_ARGS(flush_type), &valid);
+      lsc.desc.fence.flush_type = gen_lsc_flush_type_from_string(SV_ARGS(flush_type), &valid);
       if (!valid)
          return errorf("unknown LSC fence flush type '%.*s'", SV_FMT(flush_type));
 
-      lsc.addr_type = LSC_ADDR_SURFTYPE_FLAT;
+      lsc.desc.addr_type = LSC_ADDR_SURFTYPE_FLAT;
 
       if (consume(".route_to_lsc"))
-         lsc.route_to_lsc = true;
+         lsc.desc.fence.route_to_lsc = true;
 
       skip_ws();
+      return true;
+   }
+
+   void
+   parse_lsc_cache_ctrl_suffix()
+   {
+      const auto saved = line;
+      bool valid = false;
+      bool ok = false;
+
+      if (consume('.')) {
+         const auto a = consume_ident_token();
+         if (consume('.')) {
+            const auto b = consume_ident_token();
+            std::string name(a);
+            name += '.';
+            name += b;
+            const unsigned cc =
+               gen_lsc_cache_ctrl_from_string(devinfo, lsc.desc.op,
+                                              SV_ARGS(name), &valid);
+            if (valid) {
+               lsc.desc.cache_ctrl = cc;
+               ok = true;
+            }
+         }
+      }
+
+      if (!ok)
+         line = saved;
+   }
+
+   bool
+   parse_lsc_block2d_suffixes()
+   {
+      bool valid;
+
+      if (inst.send.sfid != GEN_SFID_UGM)
+         return errorf("block2d symbolic syntax requires UGM");
+
+      /* Data descriptor: dN[t][v]. */
+      consume('.');
+      auto data_name =
+         consume_while([](char c) { return c == 'd' || is_digit(c); });
+      lsc.desc.data_size = gen_lsc_data_size_from_string(SV_ARGS(data_name), &valid);
+      if (!valid) {
+         return errorf("malformed block2d data descriptor '%.*s'",
+                       SV_FMT(data_name));
+      }
+
+      lsc.desc.vect_size = LSC_VECT_SIZE_V1;
+      lsc.desc.transpose = consume('t');
+      lsc.desc.vnni = consume('v');
+      if ((lsc.desc.transpose || lsc.desc.vnni) &&
+          lsc.desc.op != LSC_OP_LOAD_2D_BLOCK)
+         return errorf("block2d store does not take transform suffixes");
+
+      /* Flat/A64 is implied by UGM and not encoded in the descriptor. */
+      if (!consume(".a64"))
+         return errorf("block2d UGM symbolic syntax requires '.a64'");
+
+      parse_lsc_cache_ctrl_suffix();
+
+      lsc.desc.addr_type = LSC_ADDR_SURFTYPE_FLAT;
+      lsc.desc.addr_size = (enum lsc_addr_size)0;
       return true;
    }
 
@@ -521,35 +593,35 @@ struct gen_parser {
    {
       bool valid;
 
-      const bool allow_vector = !lsc_opcode_has_cmask(lsc.op) &&
-                                !lsc_opcode_is_atomic(lsc.op);
+      const bool allow_vector = !lsc_opcode_has_cmask(lsc.desc.op) &&
+                                !lsc_opcode_is_atomic(lsc.desc.op);
 
       /* Data descriptor: dN[xM[t]]. */
       consume('.');
       auto data_name =
          consume_while([](char c) { return is_ident_char(c) && c != 'x'; });
-      lsc.data_size = gen_lsc_data_size_from_string(SV_ARGS(data_name), &valid);
+      lsc.desc.data_size = gen_lsc_data_size_from_string(SV_ARGS(data_name), &valid);
       if (!valid)
          return errorf("malformed LSC data descriptor '%.*s'", SV_FMT(data_name));
 
-      lsc.num_values = 1;
-      lsc.transpose = false;
+      lsc.desc.vect_size = LSC_VECT_SIZE_V1;
+      lsc.desc.transpose = false;
       if (consume('x')) {
          if (!allow_vector)
             return errorf("LSC opcode does not allow vector data form");
          unsigned n = 0;
          if (!consume_uint(n))
             return errorf("malformed LSC vector count");
-         lsc.num_values = n;
+         lsc.desc.vect_size = lsc_vect_size(n);
          if (consume('t'))
-            lsc.transpose = true;
+            lsc.desc.transpose = true;
       }
 
       /* Optional component mask. */
-      if (lsc_opcode_has_cmask(lsc.op)) {
+      if (lsc_opcode_has_cmask(lsc.desc.op)) {
          consume('.');
          auto cmask = consume_ident_token();
-         lsc.cmask = gen_lsc_cmask_from_string(SV_ARGS(cmask), &valid);
+         lsc.desc.cmask = gen_lsc_cmask_from_string(SV_ARGS(cmask), &valid);
          if (!valid)
             return errorf("unknown LSC component mask '%.*s'", SV_FMT(cmask));
       }
@@ -557,66 +629,41 @@ struct gen_parser {
       /* Address size. */
       consume('.');
       auto addr_size = consume_ident_token();
-      lsc.addr_size = gen_lsc_addr_size_from_string(SV_ARGS(addr_size), &valid);
+      lsc.desc.addr_size = gen_lsc_addr_size_from_string(SV_ARGS(addr_size), &valid);
       if (!valid)
          return errorf("unknown LSC address size '%.*s'", SV_FMT(addr_size));
 
-      /* Optional cache control: ".l1xx.l3yy" form. Try to consume two
-       * dotted ident tokens; if they don't form a valid cache_ctrl, restore
-       * line so the dot is left for the surface selector below.
-       */
-      {
-         const auto saved = line;
-         bool ok = false;
-         if (consume('.')) {
-            const auto a = consume_ident_token();
-            if (consume('.')) {
-               const auto b = consume_ident_token();
-               std::string name(a);
-               name += '.';
-               name += b;
-               const unsigned cc =
-                  gen_lsc_cache_ctrl_from_string(devinfo, lsc.op,
-                                                 SV_ARGS(name), &valid);
-               if (valid) {
-                  lsc.cache_ctrl = cc;
-                  ok = true;
-               }
-            }
-         }
-         if (!ok)
-            line = saved;
-      }
+      parse_lsc_cache_ctrl_suffix();
 
       /* Optional surface selector. */
-      lsc.addr_type = LSC_ADDR_SURFTYPE_FLAT;
+      lsc.desc.addr_type = LSC_ADDR_SURFTYPE_FLAT;
       if (consume('.')) {
          if (consume("flat")) {
-            lsc.addr_type = LSC_ADDR_SURFTYPE_FLAT;
+            lsc.desc.addr_type = LSC_ADDR_SURFTYPE_FLAT;
          } else if (consume("bss[a0.")) {
             unsigned subreg = 0;
             if (!consume_uint(subreg) || !consume(']'))
                return errorf("malformed bindless surface reference");
-            lsc.addr_type = LSC_ADDR_SURFTYPE_BSS;
+            lsc.desc.addr_type = LSC_ADDR_SURFTYPE_BSS;
             inst.send.ex_desc_is_reg = true;
             inst.send.ex_desc_subnr = subreg * 2;
          } else if (consume("ss[a0.")) {
             unsigned subreg = 0;
             if (!consume_uint(subreg) || !consume(']'))
                return errorf("malformed surface-state reference");
-            lsc.addr_type = LSC_ADDR_SURFTYPE_SS;
+            lsc.desc.addr_type = LSC_ADDR_SURFTYPE_SS;
             inst.send.ex_desc_is_reg = true;
             inst.send.ex_desc_subnr = subreg * 2;
          } else if (consume("bti[")) {
             unsigned bti = 0;
             if (!consume_uint(bti) || !consume(']'))
                return errorf("malformed BTI surface reference");
-            lsc.addr_type = LSC_ADDR_SURFTYPE_BTI;
+            lsc.desc.addr_type = LSC_ADDR_SURFTYPE_BTI;
             gen_lsc_ex_desc ex_desc = {};
             ex_desc.addr_type = LSC_ADDR_SURFTYPE_BTI;
             ex_desc.bti.index = bti;
             inst.send.ex_desc_imm =
-               gen_lsc_ex_desc_encode(devinfo, &ex_desc, NULL);
+               gen_lsc_ex_desc_encode(devinfo, lsc.desc.op, &ex_desc, NULL);
          } else {
             auto bad = consume_ident_token();
             return errorf("unknown LSC surface selector '%.*s'", SV_FMT(bad));
@@ -624,11 +671,11 @@ struct gen_parser {
       }
 
       if (inst.send.sfid == GEN_SFID_SLM &&
-          lsc.addr_type != LSC_ADDR_SURFTYPE_FLAT)
+          lsc.desc.addr_type != LSC_ADDR_SURFTYPE_FLAT)
          return errorf("SLM symbolic syntax does not take a surface selector");
 
       if (inst.send.sfid == GEN_SFID_URB &&
-          lsc.addr_type != LSC_ADDR_SURFTYPE_FLAT)
+          lsc.desc.addr_type != LSC_ADDR_SURFTYPE_FLAT)
          return errorf("URB symbolic syntax does not take a surface selector");
 
       return true;
@@ -868,6 +915,24 @@ struct gen_parser {
    }
 
    bool
+   consume_int(int &value)
+   {
+      if (!is_digit(peek()) && peek() != '-')
+         return false;
+
+      int v = 0;
+      const char *begin = line.data();
+      const char *end = line.data() + line.size();
+      const auto result = std::from_chars(begin, end, v, 10);
+      if (result.ptr == begin || result.ec != std::errc())
+         return false;
+
+      line.remove_prefix(result.ptr - begin);
+      value = v;
+      return true;
+   }
+
+   bool
    consume_integer(bool &negative, uint64_t &magnitude)
    {
       const std::string_view saved = line;
@@ -959,40 +1024,40 @@ struct gen_parser {
       ex_mlen = 0;
       rlen = 0;
 
-      if (lsc.op == LSC_OP_FENCE) {
+      if (lsc.desc.op == LSC_OP_FENCE) {
          mlen = 1;
       } else {
          const unsigned coord_components = inst.send.sfid == GEN_SFID_TGM ? 4 : 1;
-         mlen = gen_msg_addr_len(devinfo, lsc.addr_size,
+         mlen = gen_msg_addr_len(devinfo, lsc.desc.addr_size,
                                  inst.exec_size * coord_components);
       }
 
       unsigned values;
-      if (lsc.op == LSC_OP_FENCE)
+      if (lsc.desc.op == LSC_OP_FENCE)
          values = 0;
-      else if (lsc_opcode_has_cmask(lsc.op))
-         values = util_bitcount((unsigned)lsc.cmask);
-      else if (lsc_opcode_is_atomic(lsc.op))
-         values = lsc_op_num_data_values(lsc.op);
+      else if (lsc_opcode_has_cmask(lsc.desc.op))
+         values = util_bitcount((unsigned)lsc.desc.cmask);
+      else if (lsc_opcode_is_atomic(lsc.desc.op))
+         values = lsc_op_num_data_values(lsc.desc.op);
       else
-         values = lsc.num_values;
+         values = lsc_vector_length(lsc.desc.vect_size);
 
-      if (send_has_symbolic_src1(lsc.op)) {
+      if (send_has_symbolic_src1(lsc.desc.op)) {
          ex_mlen = values == 0 ? 0 :
-                   gen_msg_dest_len(devinfo, lsc.data_size,
+                   gen_msg_dest_len(devinfo, lsc.desc.data_size,
                                     inst.exec_size * values);
       }
 
       if (is_null(inst.dst))
          rlen = 0;
-      else if (lsc.op == LSC_OP_FENCE)
+      else if (lsc.desc.op == LSC_OP_FENCE)
          rlen = 1;
-      else if (lsc_opcode_is_store(lsc.op))
+      else if (lsc_opcode_is_store(lsc.desc.op))
          rlen = 0;
-      else if (lsc_opcode_is_atomic(lsc.op))
-         rlen = gen_msg_dest_len(devinfo, lsc.data_size, inst.exec_size);
+      else if (lsc_opcode_is_atomic(lsc.desc.op))
+         rlen = gen_msg_dest_len(devinfo, lsc.desc.data_size, inst.exec_size);
       else
-         rlen = gen_msg_dest_len(devinfo, lsc.data_size, inst.exec_size * values);
+         rlen = gen_msg_dest_len(devinfo, lsc.desc.data_size, inst.exec_size * values);
    }
 
    bool
@@ -1601,17 +1666,139 @@ struct gen_parser {
    }
 
    bool
-   parse_send_format()
+   lsc_symbolic_send_has_dst() const
    {
-      if (inst.exec_size == 0)
-         inst.exec_size = 1;
+      return !lsc.valid || !lsc_opcode_is_store(lsc.desc.op);
+   }
+
+   bool
+   parse_block2d_send_format()
+   {
+      const bool has_dst = lsc_symbolic_send_has_dst();
+      const bool has_src1 = send_has_symbolic_src1(lsc.desc.op);
 
       int dst_length = -1;
       int src0_length = -1;
       int src1_length = -1;
 
-      if (!parse_send_reg(inst.dst, &dst_length))
+      inst.dst.file = GEN_ARF;
+      inst.dst.nr = GEN_ARF_NULL;
+      inst.dst.type = GEN_TYPE_UD;
+
+      if (has_dst) {
+         if (!parse_send_reg(inst.dst, &dst_length))
+            return false;
+      }
+
+      skip_ws();
+      if (!consume('['))
+         return errorf("expected block2d address payload '[rN:1]'");
+      if (!parse_send_reg(inst.src[0], &src0_length))
          return false;
+
+      int x_off = 0, y_off = 0;
+      skip_ws();
+      if (consume('+')) {
+         skip_ws();
+         if (!consume('('))
+            return errorf("expected '(x, y)' block2d offset");
+         skip_ws();
+         if (!consume_int(x_off))
+            return errorf("malformed block2d X offset");
+         skip_ws();
+         if (!consume(','))
+            return errorf("expected ',' in block2d offset");
+         skip_ws();
+         if (!consume_int(y_off))
+            return errorf("malformed block2d Y offset");
+         skip_ws();
+         if (!consume(')'))
+            return errorf("expected ')' after block2d offset");
+         skip_ws();
+      }
+      if (!consume(']'))
+         return errorf("expected ']' after block2d address payload");
+
+      inst.src[1].file = GEN_ARF;
+      inst.src[1].nr = GEN_ARF_NULL;
+
+      if (has_src1) {
+         if (!parse_send_reg(inst.src[1], &src1_length))
+            return false;
+      }
+
+      if (x_off < -512 || x_off > 511 || y_off < -512 || y_off > 511)
+         return errorf("block2d offset out of signed 10-bit range");
+
+      const unsigned element_bytes = lsc_data_size_bytes(lsc.desc.data_size);
+      if ((x_off * (int)element_bytes) % 4 != 0 ||
+          (y_off * (int)element_bytes) % 4 != 0)
+         return errorf("block2d offset must be dword aligned in bytes");
+
+      /* The address payload is one GRF. */
+      const unsigned mlen = 1;
+      if (src0_length >= 0 && (unsigned)src0_length != mlen) {
+         return errorf("block2d address payload length ':%d' must be 1",
+                       src0_length);
+      }
+
+      unsigned rlen = 0;
+      if (has_dst && !is_null(inst.dst)) {
+         if (dst_length < 0)
+            return errorf("block2d load destination requires ':rlen'");
+         rlen = dst_length;
+      }
+
+      unsigned ex_mlen = 0;
+      if (has_src1) {
+         if (src1_length < 0)
+            return errorf("block2d store data requires ':mlen'");
+         ex_mlen = src1_length;
+      }
+
+      inst.send.desc_is_reg = false;
+
+      gen_lsc_ex_desc ex_desc = {};
+      ex_desc.addr_type = LSC_ADDR_SURFTYPE_FLAT;
+      ex_desc.block2d.x_off = x_off;
+      ex_desc.block2d.y_off = y_off;
+      inst.send.ex_desc_imm =
+         gen_lsc_ex_desc_encode(devinfo, lsc.desc.op, &ex_desc, NULL);
+      if (ex_mlen > 0)
+         inst.send.ex_desc_imm |= gen_message_ex_desc(devinfo, ex_mlen);
+      inst.send.ex_desc_imm_extra = 0;
+      inst.send.src1_len = ex_mlen;
+
+      const gen_message_desc msg = {
+         .msg_length = mlen,
+         .response_length = rlen,
+      };
+      inst.send.desc_imm = gen_message_desc_encode(devinfo, &msg) |
+                           gen_lsc_desc_encode(devinfo, &lsc.desc);
+      return true;
+   }
+
+   bool
+   parse_send_format()
+   {
+      if (inst.exec_size == 0)
+         inst.exec_size = 1;
+
+      if (lsc.valid && lsc_opcode_is_2d_block(lsc.desc.op))
+         return parse_block2d_send_format();
+
+      int dst_length = -1;
+      int src0_length = -1;
+      int src1_length = -1;
+
+      if (lsc_symbolic_send_has_dst()) {
+         if (!parse_send_reg(inst.dst, &dst_length))
+            return false;
+      } else {
+         inst.dst.file = GEN_ARF;
+         inst.dst.nr = GEN_ARF_NULL;
+         dst_length = 0;
+      }
       if (!parse_send_reg(inst.src[0], &src0_length))
          return false;
 
@@ -1619,7 +1806,7 @@ struct gen_parser {
       inst.src[1].nr = GEN_ARF_NULL;
 
       if (lsc.valid) {
-         if (send_has_symbolic_src1(lsc.op) &&
+         if (send_has_symbolic_src1(lsc.desc.op) &&
              !parse_send_reg(inst.src[1], &src1_length))
             return false;
       } else {
@@ -1650,13 +1837,7 @@ struct gen_parser {
          inst.send.src1_len = ex_mlen;
 
          const uint32_t payload_desc =
-            lsc.op == LSC_OP_FENCE ?
-            lsc_fence_msg_desc(devinfo, lsc.fence_scope, lsc.flush_type,
-                               lsc.route_to_lsc) :
-            lsc_msg_desc(devinfo, lsc.op, lsc.addr_type, lsc.addr_size,
-                         lsc.data_size,
-                         lsc_opcode_has_cmask(lsc.op) ? (unsigned)lsc.cmask : lsc.num_values,
-                         lsc.transpose, lsc.cache_ctrl);
+            gen_lsc_desc_encode(devinfo, &lsc.desc);
 
          const gen_message_desc msg = {
             .msg_length = mlen,
@@ -1812,6 +1993,12 @@ struct gen_parser {
       skip_ws();
       if (!consume('{'))
          return true;
+
+      skip_ws();
+      if (consume('}')) {
+         skip_ws();
+         return true;
+      }
 
       while (true) {
          skip_ws();

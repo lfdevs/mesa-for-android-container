@@ -28,6 +28,7 @@ unsigned type_size_dvec4(const struct glsl_type *type, bool bindless);
 
 struct brw_mem_access_cb_data {
    const struct intel_device_info *devinfo;
+   const struct shader_info *info;
 };
 
 static inline unsigned
@@ -166,11 +167,19 @@ bool brw_nir_lower_fully_covered(nir_shader *nir);
 struct brw_lower_urb_cb_data {
    const struct intel_device_info *devinfo;
 
-   /** Input URB read length (returned by lowering) */
-   unsigned *push_input_read_length;
+   /* Maximum URB Read Length in 256-bit units (pairs of vec4 slots).
+    *
+    * Any inputs beyond this range will be loaded via URB read messages.
+    */
+   unsigned max_urb_read_length;
 
-   /** Maximum amount of pushed data in bytes */
-   unsigned max_push_bytes;
+   /** Input URB read length (returned by lowering) */
+   unsigned *out_urb_read_length;
+
+   /* True if push inputs are divergent (where each lane reads from a
+    * different URB entry, and so a vec4 in the URB takes up 4 registers).
+    */
+   bool vector_payload;
 
    /* If true, all access is guaranteed to be vec4 (128-bit) aligned.
     * offset and base are in units of 128-bit vec4 slots.
@@ -180,7 +189,10 @@ struct brw_lower_urb_cb_data {
     */
    bool vec4_access;
 
-   /** Map from VARYING_SLOT_* to a vec4 slot index */
+   /* Map from VARYING_SLOT_* to a vec4 slot index
+    *
+    * If NULL we're dealing gl_vert_attrib semantic.
+    */
    const int8_t *varying_to_slot;
 
    /** Stride in bytes between each vertex's worth of per-vertex varyings */
@@ -223,7 +235,12 @@ bool brw_nir_lower_deferred_urb_writes(nir_shader *nir,
 
 void brw_nir_opt_vectorize_urb(struct brw_pass_tracker *pt);
 
-void brw_nir_lower_vs_inputs(nir_shader *nir);
+void brw_nir_lower_vs_inputs(nir_shader *nir,
+                             const struct intel_device_info *devinfo,
+                             const struct brw_vs_prog_key *prog_key,
+                             struct brw_vs_prog_data *prog_data,
+                             unsigned *out_nr_packed_regs,
+                             unsigned *out_urb_read_length);
 void brw_nir_lower_gs_inputs(nir_shader *nir,
                              const struct intel_device_info *devinfo,
                              const struct intel_vue_map *vue_map,
@@ -294,6 +311,7 @@ bool brw_nir_lower_mem_access_bit_sizes(nir_shader *shader,
 bool brw_nir_lower_simd(nir_shader *nir);
 
 void brw_postprocess_nir_opts(struct brw_pass_tracker *pt);
+void brw_nir_lower_int64(struct brw_pass_tracker *pt);
 
 void brw_postprocess_nir_out_of_ssa(struct brw_pass_tracker *pt,
                                     bool debug_enabled);
@@ -428,6 +446,48 @@ brw_nir_mesh_shader_needs_wa_18019110168(const struct intel_device_info *devinfo
                                               VARYING_BIT_PRIMITIVE_COUNT));
 }
 
+void
+brw_nir_lower_tue_outputs(struct brw_pass_tracker *pt, struct brw_tue_map *map);
+
+bool
+brw_nir_align_launch_mesh_workgroups(nir_shader *nir);
+
+bool
+brw_nir_lower_launch_mesh_workgroups(nir_shader *nir);
+
+void
+brw_nir_lower_tue_inputs(struct brw_pass_tracker *pt, const struct brw_tue_map *map);
+
+
+bool
+brw_nir_lower_mesh_primitive_count(nir_shader *nir);
+
+void
+brw_compute_mue_map(const struct brw_compiler *compiler,
+                    nir_shader *nir, struct brw_mue_map *map,
+                    enum brw_mesh_index_format index_format,
+                    enum intel_vue_layout vue_layout,
+                    int *wa_18019110168_mapping);
+
+bool
+brw_nir_initialize_mue(nir_shader *nir, const struct brw_mue_map *map);
+
+bool
+brw_mesh_autostrip_enable(const struct brw_compiler *compiler, struct nir_shader *nir,
+                          struct brw_mue_map *map);
+
+struct index_packing_state {
+   unsigned vertices_per_primitive;
+   nir_variable *original_prim_indices;
+   nir_variable *packed_prim_indices;
+};
+
+bool
+brw_can_pack_primitive_indices(nir_shader *nir, struct index_packing_state *state);
+
+bool
+brw_pack_primitive_indices(nir_shader *nir, void *data);
+
 static inline bool
 brw_nir_fragment_shader_needs_wa_18019110168(const struct intel_device_info *devinfo,
                                              enum intel_sometimes mesh_input,
@@ -453,13 +513,14 @@ brw_nir_frag_convert_attrs_prim_to_vert_indirect(struct nir_shader *nir,
                                                  const struct intel_device_info *devinfo,
                                                  struct brw_compile_fs_params *params);
 
-unsigned
-brw_nir_vs_compute_payload_size(nir_shader *nir,
-                                const struct intel_device_info *devinfo);
-unsigned
-brw_nir_pack_vs_input(nir_shader *nir, struct brw_vs_prog_data *prog_data);
-
 bool brw_nir_opt_divergent_atomics(nir_shader *shader, enum brw_divergent_atomics_flags flags);
+
+bool
+brw_nir_lower_active_thread_barriers(nir_shader *nir,
+                                     const struct intel_device_info *devinfo);
+bool
+brw_nir_lower_divergent_barriers(nir_shader *nir,
+                                 const struct intel_device_info *devinfo);
 
 #ifdef __cplusplus
 }

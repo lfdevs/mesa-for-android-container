@@ -1,7 +1,8 @@
 # Copyright © 2017 Intel Corporation
 # SPDX-License-Identifier: MIT
 
-foreach t : ['clear', 'collision', 'delete_and_lookup', 'delete_management',
+foreach t : ['clear', 'clone_into', 'collision', 'delete_and_lookup',
+             'delete_management',
              'destroy_callback', 'insert_and_lookup', 'insert_many',
              'null_destroy', 'random_entry', 'remove_key', 'remove_null',
              'replacement']

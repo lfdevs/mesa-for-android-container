@@ -268,6 +268,51 @@ pan_mod_afbc_test_props(const struct pan_kmod_dev_props *dprops,
    return PAN_MOD_OPTIMAL;
 }
 
+static bool
+pan_mod_afbc_supports_msaa_average(enum pipe_format format)
+{
+#if PAN_ARCH >= 9
+   const struct pan_blendable_format *blend_format =
+      GENX(pan_blendable_format_from_pipe_format)(format);
+
+   if (blend_format->internal == MALI_COLOR_BUFFER_INTERNAL_FORMAT_RAW_VALUE)
+      return false;
+
+   if (!util_format_is_float(format)) {
+      switch (blend_format->writeback) {
+      case MALI_COLOR_FORMAT_R8:
+      case MALI_COLOR_FORMAT_R8G8:
+      case MALI_COLOR_FORMAT_R8G8B8:
+      case MALI_COLOR_FORMAT_R8G8B8A8:
+      case MALI_COLOR_FORMAT_R10G10B10A2:
+      case MALI_COLOR_FORMAT_R4G4B4A4:
+      case MALI_COLOR_FORMAT_R5G6B5:
+      case MALI_COLOR_FORMAT_R5G5B5A1:
+         return true;
+      default:
+         return false;
+      }
+   } else {
+#if PAN_ARCH >= 11
+      switch (blend_format->writeback) {
+      case MALI_FLOAT_COLOR_FORMAT_R16F:
+      case MALI_FLOAT_COLOR_FORMAT_RG16F:
+      case MALI_FLOAT_COLOR_FORMAT_RGB16F:
+      case MALI_FLOAT_COLOR_FORMAT_RGBA16F:
+      case MALI_FLOAT_COLOR_FORMAT_RG11F_B10F:
+         return true;
+      default:
+         return false;
+      }
+#endif
+   }
+#else
+   UNREACHABLE("Not implemented");
+#endif
+
+   return false;
+}
+
 #define pan_mod_afbc_emit_tex_payload_entry                                    \
    GENX(pan_tex_emit_afbc_payload_entry)
 #define pan_mod_afbc_emit_color_attachment GENX(pan_emit_afbc_color_attachment)
@@ -319,6 +364,27 @@ pan_mod_afrc_test_props(const struct pan_kmod_dev_props *dprops,
       return PAN_MOD_NOT_OPTIMAL;
 
    return PAN_MOD_OPTIMAL;
+}
+
+static bool
+pan_mod_afrc_supports_msaa_average(enum pipe_format format)
+{
+   const struct pan_blendable_format *blend_format =
+      GENX(pan_blendable_format_from_pipe_format)(format);
+
+   if (blend_format->internal == MALI_COLOR_BUFFER_INTERNAL_FORMAT_RAW_VALUE ||
+       util_format_is_float(format))
+      return false;
+
+   switch (blend_format->writeback) {
+   case MALI_COLOR_FORMAT_R8:
+   case MALI_COLOR_FORMAT_R8G8:
+   case MALI_COLOR_FORMAT_R8G8B8:
+   case MALI_COLOR_FORMAT_R8G8B8A8:
+      return true;
+   default:
+      return false;
+   }
 }
 
 static uint32_t
@@ -447,6 +513,52 @@ pan_mod_u_tiled_test_props(const struct pan_kmod_dev_props *dprops,
       return PAN_MOD_NOT_OPTIMAL;
 
    return PAN_MOD_OPTIMAL;
+}
+
+static bool
+pan_mod_u_tiled_supports_msaa_average(enum pipe_format format)
+{
+#if PAN_ARCH >= 9
+   const struct pan_blendable_format *blend_format =
+      GENX(pan_blendable_format_from_pipe_format)(format);
+
+   if (blend_format->internal == MALI_COLOR_BUFFER_INTERNAL_FORMAT_RAW_VALUE)
+      return false;
+
+   if (!util_format_is_float(format)) {
+      switch (blend_format->writeback) {
+      case MALI_COLOR_FORMAT_R8:
+      case MALI_COLOR_FORMAT_R8G8:
+      case MALI_COLOR_FORMAT_R8G8B8:
+      case MALI_COLOR_FORMAT_R8G8B8A8:
+      case MALI_COLOR_FORMAT_R10G10B10A2:
+      case MALI_COLOR_FORMAT_R8G8B8_FROM_R8G8B8A2:
+      case MALI_COLOR_FORMAT_R4G4B4A4:
+      case MALI_COLOR_FORMAT_R5G6B5:
+      case MALI_COLOR_FORMAT_R5G5B5A1:
+         return true;
+      default:
+         return false;
+      }
+   } else {
+#if PAN_ARCH >= 11
+      switch (blend_format->writeback) {
+      case MALI_FLOAT_COLOR_FORMAT_R16F:
+      case MALI_FLOAT_COLOR_FORMAT_RG16F:
+      case MALI_FLOAT_COLOR_FORMAT_RGB16F:
+      case MALI_FLOAT_COLOR_FORMAT_RGBA16F:
+      case MALI_FLOAT_COLOR_FORMAT_RG11F_B10F:
+         return true;
+      default:
+         return false;
+      }
+#endif
+   }
+#else
+   UNREACHABLE("Not implemented");
+#endif
+
+   return false;
 }
 
 static uint32_t
@@ -649,6 +761,45 @@ pan_mod_interleaved_64k_test_props(const struct pan_kmod_dev_props *dprops,
    return PAN_MOD_OPTIMAL;
 }
 
+static bool
+pan_mod_interleaved_64k_supports_msaa_average(enum pipe_format format)
+{
+   const struct pan_blendable_format *blend_format =
+      GENX(pan_blendable_format_from_pipe_format)(format);
+
+   if (blend_format->internal == MALI_COLOR_BUFFER_INTERNAL_FORMAT_RAW_VALUE)
+      return false;
+
+   if (!util_format_is_float(format)) {
+      switch (blend_format->writeback) {
+      case MALI_COLOR_FORMAT_R8:
+      case MALI_COLOR_FORMAT_R8G8:
+      case MALI_COLOR_FORMAT_R8G8B8A8:
+      case MALI_COLOR_FORMAT_R10G10B10A2:
+      case MALI_COLOR_FORMAT_R4G4B4A4:
+      case MALI_COLOR_FORMAT_R5G6B5:
+      case MALI_COLOR_FORMAT_R5G5B5A1:
+         return true;
+      default:
+         return false;
+      }
+   } else {
+#if PAN_ARCH >= 11
+      switch (blend_format->writeback) {
+      case MALI_FLOAT_COLOR_FORMAT_R16F:
+      case MALI_FLOAT_COLOR_FORMAT_RG16F:
+      case MALI_FLOAT_COLOR_FORMAT_RGBA16F:
+      case MALI_FLOAT_COLOR_FORMAT_RG11F_B10F:
+         return true;
+      default:
+         return false;
+      }
+#endif
+   }
+
+   return false;
+}
+
 #define pan_mod_interleaved_64k_emit_tex_payload_entry                                 \
    GENX(pan_tex_emit_interleaved_64k_payload_entry)
 #define pan_mod_interleaved_64k_emit_color_attachment                                  \
@@ -690,6 +841,52 @@ pan_mod_linear_test_props(const struct pan_kmod_dev_props *dprops,
     * not supported.
     */
    return PAN_MOD_OPTIMAL;
+}
+
+static bool
+pan_mod_linear_supports_msaa_average(enum pipe_format format)
+{
+#if PAN_ARCH >= 9
+   const struct pan_blendable_format *blend_format =
+      GENX(pan_blendable_format_from_pipe_format)(format);
+
+   if (blend_format->internal == MALI_COLOR_BUFFER_INTERNAL_FORMAT_RAW_VALUE)
+      return false;
+
+   if (!util_format_is_float(format)) {
+      switch (blend_format->writeback) {
+      case MALI_COLOR_FORMAT_R8:
+      case MALI_COLOR_FORMAT_R8G8:
+      case MALI_COLOR_FORMAT_R8G8B8:
+      case MALI_COLOR_FORMAT_R8G8B8A8:
+      case MALI_COLOR_FORMAT_R10G10B10A2:
+      case MALI_COLOR_FORMAT_R8G8B8_FROM_R8G8B8A2:
+      case MALI_COLOR_FORMAT_R4G4B4A4:
+      case MALI_COLOR_FORMAT_R5G6B5:
+      case MALI_COLOR_FORMAT_R5G5B5A1:
+         return true;
+      default:
+         return false;
+      }
+   } else {
+#if PAN_ARCH >= 11
+      switch (blend_format->writeback) {
+      case MALI_FLOAT_COLOR_FORMAT_R16F:
+      case MALI_FLOAT_COLOR_FORMAT_RG16F:
+      case MALI_FLOAT_COLOR_FORMAT_RGB16F:
+      case MALI_FLOAT_COLOR_FORMAT_RGBA16F:
+      case MALI_FLOAT_COLOR_FORMAT_RG11F_B10F:
+         return true;
+      default:
+         return false;
+      }
+#endif
+   }
+#else
+   UNREACHABLE("Not implemented");
+#endif
+
+   return false;
 }
 
 static uint32_t
@@ -797,6 +994,7 @@ pan_mod_linear_init_slice_layout(
    {                                                                           \
       .match = pan_mod_##__name##_match,                                       \
       .test_props = pan_mod_##__name##_test_props,                             \
+      .supports_msaa_average = pan_mod_##__name##_supports_msaa_average,       \
       .get_wsi_row_pitch = pan_mod_##__name##_get_wsi_row_pitch,               \
       .init_plane_layout = pan_mod_##__name##_init_plane_layout,               \
       .init_slice_layout = pan_mod_##__name##_init_slice_layout,               \

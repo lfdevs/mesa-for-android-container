@@ -9,6 +9,7 @@ use crate::core::platform::*;
 use crate::core::util::*;
 use crate::core::version::*;
 use crate::impl_cl_type_trait_base;
+use crate::rusticl_warn_once;
 
 use mesa_rust::compiler::clc::spirv::SPIRVToNirOptions;
 use mesa_rust::compiler::clc::*;
@@ -255,6 +256,11 @@ impl HelperContextWrapper for HelperContext<'_> {
 }
 
 impl_cl_type_trait_base!(cl_device_id, Device, [Device], CL_INVALID_DEVICE);
+
+pub enum DeviceFillBuffer {
+    Clear(Vec<u8>),
+    Meta(Vec<u8>),
+}
 
 impl DeviceBase {
     fn fill_format_tables(&mut self) {
@@ -828,6 +834,24 @@ impl DeviceBase {
             add_ext(1, 0, 1, "cl_khr_semaphore");
         }
 
+        if self.has_atomic_float() {
+            add_ext(1, 0, 0, "cl_ext_float_atomics");
+
+            if self.has_atomic_float_add() {
+                add_cap(SpvCapability::SpvCapabilityAtomicFloat32AddEXT);
+                add_feat(1, 0, 0, "__opencl_c_ext_fp32_global_atomic_add");
+                add_feat(1, 0, 0, "__opencl_c_ext_fp32_local_atomic_add");
+                add_spirv(c"SPV_EXT_shader_atomic_float_add");
+            }
+
+            if self.has_atomic_float_minmax() {
+                add_cap(SpvCapability::SpvCapabilityAtomicFloat32MinMaxEXT);
+                add_feat(1, 0, 0, "__opencl_c_ext_fp32_global_atomic_min_max");
+                add_feat(1, 0, 0, "__opencl_c_ext_fp32_local_atomic_min_max");
+                add_spirv(c"SPV_EXT_shader_atomic_float_min_max");
+            }
+        }
+
         self.extensions = exts;
         self.clc_features = feats;
         self.extension_string = exts_str.join(" ");
@@ -1353,6 +1377,8 @@ impl DeviceBase {
     pub fn cl_features(&self) -> clc_optional_features {
         let subgroups_supported = self.subgroups_supported();
         clc_optional_features {
+            atomic_fp32_add: self.has_atomic_float_add(),
+            atomic_fp32_minmax: self.has_atomic_float_minmax(),
             extended_bit_ops: true,
             fp16: self.fp16_supported(),
             fp64: self.fp64_supported(),
@@ -1390,6 +1416,19 @@ impl DeviceBase {
         self.screen().device_uuid().is_some() && self.screen().driver_uuid().is_some()
     }
 
+    pub fn has_atomic_float(&self) -> bool {
+        self.has_atomic_float_add() || self.has_atomic_float_minmax()
+    }
+
+    pub fn has_atomic_float_add(&self) -> bool {
+        // This also enables atomics on buffers
+        self.screen().caps().image_atomic_float_add
+    }
+
+    pub fn has_atomic_float_minmax(&self) -> bool {
+        self.screen().caps().atomic_float_minmax
+    }
+
     pub fn spirv_to_nir_opts(&self) -> SPIRVToNirOptions {
         let mut spirv_float_controls = float_controls::FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32
             | float_controls::FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP16
@@ -1406,6 +1445,56 @@ impl DeviceBase {
             caps: &self.spirv_caps,
             address_bits: self.address_bits(),
             float_controls: spirv_float_controls,
+        }
+    }
+
+    pub fn optimize_buffer_fill(
+        &self,
+        pattern: &[u8],
+        address: usize,
+        len: usize,
+    ) -> DeviceFillBuffer {
+        debug_assert!(pattern.len().is_power_of_two());
+        debug_assert!(pattern.len() <= 128);
+
+        // somehow ilog2 panics on this value, due to a negative input?!?
+        let pattern_len = pattern.len() as u32;
+        let hw_clear_buffer_sizes = u32::from(self.screen().caps().hw_clear_buffer_sizes);
+        let min_input_pot = pattern.len().trailing_zeros();
+
+        // Fast path
+        if pattern_len & hw_clear_buffer_sizes != 0 {
+            return DeviceFillBuffer::Clear(pattern.to_vec());
+        }
+
+        // We do not support bigger than 64/128 byte fills.
+        let max_pot = if self.int64_supported() { 7 } else { 6 };
+        let max_input_pot = address
+            .trailing_zeros()
+            .min(len.trailing_zeros())
+            .min(max_pot);
+
+        let mut size_pot = max_input_pot;
+        for new_size_pot in (min_input_pot..=max_input_pot).rev() {
+            if (1 << new_size_pot) & hw_clear_buffer_sizes != 0 {
+                size_pot = new_size_pot;
+                break;
+            }
+        }
+
+        let size = 1u32 << size_pot;
+        // Replicate the pattern to the new size
+        let pattern = pattern
+            .iter()
+            .copied()
+            .cycle()
+            .take(size as usize)
+            .collect();
+
+        if size & hw_clear_buffer_sizes != 0 {
+            DeviceFillBuffer::Clear(pattern)
+        } else {
+            DeviceFillBuffer::Meta(pattern)
         }
     }
 }
@@ -1478,8 +1567,21 @@ impl Device {
         spirv_to_nir_opts.caps = &spirv_caps;
 
         let lib_clc = spirv::SPIRVBin::get_lib_clc(dev_base.screen(), spirv_to_nir_opts);
-        if lib_clc.is_none() {
-            eprintln!("Libclc failed to load. Please make sure it is installed and provides spirv-mesa3d-.spv and/or spirv64-mesa3d-.spv");
+        match &lib_clc {
+            None => eprintln!(
+                "Libclc failed to load. Please make sure it is installed and provides
+                spirv-mesa3d-.spv and/or spirv64-mesa3d-.spv"
+            ),
+            Some(libclc) => {
+                if !libclc.has_function(c"__clc_mesa_libclc_version") {
+                    rusticl_warn_once!(
+                        "Patched Mesa libclc not detected. Upstream libclc may contain known bugs \
+                        or breaking changes and isn't guaranteed to work reliably. Please visit \
+                        https://gitlab.freedesktop.org/karolherbst/mesa-libclc for more \
+                        information."
+                    );
+                }
+            }
         }
 
         Some(Device {

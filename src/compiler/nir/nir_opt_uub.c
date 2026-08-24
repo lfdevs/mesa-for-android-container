@@ -5,17 +5,25 @@
 
 #include "nir.h"
 #include "nir_builder.h"
+#include "nir_range_analysis.h"
 
 typedef struct {
    const nir_opt_uub_options *options;
    nir_shader *shader;
    struct hash_table *range_ht;
+   struct hash_table *num_lsb_zero_ht;
 } opt_uub_state;
 
 static uint32_t
 uub(opt_uub_state *state, nir_scalar s)
 {
    return nir_unsigned_upper_bound(state->shader, state->range_ht, s);
+}
+
+static uint32_t
+num_lsb_zero(opt_uub_state *state, nir_scalar s)
+{
+   return nir_def_num_lsb_zero(state->num_lsb_zero_ht, s);
 }
 
 static void
@@ -52,8 +60,72 @@ get_src_and_const(nir_alu_instr *alu, nir_scalar *src, nir_scalar *const_src,
    return false;
 }
 
-/* iand src, mask: if mask is constant with N least significant bits set and
+static bool
+op_is_add_or(nir_op op)
+{
+   return op == nir_op_iadd || op == nir_op_ior || op == nir_op_ixor;
+}
+
+static bool
+get_disjoint_add_src(opt_uub_state *state, nir_scalar *src, unsigned constant)
+{
+   if (!nir_scalar_is_alu(*src))
+      return false;
+
+   if (!op_is_add_or(nir_scalar_alu_op(*src)))
+      return false;
+
+   unsigned required_num_lsb = util_last_bit(constant);
+
+   nir_scalar iadd_src[2] = {
+      nir_scalar_chase_alu_src(*src, 0),
+      nir_scalar_chase_alu_src(*src, 1),
+   };
+
+   for (unsigned i = 0; i < 2; i++) {
+      if (num_lsb_zero(state, iadd_src[i]) >= required_num_lsb) {
+         *src = iadd_src[!i];
+         return true;
+      }
+   }
+
+   return false;
+}
+
+static bool
+only_used_by_iand_const(nir_def *def, unsigned depth)
+{
+   if (depth++ >= 2)
+      return false;
+
+   nir_foreach_use_including_if(use, def) {
+      if (nir_src_is_if(use))
+         return false;
+
+      nir_instr *use_instr = nir_src_use_instr(use);
+      if (use_instr->type != nir_instr_type_alu)
+         return false;
+
+      nir_alu_instr *use_alu = nir_instr_as_alu(use_instr);
+
+      if (op_is_add_or(use_alu->op))
+         return only_used_by_iand_const(&use_alu->def, depth);
+
+      if (use_alu->op != nir_op_iand)
+         return false;
+
+      if (!nir_src_is_const(use_alu->src[0].src) && !nir_src_is_const(use_alu->src[1].src))
+         return false;
+   }
+
+   return true;
+}
+
+/* iand(src, mask): if mask is constant with N least significant bits set and
  * uub(src) < 2^N, the iand does nothing and can be removed.
+ *
+ * iand(iadd(src0, src1), mask) -> iand(src1, mask) if src0 won't matter
+ * because of its num_lsb_zero
  */
 static bool
 opt_uub_iand(nir_builder *b, nir_alu_instr *alu, opt_uub_state *state)
@@ -61,22 +133,49 @@ opt_uub_iand(nir_builder *b, nir_alu_instr *alu, opt_uub_state *state)
    assert(alu->op == nir_op_iand);
 
    nir_scalar src, mask;
+   unsigned const_src_idx;
 
-   if (!get_src_and_const(alu, &src, &mask, NULL))
+   if (!get_src_and_const(alu, &src, &mask, &const_src_idx))
       return false;
 
    unsigned first_0 = ffsll(~nir_scalar_as_uint(mask));
    uint32_t low_mask = (1ull << (first_0 - 1)) - 1;
 
-   if (low_mask == 0)
-      return false;
+   if (low_mask != 0 && uub(state, src) <= low_mask) {
+      b->cursor = nir_after_def(src.def);
+      nir_def_replace(&alu->def, nir_mov_scalar(b, src));
+      return true;
+   } else if (get_disjoint_add_src(state, &src, nir_scalar_as_uint(mask))) {
+      nir_src_rewrite(&alu->src[!const_src_idx].src, src.def);
+      alu->src[!const_src_idx].swizzle[0] = src.comp;
+      return true;
+   } else if (nir_scalar_is_alu(src) && op_is_add_or(nir_scalar_alu_op(src))) {
+      /* Look through some level of add/or, but only if it's only used by iand with
+       * constants. This is slightly better than used_once.
+       */
+      if (!only_used_by_iand_const(src.def, 0))
+         return false;
 
-   if (uub(state, src) > low_mask)
-      return false;
+      nir_scalar iadd_src[2];
+      bool progress = false;
+      for (unsigned i = 0; i < 2; i++) {
+         iadd_src[i] = nir_scalar_chase_alu_src(src, i);
+         progress |= get_disjoint_add_src(state, &iadd_src[i], nir_scalar_as_uint(mask));
+      }
 
-   b->cursor = nir_after_def(src.def);
-   nir_def_replace(&alu->def, nir_mov_scalar(b, src));
-   return true;
+      if (!progress)
+         return false;
+
+      b->cursor = nir_before_instr(&alu->instr);
+      nir_def *src0 = nir_mov_scalar(b, iadd_src[0]);
+      nir_def *src1 = nir_mov_scalar(b, iadd_src[1]);
+      nir_def *ior = nir_build_alu2(b, nir_scalar_alu_op(src), src0, src1);
+      nir_src_rewrite(&alu->src[!const_src_idx].src, ior);
+      alu->src[!const_src_idx].swizzle[0] = 0;
+      return true;
+   }
+
+   return false;
 }
 
 static nir_op
@@ -260,6 +359,48 @@ opt_uub_imul(nir_builder *b, nir_alu_instr *alu, opt_uub_state *state)
    return false;
 }
 
+/* shr(iadd(src0, src1), #c) -> shr(src0, #c) if src1 is fully shifted away. */
+static bool
+opt_uub_shr(nir_builder *b, nir_alu_instr *alu, opt_uub_state *state)
+{
+   assert(alu->op == nir_op_ishr || alu->op == nir_op_ushr);
+
+   nir_scalar src, shift;
+   unsigned const_src_idx;
+
+   if (!get_src_and_const(alu, &src, &shift, &const_src_idx) || const_src_idx != 1)
+      return false;
+
+   if (!nir_scalar_is_alu(src))
+      return false;
+
+   unsigned cshift = nir_scalar_as_uint(shift) & (alu->def.bit_size - 1);
+
+   nir_op op = nir_scalar_alu_op(src);
+
+   if (!op_is_add_or(op))
+      return false;
+
+   nir_scalar iadd_src[2] = {
+      nir_scalar_chase_alu_src(src, 0),
+      nir_scalar_chase_alu_src(src, 1),
+   };
+
+   for (unsigned i = 0; i < 2; i++) {
+      if (uub(state, iadd_src[i]) > BITFIELD64_MASK(cshift))
+         continue;
+
+      if (op == nir_op_iadd && num_lsb_zero(state, iadd_src[!i]) < cshift)
+         continue;
+
+      nir_src_rewrite(&alu->src[0].src, iadd_src[!i].def);
+      alu->src[0].swizzle[0] = iadd_src[!i].comp;
+      return true;
+   }
+
+   return false;
+}
+
 static bool
 src_is_const(nir_src *src, void *data)
 {
@@ -303,6 +444,9 @@ opt_uub(nir_builder *b, nir_alu_instr *alu, void *data)
       return opt_uub_minmax(b, alu, state);
    case nir_op_imul:
       return opt_uub_imul(b, alu, state);
+   case nir_op_ishr:
+   case nir_op_ushr:
+      return opt_uub_shr(b, alu, state);
    default:
       return false;
    }
@@ -318,11 +462,13 @@ nir_opt_uub(nir_shader *shader, const nir_opt_uub_options *options)
       .options = options,
       .shader = shader,
       .range_ht = _mesa_pointer_hash_table_create(NULL),
+      .num_lsb_zero_ht = _mesa_pointer_hash_table_create(NULL),
    };
 
    bool progress =
       nir_shader_alu_pass(shader, opt_uub, nir_metadata_control_flow, &state);
 
    _mesa_hash_table_destroy(state.range_ht, NULL);
+   _mesa_hash_table_destroy(state.num_lsb_zero_ht, NULL);
    return progress;
 }

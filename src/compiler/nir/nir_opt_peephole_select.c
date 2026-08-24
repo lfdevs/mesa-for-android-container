@@ -191,8 +191,6 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
          case nir_intrinsic_load_frag_shading_rate:
          case nir_intrinsic_is_sparse_texels_resident:
          case nir_intrinsic_sparse_residency_code_and:
-         case nir_intrinsic_read_invocation:
-         case nir_intrinsic_quad_broadcast:
          case nir_intrinsic_quad_swap_horizontal:
          case nir_intrinsic_quad_swap_vertical:
          case nir_intrinsic_quad_swap_diagonal:
@@ -209,6 +207,20 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
          case nir_intrinsic_mbcnt_amd:
          case nir_intrinsic_load_push_data_intel:
             if (!alu_ok)
+               return false;
+            break;
+
+         case nir_intrinsic_read_invocation:
+         case nir_intrinsic_quad_broadcast:
+            if (!alu_ok)
+               return false;
+
+            /* These take an invocation which must be subgroup/quad uniform.
+             * We can't flatten the if unless the invocation is still uniform
+             * after flattening the if. For now we only allow the common case
+             * where the invocation is constant and reject the rest.
+             */
+            if (!nir_src_is_const(intrin->src[1]))
                return false;
             break;
 
@@ -252,6 +264,7 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
             break;
 
          case nir_op_fcos:
+         case nir_op_ftanh:
          case nir_op_fdiv:
          case nir_op_fexp2:
          case nir_op_flog2:

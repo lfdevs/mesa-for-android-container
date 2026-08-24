@@ -222,7 +222,7 @@ update_shader_samplers(struct st_context *st,
    GLbitfield samplers_used = prog->SamplersUsed;
    GLbitfield free_slots = ~prog->SamplersUsed;
    GLbitfield external_samplers_used = prog->ExternalSamplersUsed;
-   unsigned unit, num_samplers;
+   unsigned num_samplers;
    struct pipe_sampler_state local_samplers[PIPE_MAX_SAMPLERS];
    const struct pipe_sampler_state *states[PIPE_MAX_SAMPLERS];
 
@@ -238,7 +238,7 @@ update_shader_samplers(struct st_context *st,
    num_samplers = util_last_bit(samplers_used);
 
    /* loop over sampler units (aka tex image units) */
-   for (unit = 0; samplers_used; unit++, samplers_used >>= 1) {
+   for (unsigned unit = 0; samplers_used; unit++, samplers_used >>= 1) {
       struct pipe_sampler_state *sampler = samplers + unit;
       unsigned tex_unit = prog->SamplerUnits[unit];
 

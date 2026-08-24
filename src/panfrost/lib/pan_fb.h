@@ -176,7 +176,9 @@ static inline bool
 pan_fb_has_partial_tiles(const struct pan_fb_layout *fb)
 {
    assert(pan_fb_bbox_contains_bbox(fb->tiling_area_px, fb->render_area_px));
-   return !pan_fb_bbox_equal(fb->tiling_area_px, fb->render_area_px);
+   /* we only care about partial-tile borders if the FB is not fully covered. */
+   return !pan_fb_bbox_equal(fb->tiling_area_px, fb->render_area_px) &&
+          !pan_fb_is_fully_covered(fb);
 }
 
 #ifdef PAN_ARCH

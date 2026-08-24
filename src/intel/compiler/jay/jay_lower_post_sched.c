@@ -68,7 +68,9 @@ jay_lower_post_sched(jay_shader *shader, uint32_t api, uint32_t float_sizes)
          jay_foreach_inst_in_block(block, I) {
             uint32_t required = cr0;
             enum jay_rounding_mode round =
-               (I->op == JAY_OPCODE_CVT) ? jay_cvt_rounding_mode(I) : JAY_ROUND;
+               (I->op == JAY_OPCODE_CVT)      ? jay_cvt_rounding_mode(I) :
+               (I->op == JAY_OPCODE_ADD_RTNE) ? JAY_RNE :
+                                                JAY_ROUND;
 
             if (round != JAY_ROUND) {
                required &= ~BRW_CR0_RND_MODE_MASK;
@@ -98,7 +100,7 @@ jay_lower_post_sched(jay_shader *shader, uint32_t api, uint32_t float_sizes)
 
          /* Restore to global state on block boundaries */
          if (jay_num_successors(block, GPR) > 0) {
-            set_cr0(func, jay_after_block(block), &current, cr0);
+            set_cr0(func, jay_after_block_logical(block), &current, cr0);
          }
       }
    }

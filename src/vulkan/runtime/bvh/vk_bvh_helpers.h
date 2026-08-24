@@ -26,18 +26,16 @@
 
 #include "vk_bvh_defines.h"
 
-#ifdef VULKAN
 #ifndef VK_USED_BUILD_FLAGS
 #error "VK_USED_BUILD_FLAGS needs to be set to use helpers"
 #endif
-#endif
 
-#ifdef VULKAN
 layout (constant_id = SUBGROUP_SIZE_ID) const int SUBGROUP_SIZE = 64;
 layout (constant_id = BVH_BOUNDS_OFFSET_ID) const int BVH_BOUNDS_OFFSET = 0;
 layout (constant_id = BUILD_FLAGS_ID) const int BUILD_FLAGS = 0;
 layout (constant_id = ROOT_FLAGS_OFFSET_ID) const int ROOT_FLAGS_OFFSET = -1;
-#endif
+layout (constant_id = MORTON_SORT_WORKGROUP_SIZE_ID) const int MORTON_SORT_WORKGROUP_SIZE = 512;
+layout (constant_id = MORTON_SORT_KVS_PER_THREAD_ID) const int MORTON_SORT_KVS_PER_THREAD = 2;
 
 /* copied from u_math.h */
 uint32_t
@@ -50,7 +48,7 @@ int32_t
 to_emulated_float(float f)
 {
    int32_t bits = floatBitsToInt(f);
-   return f < 0 ? -2147483648 - bits : bits;
+   return bits < 0 ? -2147483648 - bits : bits;
 }
 
 float
@@ -359,6 +357,94 @@ should_execute_phase()
    for (; task_index != TASK_INDEX_INVALID && should_execute_phase(); task_index = fetch_task(header, true))
 #endif
 
+#ifdef VK_WORKGROUP_SIZE
+#define VK_SUBGROUPS_PER_WORKGROUPS (DIV_ROUND_UP(VK_WORKGROUP_SIZE, SUBGROUP_SIZE))
+#endif
+
+#ifdef VK_USE_PREFIX_SCAN
+
+shared uint32_t exclusive_prefix_sum;
+shared uint32_t aggregate_sums[VK_SUBGROUPS_PER_WORKGROUPS];
+shared uint32_t aggregate_sums2[VK_SUBGROUPS_PER_WORKGROUPS];
+
+/*
+ * Global prefix scan over all workgroups to find out the index of the collapsed node to write.
+ * See https://research.nvidia.com/sites/default/files/publications/nvr-2016-002.pdf
+ * One partition = one workgroup in this case.
+ */
+uint32_t
+vk_prefix_scan(uvec4 ballot, REF(vk_prefix_scan_partition) partitions, uint32_t index)
+{
+   if (gl_LocalInvocationIndex == 0) {
+      exclusive_prefix_sum = 0;
+      if (index >= VK_WORKGROUP_SIZE) {
+         REF(vk_prefix_scan_partition) current_partition =
+            REF(vk_prefix_scan_partition)(INDEX(vk_prefix_scan_partition, partitions, index / VK_WORKGROUP_SIZE));
+
+         REF(vk_prefix_scan_partition) previous_partition = current_partition - 1;
+
+         while (true) {
+            /* See if this previous workgroup already set their inclusive sum */
+            if (atomicLoad(DEREF(previous_partition).inclusive_sum, gl_ScopeDevice,
+                           gl_StorageSemanticsBuffer,
+                           gl_SemanticsAcquire | gl_SemanticsMakeVisible) != 0xFFFFFFFF) {
+               atomicAdd(exclusive_prefix_sum, DEREF(previous_partition).inclusive_sum);
+               break;
+            } else {
+               atomicAdd(exclusive_prefix_sum, DEREF(previous_partition).aggregate);
+               previous_partition -= 1;
+            }
+         }
+         /* Set the inclusive sum for the next workgroups */
+         atomicStore(DEREF(current_partition).inclusive_sum,
+                     DEREF(current_partition).aggregate + exclusive_prefix_sum, gl_ScopeDevice,
+                     gl_StorageSemanticsBuffer, gl_SemanticsRelease | gl_SemanticsMakeAvailable);
+      }
+   }
+
+   if (subgroupElect())
+      aggregate_sums[gl_SubgroupID] = subgroupBallotBitCount(ballot);
+   barrier();
+
+   if (VK_SUBGROUPS_PER_WORKGROUPS <= SUBGROUP_SIZE) {
+      if (gl_LocalInvocationID.x < VK_SUBGROUPS_PER_WORKGROUPS) {
+         aggregate_sums[gl_LocalInvocationID.x] =
+            exclusive_prefix_sum + subgroupExclusiveAdd(aggregate_sums[gl_LocalInvocationID.x]);
+      }
+   } else {
+      /* If the length of aggregate_sums[] is larger than SUBGROUP_SIZE,
+       * the prefix scan can't be done simply by subgroupExclusiveAdd.
+       */
+      if (gl_LocalInvocationID.x < VK_SUBGROUPS_PER_WORKGROUPS)
+         aggregate_sums2[gl_LocalInvocationID.x] = aggregate_sums[gl_LocalInvocationID.x];
+      barrier();
+
+      /* Hillis Steele inclusive scan on aggregate_sums2 */
+      for (uint32_t stride = 1; stride < VK_SUBGROUPS_PER_WORKGROUPS; stride *= 2) {
+         uint32_t value = 0;
+         if (gl_LocalInvocationID.x >= stride && gl_LocalInvocationID.x < VK_SUBGROUPS_PER_WORKGROUPS)
+            value = aggregate_sums2[gl_LocalInvocationID.x - stride];
+         barrier();
+         if (gl_LocalInvocationID.x < VK_SUBGROUPS_PER_WORKGROUPS)
+            aggregate_sums2[gl_LocalInvocationID.x] += value;
+         barrier();
+      }
+
+      /* Adapt to exclusive and add the prefix_sum from previous workgroups */
+      if (gl_LocalInvocationID.x < VK_SUBGROUPS_PER_WORKGROUPS) {
+         if (gl_LocalInvocationID.x == 0)
+            aggregate_sums[gl_LocalInvocationID.x] = exclusive_prefix_sum;
+         else
+            aggregate_sums[gl_LocalInvocationID.x] = exclusive_prefix_sum + aggregate_sums2[gl_LocalInvocationID.x - 1];
+      }
+   }
+   barrier();
+
+   return aggregate_sums[gl_SubgroupID] + subgroupBallotExclusiveBitCount(ballot);
+}
+
+#endif
+
 #if ((VK_USED_BUILD_FLAGS & VK_BUILD_FLAG_ALWAYS_ACTIVE) != 0)
 #define VK_TEST_BUILD_FLAG_ALWAYS_ACTIVE ((BUILD_FLAGS & VK_BUILD_FLAG_ALWAYS_ACTIVE) != 0)
 #endif
@@ -369,6 +455,41 @@ should_execute_phase()
 
 #if ((VK_USED_BUILD_FLAGS & VK_BUILD_FLAG_64BIT_KEYS) != 0)
 #define VK_TEST_BUILD_FLAG_64BIT_KEYS ((BUILD_FLAGS & VK_BUILD_FLAG_64BIT_KEYS) != 0)
+#endif
+
+REF(vk_ir_triangle_node_quad)
+vk_ir_triangle_node_get_quad_ref(REF(vk_ir_triangle_node) node)
+{
+   return REF(vk_ir_triangle_node_quad)(uint64_t(node) + SIZEOF(vk_ir_triangle_node));
+}
+
+#if ((VK_USED_BUILD_FLAGS & VK_BUILD_FLAG_HAS_QUADS) != 0)
+#define VK_TEST_BUILD_FLAG_HAS_QUADS ((BUILD_FLAGS & VK_BUILD_FLAG_HAS_QUADS) != 0)
+
+vk_ir_triangle_node_quad
+vk_ir_triangle_node_get_quad(REF(vk_ir_triangle_node) node)
+{
+   vk_ir_triangle_node_quad quad;
+   if (VK_TEST_BUILD_FLAG_HAS_QUADS)
+      quad = DEREF(vk_ir_triangle_node_get_quad_ref(node));
+   return quad;
+}
+
+uint32_t
+vk_ir_node_size(uint32_t geometry_type)
+{
+   uint32_t size = 0;
+   if (geometry_type == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
+      size = SIZEOF(vk_ir_triangle_node);
+      if (VK_TEST_BUILD_FLAG_HAS_QUADS)
+         size += SIZEOF(vk_ir_triangle_node_quad);
+   } else if (geometry_type == VK_GEOMETRY_TYPE_AABBS_KHR) {
+      size = SIZEOF(vk_ir_aabb_node);
+   } else {
+      size = SIZEOF(vk_ir_instance_node);
+   }
+   return size;
+}
 #endif
 
 #endif

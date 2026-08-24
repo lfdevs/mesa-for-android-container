@@ -34,10 +34,12 @@ pass(jay_function *f)
 
             if (!jay_is_null(I->cond_flag) &&
                 !BITSET_TEST(live_set, jay_index(I->cond_flag)) &&
-                (I->op != JAY_OPCODE_CMP || jay_is_null(I->dst))) {
+                (I->op != JAY_OPCODE_CMP || jay_is_null(I->dst)) &&
+                I->op != JAY_OPCODE_SEND) {
 
                I->cond_flag = jay_null();
-               I->conditional_mod = 0;
+               I->conditional_mod = GEN_CONDITION_NONE;
+               I->zero_inactive = false;
             }
 
             bool no_dest = jay_is_null(I->dst) && jay_is_null(I->cond_flag);

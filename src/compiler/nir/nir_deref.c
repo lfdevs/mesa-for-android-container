@@ -838,19 +838,9 @@ nir_rematerialize_deref_in_use_blocks(nir_deref_instr *instr)
       .builder = nir_builder_create(instr->instr.block->impl)
    };
 
-   nir_foreach_use_safe(use, &instr->def) {
-      nir_instr *parent = nir_src_use_instr(use);
-      if (parent->block == instr->instr.block)
-         continue;
-
-      /* If a deref is used in a phi, we can't rematerialize it, as the new
-       * derefs would appear before the phi, which is not valid.
-       */
-      if (parent->type == nir_instr_type_phi)
-         continue;
-
-      state.block = parent->block;
-      state.builder.cursor = nir_before_instr(parent);
+   nir_foreach_use_including_if_safe(use, &instr->def) {
+      state.block = nir_src_get_block(use);
+      state.builder.cursor = nir_before_src(use);
       rematerialize_deref_src(use, &state);
    }
 

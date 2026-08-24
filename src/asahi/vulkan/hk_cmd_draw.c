@@ -3246,10 +3246,18 @@ hk_handle_passthrough_gs(struct hk_cmd_buffer *cmd, struct agx_draw draw)
    };
 
    for (uint32_t i = 0; i < NUM_TOTAL_VARYING_SLOTS; i++) {
-      key->output_components[i] =
-         nir_slot_num_components(i, MESA_SHADER_VERTEX);
-      if (key->output_components[i] == 0)
-         key->output_components[i] = 4;
+      unsigned num_comps = 0;
+      switch (i) {
+         case VARYING_SLOT_TESS_LEVEL_OUTER:
+         case VARYING_SLOT_TESS_LEVEL_INNER:
+         case VARYING_SLOT_BOUNDING_BOX1:
+            num_comps = 4;
+            break;
+         default:
+            num_comps = nir_slot_num_components(i, MESA_SHADER_VERTEX);
+            break;
+      }
+      key->output_components[i] = num_comps ?: 4;
 
       /* We don't care about VS varying types in AGX, just set everything to
        * uint32 to improve cache hits. */

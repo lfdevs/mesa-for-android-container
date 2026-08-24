@@ -145,8 +145,7 @@ ac_vcn_enc_variable_slice_mode_supported(const struct radeon_info *info, bool pr
          return info->vcn_enc_minor_version >= 11;
    } else if (info->vcn_ip_version >= VCN_4_0_0) {
       if (preencode)
-         return info->vcn_enc_minor_version > 24 ||
-                (info->vcn_enc_minor_version == 24 && info->vcn_fw_revision >= 0x23);
+         return false; /* Need new FW */
       else
          return info->vcn_enc_minor_version >= 24;
    } else

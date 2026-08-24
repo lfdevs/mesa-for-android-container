@@ -15,6 +15,7 @@ use rusticl_opencl_gen::*;
 use std::borrow::Borrow;
 use std::ffi::c_void;
 use std::ffi::CStr;
+use std::fmt::Debug;
 use std::iter::Product;
 
 macro_rules! cl_callback {
@@ -222,6 +223,12 @@ impl SVMFreeCb {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CLVec<T> {
     vals: [T; 3],
+}
+
+impl<T: Debug> Debug for CLVec<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.vals.fmt(f)
+    }
 }
 
 impl<T: Copy> CLVec<T> {

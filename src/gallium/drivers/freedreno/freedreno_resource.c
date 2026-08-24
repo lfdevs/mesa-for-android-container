@@ -146,8 +146,6 @@ rebind_resource(struct fd_resource *rsc) assert_dt
 {
    struct fd_screen *screen = fd_screen(rsc->b.b.screen);
 
-   assert(!(rsc->b.b.bind & FD_BIND_GLOBAL_BUFFER));
-
    fd_screen_lock(screen);
    fd_resource_lock(rsc);
 
@@ -199,10 +197,8 @@ realloc_bo(struct fd_resource *rsc, uint32_t size)
       COND(prsc->bind & PIPE_BIND_SHARED, FD_BO_SHARED) |
       COND(prsc->bind & PIPE_BIND_SCANOUT, FD_BO_SCANOUT);
 
-   if (rsc->bo) {
-      assert(!(rsc->b.b.bind & FD_BIND_GLOBAL_BUFFER));
+   if (rsc->bo)
       fd_bo_del(rsc->bo);
-   }
 
    struct fd_bo *bo =
       fd_bo_new(screen->dev, size, flags, "%ux%ux%u@%u:%x", prsc->width0,
@@ -270,8 +266,6 @@ fd_replace_buffer_storage(struct pipe_context *pctx, struct pipe_resource *pdst,
    assert(src->track->batch_mask == 0);
    assert(src->track->write_batch == NULL);
    assert(memcmp(&dst->layout, &src->layout, sizeof(dst->layout)) == 0);
-   assert(!(psrc->bind & FD_BIND_GLOBAL_BUFFER));
-   assert(!(pdst->bind & FD_BIND_GLOBAL_BUFFER));
 
    /* get rid of any references that batch-cache might have to us (which
     * should empty/destroy rsc->batches hashset)
@@ -362,9 +356,6 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
    bool fallback = false;
 
    if (prsc->next)
-      return false;
-
-   if (prsc->bind & FD_BIND_GLOBAL_BUFFER)
       return false;
 
    /* Flush any pending batches writing the resource before we go mucking around

@@ -270,7 +270,20 @@ video_profile_supported(struct anv_physical_device *pdevice,
       break;
    }
    case VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR: {
-      return VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR;
+      const struct VkVideoEncodeAV1ProfileInfoKHR *av1_enc_profile =
+         vk_find_struct_const(profile->pNext, VIDEO_ENCODE_AV1_PROFILE_INFO_KHR);
+
+      if (pdevice->info.verx10 != 125)
+         return VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR;
+
+      if (av1_enc_profile->stdProfile != STD_VIDEO_AV1_PROFILE_MAIN)
+         return VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR;
+
+      if (profile->lumaBitDepth != VK_VIDEO_COMPONENT_BIT_DEPTH_8_BIT_KHR &&
+          profile->lumaBitDepth != VK_VIDEO_COMPONENT_BIT_DEPTH_10_BIT_KHR)
+         return VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR;
+
+      break;
    }
    default:
       UNREACHABLE("unknown codec\n");
@@ -279,6 +292,9 @@ video_profile_supported(struct anv_physical_device *pdevice,
 
    return VK_SUCCESS;
 }
+
+#define ANV_AV1_REF_NAME_BIT(name) \
+   (1u << (STD_VIDEO_AV1_REFERENCE_NAME_##name - STD_VIDEO_AV1_REFERENCE_NAME_LAST_FRAME))
 
 VkResult
 anv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice,
@@ -480,6 +496,68 @@ anv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice,
       pCapabilities->stdHeaderVersion.specVersion = VK_STD_VULKAN_VIDEO_CODEC_H265_ENCODE_SPEC_VERSION;
       break;
    }
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR: {
+      struct VkVideoEncodeAV1CapabilitiesKHR *ext = (struct VkVideoEncodeAV1CapabilitiesKHR *)
+         vk_find_struct(pCapabilities->pNext, VIDEO_ENCODE_AV1_CAPABILITIES_KHR);
+
+      if (ext) {
+         ext->flags = VK_VIDEO_ENCODE_AV1_CAPABILITY_PER_RATE_CONTROL_GROUP_MIN_MAX_Q_INDEX_BIT_KHR |
+                   VK_VIDEO_ENCODE_AV1_CAPABILITY_GENERATE_OBU_EXTENSION_HEADER_BIT_KHR |
+                   VK_VIDEO_ENCODE_AV1_CAPABILITY_FRAME_SIZE_OVERRIDE_BIT_KHR;
+         ext->maxLevel = STD_VIDEO_AV1_LEVEL_5_3;
+         ext->codedPictureAlignment.width = 8;
+         ext->codedPictureAlignment.height = 8;
+         ext->maxTiles.width = 64;
+         ext->maxTiles.height = 64;
+         ext->minTileSize.width = 64;
+         ext->minTileSize.height = 64;
+         ext->maxTileSize.width = 4096;
+         ext->maxTileSize.height = 4096;
+         ext->superblockSizes = VK_VIDEO_ENCODE_AV1_SUPERBLOCK_SIZE_64_BIT_KHR;
+
+         /* Single reference (P): one forward reference, conventionally LAST. */
+         ext->maxSingleReferenceCount = 1;
+         ext->singleReferenceNameMask = ANV_AV1_REF_NAME_BIT(LAST_FRAME);
+
+         /* Unidirectional compound (GPB): two forward references (LAST + GOLDEN),
+          * both in group 1. */
+         ext->maxUnidirectionalCompoundReferenceCount = 2;
+         ext->maxUnidirectionalCompoundGroup1ReferenceCount = 2;
+         ext->unidirectionalCompoundReferenceNameMask =
+            ANV_AV1_REF_NAME_BIT(LAST_FRAME) | ANV_AV1_REF_NAME_BIT(GOLDEN_FRAME);
+
+         /* Bidirectional compound (B): one forward (LAST, group 1 / L0) plus one
+          * backward (BWDREF, group 2 / L1) reference.
+          */
+         ext->maxBidirectionalCompoundReferenceCount = 2;
+         ext->maxBidirectionalCompoundGroup1ReferenceCount = 1;
+         ext->maxBidirectionalCompoundGroup2ReferenceCount = 1;
+         ext->bidirectionalCompoundReferenceNameMask =
+            ANV_AV1_REF_NAME_BIT(LAST_FRAME) | ANV_AV1_REF_NAME_BIT(BWDREF_FRAME);
+         ext->maxTemporalLayerCount = 1;
+         ext->maxSpatialLayerCount = 1;
+         ext->maxOperatingPoints = 1;
+         ext->minQIndex = 1;
+         ext->maxQIndex = 255;
+         ext->prefersGopRemainingFrames = 0;
+         ext->requiresGopRemainingFrames = 0;
+         ext->stdSyntaxFlags = 0;
+      }
+
+      pCapabilities->minBitstreamBufferOffsetAlignment = 4096;
+      pCapabilities->minBitstreamBufferSizeAlignment = 4096;
+
+      pCapabilities->maxDpbSlots = STD_VIDEO_AV1_NUM_REF_FRAMES + 1;
+      pCapabilities->maxActiveReferencePictures = STD_VIDEO_AV1_REFS_PER_FRAME;
+      pCapabilities->pictureAccessGranularity.width = 64;
+      pCapabilities->pictureAccessGranularity.height = 64;
+      pCapabilities->minCodedExtent.width = 64;
+      pCapabilities->minCodedExtent.height = 64;
+
+      strcpy(pCapabilities->stdHeaderVersion.extensionName, VK_STD_VULKAN_VIDEO_CODEC_AV1_ENCODE_EXTENSION_NAME);
+      pCapabilities->stdHeaderVersion.specVersion = VK_STD_VULKAN_VIDEO_CODEC_AV1_ENCODE_SPEC_VERSION;
+      break;
+   }
    default:
       break;
    }
@@ -513,8 +591,8 @@ anv_GetPhysicalDeviceVideoFormatPropertiesKHR(VkPhysicalDevice physicalDevice,
                               VK_IMAGE_USAGE_SAMPLED_BIT);
 
       supportedImageCreateFlags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT |
-                                  VK_IMAGE_CREATE_EXTENDED_USAGE_BIT |
-                                  VK_IMAGE_CREATE_VIDEO_PROFILE_INDEPENDENT_BIT_KHR;
+                                  VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
+
    }
 
    if (prof_list) {
@@ -644,6 +722,20 @@ get_h265_video_mem_size(struct anv_video_session *vid, uint32_t mem_idx)
       uint32_t max_tile_cols = DIV_ROUND_UP(vid->vk.max_coded.width, HEVC_MIN_TILE_SIZE);
       size = 2 * ((CACHELINE_SIZE * (4 + 4)) << 1) * (width_in_ctb + 3 * max_tile_cols);
       return size;
+   }
+   case ANV_VID_MEM_H265_PAK_STREAMOUT: {
+      uint32_t width_in_min_cb = DIV_ROUND_UP(vid->vk.max_coded.width, 8);
+      uint32_t height_in_min_cb = DIV_ROUND_UP(vid->vk.max_coded.height, 8);
+      return align64((uint64_t)width_in_min_cb * height_in_min_cb * 20, 4096);
+   }
+   case ANV_VID_MEM_H265_SAO_STREAMOUT: {
+      uint32_t width_in_min_lcu = DIV_ROUND_UP(vid->vk.max_coded.width, 16);
+      return align64((uint64_t)(align(width_in_min_lcu, 4) + 3 * 20) * 16, 4096);
+   }
+   case ANV_VID_MEM_H265_VDENC_INTRA_ROW_STORE: {
+      uint32_t width_in_max_lcu =
+         DIV_ROUND_UP(vid->vk.max_coded.width, ANV_MAX_H265_CTB_SIZE);
+      return align64((uint64_t)width_in_max_lcu * 64 * 2 * 2, 4096);
    }
    default:
       UNREACHABLE("unknown memory");
@@ -984,6 +1076,12 @@ get_av1_video_session_mem_reqs(struct anv_device *dev,
       case ANV_VID_MEM_AV1_DBD_BUFFER:
          buffer_size = 1;
          break;
+      case ANV_VID_MEM_AV1_TILE_SIZE_STREAMOUT:
+         buffer_size = width_in_sb * height_in_sb;
+         break;
+      case ANV_VID_MEM_AV1_ENCODE_TILE_BITSTREAM_ACCUM:
+         buffer_size = 1;
+         break;
       default:
          assert(0);
          break;
@@ -1038,6 +1136,7 @@ anv_GetVideoSessionMemoryRequirementsKHR(VkDevice _device,
                                       memory_types);
       break;
    case VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR:
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR:
       get_av1_video_session_mem_reqs(device,
                                      vid,
                                      mem_reqs,
@@ -1085,6 +1184,7 @@ anv_BindVideoSessionMemoryKHR(VkDevice _device,
       break;
    case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR:
    case VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR:
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR:
       for (unsigned i = 0; i < bind_mem_count; i++) {
          copy_bind(&vid->vid_mem[bind_mem[i].memoryBindIndex], &bind_mem[i]);
       }
@@ -1158,6 +1258,10 @@ anv_GetEncodedVideoSessionParametersKHR(VkDevice device,
       total_size = sps_size + pps_size + vps_size;
       break;
    }
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR: {
+      vk_video_encode_av1_seq_hdr(params, size_limit, &total_size, pData);
+      break;
+   }
    default:
       break;
    }
@@ -1206,6 +1310,30 @@ anv_GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(VkPhysicalDevice physi
       ext->preferredMaxL0ReferenceCount = 3;
       ext->preferredMaxL1ReferenceCount = 3;
       ext->preferredConstantQp = (VkVideoEncodeH265QpKHR) { 26, 26, 26 };
+      break;
+   }
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR: {
+      VkVideoEncodeAV1QualityLevelPropertiesKHR *ext =
+         vk_find_struct(pQualityLevelProperties->pNext, VIDEO_ENCODE_AV1_QUALITY_LEVEL_PROPERTIES_KHR);
+
+      ext->preferredRateControlFlags = VK_VIDEO_ENCODE_AV1_RATE_CONTROL_REGULAR_GOP_BIT_KHR;
+      ext->preferredGopFrameCount = 60;
+      ext->preferredKeyFramePeriod = 60;
+      ext->preferredConsecutiveBipredictiveFrameCount = 0;
+      ext->preferredTemporalLayerCount = 1;
+      /* TODO: tune preferred constant QIndex for AV1 */
+      ext->preferredConstantQIndex = (VkVideoEncodeAV1QIndexKHR) { 128, 128, 128 };
+      ext->preferredMaxSingleReferenceCount = 1;
+      ext->preferredSingleReferenceNameMask = ANV_AV1_REF_NAME_BIT(LAST_FRAME);;
+      ext->preferredMaxUnidirectionalCompoundReferenceCount = 2;
+      ext->preferredMaxUnidirectionalCompoundGroup1ReferenceCount = 2;
+      ext->preferredUnidirectionalCompoundReferenceNameMask =
+            ANV_AV1_REF_NAME_BIT(LAST_FRAME) | ANV_AV1_REF_NAME_BIT(GOLDEN_FRAME);;
+      ext->preferredMaxBidirectionalCompoundReferenceCount = 2;
+      ext->preferredMaxBidirectionalCompoundGroup1ReferenceCount = 1;
+      ext->preferredMaxBidirectionalCompoundGroup2ReferenceCount = 1;
+      ext->preferredBidirectionalCompoundReferenceNameMask =
+            ANV_AV1_REF_NAME_BIT(LAST_FRAME) | ANV_AV1_REF_NAME_BIT(BWDREF_FRAME);
       break;
    }
    default:
@@ -1487,7 +1615,8 @@ anv_video_get_image_mv_size(struct anv_device *device,
          unsigned h_ctb = DIV_ROUND_UP(image->vk.extent.height, ANV_MAX_VP9_CTB_SIZE);
 
          size = (w_ctb * h_ctb * 9) << 6;
-      } else if (profile_list->pProfiles[i].videoCodecOperation == VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR) {
+      } else if (profile_list->pProfiles[i].videoCodecOperation == VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR ||
+                 profile_list->pProfiles[i].videoCodecOperation == VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR) {
          uint32_t width_in_sb, height_in_sb;
          get_av1_sb_size(&width_in_sb, &height_in_sb);
          uint32_t sb_total = width_in_sb * height_in_sb;

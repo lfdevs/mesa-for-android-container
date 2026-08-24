@@ -166,6 +166,7 @@ struct vk_queue {
 
    /* VK_KHR_internally_synchronized_queues */
    simple_mtx_t lock;
+   bool internally_synchronized;
 
    /** For queue emulation: the real underlying hardware queue.
     *
@@ -225,14 +226,14 @@ vk_queue_is_empty(struct vk_queue *queue)
 static inline void
 vk_queue_lock(struct vk_queue *queue)
 {
-   if (queue->flags & VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR)
+   if (queue->internally_synchronized)
       simple_mtx_lock(&queue->lock);
 }
 
 static inline void
 vk_queue_unlock(struct vk_queue *queue)
 {
-   if (queue->flags & VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR)
+   if (queue->internally_synchronized)
       simple_mtx_unlock(&queue->lock);
 }
 

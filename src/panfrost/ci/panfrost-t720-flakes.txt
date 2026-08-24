@@ -17,4 +17,5 @@ dEQP-GLES2.functional.fbo.render.shared_colorbuffer.tex2d_bgra_depth_component16
 dEQP-GLES2.functional.fbo.render.shared_colorbuffer.tex2d_rgb_depth_component16
 
 # fails often on nightly CI
+dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.43
 dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.11

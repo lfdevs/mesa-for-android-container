@@ -91,12 +91,12 @@ scalar_is_aligned(nir_scalar src, lower_state *state, uint64_t mul)
 }
 
 static inline bool
-is_u2u64_aligned(nir_scalar *scalar, lower_state *state, uint64_t mul)
+is_u2u64(nir_scalar *scalar)
 {
    if (!nir_scalar_is_alu(*scalar) || nir_scalar_alu_op(*scalar) != nir_op_u2u64)
       return false;
    nir_scalar src = nir_scalar_chase_alu_src(*scalar, 0);
-   if (src.def->bit_size != 32 || !scalar_is_aligned(src, state, mul))
+   if (src.def->bit_size != 32)
       return false;
    *scalar = src;
    return true;
@@ -154,7 +154,7 @@ try_extract_additions(lower_state *state, nir_scalar *scalar, bool require_nuw, 
          return true;
       }
       return false;
-   } else if (is_u2u64_aligned(&src, state, mul)) {
+   } else if (is_u2u64(&src)) {
       bool rewrite_src = try_extract_additions(state, &src, true, mul);
       b->cursor = nir_after_instr(&alu->instr);
       if (src.def && mul == 1 && state->out_offset &&
@@ -177,9 +177,13 @@ try_extract_additions(lower_state *state, nir_scalar *scalar, bool require_nuw, 
       if (require_nuw && !is_nuw(state, alu, src0, src1))
          return false;
 
+      /* Only one source has to be aligned, assuming the addition in total was aligned too. */
+      if (!scalar_is_aligned(src0, state, mul) && !scalar_is_aligned(src1, state, mul))
+         return false;
+
       /* Visit u2u64 sources first. This prioritizes u2u64 later in the chain over those earlier. */
       nir_scalar src1_conv = src1;
-      bool swap = is_u2u64_aligned(&src1_conv, state, mul);
+      bool swap = is_u2u64(&src1_conv);
 
       bool rewrite_src0 = try_extract_additions(state, swap ? &src1 : &src0, require_nuw, mul);
       bool rewrite_src1 = try_extract_additions(state, swap ? &src0 : &src1, require_nuw, mul);

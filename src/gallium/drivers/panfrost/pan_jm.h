@@ -26,6 +26,7 @@ struct panfrost_jm_batch {
 #if defined(PAN_ARCH) && PAN_ARCH < 10
 
 #include "genxml/gen_macros.h"
+#include "util/u_blitter.h"
 
 struct panfrost_batch;
 struct panfrost_context;
@@ -76,6 +77,9 @@ void GENX(jm_launch_draw_indirect)(struct panfrost_batch *batch,
                                    const struct pipe_draw_info *info,
                                    unsigned drawid_offset,
                                    const struct pipe_draw_indirect_info *indirect);
+void GENX(jm_launch_draw_fullscreen)(struct panfrost_batch *batch,
+                                     enum blitter_attrib_type type,
+                                     const struct blitter_attrib *attrib);
 
 void GENX(jm_emit_write_timestamp)(struct panfrost_batch *batch,
                                    struct panfrost_resource *dst,

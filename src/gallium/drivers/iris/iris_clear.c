@@ -573,7 +573,7 @@ can_fast_clear_depth(struct iris_context *ice,
       return false;
    }
 
-   if (res->aux.usage == ISL_AUX_USAGE_NONE)
+   if (!isl_aux_usage_has_fast_clears(res->aux.usage))
       return false;
 
    /* From the TGL PRM, Vol 9, "Compressed Depth Buffers" (under the

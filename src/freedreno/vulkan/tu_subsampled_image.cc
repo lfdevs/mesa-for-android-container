@@ -401,10 +401,20 @@ tu_calc_subsampled_aprons(VkRect2D *dst,
                if (!(other_tile->visible_views & (1u << view)))
                    continue;
 
-               /* If they are next to each other then neither needs an apron. */
+               /* If they are next to each other then neither needs an apron.
+                * This means that their left and right edges touch and they
+                * vertically overlap.
+                */
                if (tile->subsampled_pos[view].offset.x +
                    tile->subsampled_pos[view].extent.width ==
-                   other_tile->subsampled_pos[view].offset.x)
+                   other_tile->subsampled_pos[view].offset.x &&
+                   /* check vertical overlap */
+                   tile->subsampled_pos[view].offset.y +
+                   tile->subsampled_pos[view].extent.height >=
+                   other_tile->subsampled_pos[view].offset.y &&
+                   other_tile->subsampled_pos[view].offset.y +
+                   other_tile->subsampled_pos[view].extent.height >=
+                   tile->subsampled_pos[view].offset.y)
                   continue;
 
                /* If other_tile isn't entirely to the right of tile, it is not
@@ -500,10 +510,20 @@ tu_calc_subsampled_aprons(VkRect2D *dst,
                if (!(other_tile->visible_views & (1u << view)))
                    continue;
 
-               /* If both are next to each other then neither needs an apron. */
+               /* If both are next to each other then neither needs an apron.
+                * This means that their top and bottom edges touch and they
+                * horizontally overlap.
+                */
                if (tile->subsampled_pos[view].offset.y +
                    tile->subsampled_pos[view].extent.height ==
-                   other_tile->subsampled_pos[view].offset.y)
+                   other_tile->subsampled_pos[view].offset.y &&
+                   /* Check horizontal overlap. */
+                   tile->subsampled_pos[view].offset.x +
+                   tile->subsampled_pos[view].extent.width >=
+                   other_tile->subsampled_pos[view].offset.x &&
+                   other_tile->subsampled_pos[view].offset.x +
+                   other_tile->subsampled_pos[view].extent.width >=
+                   tile->subsampled_pos[view].offset.x)
                   continue;
 
                VkExtent2D frag_area = get_effective_frag_area(tile, view);

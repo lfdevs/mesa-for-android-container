@@ -27,6 +27,9 @@ struct sim_syncobj {
    mtx_t mutex;
    int pending_fd;
    bool signaled;
+
+   /* backptr for syncobj teardown purpose */
+   struct sim_sync_provider *sim;
 };
 
 static int
@@ -43,6 +46,7 @@ sim_syncobj_create(struct util_sync_provider *p,
    mtx_init(&syncobj->mutex, mtx_plain);
    syncobj->pending_fd = -1;
    syncobj->signaled = !!(flags & DRM_SYNCOBJ_CREATE_SIGNALED);
+   syncobj->sim = sim;
 
    mtx_lock(&sim->mutex);
    *handle = util_idalloc_alloc(&sim->ida) + 1;
@@ -53,29 +57,34 @@ sim_syncobj_create(struct util_sync_provider *p,
    return 0;
 }
 
+static inline void
+sim_syncobj_destroy_locked(struct hash_entry *entry)
+{
+   struct sim_syncobj *syncobj = entry->data;
+   uint32_t handle = (uintptr_t)entry->key;
+
+   util_idalloc_free(&syncobj->sim->ida, handle - 1);
+
+   if (syncobj->pending_fd >= 0)
+      close(syncobj->pending_fd);
+
+   mtx_destroy(&syncobj->mutex);
+   free(syncobj);
+}
+
 static int
 sim_syncobj_destroy(struct util_sync_provider *p, uint32_t handle)
 {
    struct sim_sync_provider *sim = (struct sim_sync_provider *)p;
 
-   struct sim_syncobj *syncobj = NULL;
-
    mtx_lock(&sim->mutex);
    struct hash_entry *entry =
       _mesa_hash_table_search(sim->syncobjs, (const void *)(uintptr_t)handle);
    if (entry) {
-      syncobj = entry->data;
+      sim_syncobj_destroy_locked(entry);
       _mesa_hash_table_remove(sim->syncobjs, entry);
-      util_idalloc_free(&sim->ida, handle - 1);
    }
    mtx_unlock(&sim->mutex);
-
-   if (syncobj) {
-      if (syncobj->pending_fd >= 0)
-         close(syncobj->pending_fd);
-      mtx_destroy(&syncobj->mutex);
-      free(syncobj);
-   }
 
    return 0;
 }
@@ -171,16 +180,6 @@ sim_syncobj_query(struct util_sync_provider *p,
 }
 
 static int
-timeout_to_poll_timeout(int64_t timeout)
-{
-   const int64_t ns_per_ms = 1000000;
-   const int64_t ms = (timeout + ns_per_ms - 1) / ns_per_ms;
-   if (!ms && timeout)
-      return -1;
-   return ms <= INT_MAX ? ms : -1;
-}
-
-static int
 sim_syncobj_wait(struct util_sync_provider *p,
                  uint32_t *handles,
                  unsigned num_handles,
@@ -190,7 +189,7 @@ sim_syncobj_wait(struct util_sync_provider *p,
 {
    struct sim_sync_provider *sim = (struct sim_sync_provider *)p;
 
-   const int poll_timeout = timeout_to_poll_timeout(timeout_nsec);
+   const int poll_timeout = vn_timeout_to_poll_timeout(timeout_nsec);
    const bool wait_all = !!(flags & DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL);
 
    /* TODO poll all fds at the same time */
@@ -275,7 +274,14 @@ sim_syncobj_import_sync_file(struct util_sync_provider *p,
 static void
 sim_syncobj_finalize(struct util_sync_provider *p)
 {
-   free(p);
+   struct sim_sync_provider *sim = (struct sim_sync_provider *)p;
+
+   /* destroy ht first since syncobj teardown requires sim->ida */
+   _mesa_hash_table_destroy(sim->syncobjs, sim_syncobj_destroy_locked);
+
+   util_idalloc_fini(&sim->ida);
+   mtx_destroy(&sim->mutex);
+   free(sim);
 }
 
 struct util_sync_provider *

@@ -57,7 +57,7 @@ foreach s : bvh_shaders
   command = [
     prog_glslang, '-V', '-I' + bvh_include_dir, '-I' + vk_bvh_include_dir, '-I' + spirv_include_dir, '--target-env', 'spirv1.5',
     '-x', '-o', '@OUTPUT@', '@INPUT@', glslang_depfile, glslang_quiet,
-  ]
+  ] + (with_mesa_debug ? ['-g'] : [])
   command += vk_glsl_shader_preamble
 
   _bvh_name = '@0@.spv.h'.format(s[1])

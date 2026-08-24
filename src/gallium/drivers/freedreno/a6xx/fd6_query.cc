@@ -300,7 +300,7 @@ time_elapsed_pause(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
 
    fd6_record_ts<CHIP>(cs, query_sample(aq, stop));
 
-   fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
+   emit_counter_barrier<CHIP>(cs);
 
    /* result += stop - start: */
    fd_pkt7(cs, CP_MEM_TO_MEM, 9)
@@ -833,6 +833,7 @@ struct fd_batch_query_data {
    struct fd_batch_query_entry query_entries[];
 };
 
+template <chip CHIP>
 static void
 perfcntr_resume(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
 {
@@ -840,7 +841,7 @@ perfcntr_resume(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
    struct fd_screen *screen = data->screen;
    fd_cs cs(batch->draw);
 
-   fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
+   emit_counter_barrier<CHIP>(cs);
 
    /* configure performance counters for the requested queries: */
    for (unsigned i = 0; i < data->num_query_entries; i++) {
@@ -873,13 +874,14 @@ perfcntr_resume(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
    }
 }
 
+template <chip CHIP>
 static void
 perfcntr_pause(struct fd_acc_query *aq, struct fd_batch *batch) assert_dt
 {
    struct fd_batch_query_data *data = (struct fd_batch_query_data *)aq->query_data;
    fd_cs cs(batch->draw);
 
-   fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
+   emit_counter_barrier<CHIP>(cs);
 
    /* TODO do we need to bother to turn anything off? */
 
@@ -930,15 +932,17 @@ perfcntr_cleanup(void *query_data)
    }
 }
 
+template <chip CHIP>
 static const struct fd_acc_sample_provider perfcntr = {
    .query_type = FD_QUERY_FIRST_PERFCNTR,
    .always = true,
-   .resume = perfcntr_resume,
-   .pause = perfcntr_pause,
+   .resume = perfcntr_resume<CHIP>,
+   .pause = perfcntr_pause<CHIP>,
    .result = perfcntr_accumulate_result,
    .cleanup = perfcntr_cleanup,
 };
 
+template <chip CHIP>
 static struct pipe_query *
 fd6_create_batch_query(struct pipe_context *pctx, unsigned num_queries,
                        unsigned *query_types)
@@ -995,7 +999,7 @@ fd6_create_batch_query(struct pipe_context *pctx, unsigned num_queries,
       }
    }
 
-   q = fd_acc_create_query2(ctx, 0, 0, &perfcntr);
+   q = fd_acc_create_query2(ctx, 0, 0, &perfcntr<CHIP>);
    aq = fd_acc_query(q);
 
    /* sample buffer size is based on # of queries: */
@@ -1022,7 +1026,7 @@ fd6_query_context_init(struct pipe_context *pctx) disable_thread_safety_analysis
    ctx->record_timestamp = record_timestamp<CHIP>;
    ctx->ts_to_ns = ticks_to_ns;
 
-   pctx->create_batch_query = fd6_create_batch_query;
+   pctx->create_batch_query = fd6_create_batch_query<CHIP>;
 
    fd_acc_query_register_provider(pctx, &occlusion_counter<CHIP>);
    fd_acc_query_register_provider(pctx, &occlusion_predicate<CHIP>);

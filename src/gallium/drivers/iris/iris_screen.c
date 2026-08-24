@@ -489,6 +489,10 @@ iris_init_screen_caps(struct iris_screen *screen)
     */
    caps->two_sided_color = false;
 
+   caps->device_type = devinfo->has_local_mem
+      ? PIPE_DEVICE_TYPE_DISCRETE_GPU
+      : PIPE_DEVICE_TYPE_INTEGRATED_GPU;
+
    if (devinfo->ver >= 9) {
       caps->shader_subgroup_size = 32;
       caps->shader_subgroup_supported_stages = BITFIELD_MASK(MESA_SHADER_STAGES);

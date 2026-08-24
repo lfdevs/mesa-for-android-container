@@ -719,7 +719,7 @@ bool gfx10_is_ngg_passthrough(struct si_shader *shader)
    return sel->stage != MESA_SHADER_GEOMETRY && !si_shader_culling_enabled(shader);
 }
 
-template <enum si_has_tess HAS_TESS>
+template <enum si_has_tess HAS_TESS, enum si_has_ms HAS_MS>
 static void gfx10_emit_shader_ngg(struct si_context *sctx, unsigned index)
 {
    struct si_shader *shader = sctx->queued.named.gs;
@@ -764,6 +764,15 @@ static void gfx10_emit_shader_ngg(struct si_context *sctx, unsigned index)
    radeon_opt_set_sh_reg(R_00B204_SPI_SHADER_PGM_RSRC4_GS,
                          AC_TRACKED_SPI_SHADER_PGM_RSRC4_GS,
                          shader->ngg.spi_shader_pgm_rsrc4_gs);
+                         
+   /* Emit MESHLET registers for mesh shaders on GFX11+ APUs. */
+   if (HAS_MS && sctx->gfx_level >= GFX11) {
+      radeon_opt_set_sh_reg2(R_00B2B0_SPI_SHADER_GS_MESHLET_DIM, 
+                              AC_TRACKED_SPI_SHADER_GS_MESHLET_DIM,
+                              shader->ngg.spi_shader_gs_meshlet_dim,
+                              shader->ngg.spi_shader_gs_meshlet_exp_alloc);
+   }
+
    radeon_opt_set_uconfig_reg(R_030980_GE_PC_ALLOC, AC_TRACKED_GE_PC_ALLOC,
                               shader->ngg.ge_pc_alloc);
    radeon_end();
@@ -1057,9 +1066,11 @@ static void gfx10_shader_ngg(struct si_screen *sscreen, struct si_shader *shader
          pm4->atom.emit = gfx11_dgpu_emit_shader_ngg<TESS_OFF, MS_OFF>;
    } else {
       if (es_stage == MESA_SHADER_TESS_EVAL)
-         pm4->atom.emit = gfx10_emit_shader_ngg<TESS_ON>;
+         pm4->atom.emit = gfx10_emit_shader_ngg<TESS_ON, MS_OFF>;
+      else if (gs_stage == MESA_SHADER_MESH)
+         pm4->atom.emit = gfx10_emit_shader_ngg<TESS_OFF, MS_ON>;
       else
-         pm4->atom.emit = gfx10_emit_shader_ngg<TESS_OFF>;
+         pm4->atom.emit = gfx10_emit_shader_ngg<TESS_OFF, MS_OFF>;
    }
 
    va = shader->bo->gpu_address;

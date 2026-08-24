@@ -52,6 +52,8 @@ enum clc_spirv_version {
 struct clc_optional_features {
    bool atomic_order_seq_cst;
    bool atomic_scope_device;
+   bool atomic_fp32_add;
+   bool atomic_fp32_minmax;
    bool extended_bit_ops;
    bool fp16;
    bool fp64;

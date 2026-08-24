@@ -321,7 +321,11 @@ static void emit_copies(pco_builder *b,
          copy->src = pco_ref_reset_mods(copy->src);
 
          util_dynarray_foreach (copies, pco_copy, blocking) {
-            if (pco_ref_get_temp(blocking->src) >=
+            if (blocking->done)
+               continue;
+
+            if (pco_ref_is_temp(blocking->src) &&
+                pco_ref_get_temp(blocking->src) >=
                    pco_ref_get_temp(copy->dest) &&
                 pco_ref_get_temp(blocking->src) <
                    (pco_ref_get_temp(copy->dest) + 1)) {
@@ -1160,6 +1164,9 @@ bool pco_ra(pco_shader *shader)
          hw_vtxins = MAX2(hw_vtxins, rogue_get_vtxins());
       }
    }
+
+   /* FIXME: Temporarily disable vtxin allocation due to vec handling bug. */
+   hw_vtxins = 0;
 
    /* TODO: different number of temps available if preamble/phase change. */
    /* TODO: different number of temps available if barriers are in use. */

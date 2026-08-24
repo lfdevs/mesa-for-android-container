@@ -512,6 +512,18 @@ _mesa_bufferobj_map_range(struct gl_context *ctx,
                                                         transfer_flags,
                                                         &obj->transfer[index]);
    if (obj->Mappings[index].Pointer) {
+      /* Some games (e.g. Little Inferno) only partially write the mapped
+       * range and rely on the untouched bytes reading back as zero when
+       * drawn, which happens to be true with drivers that map buffer
+       * storage directly (llvmpipe), but not with staging-buffer uploads.
+       */
+      if (unlikely(ctx->st_opts->zero_invalidated_buffers) &&
+          index == MAP_USER &&
+          transfer_flags & (PIPE_MAP_DISCARD_RANGE |
+                            PIPE_MAP_DISCARD_WHOLE_RESOURCE) &&
+          !(transfer_flags & PIPE_MAP_READ))
+         memset(obj->Mappings[index].Pointer, 0, length);
+
       obj->Mappings[index].Offset = offset;
       obj->Mappings[index].Length = length;
       obj->Mappings[index].AccessFlags = access;

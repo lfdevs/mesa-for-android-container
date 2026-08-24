@@ -720,7 +720,9 @@ v3dX(emit_state)(struct pipe_context *pctx)
         if (v3d->dirty & V3D_DIRTY_OQ) {
                 cl_emit(&job->bcl, OCCLUSION_QUERY_COUNTER, counter) {
                         if (v3d->active_queries && v3d->current_oq) {
-                                counter.address = cl_address(v3d->current_oq, 0);
+                                counter.address =
+                                        cl_address(v3d->current_oq,
+                                                   v3d->current_oq_offset);
                         }
                 }
         }

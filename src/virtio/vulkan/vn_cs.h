@@ -8,7 +8,7 @@
 
 #include "vn_common.h"
 
-#include "venus-protocol/vn_protocol_driver_info.h"
+#include "vn_protocol_driver_info.h"
 
 #define VN_CS_ENCODER_BUFFER_INITIALIZER(storage)                            \
    (struct vn_cs_encoder_buffer)                                             \
@@ -23,7 +23,7 @@
       .storage_type = VN_CS_ENCODER_STORAGE_POINTER,                         \
       .buffers = &VN_CS_ENCODER_BUFFER_INITIALIZER(storage),                 \
       .buffer_count = 1, .buffer_max = 1, .current_buffer_size = size,       \
-      .cur = storage, .end = (const void *)(storage) + (size),               \
+      .cur = storage, .end = (const char *)(storage) + (size),               \
    }
 
 #define VN_CS_ENCODER_INITIALIZER(buf, size)                                 \
@@ -31,13 +31,13 @@
    {                                                                         \
       .storage_type = VN_CS_ENCODER_STORAGE_POINTER, .buffers = (buf),       \
       .buffer_count = 1, .buffer_max = 1, .current_buffer_size = size,       \
-      .cur = (buf)->base, .end = (buf)->base + (size),                       \
+      .cur = (buf)->base, .end = (const char *)(buf)->base + (size),         \
    }
 
 #define VN_CS_DECODER_INITIALIZER(storage, size)                             \
    (struct vn_cs_decoder)                                                    \
    {                                                                         \
-      .cur = storage, .end = (const void *)(storage) + (size),               \
+      .cur = storage, .end = (const char *)(storage) + (size),               \
    }
 
 enum vn_cs_encoder_storage_type {
@@ -151,7 +151,7 @@ vn_cs_encoder_get_len(const struct vn_cs_encoder *enc)
    const struct vn_cs_encoder_buffer *cur_buf =
       &enc->buffers[enc->buffer_count - 1];
    if (!cur_buf->committed_size)
-      len += enc->cur - cur_buf->base;
+      len += (const char *)enc->cur - (const char *)cur_buf->base;
    return len;
 }
 
@@ -164,12 +164,12 @@ vn_cs_encoder_reserve_internal(struct vn_cs_encoder *enc, size_t size);
 static inline bool
 vn_cs_encoder_reserve(struct vn_cs_encoder *enc, size_t size)
 {
-   if (unlikely(size > enc->end - enc->cur)) {
+   if (unlikely(size > (const char *)enc->end - (const char *)enc->cur)) {
       if (!vn_cs_encoder_reserve_internal(enc, size)) {
          vn_cs_encoder_set_fatal(enc);
          return false;
       }
-      assert(size <= enc->end - enc->cur);
+      assert(size <= (const char *)enc->end - (const char *)enc->cur);
    }
 
    return true;
@@ -182,11 +182,11 @@ vn_cs_encoder_write(struct vn_cs_encoder *enc,
                     size_t val_size)
 {
    assert(val_size <= size);
-   assert(size <= enc->end - enc->cur);
+   assert(size <= (const char *)enc->end - (const char *)enc->cur);
 
    /* we should not rely on the compiler to optimize away memcpy... */
    memcpy(enc->cur, val, val_size);
-   enc->cur += size;
+   enc->cur = (char *)enc->cur + size;
 }
 
 void
@@ -215,7 +215,7 @@ vn_cs_decoder_peek_internal(const struct vn_cs_decoder *dec,
 {
    assert(val_size <= size);
 
-   if (unlikely(size > dec->end - dec->cur)) {
+   if (unlikely(size > (const char *)dec->end - (const char *)dec->cur)) {
       vn_cs_decoder_set_fatal(dec);
       memset(val, 0, val_size);
       return false;
@@ -233,7 +233,7 @@ vn_cs_decoder_read(struct vn_cs_decoder *dec,
                    size_t val_size)
 {
    if (vn_cs_decoder_peek_internal(dec, size, val, val_size))
-      dec->cur += size;
+      dec->cur = (const char *)dec->cur + size;
 }
 
 static inline void

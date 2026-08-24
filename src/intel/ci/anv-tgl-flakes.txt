@@ -1,2 +1,7 @@
 dEQP-VK.subgroups.clustered.compute.subgroupclusteredmul_u64vec4_requiredsubgroupsize
 dEQP-VK.video.encode.h265.usage_layered_src_video_layout
+
+# See this entry in the VKCTS 1.4.5.3 -> 1.4.6.1 uprev fails list.
+dEQP-VK.api.copy_and_blit.core.use_after_copy.*
+dEQP-VK.drm_format_modifiers.export_import_fmt_features2_with_suballoc.b10g11r11_ufloat_pack32
+dEQP-VK.drm_format_modifiers.export_import_fmt_features2.b10g11r11_ufloat_pack32

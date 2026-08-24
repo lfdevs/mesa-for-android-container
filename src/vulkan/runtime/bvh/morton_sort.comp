@@ -1,0 +1,622 @@
+/*
+ * Copyright © 2026 Valve Corporation
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#version 460
+
+#define VK_USED_BUILD_FLAGS VK_MORTON_BUILD_FLAGS
+#include "vk_bvh_helpers.h"
+
+layout(local_size_x_id = MORTON_SORT_WORKGROUP_SIZE_ID, local_size_y = 1, local_size_z = 1) in;
+
+#define KEYVALS_PER_WG (MORTON_SORT_WORKGROUP_SIZE * MORTON_SORT_KVS_PER_THREAD)
+
+uint32_t
+morton_component(uint32_t x)
+{
+   x = (x * 0x00010001u) & 0xFF0000FFu;
+   x = (x * 0x00000101u) & 0x0F00F00Fu;
+   x = (x * 0x00000011u) & 0xC30C30C3u;
+   x = (x * 0x00000005u) & 0x49249249u;
+   return x;
+}
+
+uint64_t
+morton_component64(uint64_t x)
+{
+   x = (x | x << 32) & 0x1f00000000fffful;
+   x = (x | x << 16) & 0x1f0000ff0000fful;
+   x = (x | x << 8) & 0x100f00f00f00f00ful;
+   x = (x | x << 4) & 0x10c30c30c30c30c3ul;
+   x = (x | x << 2) & 0x1249249249249249ul;
+   return x;
+}
+
+uint32_t
+morton_code(uint32_t x, uint32_t y, uint32_t z)
+{
+   return (morton_component(x) << 2) | (morton_component(y) << 1) | morton_component(z);
+}
+
+uint64_t
+morton_code64(uint64_t x, uint64_t y, uint64_t z)
+{
+   return (morton_component64(x) << 2) | (morton_component64(y) << 1) | morton_component64(z);
+}
+
+uint32_t
+lbvh_key(float x01, float y01, float z01)
+{
+   /* To sort all valid nodes before invalid ones, we do min(0xfffffffe). */
+   return min(morton_code(uint32_t(x01 * 255.0), uint32_t(y01 * 255.0), uint32_t(z01 * 255.0)) << 8, 0xfffffffeu);
+}
+
+uint64_t
+lbvh_key64(float x01, float y01, float z01)
+{
+   return morton_code64(uint64_t(x01 * float(0x1fffff)), uint64_t(y01 * float(0x1fffff)), uint64_t(z01 * float(0x1fffff)));
+}
+
+vec3
+calculate_normalized_center(REF(vk_ir_header) header, VOID_REF bvh, uint32_t id)
+{
+      uint32_t offset = (id == VK_BVH_INVALID_NODE) ? 0 : ir_id_to_offset(id);
+      vk_aabb bounds = DEREF(REF(vk_ir_node)OFFSET(bvh, offset)).aabb;
+      vec3 center = (bounds.min + bounds.max) * 0.5;
+
+      vk_aabb bvh_bounds;
+      bvh_bounds.min.x = from_emulated_float(DEREF(header).min_bounds[0]);
+      bvh_bounds.min.y = from_emulated_float(DEREF(header).min_bounds[1]);
+      bvh_bounds.min.z = from_emulated_float(DEREF(header).min_bounds[2]);
+      bvh_bounds.max.x = from_emulated_float(DEREF(header).max_bounds[0]);
+      bvh_bounds.max.y = from_emulated_float(DEREF(header).max_bounds[1]);
+      bvh_bounds.max.z = from_emulated_float(DEREF(header).max_bounds[2]);
+
+      return (center - bvh_bounds.min) / (bvh_bounds.max - bvh_bounds.min);
+}
+
+key32_id_pair
+get_key32(REF(vk_ir_header) header, VOID_REF bvh, uint32_t id)
+{
+   vec3 normalized_center = calculate_normalized_center(header, bvh, id);
+   uint32_t key = lbvh_key(normalized_center.x, normalized_center.y, normalized_center.z);
+   /* INVALID_NODE ids must have INVALID_KEY as their key. */
+   if (id == VK_BVH_INVALID_NODE)
+      key = 0xFFFFFFFF;
+   return key32_id_pair(id, key);
+}
+
+key64_id_pair
+get_key64(REF(vk_ir_header) header, VOID_REF bvh, uint32_t id)
+{
+   vec3 normalized_center = calculate_normalized_center(header, bvh, id);
+   uint64_t key = lbvh_key64(normalized_center.x, normalized_center.y, normalized_center.z);
+   /* INVALID_NODE ids must have INVALID_KEY as their key. */
+   if (id == VK_BVH_INVALID_NODE)
+      key = 0xFFFFFFFFFFFFFFFFul;
+   return key64_id_pair(id, unpackUint2x32(key).x, unpackUint2x32(key).y);
+}
+
+bool
+compare_key64(key64_id_pair a, key64_id_pair b)
+{
+   uint64_t left_key = packUint2x32(u32vec2(a.key_lo, a.key_hi));
+   uint64_t right_key = packUint2x32(u32vec2(b.key_lo, b.key_hi));
+   return left_key < right_key;
+}
+
+bool
+compare_key64_gt(key64_id_pair a, key64_id_pair b)
+{
+   uint64_t left_key = packUint2x32(u32vec2(a.key_lo, a.key_hi));
+   uint64_t right_key = packUint2x32(u32vec2(b.key_lo, b.key_hi));
+   return left_key > right_key;
+}
+
+key64_id_pair
+shuffle_key64(key64_id_pair val, uint lane)
+{
+   return key64_id_pair(subgroupShuffle(val.id, lane), subgroupShuffle(val.key_lo, lane),
+                        subgroupShuffle(val.key_hi, lane));
+}
+
+bool
+compare_key32(key32_id_pair a, key32_id_pair b)
+{
+   return a.key < b.key;
+}
+
+bool
+compare_key32_gt(key32_id_pair a, key32_id_pair b)
+{
+   return a.key > b.key;
+}
+
+key32_id_pair
+shuffle_key32(key32_id_pair val, uint lane)
+{
+   return key32_id_pair(subgroupShuffle(val.id, lane), subgroupShuffle(val.key, lane));
+}
+
+#ifdef MORTON_SORT_KEY64
+#define KEY_T                key64_id_pair
+#define INVALID_KEY          key64_id_pair(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
+#define GET_KEY              get_key64
+#define KEY_REF              REF(key64_id_pair)
+#define KEY_COMPARE          compare_key64
+#define KEY_COMPARE_GT       compare_key64_gt
+#define KEY_SUBGROUP_SHUFFLE shuffle_key64
+#else
+#define KEY_T                key32_id_pair
+#define INVALID_KEY          key32_id_pair(0xFFFFFFFF, 0xFFFFFFFF)
+#define GET_KEY              get_key32
+#define KEY_REF              REF(key32_id_pair)
+#define KEY_COMPARE          compare_key32
+#define KEY_COMPARE_GT       compare_key32_gt
+#define KEY_SUBGROUP_SHUFFLE shuffle_key32
+#endif
+
+layout(push_constant) uniform CONSTS
+{
+   morton_sort_args args;
+};
+
+shared kvs_block
+{
+   KEY_T shared_kvs[KEYVALS_PER_WG];
+};
+
+shared wg_id
+{
+   uint32_t shared_wg_id;
+};
+
+shared per_wg_merge_params
+{
+   uint32_t shared_first_a_index;
+   uint32_t shared_first_b_index;
+   uint32_t shared_next_a_index;
+   uint32_t shared_next_b_index;
+};
+
+void
+load_keyvals_split(out KEY_T local_kvs[MORTON_SORT_KVS_PER_THREAD], KEY_REF src, uint32_t start1, uint32_t len1,
+                   uint32_t start2, uint32_t len2)
+{
+   uint32_t idx = gl_LocalInvocationID.x;
+   uint32_t first_idx = idx * MORTON_SORT_KVS_PER_THREAD;
+   uint32_t last_idx = idx * MORTON_SORT_KVS_PER_THREAD + (MORTON_SORT_KVS_PER_THREAD - 1);
+   uint32_t total_len = len1 + len2;
+   bool straddles_bounds = (first_idx < len1 && last_idx >= len1) || last_idx >= total_len;
+   if (!straddles_bounds) {
+      uint32_t base = first_idx >= len1 ? start2 + (first_idx - len1) : start1 + first_idx;
+      for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+         local_kvs[i] = DEREF(INDEX(KEY_T, src, base + i));
+      }
+   } else {
+      for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+         uint32_t iter_idx = first_idx + i;
+         if (iter_idx < len1)
+            local_kvs[i] = DEREF(INDEX(KEY_T, src, start1 + iter_idx));
+         else if (iter_idx < total_len)
+            local_kvs[i] = DEREF(INDEX(KEY_T, src, start2 + (first_idx - len1) + i));
+         else
+            local_kvs[i] = INVALID_KEY;
+      }
+   }
+}
+
+void
+store_keyvals_to_global(KEY_T local_kvs[MORTON_SORT_KVS_PER_THREAD], KEY_REF dst, uint32_t start, uint32_t len)
+{
+   uint32_t idx = gl_LocalInvocationID.x;
+   bool oob = idx * MORTON_SORT_KVS_PER_THREAD + (MORTON_SORT_KVS_PER_THREAD - 1) >= len;
+   if (!oob) {
+      for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+         uint32_t iter_idx = idx * MORTON_SORT_KVS_PER_THREAD + i;
+         DEREF(INDEX(KEY_T, dst, start + iter_idx)) = local_kvs[i];
+      }
+   } else {
+      for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+         uint32_t iter_idx = idx * MORTON_SORT_KVS_PER_THREAD + i;
+         if (iter_idx < len)
+            DEREF(INDEX(KEY_T, dst, start + iter_idx)) = local_kvs[i];
+      }
+   }
+}
+
+void
+store_keyvals_to_shared(KEY_T local_kvs[MORTON_SORT_KVS_PER_THREAD])
+{
+   uint32_t idx = gl_LocalInvocationID.x;
+   for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+      uint32_t iter_idx = idx * MORTON_SORT_KVS_PER_THREAD + i;
+      shared_kvs[iter_idx] = local_kvs[i];
+   }
+}
+
+/* Workgroup-level merge sort adapted from
+ * https://moderngpu.github.io/mergesort.html
+ */
+
+/* For a given first destination element first_dst_elem and lists A/B, find the
+ * first element from A that is merged into the final list at the index
+ * first_dst_elem.
+ */
+uint32_t
+find_first_src_elem(uint32_t src_a_start, uint32_t src_a_len, uint32_t src_b_start, uint32_t src_b_len,
+                    uint32_t first_dst_elem, bool global, KEY_REF src)
+{
+   /* This thread handles elements
+    * [first_dst_elem..first_dst_elem+MORTON_SORT_KVS_PER_THREAD], but previous threads
+    * may have anywhere from 0 to `first_dst_elem` elements out of A in their
+    * respective segments.
+    */
+   uint32_t first_a_index_max = min(src_a_len, first_dst_elem);
+
+   uint32_t first_a_index_min = 0;
+   if (first_dst_elem > src_b_len) {
+      /* If first_dst_elem is larger than src_b_len, previous threads must have
+       * picked at least this many elements from A, because there is nothing else
+       * to pick even if all elements of B come first.
+       */
+      first_a_index_min = first_dst_elem - src_b_len;
+   }
+
+   /* Now that we have a range of possible first indices, narrow down the range
+    * with a binary-search-like approach.
+    */
+   while (first_a_index_min < first_a_index_max) {
+      uint32_t midpoint = (first_a_index_min + first_a_index_max) / 2;
+      KEY_T a_key, b_key;
+
+      /* Since all elements that aren't in A must
+       * come from B, we can infer that if a_index denotes the first element from A,
+       * the index of the first element from B must be first_dst_elem - a_index.
+       * The key we load here is one *before* the first key from B, i.e. the last key
+       * from B that was already merged into the final list by previous threads.
+       */
+      if (global) {
+         a_key = DEREF(INDEX(KEY_T, src, src_a_start + midpoint));
+         b_key = DEREF(INDEX(KEY_T, src, src_b_start + first_dst_elem - 1 - midpoint));
+      } else {
+         a_key = shared_kvs[src_a_start + midpoint];
+         b_key = shared_kvs[src_b_start + first_dst_elem - 1 - midpoint];
+      }
+      /*
+       * Compare the candidate first A key to the B key.
+       * If this candidate key is smaller than the B key we fetched, it is impossible
+       * for this candidate to be the first merged key, because b_key would occur in the merged
+       * list before a_key. Therefore, there must be more keys from A in the final merged
+       * list, so first_a_index_min = midpoint + 1.
+       *
+       * If the candidate key is larger or equal to the last-merged B key, we know previous threads have
+       * merged at most this many keys from A. If previous threads had merged more keys from A,
+       * this key from B would be left for our thread to merge into the list, which would again
+       * make the final list unsorted and is therefore impossible.
+       */
+      if (KEY_COMPARE(a_key, b_key))
+         first_a_index_min = midpoint + 1;
+      else
+         first_a_index_max = midpoint;
+   }
+   return first_a_index_min;
+}
+
+void
+merge_shared_kv_list(out KEY_T local_kvs[MORTON_SORT_KVS_PER_THREAD], uint32_t dst_threads_per_list,
+                     uint32_t src_a_start, uint32_t src_a_len, uint32_t src_b_start, uint32_t src_b_len)
+{
+   uint32_t dst_thread_index_in_list = gl_LocalInvocationID.x % dst_threads_per_list;
+   uint32_t first_dst_elem = dst_thread_index_in_list * MORTON_SORT_KVS_PER_THREAD;
+
+   if (first_dst_elem >= src_a_len + src_b_len)
+      return;
+
+   uint32_t first_a_index =
+      find_first_src_elem(src_a_start, src_a_len, src_b_start, src_b_len, first_dst_elem, false, KEY_REF(0ul));
+
+   /* An element from A being picked means the corresponding element from B isn't
+    * being picked. The number of elements from b that have been picked by
+    * previous threads is therefore the total number of elements picked by
+    * previous threads, minus the number of elements from A.
+    */
+   uint32_t first_b_index = first_dst_elem - first_a_index;
+
+   KEY_T a_key = shared_kvs[src_a_start + first_a_index];
+   KEY_T b_key = shared_kvs[src_b_start + first_b_index];
+
+   for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+      if (first_dst_elem + i >= src_a_len + src_b_len)
+         break;
+
+      bool pick_a;
+      if (first_b_index >= src_b_len)
+         pick_a = true;
+      else if (first_a_index >= src_a_len)
+         pick_a = false;
+      else
+         pick_a = KEY_COMPARE(a_key, b_key);
+
+      if (pick_a) {
+         local_kvs[i] = a_key;
+         ++first_a_index;
+         a_key = shared_kvs[src_a_start + first_a_index];
+      } else {
+         local_kvs[i] = b_key;
+         ++first_b_index;
+         b_key = shared_kvs[src_b_start + first_b_index];
+      }
+   }
+}
+
+void
+subgroup_bitonic_merge_step(inout KEY_T local_kvs[MORTON_SORT_KVS_PER_THREAD], uint32_t dst_width)
+{
+   if (dst_width > gl_SubgroupSize * MORTON_SORT_KVS_PER_THREAD)
+      return;
+
+   uint32_t input_base = gl_SubgroupInvocationID.x * MORTON_SORT_KVS_PER_THREAD;
+   [[unroll]]
+   for (uint32_t delta_div = 2; delta_div <= dst_width; delta_div *= 2) {
+      uint32_t delta = dst_width / delta_div;
+      KEY_T new_local_kvs[MORTON_SORT_KVS_PER_THREAD];
+      for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+         new_local_kvs[i] = local_kvs[i];
+      }
+
+      for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+         KEY_T test_kv;
+         uint32_t input_idx = input_base + i;
+         if (delta >= MORTON_SORT_KVS_PER_THREAD)
+            test_kv =
+               KEY_SUBGROUP_SHUFFLE(local_kvs[i], gl_SubgroupInvocationID ^ (delta / MORTON_SORT_KVS_PER_THREAD));
+         else
+            test_kv = local_kvs[i ^ delta];
+
+         bool flip_comparator = (input_idx & dst_width) != 0;
+         if ((input_idx & delta) != 0)
+            flip_comparator = !flip_comparator;
+
+         bool comparator;
+         if (flip_comparator)
+            comparator = KEY_COMPARE_GT(test_kv, local_kvs[i]);
+         else
+            comparator = KEY_COMPARE(test_kv, local_kvs[i]);
+
+         if (comparator)
+            new_local_kvs[i] = test_kv;
+         else
+            new_local_kvs[i] = local_kvs[i];
+      }
+      for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+         local_kvs[i] = new_local_kvs[i];
+      }
+   }
+}
+
+void
+subgroup_bitonic_merge(inout KEY_T local_kvs[MORTON_SORT_KVS_PER_THREAD])
+{
+   /* NIR unfortunately can't unroll this loop. Unroll the outer loop manually and only have the
+    * loop construct as a fallback in case gl_SubgroupSize * MORTON_SORT_KVS_PER_THREAD exceeds 512.
+    * This shouldn't really happen, so it should be practically dead code, but in case something does hit this,
+    * it's better to generate suboptimal correct code than to output incorrect sorts.
+    */
+   subgroup_bitonic_merge_step(local_kvs, 2);
+   subgroup_bitonic_merge_step(local_kvs, 4);
+   subgroup_bitonic_merge_step(local_kvs, 8);
+   subgroup_bitonic_merge_step(local_kvs, 16);
+   subgroup_bitonic_merge_step(local_kvs, 32);
+   subgroup_bitonic_merge_step(local_kvs, 64);
+   subgroup_bitonic_merge_step(local_kvs, 128);
+   subgroup_bitonic_merge_step(local_kvs, 256);
+   subgroup_bitonic_merge_step(local_kvs, 512);
+   if (gl_SubgroupSize * MORTON_SORT_KVS_PER_THREAD > 512) {
+      for (uint32_t dst_width = 1024; dst_width <= gl_SubgroupSize * MORTON_SORT_KVS_PER_THREAD; dst_width *= 2)
+         subgroup_bitonic_merge_step(local_kvs, dst_width);
+   }
+}
+
+/* Merges two lists of list_length keyvals into one list_length * 2-long list.
+ * Each thread cooperatively handles MORTON_SORT_KVS_PER_THREAD elements of the
+ * destination list.
+ */
+void
+intra_wg_merge(inout KEY_T local_kvs[MORTON_SORT_KVS_PER_THREAD], uint32_t dst_threads_per_list)
+{
+   uint32_t src_threads_per_list = dst_threads_per_list / 2;
+   uint32_t src_list_len = src_threads_per_list * MORTON_SORT_KVS_PER_THREAD;
+
+   uint32_t list_index = gl_LocalInvocationID.x / dst_threads_per_list;
+
+   uint32_t src_a_start = list_index * 2 * src_list_len;
+   uint32_t src_b_start = src_a_start + src_list_len;
+
+   store_keyvals_to_shared(local_kvs);
+
+   barrier();
+
+   merge_shared_kv_list(local_kvs, dst_threads_per_list, src_a_start, src_list_len, src_b_start, src_list_len);
+}
+
+void
+per_wg_merge(uint32_t kv_count, uint32_t wg_id, uint32_t dst_wgs_per_list, KEY_REF src, KEY_REF dst)
+{
+   uint32_t dst_list_len = dst_wgs_per_list * KEYVALS_PER_WG;
+
+   uint32_t src_wgs_per_list = dst_wgs_per_list / 2;
+   uint32_t src_list_len = src_wgs_per_list * KEYVALS_PER_WG;
+
+   uint32_t list_index = wg_id / dst_wgs_per_list;
+   uint32_t dst_list_start = list_index * dst_list_len;
+
+   uint32_t dst_wg_index_in_list = wg_id % dst_wgs_per_list;
+   uint32_t first_dst_elem = dst_wg_index_in_list * KEYVALS_PER_WG;
+   uint32_t elem_start_idx = min(dst_list_start + first_dst_elem, kv_count);
+   uint32_t items_to_write = min(KEYVALS_PER_WG, kv_count - elem_start_idx);
+
+   dst_list_len = min(kv_count - dst_list_start, dst_list_len);
+
+   uint32_t src_a_start = list_index * 2 * src_list_len;
+   uint32_t src_a_len = min(src_list_len, kv_count - src_a_start);
+
+   uint32_t src_b_start = src_a_start + src_a_len;
+   uint32_t src_b_len = min(src_list_len, kv_count - src_b_start);
+
+   if (gl_LocalInvocationID.x == 0) {
+      shared_first_a_index =
+         find_first_src_elem(src_a_start, src_a_len, src_b_start, src_b_len, first_dst_elem, true, src);
+      shared_first_b_index = first_dst_elem - shared_first_a_index;
+
+      /* We know we're going to merge KEYVALS_PER_WG items, but we don't yet know which list we're going
+       * to take them from. We may take all KEYVALS_PER_WG items from either list A or B, but we only have
+       * space for KEYVALS_PER_WG items in total. Instead of allocating for the worst case, do another binary
+       * search for the items belonging to the workgroup after us. The range from
+       * "first element belonging to this workgroup" to "first element belonging to next workgroup" is precisely
+       * the range containing elements we will merge.
+       */
+      shared_next_a_index =
+         find_first_src_elem(src_a_start, src_a_len, src_b_start, src_b_len, first_dst_elem + items_to_write, true, src);
+      shared_next_b_index = (first_dst_elem + items_to_write) - shared_next_a_index;
+   }
+
+   barrier();
+   uint32_t first_a_index = shared_first_a_index;
+   uint32_t first_b_index = shared_first_b_index;
+   uint32_t next_a_index = shared_next_a_index;
+   uint32_t next_b_index = shared_next_b_index;
+   barrier();
+
+   uint32_t merge_a_len = next_a_index - first_a_index;
+   uint32_t merge_b_len = next_b_index - first_b_index;
+
+   KEY_T local_kvs[MORTON_SORT_KVS_PER_THREAD];
+   load_keyvals_split(local_kvs, src, src_a_start + first_a_index, merge_a_len, src_b_start + first_b_index,
+                      merge_b_len);
+
+   store_keyvals_to_shared(local_kvs);
+
+   barrier();
+
+   /* Shared memory now looks like this:
+    * [  list a  ][       list b       ]
+    * ^ 0         ^ merge_a_len        ^ merge_a_len + merge_b_len
+    * Merge the intervals (0, 0 + merge_a_len) and (merge_a_len, merge_a_len + merge_b_len)
+    * corresponding to lists a and b.
+    */
+   merge_shared_kv_list(local_kvs, MORTON_SORT_WORKGROUP_SIZE, 0, merge_a_len, merge_a_len, merge_b_len);
+
+   store_keyvals_to_global(local_kvs, dst, dst_list_start + first_dst_elem, items_to_write);
+}
+
+void
+main()
+{
+   uint32_t kv_count = args.leaf_count;
+
+   uint32_t num_wgs_done = 0;
+   while (true) {
+      uint32_t cur_wg_id;
+      if (gl_NumWorkGroups.x == 1) {
+         cur_wg_id = 0;
+         if (num_wgs_done > 0)
+            break;
+      } else {
+         if (gl_LocalInvocationID.x == 0) {
+            shared_wg_id = atomicAdd(DEREF(INDEX(morton_ready_count, args.counts, 0)).ready, 1);
+         }
+
+         barrier();
+
+         cur_wg_id = shared_wg_id;
+
+         if (cur_wg_id >= gl_NumWorkGroups.x)
+            break;
+
+         barrier();
+      }
+
+      KEY_T local_kvs[MORTON_SORT_KVS_PER_THREAD];
+      uint32_t wg_base = cur_wg_id * KEYVALS_PER_WG;
+      uint32_t base = wg_base + gl_LocalInvocationID.x * MORTON_SORT_KVS_PER_THREAD;
+      if (base + MORTON_SORT_KVS_PER_THREAD <= kv_count) {
+         for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+            uint32_t id_index = base + i;
+            uint32_t id = DEREF(INDEX(uint32_t, args.ids_even, id_index));
+            local_kvs[i] = GET_KEY(args.header, args.bvh, id);
+         }
+      } else {
+         for (uint32_t i = 0; i < MORTON_SORT_KVS_PER_THREAD; ++i) {
+            uint32_t id_index = base + i;
+            if (id_index < kv_count) {
+               uint32_t id = DEREF(INDEX(uint32_t, args.ids_even, id_index));
+               local_kvs[i] = GET_KEY(args.header, args.bvh, id);
+            } else {
+               local_kvs[i] = INVALID_KEY;
+            }
+         }
+      }
+
+      subgroup_bitonic_merge(local_kvs);
+
+      /* Intra-workgroup cooperative merging steps */
+      for (uint multiplier = gl_SubgroupSize * 2; multiplier <= MORTON_SORT_WORKGROUP_SIZE; multiplier *= 2) {
+         intra_wg_merge(local_kvs, multiplier);
+         barrier();
+      }
+
+      store_keyvals_to_global(local_kvs, KEY_REF(args.ids_odd), wg_base, kv_count - wg_base);
+
+      barrier();
+      ++num_wgs_done;
+   }
+
+   uint32_t max_log2_multiplier = findMSB(gl_NumWorkGroups.x - 1) + 1;
+
+   uint32_t group_counter_base = 0;
+   uint32_t last_log2_multiplier = 0;
+   for (uint log2_multiplier = 1; log2_multiplier <= max_log2_multiplier;) {
+      bool pass_even = (log2_multiplier & 0x1) == 0;
+      KEY_REF cur_in = pass_even ? KEY_REF(args.ids_even) : KEY_REF(args.ids_odd);
+      KEY_REF cur_out = pass_even ? KEY_REF(args.ids_odd) : KEY_REF(args.ids_even);
+
+      uint32_t workgroup_multiplier = 1 << log2_multiplier;
+
+      controlBarrier(gl_ScopeWorkgroup, gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelease | gl_SemanticsMakeAvailable);
+
+      if (gl_LocalInvocationID.x == 0) {
+         if (num_wgs_done > 0) {
+            atomicAdd(DEREF(INDEX(morton_ready_count, args.counts, last_log2_multiplier)).done, num_wgs_done);
+            num_wgs_done = 0;
+         }
+         shared_wg_id = atomicAdd(DEREF(INDEX(morton_ready_count, args.counts, log2_multiplier)).ready, 1);
+      }
+
+      barrier();
+
+      last_log2_multiplier = log2_multiplier;
+      uint32_t cur_wg_id = shared_wg_id;
+
+      if (cur_wg_id >= gl_NumWorkGroups.x) {
+         ++log2_multiplier;
+         continue;
+      }
+
+      /* Spin waiting for outstanding work to finish. */
+      if (gl_LocalInvocationID.x == 0) {
+         while (atomicLoad(DEREF(INDEX(morton_ready_count, args.counts, log2_multiplier - 1)).done, gl_ScopeDevice,
+                           gl_StorageSemanticsBuffer,
+                           gl_SemanticsAcquire | gl_SemanticsMakeVisible) < gl_NumWorkGroups.x) {}
+      }
+
+      barrier();
+
+      memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsAcquire | gl_SemanticsMakeVisible);
+
+      per_wg_merge(kv_count, cur_wg_id, workgroup_multiplier, cur_in, cur_out);
+      num_wgs_done = 1;
+   }
+}

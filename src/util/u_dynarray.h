@@ -160,6 +160,10 @@ util_dynarray_clone(struct util_dynarray *buf, void *mem_ctx,
       memcpy(buf->data, from_buf->data, from_buf->size);
 }
 
+/* growbytes has already been checked for overflow by the inline wrapper. */
+MUST_CHECK ATTRIBUTE_NOINLINE void *
+util_dynarray_grow_bytes_slow(struct util_dynarray *buf, unsigned growbytes);
+
 MUST_CHECK static inline void *
 util_dynarray_grow_bytes(struct util_dynarray *buf, unsigned ngrow, size_t eltsize)
 {
@@ -169,14 +173,13 @@ util_dynarray_grow_bytes(struct util_dynarray *buf, unsigned ngrow, size_t eltsi
                 growbytes > UINT_MAX - buf->size))
       return NULL;
 
-   unsigned newsize = buf->size + growbytes;
-   void *p = util_dynarray_ensure_cap(buf, newsize);
-   if (!p)
-      return NULL;
+   if (likely(growbytes <= buf->capacity - buf->size)) {
+      void *p = (char *)buf->data + buf->size;
+      buf->size += growbytes;
+      return p;
+   }
 
-   buf->size = newsize;
-
-   return p;
+   return util_dynarray_grow_bytes_slow(buf, growbytes);
 }
 
 static inline void

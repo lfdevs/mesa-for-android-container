@@ -189,7 +189,10 @@ dri_sw_displaytarget_create_mapped(struct sw_winsys *winsys,
 {
    UNUSED struct dri_sw_winsys *ws = dri_sw_winsys(winsys);
    struct dri_sw_displaytarget *dri_sw_dt;
-   unsigned nblocksy, size;
+
+   if (whandle->offset + util_format_get_2d_size(format, stride, height) >
+       whandle->size)
+      return NULL;
 
    dri_sw_dt = CALLOC_STRUCT(dri_sw_displaytarget);
    if(!dri_sw_dt)
@@ -201,9 +204,7 @@ dri_sw_displaytarget_create_mapped(struct sw_winsys *winsys,
 
    dri_sw_dt->stride = stride;
 
-   nblocksy = util_format_get_nblocksy(format, height);
-   size = dri_sw_dt->stride * nblocksy;
-   dri_sw_dt->size = size;
+   dri_sw_dt->size = whandle->size;
 
    dri_sw_dt->shmid = -1;
    dri_sw_dt->fd = -1;

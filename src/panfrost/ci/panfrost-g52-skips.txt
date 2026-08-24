@@ -52,12 +52,6 @@ dEQP-VK.compute.pipeline.zero_initialize_workgroup_memory.max_workgroup_memory.6
 dEQP-VK.compute.pipeline.zero_initialize_workgroup_memory.types.f32mat3x3
 dEQP-VK.compute.pipeline.zero_initialize_workgroup_memory.types.f32mat4x4
 
-# tests are broken with Vulkan 1.0: https://gerrit.khronos.org/c/vk-gl-cts/+/19823
-dEQP-VK.wsi.direct_drm.*
-
-# more tests broken on Vulkan 1.0: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6409
-dEQP-VK.wsi.*.maintenance1.*.bind_image*
-
 # Almost all crashes
 dEQP-VK.wsi.*present_timing.*
 
@@ -72,3 +66,7 @@ dEQP-VK.wsi.xlib.incremental_present.scale_none.mailbox.horizontal_mirror.post_m
 
 # Intermittent timeouts
 dEQP-VK.wsi.wayland.swapchain.render.10swapchains.*
+
+# Nightly run expectations update
+spec@egl_ext_surface_compression@create
+

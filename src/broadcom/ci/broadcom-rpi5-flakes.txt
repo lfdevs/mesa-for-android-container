@@ -157,4 +157,6 @@ glx@glx-visuals-depth
 glx@glx-visuals-stencil
 wayland-dEQP-EGL.functional.sharing.gles2.multithread.random.programs.link.7
 
+dEQP-VK.draw.dynamic_rendering.complete_secondary_cmd_buff.multiple_interpolation.structured.no_sample_decoration.4_samples
+dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.multiple_interpolation.structured.no_sample_decoration.4_samples
 dEQP-VK.subgroups.basic.graphics.subgroupbarrier

@@ -101,6 +101,10 @@ void v3d_job_add_bo(struct v3d_job *job, struct v3d_bo *bo);
 #define V3D_JOB_MAX_SCISSORS 16
 #define V3D_JOB_MAX_BO_HANDLE_COUNT 2048
 #define V3D_JOB_MAX_BO_REFERENCED_SIZE (768 * 1024 * 1024)
+/* Keeps the amount of queued GPU work in the range where the kernel does not
+ * reset. Less than 500ms of work in a tile.
+ */
+#define V3D_JOB_MAX_DRAW_CALLS_QUEUED 16384
 
 enum v3d_sampler_state_variant {
         V3D_SAMPLER_STATE_BORDER_0000,
@@ -602,7 +606,7 @@ struct v3d_context {
 
         struct v3d_compiler_state *compiler_state;
 
-        uint8_t prim_mode;
+        enum mesa_prim prim_mode;
 
         /** Maximum index buffer valid for the current shader_rec. */
         uint32_t max_index;
@@ -709,6 +713,7 @@ struct v3d_context {
         struct v3d_vertexbuf_stateobj vertexbuf;
         struct v3d_streamout_stateobj streamout;
         struct v3d_bo *current_oq;
+        uint32_t current_oq_offset;
         struct pipe_resource *prim_counts;
         uint32_t prim_counts_offset;
         struct v3d_perfmon_state *active_perfmon;
@@ -839,7 +844,7 @@ void v3d_flush_jobs_reading_resource(struct v3d_context *v3d,
                                      struct pipe_resource *prsc,
                                      enum v3d_flush_cond flush_cond,
                                      bool is_compute_pipeline);
-void v3d_update_compiled_shaders(struct v3d_context *v3d, uint8_t prim_mode);
+void v3d_update_compiled_shaders(struct v3d_context *v3d, enum mesa_prim prim_mode);
 void v3d_update_compiled_cs(struct v3d_context *v3d);
 
 bool v3d_rt_format_is_emulated(enum pipe_format f);

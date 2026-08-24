@@ -18,9 +18,6 @@
 #include <inttypes.h>
 #include <util/bitscan.h>
 
-// Minimum supported sampling period in nanoseconds
-#define MIN_SAMPLING_PERIOD_NS 5000
-
 namespace pps
 {
 /// A data source supports one driver at a time, but if you need more
@@ -58,22 +55,15 @@ void GpuDataSource::OnSetup(const SetupArgs &args)
       driver->enable_all_counters();
    }
 
-   // Get sampling period
-   auto min_sampling_period = std::chrono::nanoseconds(MIN_SAMPLING_PERIOD_NS);
-
-   auto dev_supported = std::chrono::nanoseconds(driver->get_min_sampling_period_ns());
-   if (dev_supported > min_sampling_period) {
-      min_sampling_period = dev_supported;
-   }
-
-   time_to_sleep = std::max(time_to_sleep, min_sampling_period);
+   auto drv_min_sampling_period = std::chrono::nanoseconds(driver->get_min_sampling_period_ns());
+   time_to_sleep = std::max(time_to_sleep, drv_min_sampling_period);
 
    if (config.has_counter_period_ns()) {
       auto requested_sampling_period = std::chrono::nanoseconds(config.counter_period_ns());
-      if (requested_sampling_period < min_sampling_period) {
+      if (requested_sampling_period < drv_min_sampling_period) {
          PPS_LOG_ERROR("Sampling period should be greater than %" PRIu64 " ns (%.2f ms)",
-            uint64_t(min_sampling_period.count()),
-            ms(min_sampling_period));
+            uint64_t(drv_min_sampling_period.count()),
+            ms(drv_min_sampling_period));
       } else {
          time_to_sleep = requested_sampling_period;
       }
@@ -185,6 +175,18 @@ template <typename GpuCounterDescriptor> void add_descriptors(GpuCounterDescript
          break;
       case Counter::Units::None:
          units = GpuCounterDescriptor::NONE;
+         break;
+      case Counter::Units::Primitive:
+         units = GpuCounterDescriptor::PRIMITIVE;
+         break;
+      case Counter::Units::Instruction:
+         units = GpuCounterDescriptor::INSTRUCTION;
+         break;
+      case Counter::Units::Pixel:
+         units = GpuCounterDescriptor::PIXEL;
+         break;
+      case Counter::Units::Fragment:
+         units = GpuCounterDescriptor::FRAGMENT;
          break;
       default:
          assert(false && "Missing counter units type!");

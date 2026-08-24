@@ -1620,7 +1620,7 @@ d3d12_video_encoder_update_current_frame_pic_params_info_av1(struct d3d12_video_
       }
    }
 
-   D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 picParams = {};
+   d3d12_video_encoder_picture_control_codec_data_mutable picParams = {};
    picParams.pAV1PicData = pAV1PicData;
    picParams.DataSize = sizeof(*pAV1PicData);
    pD3D12Enc->m_upDPBManager->begin_frame(picParams, bUsedAsReference, picture);
@@ -2946,4 +2946,33 @@ d3d12_video_encoder_store_current_picture_references_av1(d3d12_video_encoder *pD
    // changes
    pD3D12Enc->m_spEncodedFrameMetadata[static_cast<size_t>(current_metadata_slot)].m_associatedEncodeConfig.m_encoderPicParamsDesc =
       pD3D12Enc->m_currentEncodeConfig.m_encoderPicParamsDesc;
+}
+
+uint32_t
+d3d12_video_encoder_build_codec_sequence_headers_av1(struct d3d12_video_encoder *pD3D12Enc,
+                                                     std::vector<uint64_t> &pWrittenCodecUnitsSizes)
+{
+   d3d12_video_bitstream_builder_av1 *pAV1BitstreamBuilder =
+      static_cast<d3d12_video_bitstream_builder_av1 *>(pD3D12Enc->m_upBitstreamBuilder.get());
+   assert(pAV1BitstreamBuilder);
+
+   pWrittenCodecUnitsSizes.clear();
+   size_t writtenSequenceHeaderBytes = 0;
+
+   av1_seq_header_t sequenceHeader = {};
+   EncodedBitstreamResolvedMetadata currentMetadata = {};
+   currentMetadata.m_associatedEncodeConfig = pD3D12Enc->m_currentEncodeConfig;
+   fill_av1_seq_header(currentMetadata, &sequenceHeader);
+   pAV1BitstreamBuilder->write_sequence_header(&sequenceHeader,
+                                               pD3D12Enc->m_BitstreamHeadersBuffer,
+                                               pD3D12Enc->m_BitstreamHeadersBuffer.begin(),
+                                               writtenSequenceHeaderBytes);
+   pWrittenCodecUnitsSizes.push_back(writtenSequenceHeaderBytes);
+
+   if (pD3D12Enc->m_BitstreamHeadersBuffer.size() > writtenSequenceHeaderBytes)
+      pD3D12Enc->m_BitstreamHeadersBuffer.resize(writtenSequenceHeaderBytes);
+
+   assert(std::accumulate(pWrittenCodecUnitsSizes.begin(), pWrittenCodecUnitsSizes.end(), 0ull) ==
+          pD3D12Enc->m_BitstreamHeadersBuffer.size());
+   return static_cast<uint32_t>(pD3D12Enc->m_BitstreamHeadersBuffer.size());
 }

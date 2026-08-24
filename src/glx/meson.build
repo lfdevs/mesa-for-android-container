@@ -57,6 +57,7 @@ files_libglx = files(
 extra_libs_libglx = []
 extra_deps_libgl = []
 extra_ld_args_libgl = []
+c_args_libglx = []
 
 if with_dri_platform == 'drm' or with_dri_platform == 'pseudo-drm'
   if host_machine.cpu_family() == 'x86' and not with_glx_read_only_text
@@ -69,6 +70,8 @@ endif
 if with_dri_platform == 'apple'
   files_libglx += files('applegl_glx.c')
   extra_libs_libglx += libappleglx
+  # applegl_glx.c and glxcmds.c include apple/apple_glx_*.h, which reference deprecated CGL types.
+  c_args_libglx += ['-DGL_SILENCE_DEPRECATION']
 elif with_dri_platform == 'windows'
   files_libglx += files('driwindows_glx.c')
   extra_libs_libglx += [
@@ -110,6 +113,7 @@ libglx = static_library(
   include_directories : [inc_include, inc_src, inc_glapi, inc_loader, inc_loader_x11,
                          inc_gallium, inc_mesa, inc_st_dri, inc_gallium_aux],
   gnu_symbol_visibility : 'hidden',
+  c_args : c_args_libglx,
   link_with : [
     libloader, libloader_x11,
     extra_libs_libglx, glx_gallium_link

@@ -192,6 +192,16 @@ invalid_pname:
 }
 
 
+bool
+_mesa_fog_coord_needs_deferred_abs(const struct gl_context *ctx)
+{
+   return ctx->VertexProgram._VPMode == VP_MODE_FF &&
+          ctx->Fog.FogCoordinateSource == GL_FRAGMENT_DEPTH_EXT &&
+          ctx->Fog.FogDistanceMode != GL_EYE_PLANE &&
+          ctx->Fog.FogDistanceMode != GL_EYE_RADIAL_NV;
+}
+
+
 /**********************************************************************/
 /*****                      Initialization                        *****/
 /**********************************************************************/

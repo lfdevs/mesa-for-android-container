@@ -628,9 +628,32 @@ CDX12EncHMFT::PrepareForEncode( IMFSample *pSample, LPDX12EncodeContext *ppDX12E
       templ.depth0 = 1;
       templ.array_size = 1;
 
+      if( m_spD3D12BitstreamMFBufferManager && m_spD3D12BitstreamMFBufferManager->GetWidth0() != templ.width0 )
+      {
+         MFE_INFO( "[dx12 hmft 0x%p] Recreating m_spD3D12BitstreamMFBufferManager due to size change (%d to %d)",
+                   this,
+                   m_spD3D12BitstreamMFBufferManager->GetWidth0(),
+                   templ.width0 );
+         HMFT_ETW_EVENT_INFO( "m_spD3D12BitstreamMFBufferManagerReset", this );
+         m_spD3D12BitstreamMFBufferManager.Reset();
+      }
+
       pDX12EncodeContext->pOutputBitRes.resize( num_output_buffers, NULL );
+      pDX12EncodeContext->spOutputBitResourceHolders.resize( num_output_buffers, NULL );
       pDX12EncodeContext->pSliceFences.resize( num_output_buffers, NULL );
       pDX12EncodeContext->pLastSliceFence = NULL;
+
+      // predict initial pool size to be 1 or MFT_INPUT_QUEUE_DEPTH frames + 1 potentially delayed returned frame.
+      const unsigned int delayed_return_frame_count = 1;
+      unsigned int initial_pool_size = ( m_bLowLatency ) ? (1 + delayed_return_frame_count) : MFT_INPUT_QUEUE_DEPTH + delayed_return_frame_count;
+      if( m_EncoderCapabilities.m_HWSupportSlicedFences.bits.multiple_buffers_required )
+      {
+         initial_pool_size = initial_pool_size * num_output_buffers;
+      }
+      // this would be the potentially maximum pool size before the MFT errors out if the app calling into the MFT keeps not
+      // releasing the buffers and triggering dynamic pool growth on each frame.
+      unsigned int max_pool_size = std::max( initial_pool_size, 1024u );
+
       for( uint32_t slice_idx = 0; slice_idx < num_output_buffers; slice_idx++ )
       {
          if( ( slice_idx > 0 ) && !m_EncoderCapabilities.m_HWSupportSlicedFences.bits.multiple_buffers_required )
@@ -639,15 +662,28 @@ CDX12EncHMFT::PrepareForEncode( IMFSample *pSample, LPDX12EncodeContext *ppDX12E
             // Increment reference count since we're sharing the same resource across multiple indices
             // and the context destructor will release each index separately
             pipe_resource_reference( &pDX12EncodeContext->pOutputBitRes[slice_idx], pDX12EncodeContext->pOutputBitRes[0] );
+            pDX12EncodeContext->spOutputBitResourceHolders[slice_idx] = pDX12EncodeContext->spOutputBitResourceHolders[0];
          }
          else
          {
             // sliced buffers + notifications with multiple individual buffers per slice
             // or, full frame bitstream (when num_output_buffers == 1)
-            CHECKNULL_GOTO(
-               pDX12EncodeContext->pOutputBitRes[slice_idx] = m_pVlScreen->pscreen->resource_create( m_pVlScreen->pscreen, &templ ),
-               E_OUTOFMEMORY,
-               done );
+            if( !m_spD3D12BitstreamMFBufferManager )
+            {
+               CHECKHR_GOTO( CD3D12BitstreamMFBufferManager::Create( this,
+                                                                     m_spDevice.Get(),
+                                                                     templ,
+                                                                     initial_pool_size,
+                                                                     max_pool_size,
+                                                                     m_spD3D12BitstreamMFBufferManager.GetAddressOf() ),
+                             done );
+            }
+
+            CD3D12ResourceHolder *resourceHolder = m_spD3D12BitstreamMFBufferManager->get_new_tracked_buffer();
+            CHECKNULL_GOTO( resourceHolder, E_OUTOFMEMORY, done );
+            pDX12EncodeContext->spOutputBitResourceHolders[slice_idx].Attach(resourceHolder);
+            pDX12EncodeContext->pOutputBitRes[slice_idx] = resourceHolder->GetPipeResource( m_pVlScreen );
+            CHECKNULL_GOTO( pDX12EncodeContext->pOutputBitRes[slice_idx], E_OUTOFMEMORY, done );
          }
       }
    }

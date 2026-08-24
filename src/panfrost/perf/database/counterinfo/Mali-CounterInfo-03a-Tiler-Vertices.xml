@@ -1,0 +1,959 @@
+<?xml version="1.0" ?>
+<!--
+#
+# Copyright (c) 2019-2026 Arm Limited.
+#
+# SPDX-License-Identifier: MIT
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+-->
+<CounterInfoList>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerActiveCy</MachineName>
+    <SourceName>TILER_ACTIVE</SourceName>
+    <StableID>139</StableID>
+    <HumanName>Tiler active cycles</HumanName>
+    <GroupName>GPU Cycles</GroupName>
+    <GroupHumanName>Tiler active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when the tiler has a workload queued for processing.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle the tiler has a workload in its
+      processing queue. The tiler is responsible for coordinating geometry
+      processing and providing the fixed-function tiling needed for the Mali
+      tile-based rendering pipeline. It can run in parallel to vertex shading
+      and fragment shading.
+
+      A high cycle count here does not necessarily imply a bottleneck, unless
+      the {{C::MaliNonFragActiveCy}} counter in the shader core is
+      comparatively low.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T720</GPU>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T830</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerActiveCy</MachineName>
+    <SourceName>TILER_ACTIVE</SourceName>
+    <StableID>139</StableID>
+    <HumanName>Tiler active cycles</HumanName>
+    <GroupName>GPU Cycles</GroupName>
+    <GroupHumanName>Tiler active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when the tiler has a workload queued for processing.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle the tiler has a workload in its
+      processing queue. The tiler is responsible for coordinating geometry
+      processing and providing the fixed-function tiling needed for the Mali
+      tile-based rendering pipeline. It can run in parallel to vertex shading
+      and fragment shading.
+
+      A high cycle count here does not necessarily imply a bottleneck, unless
+      the {{C::MaliCompOrBinningActiveCy}} counter in the shader core is
+      comparatively low.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerUtil</MachineName>
+    <StableID>65545</StableID>
+    <HumanName>Tiler utilization</HumanName>
+    <GroupName>GPU Utilization</GroupName>
+    <GroupHumanName>Tiler utilization</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The percentage of GPU active cycles when the tiler has a workload queued
+      for processing.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the tiler utilization compared to the total GPU
+      active cycles.
+
+      Note that this metric measures the overall processing time for the tiler
+      geometry pipeline. The metric includes aspects of vertex shading, in
+      addition to the fixed-function tiling process.
+    </LongDescription>
+    <Equation>
+      (MaliTilerActiveCy / MaliGPUActiveCy) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerPosShadTask</MachineName>
+    <SourceName>IDVS_POS_SHAD_REQ</SourceName>
+    <SourceAlias>POS_SHADER_WARPS</SourceAlias>
+    <StableID>159</StableID>
+    <HumanName>Tiler position shading requests</HumanName>
+    <GroupName>Tiler Shading Requests</GroupName>
+    <GroupHumanName>Position shading requests</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of position shading requests in the tiler geometry flow.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every position shading request in the tiler
+      geometry flow. Position shading runs the first part of the vertex shader,
+      computing the position required to perform clipping and culling. A vertex
+      that has been evicted from the post-transform cache must be reshaded if
+      used again, so your index buffers must have good spatial locality of
+      index reuse.
+
+      Each request contains {{C::MaliGPUGeomTaskSize.equation}} vertices.
+
+      Note that not all types of draw call use this tiler workflow, so this
+      counter might not account for all submitted geometry.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerPosShadPartTask</MachineName>
+    <SourceName>POS_SHADER_PARTIAL_WARPS</SourceName>
+    <StableID>368</StableID>
+    <HumanName>Partial tiler position shading requests</HumanName>
+    <GroupName>Tiler Shading Requests</GroupName>
+    <GroupHumanName>Partial position shading requests</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of partial position shading requests in the tiler geometry
+      flow.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every partial position shading request from
+      the tiler geometry flow. Partial tasks cannot fill a shader core warp,
+      and can result in lost efficiency.
+
+      Each request contains fewer than {{C::MaliGPUGeomTaskSize.equation}}
+      vertices.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerPosShadThread</MachineName>
+    <StableID>65565</StableID>
+    <HumanName>Position shader thread invocations</HumanName>
+    <GroupName>Geometry Threads</GroupName>
+    <GroupHumanName>Position shading threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of position shader thread invocations.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of position shader thread invocations.
+    </LongDescription>
+    <Equation>
+      MaliTilerPosShadTask * MaliGPUGeomTaskSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerPosShadThreadPerPrim</MachineName>
+    <StableID>65666</StableID>
+    <HumanName>Position shader threads per input primitive</HumanName>
+    <GroupName>Geometry Efficiency</GroupName>
+    <GroupHumanName>Position threads/input primitive</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of position shader invocations per input primitive.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of position shader threads per input
+      primitive.
+
+      Efficient meshes with a good vertex reuse have average less than 1.5
+      vertices shaded per triangle, as vertex computation is shared by multiple
+      primitives. Minimize this number by reusing vertices for nearby
+      primitives, improving temporal locality of index reuse, and avoiding
+      unused values in the active index range.
+    </LongDescription>
+    <Equation>
+      MaliTilerPosShadThread / MaliGeomTotalPrim
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerVarShadTask</MachineName>
+    <SourceName>IDVS_VAR_SHAD_REQ</SourceName>
+    <SourceAlias>VAR_SHADER_WARPS</SourceAlias>
+    <StableID>175</StableID>
+    <HumanName>Tiler varying shading requests</HumanName>
+    <GroupName>Tiler Shading Requests</GroupName>
+    <GroupHumanName>Varying shading requests</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of varying shading requests in the tiler geometry flow.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every varying shading request in the tiler
+      geometry flow. Varying shading runs the second part of the vertex shader,
+      for any primitive that survives clipping and culling. The same vertex is
+      shaded multiple times if it has been evicted from the post-transform
+      cache before reuse occurs. Keep good spatial locality of index reuse in
+      your index buffers.
+
+      Each request contains {{C::MaliGPUGeomTaskSize.equation}} vertices.
+
+      Note that not all types of draw call use this tiler workflow, so this
+      counter might not account for all submitted geometry.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerVarShadTask</MachineName>
+    <SourceName>IDVS_VAR_SHAD_REQ</SourceName>
+    <SourceAlias>VAR_SHADER_WARPS</SourceAlias>
+    <StableID>175</StableID>
+    <HumanName>Tiler varying shading requests</HumanName>
+    <GroupName>Tiler Shading Requests</GroupName>
+    <GroupHumanName>Varying shading requests</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of varying shading requests in the tiler geometry flow.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every varying shading request in the tiler
+      geometry flow. Varying shading runs the second part of the vertex shader,
+      for any primitive that survives clipping and culling. The same vertex is
+      shaded multiple times if it has been evicted from the post-transform
+      cache before reuse occurs. Keep good spatial locality of index reuse in
+      your index buffers.
+
+      Each request contains {{C::MaliGPUGeomTaskSize.equation}} vertices.
+
+      Note that not all types of draw call use this tiler workflow, so this
+      counter might not account for all submitted geometry.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerVarShadPartTask</MachineName>
+    <SourceName>VAR_SHADER_PARTIAL_WARPS</SourceName>
+    <StableID>369</StableID>
+    <HumanName>Partial tiler varying shading requests</HumanName>
+    <GroupName>Tiler Shading Requests</GroupName>
+    <GroupHumanName>Partial varying shading requests</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of partial varying shading requests in the tiler geometry
+      flow.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments for every partial varying shading request from
+      the tiler geometry flow. Partial tasks cannot fill a shader core warp,
+      and can result in lost efficiency.
+
+      Each request contains fewer than {{C::MaliGPUGeomTaskSize.equation}}
+      vertices.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerVarShadThread</MachineName>
+    <StableID>65566</StableID>
+    <HumanName>Varying shader thread invocations</HumanName>
+    <GroupName>Geometry Threads</GroupName>
+    <GroupHumanName>Varying shading threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of varying shader thread invocations.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of varying shader thread invocations.
+    </LongDescription>
+    <Equation>
+      MaliTilerVarShadTask * MaliGPUGeomTaskSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerVarShadThread</MachineName>
+    <StableID>65566</StableID>
+    <HumanName>Varying shader thread invocations</HumanName>
+    <GroupName>Geometry Threads</GroupName>
+    <GroupHumanName>Varying shading threads</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of varying shader thread invocations.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of varying shader thread invocations
+      triggered during the binning phase.
+
+      This GPU can defer varying shading to the main pass, which is not visible
+      in this counter.
+    </LongDescription>
+    <Equation>
+      MaliTilerVarShadTask * MaliGPUGeomTaskSize
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerVarShadThreadPerPrim</MachineName>
+    <StableID>65667</StableID>
+    <HumanName>Varying shader threads per input primitive</HumanName>
+    <GroupName>Geometry Efficiency</GroupName>
+    <GroupHumanName>Varying threads/visible primitive</GroupHumanName>
+    <Units>threads</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The number of varying shader invocations per visible primitive.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the number of varying shader invocations per
+      visible primitive.
+
+      Efficient meshes with a good vertex reuse have average less than 1.5
+      vertices shaded per triangle, as vertex computation is shared by multiple
+      primitives. Minimize this number by reusing vertices for nearby
+      primitives, improving temporal locality of index reuse, and avoiding
+      unused values in the active index range.
+    </LongDescription>
+    <Equation>
+      MaliTilerVarShadThread / MaliGeomVisiblePrim
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerPosCacheHit</MachineName>
+    <SourceName>VCACHE_HIT</SourceName>
+    <StableID>164</StableID>
+    <HumanName>Tiler position cache hits</HumanName>
+    <GroupName>Tiler Vertex Cache</GroupName>
+    <GroupHumanName>Position cache hits</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of position lookups that result in a hit in the vertex cache.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every time a vertex position lookup hits in the
+      vertex cache.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Unclassified</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerPosCacheMiss</MachineName>
+    <SourceName>VCACHE_MISS</SourceName>
+    <StableID>165</StableID>
+    <HumanName>Tiler position cache misses</HumanName>
+    <GroupName>Tiler Vertex Cache</GroupName>
+    <GroupHumanName>Position cache misses</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of position lookups that miss in the vertex cache.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every time a vertex position lookup misses in the
+      vertex cache. Cache misses at this stage result in a position shading
+      request, although a single request can produce data to handle multiple
+      cache misses.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-T760</GPU>
+      <GPU>Mali-T880</GPU>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Unclassified</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerPosCacheHitRate</MachineName>
+    <StableID>65663</StableID>
+    <HumanName>Tiler position cache hit rate</HumanName>
+    <GroupName>Vertex Cache Hit Rate</GroupName>
+    <GroupHumanName>Position read hit rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage hit rate of the tiler position cache.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage hit rate of the tiler position
+      cache used for the index-driven vertex shading pipeline.
+    </LongDescription>
+    <Equation>
+      (MaliTilerPosCacheHit / (MaliTilerPosCacheHit + MaliTilerPosCacheMiss)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerPosShadFIFOFullCy</MachineName>
+    <SourceName>IDVS_POS_FIFO_FULL</SourceName>
+    <SourceAlias>POS_FIFO_FULL</SourceAlias>
+    <StableID>162</StableID>
+    <HumanName>Tiler position FIFO full cycles</HumanName>
+    <GroupName>Tiler Stall Cycles</GroupName>
+    <GroupHumanName>Position FIFO full stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when the tiler has a stalled position shading
+      buffer.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the tiler has a position
+      shading request that it can not send to a shader core because the
+      position buffer is full.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Unclassified</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerVarCacheHit</MachineName>
+    <SourceName>IDVS_VBU_HIT</SourceName>
+    <SourceAlias>VBU_HIT</SourceAlias>
+    <StableID>172</StableID>
+    <HumanName>Tiler varying cache hits</HumanName>
+    <GroupName>Tiler Vertex Cache</GroupName>
+    <GroupHumanName>Varying cache hits</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of varying lookups that result in a hit in the vertex cache.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every time a vertex varying lookup results in a
+      successful hit in the vertex cache.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Unclassified</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerVarCacheMiss</MachineName>
+    <SourceName>IDVS_VBU_MISS</SourceName>
+    <StableID>173</StableID>
+    <HumanName>Tiler varying cache misses</HumanName>
+    <GroupName>Tiler Vertex Cache</GroupName>
+    <GroupHumanName>Varying cache misses</GroupHumanName>
+    <Units>requests</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of varying lookups that miss in the vertex cache.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every time a vertex varying lookup misses in the
+      vertex cache. Cache misses at this stage result in a varying shading
+      request, although a single request can produce data to handle multiple
+      cache misses.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Unclassified</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerVarCacheHitRate</MachineName>
+    <StableID>65664</StableID>
+    <HumanName>Tiler varying cache hit rate</HumanName>
+    <GroupName>Vertex Cache Hit Rate</GroupName>
+    <GroupHumanName>Varying read hit rate</GroupHumanName>
+    <Units>percent</Units>
+    <Trend>Higher better</Trend>
+    <Visibility>Novice</Visibility>
+    <ShortDescription>
+      The percentage hit rate of the tiler varying cache.
+    </ShortDescription>
+    <LongDescription>
+      This expression defines the percentage hit rate of the tiler varying
+      cache used for the index-driven vertex shading pipeline.
+    </LongDescription>
+    <Equation>
+      (MaliTilerVarCacheHit / (MaliTilerVarCacheHit + MaliTilerVarCacheMiss)) * 100
+    </Equation>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Vertices</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerPosShadStallCy</MachineName>
+    <SourceName>IDVS_POS_SHAD_STALL</SourceName>
+    <SourceAlias>POS_SHADER_STALL</SourceAlias>
+    <StableID>161</StableID>
+    <HumanName>Tiler position shading stall cycles</HumanName>
+    <GroupName>Tiler Stall Cycles</GroupName>
+    <GroupHumanName>Position shading stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when the tiler has a stalled position shading
+      request.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the tiler has a position
+      shading request that it can not send to a shader core because the shading
+      request queue is full.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Unclassified</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerPosShadWaitCy</MachineName>
+    <SourceName>IDVS_POS_SHAD_WAIT</SourceName>
+    <StableID>160</StableID>
+    <HumanName>Tiler position shading outstanding cycles</HumanName>
+    <GroupName>Tiler Cycles</GroupName>
+    <GroupHumanName>Position shading active</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when the tiler has position shading requests
+      outstanding.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the tiler has an
+      outstanding position shading request that is still being processed by a
+      shader core.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Unclassified</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+  <!-- ==================================================================== -->
+  <CounterInfo>
+    <MachineName>MaliTilerVarShadStallCy</MachineName>
+    <SourceName>IDVS_VAR_SHAD_STALL</SourceName>
+    <SourceAlias>VAR_SHADER_STALL</SourceAlias>
+    <StableID>176</StableID>
+    <HumanName>Tiler varying shading stall cycles</HumanName>
+    <GroupName>Tiler Stall Cycles</GroupName>
+    <GroupHumanName>Varying shading stalls</GroupHumanName>
+    <Units>cycles</Units>
+    <Trend>Lower better</Trend>
+    <Visibility>Advanced application</Visibility>
+    <ShortDescription>
+      The number of cycles when the tiler has a stalled varying shading
+      request.
+    </ShortDescription>
+    <LongDescription>
+      This counter increments every clock cycle when the tiler has a varying
+      shading request that it can not send to a shader core because the shading
+      request queue is full.
+    </LongDescription>
+    <SupportedGPUs>
+      <GPU>Mali-G31</GPU>
+      <GPU>Mali-G51</GPU>
+      <GPU>Mali-G52</GPU>
+      <GPU>Mali-G71</GPU>
+      <GPU>Mali-G72</GPU>
+      <GPU>Mali-G76</GPU>
+      <GPU>Mali-G77</GPU>
+      <GPU>Mali-G78</GPU>
+      <GPU>Mali-G710</GPU>
+      <GPU>Mali-G715</GPU>
+      <GPU>Mali-G720</GPU>
+      <GPU>Mali-G725</GPU>
+      <GPU>Mali G1</GPU>
+    </SupportedGPUs>
+    <Perfetto>
+      <Groups>
+        <GroupName>Unclassified</GroupName>
+      </Groups>
+    </Perfetto>
+  </CounterInfo>
+</CounterInfoList>

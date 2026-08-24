@@ -10,7 +10,7 @@ section_start fossilize "Building fossilize"
 
 git clone https://github.com/ValveSoftware/Fossilize.git
 cd Fossilize
-git checkout b43ee42bbd5631ea21fe9a2dee4190d5d875c327
+git checkout c774839d5412dd675dc15b41412041c316393069
 git submodule update --init
 mkdir build
 cd build

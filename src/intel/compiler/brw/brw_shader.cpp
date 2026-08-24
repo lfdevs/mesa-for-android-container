@@ -174,6 +174,7 @@ brw_shader::brw_shader(const brw_shader_params *params)
    this->first_non_payload_grf = 0;
 
    this->last_scratch = 0;
+   this->last_logical_scratch = 0;
 
    memset(&this->shader_stats, 0, sizeof(this->shader_stats));
 
@@ -988,7 +989,7 @@ brw_cs_get_dispatch_info(const struct intel_device_info *devinfo,
                             prog_data->local_size;
 
    int simd = -1;
-   if (intel_use_jay(devinfo, MESA_SHADER_COMPUTE)) {
+   if (intel_use_jay(devinfo, prog_data->base.stage)) {
       /* Currently Jay compiles only a single binary, just select that. In the
        * future this needs to get smarter.
        */
@@ -1021,7 +1022,7 @@ brw_shader_phase_update(brw_shader &s, enum brw_shader_phase phase)
    brw_validate(s);
 }
 
-bool brw_should_print_shader(const nir_shader *shader, uint64_t debug_flag, uint32_t source_hash)
+bool brw_should_print_shader(const nir_shader *shader, uint64_t debug_flag, uint64_t source_hash)
 {
    if (intel_shader_dump_filter && intel_shader_dump_filter != source_hash) {
       return false;
@@ -1110,7 +1111,6 @@ void brw_prog_data_init(struct brw_stage_prog_data *prog_data,
     */
    prog_data->ray_queries = params->nir->info.ray_queries;
    prog_data->stage = params->nir->info.stage;
-   prog_data->source_hash = params->source_hash;
    prog_data->total_scratch = 0;
    prog_data->total_shared = params->nir->info.shared_size;
 }

@@ -231,13 +231,6 @@ static const VkExtent3D block_shapes_2d_8samples[] = {
    /* 64 bits:  */ { .width = 32, .height =  32, .depth = 1 },
    /* 128 bits: */ { .width = 16, .height =  32, .depth = 1 },
 };
-static const VkExtent3D block_shapes_2d_16samples[] = {
-   /* 8 bits:   */ { .width = 64, .height = 64, .depth = 1 },
-   /* 16 bits:  */ { .width = 64, .height = 32, .depth = 1 },
-   /* 32 bits:  */ { .width = 32, .height = 32, .depth = 1 },
-   /* 64 bits:  */ { .width = 32, .height = 16, .depth = 1 },
-   /* 128 bits: */ { .width = 16, .height = 16, .depth = 1 },
-};
 
 static VkExtent3D
 anv_sparse_get_standard_image_block_shape(enum isl_format format,
@@ -276,9 +269,6 @@ anv_sparse_get_standard_image_block_shape(enum isl_format format,
       break;
    case VK_SAMPLE_COUNT_8_BIT:
       block_shape = block_shapes_2d_8samples[table_idx];
-      break;
-   case VK_SAMPLE_COUNT_16_BIT:
-      block_shape = block_shapes_2d_16samples[table_idx];
       break;
    default:
       fprintf(stderr, "unexpected sample count: %d\n", samples);
@@ -1134,10 +1124,6 @@ is_xe2_non_standard_msaa_block_shape(struct anv_physical_device *pdevice,
       if (bpb == 8 || bpb == 32)
          return true;
       break;
-   case VK_SAMPLE_COUNT_16_BIT:
-      if (bpb == 64)
-         return true;
-      break;
    default:
       break;
    }
@@ -1645,8 +1631,6 @@ anv_sparse_image_check_support(struct anv_physical_device *pdevice,
       valid_samples &= ~VK_SAMPLE_COUNT_4_BIT;
    if (!pdevice->vk.supported_features.sparseResidency8Samples)
       valid_samples &= ~VK_SAMPLE_COUNT_8_BIT;
-   if (!pdevice->vk.supported_features.sparseResidency16Samples)
-      valid_samples &= ~VK_SAMPLE_COUNT_16_BIT;
    valid_samples &= ~(VK_SAMPLE_COUNT_32_BIT | VK_SAMPLE_COUNT_64_BIT);
 
    /* Here we return NOT_PRESENT since the user is asking for sample counts we

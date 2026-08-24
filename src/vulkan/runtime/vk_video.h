@@ -185,7 +185,8 @@ struct vk_video_session_parameters {
          struct vk_video_av1_seq_hdr seq_hdr;
          StdVideoEncodeAV1DecoderModelInfo decoder_model;
          uint32_t num_op_points;
-         const StdVideoEncodeAV1OperatingPointInfo* op_points;
+         StdVideoEncodeAV1OperatingPointInfo op_points[32];
+         const StdVideoEncodeAV1DecoderModelInfo *pStdDecoderModelInfo;
       } av1_enc;
    };
 };
@@ -385,6 +386,16 @@ vk_video_encode_av1_seq_hdr(const struct vk_video_session_parameters *params,
                             size_t size_limit,
                             size_t *data_size_ptr,
                             void *data_ptr);
+
+VkResult
+vk_video_encode_av1_frame_hdr(const struct vk_video_session_parameters *params,
+                              const StdVideoEncodeAV1PictureInfo *pic_info,
+                              uint32_t base_q_idx,
+                              bool reference_select, bool restoration_support,
+                              uint32_t frame_width, uint32_t frame_height,
+                              size_t size_limit,
+                              size_t *data_size_ptr,
+                              void *data_ptr);
 
 VkResult
 vk_video_is_profile_supported(const VkVideoProfileInfoKHR *video_profile);

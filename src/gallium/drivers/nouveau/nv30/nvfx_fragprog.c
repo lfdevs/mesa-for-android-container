@@ -26,6 +26,7 @@ struct nvfx_fpc {
    struct nvfx_reg r_result[PIPE_MAX_SHADER_OUTPUTS];
    struct nvfx_reg r_input[PIPE_MAX_SHADER_INPUTS];
    struct nvfx_reg *r_temp;
+   unsigned num_requested_tmps;
 
    int num_regs;
 
@@ -47,6 +48,7 @@ static inline struct nvfx_reg
 temp(struct nvfx_fpc *fpc)
 {
    int idx = __builtin_ctzll(~fpc->r_temps);
+   fpc->num_requested_tmps++;
 
    if (idx >= fpc->max_temps) {
       NOUVEAU_ERR("out of temps!!\n");
@@ -55,6 +57,7 @@ temp(struct nvfx_fpc *fpc)
 
    fpc->r_temps |= (1ULL << idx);
    fpc->r_temps_discard |= (1ULL << idx);
+
    return nvfx_reg(NVFXSR_TEMP, idx);
 }
 
@@ -147,7 +150,7 @@ emit_src(struct nvfx_fpc *fpc, int pos, struct nvfx_src src)
       sr |= NVFX_FP_REG_NEGATE;
 
    if (src.abs)
-      hw[1] |= (1 << (29 + pos));
+      hw[1] |= (1u << (29 + pos));
 
    sr |= ((src.swz[0] << NVFX_FP_REG_SWZ_X_SHIFT) |
           (src.swz[1] << NVFX_FP_REG_SWZ_Y_SHIFT) |
@@ -536,9 +539,7 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
       nvfx_fp_emit(fpc, arith(sat, ADD, dst, mask, src[0], src[1], none));
       break;
    case TGSI_OPCODE_CEIL:
-      tmp = nvfx_src(temp(fpc));
-      nvfx_fp_emit(fpc, arith(0, FLR, tmp.reg, mask, neg(src[0]), none, none));
-      nvfx_fp_emit(fpc, arith(sat, MOV, dst, mask, neg(tmp), none, none));
+      NOUVEAU_ERR("CEIL should have been lowered.\n");
       break;
    case TGSI_OPCODE_CMP:
       insn = arith(0, MOV, none.reg, mask, src[0], none, none);
@@ -589,9 +590,6 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
    case TGSI_OPCODE_DP4:
       nvfx_fp_emit(fpc, arith(sat, DP4, dst, mask, src[0], src[1], none));
       break;
-   case TGSI_OPCODE_DST:
-      nvfx_fp_emit(fpc, arith(sat, DST, dst, mask, src[0], src[1], none));
-      break;
    case TGSI_OPCODE_EX2:
       nvfx_fp_emit(fpc, arith(sat, EX2, dst, mask, src[0], none, none));
       break;
@@ -616,34 +614,11 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
    case TGSI_OPCODE_LG2:
       nvfx_fp_emit(fpc, arith(sat, LG2, dst, mask, src[0], none, none));
       break;
-   case TGSI_OPCODE_LIT:
-      if(!fpc->is_nv4x)
-         nvfx_fp_emit(fpc, arith(sat, LIT_NV30, dst, mask, src[0], none, none));
-      else {
-         /* we use FLT_MIN, so that log2 never gives -infinity, and thus multiplication by
-          * specular 0 always gives 0, so that ex2 gives 1, to satisfy the 0^0 = 1 requirement
-          *
-          * NOTE: if we start using half precision, we might need an fp16 FLT_MIN here instead
-          */
-         struct nvfx_src maxs = nvfx_src(nvfx_fp_imm(fpc, 0, FLT_MIN, 0, 0));
-         tmp = nvfx_src(temp(fpc));
-         if (ci>= 0 || ii >= 0) {
-            nvfx_fp_emit(fpc, arith(0, MOV, tmp.reg, NVFX_FP_MASK_X | NVFX_FP_MASK_Y, maxs, none, none));
-            maxs = tmp;
-         }
-         nvfx_fp_emit(fpc, arith(0, MAX, tmp.reg, NVFX_FP_MASK_Y | NVFX_FP_MASK_W, swz(src[0], X, X, X, Y), swz(maxs, X, X, Y, Y), none));
-         nvfx_fp_emit(fpc, arith(0, LG2, tmp.reg, NVFX_FP_MASK_W, swz(tmp, W, W, W, W), none, none));
-         nvfx_fp_emit(fpc, arith(0, MUL, tmp.reg, NVFX_FP_MASK_W, swz(tmp, W, W, W, W), swz(src[0], W, W, W, W), none));
-         nvfx_fp_emit(fpc, arith(sat, LITEX2_NV40, dst, mask, swz(tmp, Y, Y, W, W), none, none));
-      }
-      break;
    case TGSI_OPCODE_LRP:
       if(!fpc->is_nv4x)
          nvfx_fp_emit(fpc, arith(sat, LRP_NV30, dst, mask, src[0], src[1], src[2]));
       else {
-         tmp = nvfx_src(temp(fpc));
-         nvfx_fp_emit(fpc, arith(0, MAD, tmp.reg, mask, neg(src[0]), src[2], src[2]));
-         nvfx_fp_emit(fpc, arith(sat, MAD, dst, mask, src[0], src[1], tmp));
+         NOUVEAU_ERR("LRP should have been lowered.\n");
       }
       break;
    case TGSI_OPCODE_MAD:
@@ -667,10 +642,7 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
       if(!fpc->is_nv4x)
          nvfx_fp_emit(fpc, arith(sat, POW_NV30, dst, mask, src[0], src[1], none));
       else {
-         tmp = nvfx_src(temp(fpc));
-         nvfx_fp_emit(fpc, arith(0, LG2, tmp.reg, NVFX_FP_MASK_X, swz(src[0], X, X, X, X), none, none));
-         nvfx_fp_emit(fpc, arith(0, MUL, tmp.reg, NVFX_FP_MASK_X, swz(tmp, X, X, X, X), swz(src[1], X, X, X, X), none));
-         nvfx_fp_emit(fpc, arith(sat, EX2, dst, mask, swz(tmp, X, X, X, X), none, none));
+         NOUVEAU_ERR("POW should have been lowered.\n");
       }
       break;
    case TGSI_OPCODE_RCP:
@@ -709,52 +681,36 @@ nvfx_fragprog_parse_instruction(struct nvfx_fpc *fpc,
       nvfx_fp_emit(fpc, arith(sat, SNE, dst, mask, src[0], src[1], none));
       break;
    case TGSI_OPCODE_SSG:
-   {
-      struct nvfx_src minones = swz(nvfx_src(nvfx_fp_imm(fpc, -1, -1, -1, -1)), X, X, X, X);
-
-      insn = arith(sat, MOV, dst, mask, src[0], none, none);
-      insn.cc_update = 1;
-      nvfx_fp_emit(fpc, insn);
-
-      insn = arith(0, STR, dst, mask, none, none, none);
-      insn.cc_test = NVFX_COND_GT;
-      nvfx_fp_emit(fpc, insn);
-
-      if(!sat) {
-         insn = arith(0, MOV, dst, mask, minones, none, none);
-         insn.cc_test = NVFX_COND_LT;
-         nvfx_fp_emit(fpc, insn);
-      }
+      NOUVEAU_ERR("SSG should have been lowered.\n");
       break;
-   }
    case TGSI_OPCODE_TEX:
       nvfx_fp_emit(fpc, tex(sat, TEX, unit, dst, mask, src[0], none, none));
       break;
-        case TGSI_OPCODE_TRUNC:
-                tmp = nvfx_src(temp(fpc));
-                insn = arith(0, MOV, none.reg, mask, src[0], none, none);
-                insn.cc_update = 1;
-                nvfx_fp_emit(fpc, insn);
+   case TGSI_OPCODE_TRUNC:
+      tmp = nvfx_src(temp(fpc));
+      insn = arith(0, MOV, none.reg, mask, src[0], none, none);
+      insn.cc_update = 1;
+      nvfx_fp_emit(fpc, insn);
 
-                nvfx_fp_emit(fpc, arith(0, FLR, tmp.reg, mask, abs(src[0]), none, none));
-                nvfx_fp_emit(fpc, arith(sat, MOV, dst, mask, tmp, none, none));
+      nvfx_fp_emit(fpc, arith(0, FLR, tmp.reg, mask, abs(src[0]), none, none));
+      nvfx_fp_emit(fpc, arith(sat, MOV, dst, mask, tmp, none, none));
 
-                insn = arith(sat, MOV, dst, mask, neg(tmp), none, none);
-                insn.cc_test = NVFX_COND_LT;
-                nvfx_fp_emit(fpc, insn);
-                break;
-        case TGSI_OPCODE_TXB:
-                nvfx_fp_emit(fpc, tex(sat, TXB, unit, dst, mask, src[0], none, none));
-                break;
-        case TGSI_OPCODE_TXL:
-                if(fpc->is_nv4x)
-                        nvfx_fp_emit(fpc, tex(sat, TXL_NV40, unit, dst, mask, src[0], none, none));
-                else /* unsupported on nv30, use TEX and hope they like it */
-                        nvfx_fp_emit(fpc, tex(sat, TEX, unit, dst, mask, src[0], none, none));
-                break;
-        case TGSI_OPCODE_TXP:
-                nvfx_fp_emit(fpc, tex(sat, TXP, unit, dst, mask, src[0], none, none));
-                break;
+      insn = arith(sat, MOV, dst, mask, neg(tmp), none, none);
+      insn.cc_test = NVFX_COND_LT;
+      nvfx_fp_emit(fpc, insn);
+      break;
+   case TGSI_OPCODE_TXB:
+      nvfx_fp_emit(fpc, tex(sat, TXB, unit, dst, mask, src[0], none, none));
+      break;
+   case TGSI_OPCODE_TXL:
+      if(fpc->is_nv4x)
+         nvfx_fp_emit(fpc, tex(sat, TXL_NV40, unit, dst, mask, src[0], none, none));
+      else /* unsupported on nv30, use TEX and hope they like it */
+         nvfx_fp_emit(fpc, tex(sat, TEX, unit, dst, mask, src[0], none, none));
+      break;
+   case TGSI_OPCODE_TXP:
+      nvfx_fp_emit(fpc, tex(sat, TXP, unit, dst, mask, src[0], none, none));
+      break;
 
    case TGSI_OPCODE_IF:
       // MOVRC0 R31 (TR0.xyzw), R<src>:
@@ -1059,7 +1015,7 @@ out_err:
 DEBUG_GET_ONCE_BOOL_OPTION(nvfx_dump_fp, "NVFX_DUMP_FP", false)
 
 void
-_nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp)
+_nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp, struct util_debug_callback *debug)
 {
    struct tgsi_parse_context parse;
    struct nvfx_fpc *fpc = NULL;
@@ -1148,6 +1104,10 @@ _nvfx_fragprog_translate(uint16_t oclass, struct nv30_fragprog *fp)
    }
 
    fp->translated = true;
+
+   util_debug_message(debug, SHADER_INFO,
+                      "%s shader: %u inst, %u const, %u requested_temps",
+                      "FP", fp->insn_len, fp->nr_consts, fpc->num_requested_tmps);
 
 out:
    tgsi_parse_free(&parse);

@@ -375,6 +375,12 @@ int64_t
 debug_get_num_option(const char *name, int64_t dfault);
 
 uint64_t
+debug_parse_unsigned_option(const char *str, uint64_t dfault);
+
+uint64_t
+debug_get_unsigned_option(const char *name, uint64_t dfault);
+
+uint64_t
 debug_parse_flags_option(const char *name,
                          const char *str,
                          const struct debug_named_value *flags,

@@ -1667,7 +1667,7 @@ radv_clear_image_layer(struct radv_cmd_buffer *cmd_buffer, struct radv_image *im
                            .pNext = &iview_usage_info,
                            .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                            .image = radv_image_to_handle(image),
-                           .viewType = radv_meta_get_view_type(image),
+                           .viewType = radv_meta_get_view_type(image, true),
                            .format = format,
                            .subresourceRange = {.aspectMask = range->aspectMask,
                                                 .baseMipLevel = range->baseMipLevel + level,
@@ -1756,7 +1756,7 @@ radv_fast_clear_range(struct radv_cmd_buffer *cmd_buffer, struct radv_image *ima
                            .pNext = &iview_usage_info,
                            .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                            .image = radv_image_to_handle(image),
-                           .viewType = radv_meta_get_view_type(image),
+                           .viewType = radv_meta_get_view_type(image, false),
                            .format = image->vk.format,
                            .subresourceRange =
                               {

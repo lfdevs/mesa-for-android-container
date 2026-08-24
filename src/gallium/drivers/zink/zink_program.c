@@ -2036,6 +2036,8 @@ bind_gfx_stage(struct zink_context *ctx, mesa_shader_stage stage, struct zink_sh
       }
       ctx->shader_stages &= ~BITFIELD_BIT(stage);
    }
+   /* avoid potential overdraw conflicts */
+   ctx->can_promote_depth_op = false;
 }
 
 static enum mesa_prim

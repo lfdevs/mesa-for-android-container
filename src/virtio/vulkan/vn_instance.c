@@ -10,11 +10,11 @@
 
 #include "vn_instance.h"
 
-#include "vn_drirc.h"
-#include "venus-protocol/vn_protocol_driver_info.h"
-#include "venus-protocol/vn_protocol_driver_instance.h"
-#include "venus-protocol/vn_protocol_driver_transport.h"
+#include "vn_protocol_driver_info.h"
+#include "vn_protocol_driver_instance.h"
+#include "vn_protocol_driver_transport.h"
 
+#include "vn_drirc.h"
 #include "vn_icd.h"
 #include "vn_physical_device.h"
 #include "vn_renderer.h"
@@ -363,11 +363,6 @@ vn_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
    if (VN_DEBUG(INIT)) {
       vn_log(instance, "supports multi-plane wsi format modifiers: %s",
              instance->drirc.performance.enable_wsi_multi_plane_modifiers ? "yes" : "no");
-   }
-
-   const char *engine_name = instance->base.vk.app_info.engine_name;
-   if (engine_name) {
-      instance->engine_is_zink = strcmp(engine_name, "mesa zink") == 0;
    }
 
    *pInstance = instance_handle;

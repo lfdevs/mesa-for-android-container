@@ -61,7 +61,7 @@ libva_st = static_library(
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_include, inc_src, inc_gallium, inc_gallium_aux],
   dependencies : [
-    dep_va_headers, dep_x11_xcb, dep_xcb, dep_xcb_dri3,
+    dep_va_headers_sources, dep_x11_xcb, dep_xcb, dep_xcb_dri3,
     dep_libdrm, idep_mesautil,
   ],
 )

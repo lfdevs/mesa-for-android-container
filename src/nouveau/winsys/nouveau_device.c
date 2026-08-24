@@ -160,6 +160,49 @@ max_warps_per_mp_for_sm(uint8_t sm)
 }
 
 static uint8_t
+max_blocks_per_mp_for_sm(uint8_t sm)
+{
+   /* Values taken from CUDA programming guide section "Compute Capabilities" */
+   switch (sm) {
+   case 10:
+   case 11:
+   case 12:
+   case 13:
+   case 20:
+   case 21:
+      return 8;
+   case 30:
+   case 32:
+   case 35:
+   case 37:
+   case 75:
+   case 86:
+   case 87:
+      return 16;
+   case 89:
+   case 110:
+   case 120:
+      return 24;
+   case 50:
+   case 52:
+   case 53:
+   case 60:
+   case 61:
+   case 62:
+   case 70:
+   case 72:
+   case 80:
+   case 90:
+   case 100:
+      return 32;
+   default:
+      assert(!"unkown SM version");
+      /* return the smallest known value */
+      return 8;
+   }
+}
+
+static uint8_t
 mp_per_tpc_for_chipset(uint16_t chipset)
 {
    // GP100 is special and has two, otherwise it's a Volta and newer thing to have two
@@ -525,7 +568,7 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
    device->info.tpc_count = (value >> 8) & 0x0000ffff;
 
    struct nouveau_ws_context *tmp_ctx;
-   if (nouveau_ws_context_create(device, ~0, &tmp_ctx))
+   if (nouveau_ws_context_create(device, NOUVEAU_WS_ALL_3D_ENGINES, &tmp_ctx))
       goto out_err;
 
    device->info.sm = sm_for_chipset(device->info.chipset);
@@ -535,9 +578,17 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
    device->info.cls_m2mf = tmp_ctx->m2mf.cls;
    device->info.cls_compute = tmp_ctx->compute.cls;
 
+   nouveau_ws_context_destroy(tmp_ctx);
+
+   if (!nouveau_ws_context_create(device, NOUVEAU_WS_ENGINE_VDEC, &tmp_ctx)) {
+      device->info.cls_vdec = tmp_ctx->vdec.cls;
+      nouveau_ws_context_destroy(tmp_ctx);
+   }
+
    // for now we hardcode those values, but in the future Nouveau could provide that information to
    // us instead.
    device->info.max_warps_per_mp = max_warps_per_mp_for_sm(device->info.sm);
+   device->info.max_blocks_per_mp = max_blocks_per_mp_for_sm(device->info.sm);
    device->info.mp_per_tpc = mp_per_tpc_for_chipset(device->info.chipset);
 
    /* Transfer queues require two kernel fixes:
@@ -552,9 +603,15 @@ nouveau_ws_device_new(drmDevicePtr drm_device)
    device->info.has_transfer_queue = device->nouveau_version >= 0x01000401 &&
                                      device->info.cls_eng3d >= TURING_A;
 
-   init_shared_mem_sizes(&device->info);
+   /* Video decode runs on its own NVDEC channel. nouveau only allows
+    * allocating those from 1.4.3 ("VDEC contexts can be created") on, and the
+    * chip has to have the engine in the first place: cls_vdec is left at zero
+    * above when no VDEC context can be created.
+    */
+   device->info.has_video = device->nouveau_version >= 0x01000403 &&
+                            device->info.cls_vdec != 0;
 
-   nouveau_ws_context_destroy(tmp_ctx);
+   init_shared_mem_sizes(&device->info);
 
    simple_mtx_init(&device->bos_lock, mtx_plain);
    device->bos = _mesa_pointer_hash_table_create(NULL);

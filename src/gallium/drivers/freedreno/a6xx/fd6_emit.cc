@@ -396,9 +396,15 @@ fd6_emit_streamout(fd_cs &cs, struct fd6_emit *emit) assert_dt
       if (so->reset & (1 << i)) {
          assert(so->offsets[i] == 0);
 
+         /* The counter in offset_bo is maintained by the hardware in the
+          * units of VPC_SO_FLUSH_BASE, which are dwords on a6xx and bytes on
+          * a7xx, while VPC_SO_BUFFER_OFFSET is bytes on both.  Seed each of
+          * them in its own units.
+          */
          fd_pkt7(cs, CP_MEM_WRITE, 3)
             .add(A5XX_CP_MEM_WRITE_ADDR(offset_bo))
-            .add(target->base.buffer_offset);
+            .add(CHIP == A6XX ? target->base.buffer_offset >> 2
+                              : target->base.buffer_offset);
 
          fd_pkt4(cs, 1)
             .add(VPC_SO_BUFFER_OFFSET(CHIP, i,target->base.buffer_offset));
@@ -788,7 +794,7 @@ fd6_emit_gmem_cache_cntl(fd_cs &cs, struct fd_screen *screen, bool gmem)
          .add(RB_CCU_CACHE_CNTL(CHIP,
             .depth_offset_hi = depth_offset_hi,
             .color_offset_hi = color_offset_hi,
-            .depth_cache_size = CCU_CACHE_SIZE_FULL,
+            .depth_cache_size = (enum a6xx_ccu_cache_size)cfg->depth_cache_fraction,
             .depth_offset = depth_offset,
             .color_cache_size = color_cache_size,
             .color_offset = color_offset,
@@ -812,7 +818,7 @@ fd6_emit_gmem_cache_cntl(fd_cs &cs, struct fd_screen *screen, bool gmem)
                screen->info->props.concurrent_resolve,
             .depth_offset_hi = depth_offset_hi,
             .color_offset_hi = color_offset_hi,
-            .depth_cache_size = CCU_CACHE_SIZE_FULL,
+            .depth_cache_size = (enum a6xx_ccu_cache_size)cfg->depth_cache_fraction,
             .depth_offset = depth_offset,
             .color_cache_size = color_cache_size,
             .color_offset = color_offset,
@@ -887,7 +893,7 @@ fd6_emit_static_non_context_regs(struct fd_context *ctx, fd_cs &cs)
     */
    if (CHIP < A8XX) {
       ncrb.add(A6XX_RB_DBG_ECO_CNTL(.dword = screen->info->magic.RB_DBG_ECO_CNTL));
-      ncrb.add(A6XX_SP_NC_MODE_CNTL_2(.f16_no_inf = true));
+      ncrb.add(A6XX_SP_NC_MODE_CNTL_2(.f16_no_inf = false));
       ncrb.add(VPC_LB_MODE_CNTL(CHIP));
       ncrb.add(PC_CONTEXT_SWITCH_GFX_PREEMPTION_MODE(CHIP));
    }
@@ -954,7 +960,7 @@ fd6_emit_static_context_regs(struct fd_context *ctx, fd_cs &cs)
 
    crb.add(A6XX_VFD_MODE_CNTL(.vertex = true, .instance = true));
    if (CHIP == A6XX)
-      crb.add(VPC_UNKNOWN_9107(CHIP));
+      crb.add(PC_RAST_STREAM_CNTL(CHIP));
    crb.add(A6XX_RB_MODE_CNTL(.dword = 0x00000010));
    crb.add(GRAS_LRZ_PS_INPUT_CNTL(CHIP));
    crb.add(A6XX_GRAS_LRZ_PS_SAMPLEFREQ_CNTL());

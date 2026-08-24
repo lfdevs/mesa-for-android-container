@@ -135,14 +135,13 @@ blorp_alloc_dynamic_state(struct blorp_batch *blorp_batch,
                        size, alignment, offset, NULL);
 }
 
-UNUSED static void *
-blorp_alloc_general_state(struct blorp_batch *blorp_batch,
-                          uint32_t size,
-                          uint32_t alignment,
-                          uint32_t *offset)
+static struct blorp_address
+blorp_dynamic_state_address(struct blorp_batch *batch,
+                            uint32_t offset)
 {
-   /* Use dynamic state range for general state on iris. */
-   return blorp_alloc_dynamic_state(blorp_batch, size, alignment, offset);
+   return (struct blorp_address) {
+      .offset = IRIS_MEMZONE_DYNAMIC_START + offset,
+   };
 }
 
 static bool
@@ -321,8 +320,13 @@ iris_blorp_exec_render(struct blorp_batch *blorp_batch,
    }
 
    if (params->depth.enabled &&
-       !(blorp_batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL))
-      genX(emit_depth_state_workarounds)(ice, batch, &params->depth.surf);
+       !(blorp_batch->flags & BLORP_BATCH_NO_EMIT_DEPTH_STENCIL)) {
+      if (INTEL_NEEDS_WA_1808121037 && params->num_samples == 1 &&
+          params->depth.surf.format == ISL_FORMAT_R16_UNORM) {
+         /* Disable HiZ planes on D16 1x MSAA to avoid sporadic corruption. */
+         genX(batch_disable_hiz_planes)(batch);
+      }
+   }
 
    iris_require_command_space(batch, 1400);
 
@@ -505,7 +509,10 @@ genX(init_blorp)(struct iris_context *ice)
    struct iris_screen *screen = (struct iris_screen *)ice->ctx.screen;
 
 #if GFX_VER >= 9
-   blorp_init_brw(&ice->blorp, ice, &screen->isl_dev, screen->brw, NULL);
+   const struct blorp_config config = {
+      .enable_tbimr = screen->driconf.enable_tbimr,
+   };
+   blorp_init_brw(&ice->blorp, ice, &screen->isl_dev, screen->brw, &config);
 #else
    blorp_init_elk(&ice->blorp, ice, &screen->isl_dev, screen->elk, NULL);
 #endif
@@ -513,7 +520,6 @@ genX(init_blorp)(struct iris_context *ice)
    ice->blorp.upload_shader = iris_blorp_upload_shader;
    ice->blorp.get_surface_address = blorp_get_surface_address;
    ice->blorp.exec = iris_blorp_exec;
-   ice->blorp.enable_tbimr = screen->driconf.enable_tbimr;
 }
 
 static void

@@ -62,6 +62,7 @@ nvkmd_nouveau_create_exec_ctx(struct nvkmd_dev *_dev,
    STATIC_ASSERT(NVKMD_ENGINE_3D       == (int)NOUVEAU_WS_ENGINE_3D);
    STATIC_ASSERT(NVKMD_ENGINE_M2MF     == (int)NOUVEAU_WS_ENGINE_M2MF);
    STATIC_ASSERT(NVKMD_ENGINE_COMPUTE  == (int)NOUVEAU_WS_ENGINE_COMPUTE);
+   STATIC_ASSERT(NVKMD_ENGINE_VDEC     == (int)NOUVEAU_WS_ENGINE_VDEC);
 
    err = nouveau_ws_context_create(dev->ws_dev, (int)engines, &ctx->ws_ctx);
    if (err != 0) {

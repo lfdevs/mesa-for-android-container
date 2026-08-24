@@ -177,13 +177,13 @@ traces:
       checksum: 9c891fd21b0cdc79f7071001d95d549c
   gputest/plot3d-v2.trace:
     gl-intel-apl:
-      checksum: 8510dc46ba2d5a25030d07fdf1710f90
+      checksum: 83deb0f2405c747a46845cc5765c8c60
     gl-intel-glk:
-      checksum: 8510dc46ba2d5a25030d07fdf1710f90
+      checksum: 83deb0f2405c747a46845cc5765c8c60
     gl-intel-amly:
-      checksum: 8510dc46ba2d5a25030d07fdf1710f90
+      checksum: 83deb0f2405c747a46845cc5765c8c60
     gl-intel-kbl:
-      checksum: 8510dc46ba2d5a25030d07fdf1710f90
+      checksum: 83deb0f2405c747a46845cc5765c8c60
     gl-intel-whl:
       checksum: cea8f26227763a3c3b2a2a6af9a0c1da
     gl-intel-adl:
@@ -535,14 +535,14 @@ traces:
       checksum: c4ff3894eaf7fb4b3632fd46e50b0128
   warzone2100/warzone2100-default.trace:
     gl-intel-apl:
-      checksum: ceeba6125a74145fc7ab38157239f6f5
+      checksum: 104d15d82def3ab1a9879e895ad51900
     gl-intel-glx:
-      checksum: ceeba6125a74145fc7ab38157239f6f5
+      checksum: 104d15d82def3ab1a9879e895ad51900
     gl-intel-amly:
-      checksum: ceeba6125a74145fc7ab38157239f6f5
+      checksum: 104d15d82def3ab1a9879e895ad51900
     gl-intel-kbl:
-      checksum: ceeba6125a74145fc7ab38157239f6f5
+      checksum: 104d15d82def3ab1a9879e895ad51900
     gl-intel-whl:
-      checksum: ceeba6125a74145fc7ab38157239f6f5
+      checksum: 104d15d82def3ab1a9879e895ad51900
     gl-intel-adl:
-      checksum: ceeba6125a74145fc7ab38157239f6f5
+      checksum: 104d15d82def3ab1a9879e895ad51900

@@ -45,6 +45,11 @@ struct svga_compile_key
       unsigned attrib_puint_to_snorm;
       unsigned attrib_puint_to_uscaled;
       unsigned attrib_puint_to_sscaled;
+
+      /* only for passthrough VS */
+      uint64_t passthrough_generic_outputs;
+      int8_t passthrough_color_index;
+      int8_t passthrough_fog_index;
    } vs;
 
    /* geometry shader only */

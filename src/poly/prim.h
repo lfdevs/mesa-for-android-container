@@ -145,3 +145,45 @@ poly_vertex_id_for_topology(enum mesa_prim mode, bool flatshade_first,
       return 0;
    }
 }
+
+static inline uint32_t
+poly_output_vertex_id_for_topology(enum mesa_prim mode, bool flatshade_first,
+                                   bool emulate_flatshade_last, uint vtx)
+{
+   /* No need to adjust vertex ID if not emulating last-vertex provoking */
+   if (flatshade_first || !emulate_flatshade_last)
+      return vtx;
+
+   /* Note that the output vertices are for the decomposed primitive type, so we
+    * don't differentiate between lists, strips, fans, etc. */
+   switch (mode) {
+   case MESA_PRIM_POINTS:
+      return vtx;
+
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_LOOP:
+   case MESA_PRIM_LINE_STRIP:
+      /* Don't need to worry about winding, just invert vertex order */
+      return 1 - vtx;
+
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_FAN:
+      /* Rotate from [a, b, c] to [c, a, b] to move last vertex to be provoking
+       * while preserving the winding order */
+      return (vtx == 2) ? 0 : vtx + 1;
+
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      /* Same as regular lines, but accounting for adjacency vertices */
+      return 3 - vtx;
+
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      /* Same as regular triangles, but accounting for adjacency vertices */
+      return (vtx > 3) ? vtx & 1 : vtx + 2;
+
+   default:
+      return 0;
+   }
+}

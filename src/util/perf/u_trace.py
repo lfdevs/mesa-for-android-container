@@ -652,13 +652,13 @@ static const struct u_tracepoint __tp_${trace_name} = {
     ${trace.tp_type},
     __print_${trace_name},
     __print_json_${trace_name},
+    __fuzzy_hash_${trace_name},
+    __fuzzy_equals_${trace_name},
+    __print_fuzzy_hash_args_${trace_name},
  % if trace.tp_perfetto is not None:
 #ifdef HAVE_PERFETTO
     (void (*)(void *pctx, uint64_t, uint16_t, const void *, const void *, const void *))${trace.tp_perfetto},
 #endif
-    __fuzzy_hash_${trace_name},
-    __fuzzy_equals_${trace_name},
-    __print_fuzzy_hash_args_${trace_name},
  % endif
 };
 <%call expr="trace_func(trace, trace_name)">\

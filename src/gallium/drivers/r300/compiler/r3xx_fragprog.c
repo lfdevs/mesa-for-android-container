@@ -12,7 +12,6 @@
 #include "r500_fragprog.h"
 #include "radeon_compiler_util.h"
 #include "radeon_dataflow.h"
-#include "radeon_list.h"
 #include "radeon_program_alu.h"
 #include "radeon_remove_constants.h"
 #include "radeon_variable.h"
@@ -36,13 +35,12 @@
 static void
 rc_convert_rgb_alpha(struct radeon_compiler *c, void *user)
 {
-   struct rc_list *variables;
-   struct rc_list *var_ptr;
+   struct util_dynarray *variables;
 
    variables = rc_get_variables(c);
 
-   for (var_ptr = variables; var_ptr; var_ptr = var_ptr->Next) {
-      struct rc_variable *var = var_ptr->Item;
+   util_dynarray_foreach(variables, struct rc_variable *, variable_ptr) {
+      struct rc_variable *var = *variable_ptr;
 
       if (var->Inst->U.I.DstReg.File != RC_FILE_TEMPORARY) {
          continue;
@@ -72,13 +70,13 @@ rc_convert_rgb_alpha(struct radeon_compiler *c, void *user)
          unsigned have_tex = false;
          struct rc_variable *fsat = NULL;
          for (unsigned int src = 0; src < 2; src++) {
-            struct rc_list *writer_list;
+            struct util_dynarray *writer_list;
             writer_list = rc_variable_list_get_writers(variables, RC_INSTRUCTION_NORMAL,
                                                        &var->Inst->U.I.SrcReg[src]);
-            if (!writer_list || !writer_list->Item)
+            if (!writer_list)
                continue;
 
-            struct rc_variable *src_variable = (struct rc_variable *)writer_list->Item;
+            struct rc_variable *src_variable = rc_variable_list_first(writer_list);
             struct rc_instruction *inst = src_variable->Inst;
             const struct rc_opcode_info *info = rc_get_opcode_info(inst->U.I.Opcode);
 

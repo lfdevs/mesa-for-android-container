@@ -537,9 +537,9 @@
     <field name="Subslice Hashing Table Enable Mask" dword="1" bits="21:21" type="bool" />
     <field name="Slice Hashing Table Enable Mask" dword="1" bits="22:22" type="bool" />
     <field name="DX10 OGL Border Mode for YCRCB Mask" dword="1" bits="26:26" type="bool" />
-    <field name="Fast Clear Optimization Enable" dword="3" bits="10:10" type="bool" />
+    <field name="Fast Clear Optimization Enable" dword="3" bits="10:10" type="mbz" />
     <field name="RCC RHWO Optimization Disable" dword="3" bits="15:15" type="bool" />
-    <field name="Fast Clear Optimization Enable Mask" dword="3" bits="26:26" type="bool" />
+    <field name="Fast Clear Optimization Enable Mask" dword="3" bits="26:26" type="mbz" />
     <field name="RCC RHWO Optimization Disable Mask" dword="3" bits="31:31" type="bool" />
   </instruction>
   <instruction name="3DSTATE_BINDING_TABLE_POINTERS_DS" bias="2" length="2" engine="render">
@@ -1593,16 +1593,32 @@
     <field name="Clear Rectangle Y Max" dword="3" bits="31:16" type="uint" />
     <field name="Sample Mask" dword="4" bits="15:0" type="uint" />
   </instruction>
-  <instruction name="AVP_IND_OBJ_BASE_ADDR_STATE" bias="2" length="6" engine="video">
-    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="4" />
+  <instruction name="AVP_IND_OBJ_BASE_ADDR_STATE" bias="2" length="9" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="7" />
     <field name="SubOpcode" dword="0" bits="22:16" type="uint" default="3" />
     <field name="Media Command Opcode" dword="0" bits="26:23" type="uint" default="3" />
     <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
     <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
     <field name="AVP Indirect Bitstream Object Base Address" dword="1" bits="63:0" type="address" />
     <field name="AVP Indirect Bitstream Object Address Attributes" dword="3" bits="31:0" type="MEMORYADDRESSATTRIBUTES" />
+    <field name="AVP Indirect Bitstream Object Access Upper Bound" dword="4" bits="63:0" type="address" />
     <field name="AVP Indirect CU Object Base Address" dword="6" bits="63:0" type="address" />
     <field name="AVP Indirect CU Object Memory Address Attributes" dword="8" bits="31:0" type="MEMORYADDRESSATTRIBUTES" />
+  </instruction>
+  <instruction name="AVP_PAK_INSERT_OBJECT" bias="2" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="0" />
+    <field name="SubOpcode" dword="0" bits="22:16" type="uint" default="34" />
+    <field name="Media Command Opcode" dword="0" bits="26:23" type="uint" default="3" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <field name="End of Slice" dword="1" bits="1:1" type="bool" />
+    <field name="Last Header" dword="1" bits="2:2" type="bool" />
+    <field name="Data Bits In Last DW" dword="1" bits="13:8" type="uint" />
+    <field name="Data Byte Offset" dword="1" bits="17:16" type="uint" />
+    <field name="Indirect Payload Enable" dword="1" bits="31:31" type="bool" />
+    <group count="0" dword="2" size="32">
+      <field name="Insert Data PayLoad" dword="0" bits="31:0" type="uint" />
+    </group>
   </instruction>
   <instruction name="AVP_PIC_STATE" bias="2" length="76" engine="video">
     <field name="DWord Length" dword="0" bits="11:0" type="uint" default="74" />
@@ -1635,12 +1651,17 @@
     <field name="Sequence Enable Inter Intra Compound Flag" dword="2" bits="19:19" type="bool" />
     <field name="Sequence Enable Masked Compound Flag" dword="2" bits="20:20" type="bool" />
     <field name="Sequence Enable Joint Compound Flag" dword="2" bits="21:21" type="bool" />
+    <field name="Tail Present Flag" dword="2" bits="22:22" type="bool" />
+    <field name="Header Present Flag" dword="2" bits="23:23" type="bool" />
+    <field name="Enable Bitstream Stitching In Hardware" dword="2" bits="24:24" type="bool" />
     <field name="Allow Screen Content Tools Flag" dword="3" bits="0:0" type="bool" />
     <field name="Force Integer MV Flag" dword="3" bits="1:1" type="bool" />
     <field name="Allow Warped Motion Flag" dword="3" bits="2:2" type="bool" />
     <field name="Use CDEF Filter Flag" dword="3" bits="4:4" type="bool" />
     <field name="Use Super-Res Flag" dword="3" bits="5:5" type="bool" />
     <field name="Frame Level Loop Restoration Filter Enable" dword="3" bits="6:6" type="bool" />
+    <field name="Post CDEF Filtered Recon Pixels Writeout Enable" dword="3" bits="14:14" type="bool" />
+    <field name="Post Wiener Filtered Pixel Streamout Enable" dword="3" bits="15:15" type="bool" />
     <field name="Frame Type" dword="3" bits="17:16" type="uint" />
     <field name="Intra Only Flag" dword="3" bits="19:19" type="bool" />
     <field name="Error Resilient Mode Flag" dword="3" bits="22:22" type="bool" />
@@ -1888,6 +1909,7 @@
     <field name="Pic Status/Error Report Enable" dword="1" bits="3:3" type="bool" />
     <field name="Frame Reconstruction Disable" dword="1" bits="4:4" type="bool" />
     <field name="Codec Standard Select" dword="1" bits="7:5" type="uint" default="2" />
+    <field name="VDENC Mode" dword="1" bits="10:10" type="bool" />
     <field name="Tile Statistics Streamout Enable" dword="1" bits="12:12" type="bool" />
     <field name="Multi Engine Mode" dword="1" bits="14:13" type="uint">
       <value name="Single Engine Mode" value="0" />
@@ -1901,8 +1923,8 @@
       <value name="Decode Scalable Mode" value="3" />
     </field>
     <field name="Pic Status/Error Report ID" dword="3" bits="31:0" type="uint" />
-    <field name="Source Pixel Prefetch Length" dword="6" bits="4:2" type="uint" />
-    <field name="Source Pixel Prefetch Enable" dword="6" bits="5:5" type="bool" />
+    <field name="Downscaled Source Pixel Prefetch Length" dword="6" bits="4:2" type="uint" />
+    <field name="Downscaled Source Pixel Prefetch Enable" dword="6" bits="5:5" type="bool" />
   </instruction>
   <instruction name="AVP_TILE_CODING" bias="2" length="7" engine="video">
     <field name="DWord Length" dword="0" bits="11:0" type="uint" default="5" />
@@ -2530,7 +2552,8 @@
     <field name="Tile Slice Param18" dword="16" bits="21:16" type="uint" />
     <field name="Tile Slice Param19" dword="16" bits="28:24" type="uint" />
     <field name="Tile Slice Param20" dword="16" bits="31:29" type="uint" />
-    <field name="Values17" dword="17" bits="31:0" type="uint" />
+    <field name="Tile Cumulative CU Count Streamout Offset Enable" dword="17" bits="0:0" type="bool" />
+    <field name="Tile Cumulative CU Count Streamout Offset" dword="17" bits="31:6" type="uint" />
     <field name="Values18" dword="18" bits="31:0" type="uint" />
     <field name="Values19" dword="19" bits="31:0" type="uint" />
     <field name="Values20" dword="20" bits="31:0" type="uint" />

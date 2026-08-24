@@ -40,13 +40,13 @@ vn_wsi_validate_image_format_info(
    const VkPhysicalDeviceImageFormatInfo2 *info);
 
 VkResult
-vn_wsi_fence_wait(struct vn_device *dev, struct vn_queue *queue);
+vn_wsi_fence_wait(VkQueue queue_handle);
 
 void
 vn_wsi_sync_wait(struct vn_device *dev, int fd);
 
 void
-vn_wsi_flush(struct vn_queue *queue);
+vn_wsi_flush(VkQueue queue_handle);
 
 #else
 
@@ -85,7 +85,7 @@ vn_wsi_validate_image_format_info(struct vn_physical_device *physical_dev,
 }
 
 static inline VkResult
-vn_wsi_fence_wait(struct vn_device *dev, struct vn_queue *queue)
+vn_wsi_fence_wait(VkQueue queue_handle)
 {
    return VK_SUCCESS;
 }
@@ -97,7 +97,7 @@ vn_wsi_sync_wait(struct vn_device *dev, int fd)
 }
 
 static inline void
-vn_wsi_flush(struct vn_queue *queue)
+vn_wsi_flush(VkQueue queue_handle)
 {
    return;
 }

@@ -77,6 +77,7 @@ struct r300_blend_state {
     struct pipe_blend_state state;
 
     uint32_t cb_clamp[COLORMASK_NUM_SWIZZLES][8];
+    uint32_t cb_clamp_masked_write[COLORMASK_NUM_SWIZZLES][8];
     uint32_t cb_noclamp[8];
     uint32_t cb_noclamp_noalpha[8];
     uint32_t cb_no_readwrite[8];
@@ -811,6 +812,7 @@ enum r300_fb_state_change {
 void r300_mark_fb_state_dirty(struct r300_context *r300,
                               enum r300_fb_state_change change);
 void r300_mark_vs_code_dirty(struct r300_context *r300);
+void r300_bind_vertex_shader_variant(struct r300_context *r300);
 void r300_mark_fs_code_dirty(struct r300_context *r300);
 
 struct pipe_sampler_view *

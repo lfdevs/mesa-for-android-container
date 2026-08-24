@@ -101,6 +101,28 @@ struct ac_addrlib {
    uint32_t fmask_surf_index;
 };
 
+static bool is_displayable(const uint32_t bpe, const uint32_t blk_w, const uint32_t blk_h,
+                           const uint32_t num_channels)
+{
+   if (blk_h != 1)
+      return false;
+
+   /* subsampled */
+   if (blk_w == 2)
+       return true;
+
+   if (blk_w != 1)
+       return false;
+
+   return
+      /* RGBA8 or RGBA16F */
+      (bpe >= 4 && bpe <= 8 && num_channels == 4) ||
+      /* R5G6B5 or R5G5B5A1 */
+      (bpe == 2 && num_channels >= 3) ||
+      /* C8 palette */
+      (bpe == 1 && num_channels == 1);
+}
+
 unsigned ac_pipe_config_to_num_pipes(unsigned pipe_config)
 {
    switch (pipe_config) {
@@ -134,7 +156,8 @@ bool ac_modifier_has_dcc(uint64_t modifier)
 
 bool ac_modifier_has_dcc_retile(uint64_t modifier)
 {
-   return IS_AMD_FMT_MOD(modifier) && AMD_FMT_MOD_GET(DCC_RETILE, modifier);
+   return IS_AMD_FMT_MOD(modifier) && AMD_FMT_MOD_GET(DCC_RETILE, modifier) &&
+          AMD_FMT_MOD_GET(TILE_VERSION, modifier) >= AMD_FMT_MOD_TILE_VER_GFX9;
 }
 
 bool ac_modifier_supports_dcc_image_stores(enum amd_gfx_level gfx_level, uint64_t modifier)
@@ -276,31 +299,70 @@ ac_modifier_fill_dcc_params(uint64_t modifier, struct radeon_surf *surf,
    surf->u.gfx9.color.dcc.max_compressed_block_size = AMD_FMT_MOD_GET(DCC_MAX_COMPRESSED_BLOCK, modifier);
 }
 
-bool ac_is_modifier_supported(const struct radeon_info *info,
-                              const struct ac_modifier_options *options,
-                              enum pipe_format format,
-                              uint64_t modifier)
+static uint32_t gfx6_get_tile_idx(const enum amd_gfx_level gfx_level, const uint32_t bpe, const uint32_t array_mode, const uint32_t micro_tile_mode)
 {
+   uint32_t bpp;
 
-   if (util_format_is_compressed(format) ||
-       util_format_is_depth_or_stencil(format) ||
-       (util_format_get_blocksizebits(format) > 64 && modifier != DRM_FORMAT_MOD_LINEAR))
-      return false;
+   STATIC_ASSERT(V_009910_ADDR_SURF_DISPLAY_MICRO_TILING == ADDR_DISPLAYABLE);
+   STATIC_ASSERT(V_009910_ADDR_SURF_THIN_MICRO_TILING == ADDR_NON_DISPLAYABLE);
+   STATIC_ASSERT(V_009910_ADDR_SURF_DEPTH_MICRO_TILING == ADDR_DEPTH_SAMPLE_ORDER);
+   STATIC_ASSERT(V_009910_ADDR_SURF_ROTATED_MICRO_TILING == ADDR_ROTATED);
+   STATIC_ASSERT(V_009910_ADDR_SURF_THICK_MICRO_TILING == ADDR_THICK);
 
-   if (info->gfx_level < GFX9)
-      return false;
+   switch (array_mode) {
+   case V_009910_ARRAY_1D_TILED_THIN1:
+      switch (micro_tile_mode) {
+      case V_009910_ADDR_SURF_DISPLAY_MICRO_TILING:
+         return 9;
+      case V_009910_ADDR_SURF_THIN_MICRO_TILING:
+         return 13;
+      default:
+         UNREACHABLE("Unsupported micro tile mode.");
+      }
+   case V_009910_ARRAY_2D_TILED_THIN1:
+      switch (micro_tile_mode) {
+      case V_009910_ADDR_SURF_DISPLAY_MICRO_TILING:
+         if (gfx_level >= GFX7)
+            return 10;
 
-   if(modifier == DRM_FORMAT_MOD_LINEAR)
-      return true;
+         bpp = MIN2(util_next_power_of_two(bpe * 8), 32);
+         return 10 + util_logbase2(bpp / 8);
 
-   /* GFX8 may need a different modifier for each plane */
-   if (info->gfx_level < GFX9 && util_format_get_num_planes(format) > 1)
-      return false;
+      case V_009910_ADDR_SURF_THIN_MICRO_TILING:
+         if (gfx_level >= GFX7)
+            return 14;
 
-   /* Tiling doesn't work with the 422 (SUBSAMPLED) formats. */
-   if (util_format_is_subsampled_422(format))
-      return false;
+         bpp = MIN2(util_next_power_of_two(bpe * 8), 64);
+         return 14 + util_logbase2(bpp / 8);
 
+      default:
+         UNREACHABLE("Unsupported micro tile mode.");
+      }
+   default:
+      UNREACHABLE("Unsupported array mode.");
+   }
+}
+
+static uint32_t gfx7_get_macrotile_idx(const uint32_t bpe,
+                                       const uint32_t tile_split_bytes,
+                                       const uint32_t thickness,
+                                       const uint32_t num_samples)
+{
+   /* See CiLib::HwlComputeMacroModeIndex() */
+   const uint32_t tile_size_pixels = 8 * 8;
+   const uint32_t tile_bytes_1x = thickness * tile_size_pixels * bpe;
+   const uint32_t tile_bytes = CLAMP(tile_bytes_1x * num_samples, 64, tile_split_bytes);
+   const uint32_t index = util_logbase2(tile_bytes / 64);
+
+   assert(index < 16);
+   return index;
+}
+
+static bool ac_is_modifier_supported_gfx9(const struct radeon_info *info,
+                                          const struct ac_modifier_options *options,
+                                          enum pipe_format format,
+                                          uint64_t modifier)
+{
    uint32_t allowed_swizzles = 0xFFFFFFFF;
    switch(info->gfx_level) {
    case GFX9:
@@ -345,6 +407,37 @@ bool ac_is_modifier_supported(const struct radeon_info *info,
    }
 
    return true;
+}
+
+bool ac_is_modifier_supported(const struct radeon_info *info,
+                              const struct ac_modifier_options *options,
+                              enum pipe_format format,
+                              uint64_t modifier)
+{
+
+   if (util_format_is_compressed(format) ||
+       util_format_is_depth_or_stencil(format) ||
+       (util_format_get_blocksizebits(format) > 64 && modifier != DRM_FORMAT_MOD_LINEAR))
+      return false;
+
+   if (info->gfx_level < GFX9)
+      return false;
+
+   if (modifier == DRM_FORMAT_MOD_LINEAR)
+      return true;
+
+   /* GFX8 may need a different modifier for each plane */
+   if (info->gfx_level < GFX9 && util_format_get_num_planes(format) > 1)
+      return false;
+
+   /* Tiling doesn't work with the 422 (SUBSAMPLED) formats. */
+   if (util_format_is_subsampled_422(format))
+      return false;
+
+   if (info->gfx_level >= GFX9)
+      return ac_is_modifier_supported_gfx9(info, options, format, modifier);
+   else
+      UNREACHABLE("unsupported GFX level");
 }
 
 bool ac_get_supported_modifiers(const struct radeon_info *info,
@@ -631,7 +724,8 @@ bool ac_get_supported_modifiers(const struct radeon_info *info,
       ADD_MOD(DRM_FORMAT_MOD_LINEAR)
       break;
    }
-   case GFX12: {
+   case GFX12:
+   case GFX12_1: {
       /* Chip properties no longer affect tiling, and there is no distinction between displayable
        * and non-displayable anymore. (DCC settings may affect displayability though)
        *
@@ -1156,25 +1250,8 @@ static void gfx6_set_micro_tile_mode(struct radeon_surf *surf, const struct rade
       surf->micro_tile_mode = G_009910_MICRO_TILE_MODE(tile_mode);
 }
 
-static unsigned cik_get_macro_tile_index(struct radeon_surf *surf)
-{
-   unsigned index, tileb;
-
-   tileb = 8 * 8 * surf->bpe;
-   tileb = MIN2(surf->u.legacy.tile_split, tileb);
-
-   for (index = 0; tileb > 64; index++)
-      tileb >>= 1;
-
-   assert(index < 16);
-   return index;
-}
-
 static bool get_display_flag(const struct ac_surf_config *config, const struct radeon_surf *surf)
 {
-   unsigned num_channels = config->info.num_channels;
-   unsigned bpe = surf->bpe;
-
    /* With modifiers the kernel is in charge of whether it is displayable.
     * We need to ensure at least 32 pixels pitch alignment, but this is
     * always the case when the blocksize >= 4K.
@@ -1184,19 +1261,8 @@ static bool get_display_flag(const struct ac_surf_config *config, const struct r
 
    if (!config->is_1d && !config->is_3d && !config->is_cube &&
        !(surf->flags & RADEON_SURF_Z_OR_SBUFFER) &&
-       surf->flags & RADEON_SURF_SCANOUT && config->info.samples <= 1 && surf->blk_w <= 2 &&
-       surf->blk_h == 1) {
-      /* subsampled */
-      if (surf->blk_w == 2 && surf->blk_h == 1)
-         return true;
-
-      if (/* RGBA8 or RGBA16F */
-          (bpe >= 4 && bpe <= 8 && num_channels == 4) ||
-          /* R5G6B5 or R5G5B5A1 */
-          (bpe == 2 && num_channels >= 3) ||
-          /* C8 palette */
-          (bpe == 1 && num_channels == 1))
-         return true;
+       surf->flags & RADEON_SURF_SCANOUT && config->info.samples <= 1) {
+      return is_displayable(surf->bpe, surf->blk_w, surf->blk_h, config->info.num_channels);
    }
    return false;
 }
@@ -1396,14 +1462,271 @@ static uint64_t ac_estimate_size(const struct ac_surf_config *config,
 #define SI__GB_TILE_MODE__NUM_BANKS(x)          (((x) >> 20) & 0x3)
 
 /**
+ * Select the best tile mode that doesn't overallocate memory too much.
+ * The tile modes below are sorted from best to worst performance.
+ */
+static int gfx6_select_3d_tile_idx(const struct ac_addrlib *const addrlib,
+                                   const struct radeon_info *const info,
+                                   const struct ac_surf_config *const config,
+                                   const struct radeon_surf *const surf)
+{
+   struct {
+      unsigned tile_mode;
+      unsigned gfx6_tile_mode_index;
+      unsigned gfx7_tile_mode_index;
+      unsigned microtile_width;
+      unsigned microtile_height;
+      unsigned microtile_depth;
+      bool supported; /* this comes from the tile mode arrays in the kernel */
+      /* Derived fields. */
+      unsigned bank_width;
+      unsigned bank_height;
+      unsigned num_banks;
+      unsigned macro_tile_aspect;
+      unsigned align_width;
+      unsigned align_height;
+      unsigned align_depth;
+   } modes[] = {
+      {ADDR_TM_3D_TILED_XTHICK, 0, 26, 8, 8, 8, info->gfx_level >= GFX7},
+      {ADDR_TM_2D_TILED_XTHICK, 19, 25, 8, 8, 8, true},
+      {ADDR_TM_3D_TILED_THICK, 0, 21, 8, 8, 4, info->gfx_level >= GFX7},
+      {ADDR_TM_2D_TILED_THICK, 20, 20, 8, 8, 4, true},
+      {ADDR_TM_3D_TILED_THIN1, 0, 15, 8, 8, 1, info->gfx_level >= GFX7},
+      {ADDR_TM_2D_TILED_THIN1, 14, 14, 8, 8, 1, true},
+      {ADDR_TM_1D_TILED_THICK, 18, 19, 8, 8, 4, true},
+      {ADDR_TM_1D_TILED_THIN1, 13, 13, 8, 8, 1, true},
+      /* Don't use LINEAR_ALIGNED. It doesn't work with BC formats. */
+   };
+
+   for (unsigned i = 0; i < ARRAY_SIZE(modes); i++) {
+      if (!modes[i].supported)
+         continue;
+
+      if (modes[i].tile_mode <= ADDR_TM_1D_TILED_THICK) {
+         modes[i].align_width = modes[i].microtile_width;
+         modes[i].align_height = modes[i].microtile_height;
+         modes[i].align_depth = modes[i].microtile_depth;
+         continue;
+      }
+
+      if (info->gfx_level >= GFX7) {
+         ADDR_GET_MACROMODEINDEX_INPUT in = {sizeof(in)};
+         ADDR_GET_MACROMODEINDEX_OUTPUT out = {sizeof(out)};
+
+         in.tileIndex = modes[i].gfx7_tile_mode_index;
+         in.bpp = surf->bpe * 8;
+         in.numFrags = 1;
+
+         if (AddrGetMacroModeIndex(addrlib->handle, &in, &out) != ADDR_OK) {
+            fprintf(stderr, "amdgpu: AddrGetMacroModeIndex failed.\n");
+            return -1;
+         }
+
+         uint32_t macro_mode_reg = info->cik_macrotile_mode_array[out.macroModeIndex];
+         modes[i].bank_width = 1 << G_009990_BANK_WIDTH(macro_mode_reg);
+         modes[i].bank_height = 1 << G_009990_BANK_HEIGHT(macro_mode_reg);
+         modes[i].num_banks = 2 << G_009990_NUM_BANKS(macro_mode_reg);
+         modes[i].macro_tile_aspect = 1 << G_009990_MACRO_TILE_ASPECT(macro_mode_reg);
+      } else {
+         /* GFX6. */
+         uint32_t tile_mode_reg = info->si_tile_mode_array[modes[i].gfx6_tile_mode_index];
+         modes[i].bank_width = 1 << SI__GB_TILE_MODE__BANK_WIDTH(tile_mode_reg);
+         modes[i].bank_height = 1 << SI__GB_TILE_MODE__BANK_HEIGHT(tile_mode_reg);
+         modes[i].num_banks = 2 << SI__GB_TILE_MODE__NUM_BANKS(tile_mode_reg);
+         modes[i].macro_tile_aspect = 1 << SI__GB_TILE_MODE__MACRO_TILE_ASPECT(tile_mode_reg);
+      }
+
+      modes[i].align_width = modes[i].microtile_width * modes[i].bank_width *
+                              info->num_tile_pipes * modes[i].macro_tile_aspect;
+      modes[i].align_height = modes[i].microtile_height * modes[i].bank_height *
+                              modes[i].num_banks / modes[i].macro_tile_aspect;
+      modes[i].align_depth = modes[i].microtile_depth;
+   }
+
+   uint64_t ideal_size = ac_estimate_size(config, surf->blk_w, surf->blk_h, surf->bpe * 8,
+                                          config->info.width, config->info.height, 1, 1, 1);
+   int tile_idx = ADDR_TM_1D_TILED_THIN1; /* used if everything else fails */
+
+   for (unsigned i = 0; i < ARRAY_SIZE(modes); i++) {
+      if (!modes[i].supported)
+         continue;
+
+      if (modes[i].align_depth > 1 && surf->flags & RADEON_SURF_VIEW_3D_AS_2D_ARRAY)
+         continue;
+
+      uint64_t size = ac_estimate_size(config, surf->blk_w, surf->blk_h, surf->bpe * 8,
+                                       config->info.width, config->info.height,
+                                       modes[i].align_width, modes[i].align_height,
+                                       modes[i].align_depth);
+
+      if (size <= ideal_size * 3) {
+         tile_idx = modes[i].tile_mode;
+         break;
+      }
+   }
+
+   return tile_idx;
+}
+
+static void gfx6_fill_addr_info_from_surf(const struct ac_addrlib *const addrlib,
+                                          const struct radeon_info *const info,
+                                          const struct ac_surf_config *const config,
+                                          const bool compressed,
+                                          enum radeon_surf_mode mode,
+                                          const struct radeon_surf *const surf,
+                                          ADDR_COMPUTE_SURFACE_INFO_INPUT *const AddrSurfInfoIn,
+                                          ADDR_TILEINFO *const AddrTileInfoIn)
+{
+   /* MSAA requires 2D tiling. */
+   if (config->info.samples > 1)
+      mode = RADEON_SURF_MODE_2D;
+
+   /* DB doesn't support linear layouts. */
+   if (surf->flags & (RADEON_SURF_Z_OR_SBUFFER) && mode < RADEON_SURF_MODE_1D)
+      mode = RADEON_SURF_MODE_1D;
+
+   /* Set the requested tiling mode. */
+   switch (mode) {
+   case RADEON_SURF_MODE_LINEAR_ALIGNED:
+      AddrSurfInfoIn->tileMode = ADDR_TM_LINEAR_ALIGNED;
+      break;
+   case RADEON_SURF_MODE_1D:
+      if (surf->flags & RADEON_SURF_PRT)
+         AddrSurfInfoIn->tileMode = ADDR_TM_PRT_TILED_THIN1;
+      else if (config->is_3d)
+         AddrSurfInfoIn->tileMode = ADDR_TM_1D_TILED_THICK;
+      else
+         AddrSurfInfoIn->tileMode = ADDR_TM_1D_TILED_THIN1;
+      break;
+   case RADEON_SURF_MODE_2D:
+      if (surf->flags & RADEON_SURF_PRT) {
+         if (config->is_3d && surf->bpe < 8) {
+            AddrSurfInfoIn->tileMode = ADDR_TM_PRT_2D_TILED_THICK;
+         } else {
+            AddrSurfInfoIn->tileMode = ADDR_TM_PRT_TILED_THIN1;
+         }
+      } else if (config->is_3d) {
+         AddrSurfInfoIn->tileMode = gfx6_select_3d_tile_idx(addrlib, info, config, surf);
+      } else {
+         AddrSurfInfoIn->tileMode = ADDR_TM_2D_TILED_THIN1;
+      }
+      break;
+   default:
+      assert(0);
+   }
+
+   /* Set the micro tile type. */
+   if (surf->flags & RADEON_SURF_SCANOUT)
+      AddrSurfInfoIn->tileType = ADDR_DISPLAYABLE;
+   else if (surf->flags & RADEON_SURF_Z_OR_SBUFFER)
+      AddrSurfInfoIn->tileType = ADDR_DEPTH_SAMPLE_ORDER;
+   else
+      AddrSurfInfoIn->tileType = ADDR_NON_DISPLAYABLE;
+
+   AddrSurfInfoIn->flags.color = !(surf->flags & RADEON_SURF_Z_OR_SBUFFER);
+   AddrSurfInfoIn->flags.depth = (surf->flags & RADEON_SURF_ZBUFFER) != 0;
+   AddrSurfInfoIn->flags.cube = config->is_cube;
+   AddrSurfInfoIn->flags.display = get_display_flag(config, surf);
+   AddrSurfInfoIn->flags.pow2Pad = config->info.levels > 1;
+   AddrSurfInfoIn->flags.tcCompatible = (surf->flags & RADEON_SURF_TC_COMPATIBLE_HTILE) != 0;
+   AddrSurfInfoIn->flags.prt = (surf->flags & RADEON_SURF_PRT) != 0;
+
+   /* Only degrade the tile mode for space if TC-compatible HTILE hasn't been
+    * requested, because TC-compatible HTILE requires 2D tiling.
+    */
+   AddrSurfInfoIn->flags.opt4Space = !AddrSurfInfoIn->flags.tcCompatible && !config->is_3d &&
+                                     !AddrSurfInfoIn->flags.fmask && config->info.samples <= 1 &&
+                                     !(surf->flags & RADEON_SURF_FORCE_SWIZZLE_MODE);
+
+   /* DCC notes:
+    * - If we add MSAA support, keep in mind that CB can't decompress 8bpp
+    *   with samples >= 4.
+    * - Mipmapped array textures have low performance (discovered by a closed
+    *   driver team).
+    */
+   AddrSurfInfoIn->flags.dccCompatible =
+      info->gfx_level >= GFX8 && info->has_graphics && /* disable DCC on compute-only chips */
+      !(surf->flags & RADEON_SURF_Z_OR_SBUFFER) && !(surf->flags & RADEON_SURF_DISABLE_DCC) &&
+      !compressed &&
+      ((config->info.array_size == 1 && config->info.depth == 1) || config->info.levels == 1);
+
+   AddrSurfInfoIn->flags.noStencil =
+      !(surf->flags & RADEON_SURF_SBUFFER) || (surf->flags & RADEON_SURF_NO_RENDER_TARGET);
+
+   AddrSurfInfoIn->flags.compressZ = !!(surf->flags & RADEON_SURF_Z_OR_SBUFFER);
+
+   /* On GFX7-GFX8, the DB uses the same pitch and tile mode (except tilesplit)
+    * for Z and stencil. This can cause a number of problems which we work
+    * around here:
+    *
+    * - a depth part that is incompatible with mipmapped texturing
+    * - at least on Stoney, entirely incompatible Z/S aspects (e.g.
+    *   incorrect tiling applied to the stencil part, stencil buffer
+    *   memory accesses that go out of bounds) even without mipmapping
+    *
+    * Some piglit tests that are prone to different types of related
+    * failures:
+    *  ./bin/ext_framebuffer_multisample-upsample 2 stencil
+    *  ./bin/framebuffer-blit-levels {draw,read} stencil
+    *  ./bin/ext_framebuffer_multisample-unaligned-blit N {depth,stencil} {msaa,upsample,downsample}
+    *  ./bin/fbo-depth-array fs-writes-{depth,stencil} / {depth,stencil}-{clear,layered-clear,draw}
+    *  ./bin/depthstencil-render-miplevels 1024 d=s=z24_s8
+    */
+   if (AddrSurfInfoIn->flags.depth && !AddrSurfInfoIn->flags.noStencil &&
+       (config->info.levels > 1 || info->family == CHIP_STONEY)) {
+      /* Compute stencilTileIdx that is compatible with the (depth)
+       * tileIdx. This degrades the depth surface if necessary to
+       * ensure that a matching stencilTileIdx exists. */
+      AddrSurfInfoIn->flags.matchStencilTileCfg = 1;
+
+      /* Keep the depth mip-tail compatible with texturing. */
+      if (config->info.levels > 1 && !(surf->flags & RADEON_SURF_NO_STENCIL_ADJUST))
+         AddrSurfInfoIn->flags.noStencil = 1;
+   }
+
+   /* Set preferred macrotile parameters. This is usually required
+    * for shared resources. This is for 2D tiling only.
+    */
+   if (!(surf->flags & RADEON_SURF_Z_OR_SBUFFER) &&
+       AddrSurfInfoIn->tileMode >= ADDR_TM_2D_TILED_THIN1 && surf->u.legacy.bankw &&
+       surf->u.legacy.bankh && surf->u.legacy.mtilea && surf->u.legacy.tile_split) {
+      /* If any of these parameters are incorrect, the calculation
+       * will fail.
+       */
+      AddrTileInfoIn->banks = surf->u.legacy.num_banks;
+      AddrTileInfoIn->bankWidth = surf->u.legacy.bankw;
+      AddrTileInfoIn->bankHeight = surf->u.legacy.bankh;
+      AddrTileInfoIn->macroAspectRatio = surf->u.legacy.mtilea;
+      AddrTileInfoIn->tileSplitBytes = surf->u.legacy.tile_split;
+      AddrTileInfoIn->pipeConfig = surf->u.legacy.pipe_config + 1; /* +1 compared to GB_TILE_MODE */
+      AddrSurfInfoIn->flags.opt4Space = 0;
+      AddrSurfInfoIn->pTileInfo = AddrTileInfoIn;
+
+      /* If AddrSurfInfoIn.pTileInfo is set, Addrlib doesn't set
+       * the tile index, because we are expected to know it if
+       * we know the other parameters.
+       *
+       * This is something that can easily be fixed in Addrlib.
+       * For now, just figure it out here.
+       * Note that only 2D_TILE_THIN1 is handled here.
+       */
+      AddrSurfInfoIn->tileIndex = gfx6_get_tile_idx(info->gfx_level, surf->bpe,
+                                                    V_009910_ARRAY_2D_TILED_THIN1,
+                                                    AddrSurfInfoIn->tileType);
+   }
+}
+
+/**
  * Fill in the tiling information in \p surf based on the given surface config.
  *
  * The following fields of \p surf must be initialized by the caller:
  * blk_w, blk_h, bpe, flags.
  */
-static int gfx6_compute_surface(struct ac_addrlib *addrlib, const struct radeon_info *info,
-                                const struct ac_surf_config *config, enum radeon_surf_mode mode,
-                                struct radeon_surf *surf)
+static int gfx6_compute_surface(struct ac_addrlib *const addrlib,
+                                const struct radeon_info *const info,
+                                const struct ac_surf_config *const config,
+                                const enum radeon_surf_mode preferred_mode,
+                                struct radeon_surf *const surf)
 {
    unsigned level;
    bool compressed;
@@ -1427,142 +1750,6 @@ static int gfx6_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
 
    compressed = surf->blk_w == 4 && surf->blk_h == 4;
 
-   /* MSAA requires 2D tiling. */
-   if (config->info.samples > 1)
-      mode = RADEON_SURF_MODE_2D;
-
-   /* DB doesn't support linear layouts. */
-   if (surf->flags & (RADEON_SURF_Z_OR_SBUFFER) && mode < RADEON_SURF_MODE_1D)
-      mode = RADEON_SURF_MODE_1D;
-
-   /* Set the requested tiling mode. */
-   switch (mode) {
-   case RADEON_SURF_MODE_LINEAR_ALIGNED:
-      AddrSurfInfoIn.tileMode = ADDR_TM_LINEAR_ALIGNED;
-      break;
-   case RADEON_SURF_MODE_1D:
-      if (surf->flags & RADEON_SURF_PRT)
-         AddrSurfInfoIn.tileMode = ADDR_TM_PRT_TILED_THIN1;
-      else if (config->is_3d)
-         AddrSurfInfoIn.tileMode = ADDR_TM_1D_TILED_THICK;
-      else
-         AddrSurfInfoIn.tileMode = ADDR_TM_1D_TILED_THIN1;
-      break;
-   case RADEON_SURF_MODE_2D:
-      if (surf->flags & RADEON_SURF_PRT) {
-         if (config->is_3d && surf->bpe < 8) {
-            AddrSurfInfoIn.tileMode = ADDR_TM_PRT_2D_TILED_THICK;
-         } else {
-            AddrSurfInfoIn.tileMode = ADDR_TM_PRT_TILED_THIN1;
-         }
-      } else {
-         if (config->is_3d) {
-            /* Select the best tile mode that doesn't overallocate memory too much.
-             * The tile modes below are sorted from best to worst performance.
-             */
-            struct {
-               unsigned tile_mode;
-               unsigned gfx6_tile_mode_index;
-               unsigned gfx7_tile_mode_index;
-               unsigned microtile_width;
-               unsigned microtile_height;
-               unsigned microtile_depth;
-               bool supported; /* this comes from the tile mode arrays in the kernel */
-               /* Derived fields. */
-               unsigned bank_width;
-               unsigned bank_height;
-               unsigned num_banks;
-               unsigned macro_tile_aspect;
-               unsigned align_width;
-               unsigned align_height;
-               unsigned align_depth;
-            } modes[] = {
-               {ADDR_TM_3D_TILED_XTHICK, 0, 26, 8, 8, 8, info->gfx_level >= GFX7},
-               {ADDR_TM_2D_TILED_XTHICK, 19, 25, 8, 8, 8, true},
-               {ADDR_TM_3D_TILED_THICK, 0, 21, 8, 8, 4, info->gfx_level >= GFX7},
-               {ADDR_TM_2D_TILED_THICK, 20, 20, 8, 8, 4, true},
-               {ADDR_TM_3D_TILED_THIN1, 0, 15, 8, 8, 1, info->gfx_level >= GFX7},
-               {ADDR_TM_2D_TILED_THIN1, 14, 14, 8, 8, 1, true},
-               {ADDR_TM_1D_TILED_THICK, 18, 19, 8, 8, 4, true},
-               {ADDR_TM_1D_TILED_THIN1, 13, 13, 8, 8, 1, true},
-               /* Don't use LINEAR_ALIGNED. It doesn't work with BC formats. */
-            };
-
-            for (unsigned i = 0; i < ARRAY_SIZE(modes); i++) {
-               if (!modes[i].supported)
-                  continue;
-
-               if (modes[i].tile_mode <= ADDR_TM_1D_TILED_THICK) {
-                  modes[i].align_width = modes[i].microtile_width;
-                  modes[i].align_height = modes[i].microtile_height;
-                  modes[i].align_depth = modes[i].microtile_depth;
-                  continue;
-               }
-
-               if (info->gfx_level >= GFX7) {
-                  ADDR_GET_MACROMODEINDEX_INPUT in = {sizeof(in)};
-                  ADDR_GET_MACROMODEINDEX_OUTPUT out = {sizeof(out)};
-
-                  in.tileIndex = modes[i].gfx7_tile_mode_index;
-                  in.bpp = surf->bpe * 8;
-                  in.numFrags = 1;
-
-                  if (AddrGetMacroModeIndex(addrlib->handle, &in, &out) != ADDR_OK) {
-                     fprintf(stderr, "amdgpu: AddrGetMacroModeIndex failed.\n");
-                     return -1;
-                  }
-
-                  uint32_t macro_mode_reg = info->cik_macrotile_mode_array[out.macroModeIndex];
-                  modes[i].bank_width = 1 << G_009990_BANK_WIDTH(macro_mode_reg);
-                  modes[i].bank_height = 1 << G_009990_BANK_HEIGHT(macro_mode_reg);
-                  modes[i].num_banks = 2 << G_009990_NUM_BANKS(macro_mode_reg);
-                  modes[i].macro_tile_aspect = 1 << G_009990_MACRO_TILE_ASPECT(macro_mode_reg);
-               } else {
-                  /* GFX6. */
-                  uint32_t tile_mode_reg = info->si_tile_mode_array[modes[i].gfx6_tile_mode_index];
-                  modes[i].bank_width = 1 << SI__GB_TILE_MODE__BANK_WIDTH(tile_mode_reg);
-                  modes[i].bank_height = 1 << SI__GB_TILE_MODE__BANK_HEIGHT(tile_mode_reg);
-                  modes[i].num_banks = 2 << SI__GB_TILE_MODE__NUM_BANKS(tile_mode_reg);
-                  modes[i].macro_tile_aspect = 1 << SI__GB_TILE_MODE__MACRO_TILE_ASPECT(tile_mode_reg);
-               }
-
-               modes[i].align_width = modes[i].microtile_width * modes[i].bank_width *
-                                      info->num_tile_pipes * modes[i].macro_tile_aspect;
-               modes[i].align_height = modes[i].microtile_height * modes[i].bank_height *
-                                       modes[i].num_banks / modes[i].macro_tile_aspect;
-               modes[i].align_depth = modes[i].microtile_depth;
-            }
-
-            uint64_t ideal_size = ac_estimate_size(config, surf->blk_w, surf->blk_h, surf->bpe * 8,
-                                                   config->info.width, config->info.height, 1, 1, 1);
-            AddrSurfInfoIn.tileMode = ADDR_TM_1D_TILED_THIN1; /* used if everything else fails */
-
-            for (unsigned i = 0; i < ARRAY_SIZE(modes); i++) {
-               if (!modes[i].supported)
-                  continue;
-
-               if (modes[i].align_depth > 1 && surf->flags & RADEON_SURF_VIEW_3D_AS_2D_ARRAY)
-                  continue;
-
-               uint64_t size = ac_estimate_size(config, surf->blk_w, surf->blk_h, surf->bpe * 8,
-                                                config->info.width, config->info.height,
-                                                modes[i].align_width, modes[i].align_height,
-                                                modes[i].align_depth);
-
-               if (size <= ideal_size * 3) {
-                  AddrSurfInfoIn.tileMode = modes[i].tile_mode;
-                  break;
-               }
-            }
-         } else {
-            AddrSurfInfoIn.tileMode = ADDR_TM_2D_TILED_THIN1;
-         }
-      }
-      break;
-   default:
-      assert(0);
-   }
-
    AddrSurfInfoIn.format = bpe_to_format(surf);
    if (!compressed)
       AddrDccIn.bpp = AddrSurfInfoIn.bpp = surf->bpe * 8;
@@ -1571,138 +1758,22 @@ static int gfx6_compute_surface(struct ac_addrlib *addrlib, const struct radeon_
    if (AddrSurfInfoIn.format == ADDR_FMT_32_32_32)
       AddrSurfInfoIn.format = ADDR_FMT_INVALID;
 
-   AddrDccIn.numSamples = AddrSurfInfoIn.numSamples = MAX2(1, config->info.samples);
    AddrSurfInfoIn.tileIndex = -1;
+   AddrSurfInfoIn.numSamples = MAX2(1, config->info.samples);
 
-   if (!(surf->flags & RADEON_SURF_Z_OR_SBUFFER)) {
+   if (!(surf->flags & RADEON_SURF_Z_OR_SBUFFER))
       AddrDccIn.numSamples = AddrSurfInfoIn.numFrags = MAX2(1, config->info.storage_samples);
-   }
 
-   /* Set the micro tile type. */
-   if (surf->flags & RADEON_SURF_SCANOUT)
-      AddrSurfInfoIn.tileType = ADDR_DISPLAYABLE;
-   else if (surf->flags & RADEON_SURF_Z_OR_SBUFFER)
-      AddrSurfInfoIn.tileType = ADDR_DEPTH_SAMPLE_ORDER;
-   else
-      AddrSurfInfoIn.tileType = ADDR_NON_DISPLAYABLE;
+   gfx6_fill_addr_info_from_surf(addrlib, info, config, compressed, preferred_mode, surf,
+                                 &AddrSurfInfoIn, &AddrTileInfoIn);
 
-   AddrSurfInfoIn.flags.color = !(surf->flags & RADEON_SURF_Z_OR_SBUFFER);
-   AddrSurfInfoIn.flags.depth = (surf->flags & RADEON_SURF_ZBUFFER) != 0;
-   AddrSurfInfoIn.flags.cube = config->is_cube;
-   AddrSurfInfoIn.flags.display = get_display_flag(config, surf);
-   AddrSurfInfoIn.flags.pow2Pad = config->info.levels > 1;
-   AddrSurfInfoIn.flags.tcCompatible = (surf->flags & RADEON_SURF_TC_COMPATIBLE_HTILE) != 0;
-   AddrSurfInfoIn.flags.prt = (surf->flags & RADEON_SURF_PRT) != 0;
+   /* Addrlib may not set this if tileIndex is forced. */
+   if (info->gfx_level >= GFX7 && AddrSurfInfoIn.tileIndex >= 0)
+      AddrSurfInfoOut.macroModeIndex = gfx7_get_macrotile_idx(surf->bpe,
+                                                              surf->u.legacy.tile_split, 1,
+                                                              AddrSurfInfoIn.numSamples);
 
-   /* Only degrade the tile mode for space if TC-compatible HTILE hasn't been
-    * requested, because TC-compatible HTILE requires 2D tiling.
-    */
-   AddrSurfInfoIn.flags.opt4Space = !AddrSurfInfoIn.flags.tcCompatible && !config->is_3d &&
-                                    !AddrSurfInfoIn.flags.fmask && config->info.samples <= 1 &&
-                                    !(surf->flags & RADEON_SURF_FORCE_SWIZZLE_MODE);
-
-   /* DCC notes:
-    * - If we add MSAA support, keep in mind that CB can't decompress 8bpp
-    *   with samples >= 4.
-    * - Mipmapped array textures have low performance (discovered by a closed
-    *   driver team).
-    */
-   AddrSurfInfoIn.flags.dccCompatible =
-      info->gfx_level >= GFX8 && info->has_graphics && /* disable DCC on compute-only chips */
-      !(surf->flags & RADEON_SURF_Z_OR_SBUFFER) && !(surf->flags & RADEON_SURF_DISABLE_DCC) &&
-      !compressed &&
-      ((config->info.array_size == 1 && config->info.depth == 1) || config->info.levels == 1);
-
-   AddrSurfInfoIn.flags.noStencil =
-      !(surf->flags & RADEON_SURF_SBUFFER) || (surf->flags & RADEON_SURF_NO_RENDER_TARGET);
-
-   AddrSurfInfoIn.flags.compressZ = !!(surf->flags & RADEON_SURF_Z_OR_SBUFFER);
-
-   /* On GFX7-GFX8, the DB uses the same pitch and tile mode (except tilesplit)
-    * for Z and stencil. This can cause a number of problems which we work
-    * around here:
-    *
-    * - a depth part that is incompatible with mipmapped texturing
-    * - at least on Stoney, entirely incompatible Z/S aspects (e.g.
-    *   incorrect tiling applied to the stencil part, stencil buffer
-    *   memory accesses that go out of bounds) even without mipmapping
-    *
-    * Some piglit tests that are prone to different types of related
-    * failures:
-    *  ./bin/ext_framebuffer_multisample-upsample 2 stencil
-    *  ./bin/framebuffer-blit-levels {draw,read} stencil
-    *  ./bin/ext_framebuffer_multisample-unaligned-blit N {depth,stencil} {msaa,upsample,downsample}
-    *  ./bin/fbo-depth-array fs-writes-{depth,stencil} / {depth,stencil}-{clear,layered-clear,draw}
-    *  ./bin/depthstencil-render-miplevels 1024 d=s=z24_s8
-    */
    int stencil_tile_idx = -1;
-
-   if (AddrSurfInfoIn.flags.depth && !AddrSurfInfoIn.flags.noStencil &&
-       (config->info.levels > 1 || info->family == CHIP_STONEY)) {
-      /* Compute stencilTileIdx that is compatible with the (depth)
-       * tileIdx. This degrades the depth surface if necessary to
-       * ensure that a matching stencilTileIdx exists. */
-      AddrSurfInfoIn.flags.matchStencilTileCfg = 1;
-
-      /* Keep the depth mip-tail compatible with texturing. */
-      if (config->info.levels > 1 && !(surf->flags & RADEON_SURF_NO_STENCIL_ADJUST))
-         AddrSurfInfoIn.flags.noStencil = 1;
-   }
-
-   /* Set preferred macrotile parameters. This is usually required
-    * for shared resources. This is for 2D tiling only. */
-   if (!(surf->flags & RADEON_SURF_Z_OR_SBUFFER) &&
-       AddrSurfInfoIn.tileMode >= ADDR_TM_2D_TILED_THIN1 && surf->u.legacy.bankw &&
-       surf->u.legacy.bankh && surf->u.legacy.mtilea && surf->u.legacy.tile_split) {
-      /* If any of these parameters are incorrect, the calculation
-       * will fail. */
-      AddrTileInfoIn.banks = surf->u.legacy.num_banks;
-      AddrTileInfoIn.bankWidth = surf->u.legacy.bankw;
-      AddrTileInfoIn.bankHeight = surf->u.legacy.bankh;
-      AddrTileInfoIn.macroAspectRatio = surf->u.legacy.mtilea;
-      AddrTileInfoIn.tileSplitBytes = surf->u.legacy.tile_split;
-      AddrTileInfoIn.pipeConfig = surf->u.legacy.pipe_config + 1; /* +1 compared to GB_TILE_MODE */
-      AddrSurfInfoIn.flags.opt4Space = 0;
-      AddrSurfInfoIn.pTileInfo = &AddrTileInfoIn;
-
-      /* If AddrSurfInfoIn.pTileInfo is set, Addrlib doesn't set
-       * the tile index, because we are expected to know it if
-       * we know the other parameters.
-       *
-       * This is something that can easily be fixed in Addrlib.
-       * For now, just figure it out here.
-       * Note that only 2D_TILE_THIN1 is handled here.
-       */
-      assert(!(surf->flags & RADEON_SURF_Z_OR_SBUFFER));
-      assert(AddrSurfInfoIn.tileMode == ADDR_TM_2D_TILED_THIN1);
-
-      if (info->gfx_level == GFX6) {
-         if (AddrSurfInfoIn.tileType == ADDR_DISPLAYABLE) {
-            if (surf->bpe == 2)
-               AddrSurfInfoIn.tileIndex = 11; /* 16bpp */
-            else
-               AddrSurfInfoIn.tileIndex = 12; /* 32bpp */
-         } else {
-            if (surf->bpe == 1)
-               AddrSurfInfoIn.tileIndex = 14; /* 8bpp */
-            else if (surf->bpe == 2)
-               AddrSurfInfoIn.tileIndex = 15; /* 16bpp */
-            else if (surf->bpe == 4)
-               AddrSurfInfoIn.tileIndex = 16; /* 32bpp */
-            else
-               AddrSurfInfoIn.tileIndex = 17; /* 64bpp (and 128bpp) */
-         }
-      } else {
-         /* GFX7 - GFX8 */
-         if (AddrSurfInfoIn.tileType == ADDR_DISPLAYABLE)
-            AddrSurfInfoIn.tileIndex = 10; /* 2D displayable */
-         else
-            AddrSurfInfoIn.tileIndex = 14; /* 2D non-displayable */
-
-         /* Addrlib doesn't set this if tileIndex is forced like above. */
-         AddrSurfInfoOut.macroModeIndex = cik_get_macro_tile_index(surf);
-      }
-   }
 
    surf->has_stencil = !!(surf->flags & RADEON_SURF_SBUFFER);
    surf->num_meta_levels = 0;
@@ -3633,9 +3704,34 @@ static bool gfx12_compute_surface(struct ac_addrlib *addrlib, const struct radeo
    return true;
 }
 
+static uint32_t get_tile_version(const enum amd_gfx_level gfx_level)
+{
+   switch (gfx_level) {
+   case GFX9:
+      return AMD_FMT_MOD_TILE_VER_GFX9;
+   case GFX10:
+      return AMD_FMT_MOD_TILE_VER_GFX10;
+   case GFX10_3:
+      return AMD_FMT_MOD_TILE_VER_GFX10_RBPLUS;
+   case GFX11:
+   case GFX11_5:
+   case GFX11_7:
+      return AMD_FMT_MOD_TILE_VER_GFX11;
+   case GFX12:
+      return AMD_FMT_MOD_TILE_VER_GFX12;
+   default:
+      UNREACHABLE("invalid gfx level");
+   }
+}
+
 static void gfx9_compute_surface_modifier(const struct radeon_info *info,
                                           struct radeon_surf *surf)
 {
+   surf->modifier =
+      AMD_FMT_MOD |
+      AMD_FMT_MOD_SET(TILE_VERSION, get_tile_version(info->gfx_level)) |
+      AMD_FMT_MOD_SET(TILE, surf->u.gfx9.swizzle_mode);
+
    unsigned block_size_bits = 0;
    switch (surf->u.gfx9.swizzle_mode >> 2) {
    case 0: /* 256B */
@@ -3718,6 +3814,11 @@ static void gfx9_compute_surface_modifier(const struct radeon_info *info,
 
 static void gfx12_compute_surface_modifier(struct radeon_surf *surf)
 {
+   surf->modifier =
+      AMD_FMT_MOD |
+      AMD_FMT_MOD_SET(TILE_VERSION, AMD_FMT_MOD_TILE_VER_GFX12) |
+      AMD_FMT_MOD_SET(TILE, surf->u.gfx9.swizzle_mode);
+
    if (surf->u.gfx9.gfx12_enable_dcc) {
       surf->modifier |=
          AMD_FMT_MOD_SET(DCC, 1) |
@@ -3743,38 +3844,12 @@ void ac_compute_surface_modifier(const struct radeon_info *info,
       return;
    }
 
-   unsigned version = 0;
-   switch (info->gfx_level) {
-   case GFX9:
-      version = AMD_FMT_MOD_TILE_VER_GFX9;
-      break;
-   case GFX10:
-      version = AMD_FMT_MOD_TILE_VER_GFX10;
-      break;
-   case GFX10_3:
-      version = AMD_FMT_MOD_TILE_VER_GFX10_RBPLUS;
-      break;
-   case GFX11:
-   case GFX11_5:
-   case GFX11_7:
-      version = AMD_FMT_MOD_TILE_VER_GFX11;
-      break;
-   case GFX12:
-      version = AMD_FMT_MOD_TILE_VER_GFX12;
-      break;
-   default:
-      UNREACHABLE("invalid gfx level");
-   }
-
-   surf->modifier =
-      AMD_FMT_MOD |
-      AMD_FMT_MOD_SET(TILE_VERSION, version) |
-      AMD_FMT_MOD_SET(TILE, surf->u.gfx9.swizzle_mode);
-
    if (info->gfx_level >= GFX12)
       gfx12_compute_surface_modifier(surf);
-   else
+   else if (info->gfx_level >= GFX9)
       gfx9_compute_surface_modifier(info, surf);
+   else
+      UNREACHABLE("unsupported GFX level");
 }
 
 int ac_compute_surface(struct ac_addrlib *addrlib, const struct radeon_info *info,

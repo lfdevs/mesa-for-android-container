@@ -31,7 +31,7 @@ mir_is_pushable_ubo(compiler_context *ctx, midgard_instruction *ins)
 
    return !(ins->constants.u32[0] & 0xF) &&
           (ins->src[1] == ~0) && (ins->src[2] == ~0) &&
-          (ctx->inputs->pushable_ubos & BITFIELD_BIT(ubo));
+          (ctx->inputs->fau.pushable_ubos & BITFIELD_BIT(ubo));
 }
 
 /* Represents use data for a single UBO */
@@ -88,7 +88,7 @@ mir_analyze_ranges(compiler_context *ctx)
  * sophisticated. Select from the last UBO first to prioritize sysvals. */
 
 static void
-mir_pick_ubo(struct pan_ubo_push *push, struct mir_ubo_analysis *analysis,
+mir_pick_ubo(struct pan_fau_layout *fau, struct mir_ubo_analysis *analysis,
              unsigned max_qwords)
 {
    unsigned max_words = MIN2(PAN_MAX_PUSH, max_qwords * 4);
@@ -99,16 +99,14 @@ mir_pick_ubo(struct pan_ubo_push *push, struct mir_ubo_analysis *analysis,
       unsigned vec4;
       BITSET_FOREACH_SET(vec4, block->uses, MAX_UBO_QWORDS) {
          /* Don't push more than possible */
-         if (push->count > max_words - 4)
+         if (fau->count > max_words - 4)
             return;
 
          for (unsigned offs = 0; offs < 4; ++offs) {
-            struct pan_ubo_word word = {
+            pan_fau_emit_reloc(fau, (struct pan_ubo_relocation) {
                .ubo = ubo,
                .offset = (vec4 * 16) + (offs * 4),
-            };
-
-            push->words[push->count++] = word;
+            });
          }
 
          /* Mark it as pushed so we can rewrite */
@@ -258,7 +256,7 @@ mir_special_indices(compiler_context *ctx)
 void
 midgard_promote_uniforms(compiler_context *ctx)
 {
-   if (!ctx->inputs->pushable_ubos) {
+   if (!ctx->inputs->fau.pushable_ubos) {
       /* If nothing is pushed, all UBOs need to be uploaded
        * conventionally */
       ctx->ubo_mask = ~0;
@@ -271,8 +269,8 @@ midgard_promote_uniforms(compiler_context *ctx)
    unsigned promoted_count = 24 - work_count;
 
    /* Ensure we are 16 byte aligned to avoid underallocations */
-   mir_pick_ubo(&ctx->info->push, &analysis, promoted_count);
-   ctx->info->push.count = ALIGN_POT(ctx->info->push.count, 4);
+   mir_pick_ubo(&ctx->info->fau, &analysis, promoted_count);
+   ctx->info->fau.count = ALIGN_POT(ctx->info->fau.count, 4);
 
    /* First, figure out special indices a priori so we don't recompute a lot */
    BITSET_WORD *special = mir_special_indices(ctx);
@@ -303,7 +301,7 @@ midgard_promote_uniforms(compiler_context *ctx)
       }
 
       /* Find where we pushed to, TODO: unaligned pushes to pack */
-      unsigned base = pan_lookup_pushed_ubo(&ctx->info->push, ubo, qword * 16);
+      unsigned base = pan_lookup_pushed_ubo(&ctx->info->fau, ubo, qword * 16);
       assert((base & 0x3) == 0);
 
       unsigned address = base / 4;

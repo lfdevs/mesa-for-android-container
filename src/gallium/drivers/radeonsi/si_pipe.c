@@ -46,6 +46,7 @@ static const struct debug_named_value radeonsi_debug_options[] = {
    {"userqnoshadowregs", DBG(USERQ_NO_SHADOW_REGS), "Disable register shadowing in userqueue."},
    {"nofastdlist", DBG(NO_FAST_DISPLAY_LIST), "Disable fast display lists"},
    {"nodmashaders", DBG(NO_DMA_SHADERS), "Disable uploading shaders via CP DMA and map them directly."},
+   {"ibcachesflush", DBG(IB_CACHES_FLUSH), "Flush all caches at the beginning of IBs."},
 
    /* 3D engine options: */
    {"nongg", DBG(NO_NGG), "Disable NGG and use the legacy pipeline."},
@@ -78,6 +79,12 @@ static const struct debug_named_value radeonsi_debug_options[] = {
    {"tmz", DBG(TMZ), "Force allocation of scanout/depth/stencil buffer as encrypted"},
    {"sqtt", DBG(SQTT), "Enable SQTT"},
    {"export_modifier", DBG(EXPORT_MODIFIER), "Export real modifier instead of DRM_FORMAT_MOD_INVALID"},
+
+   {"userqjoblog", DBG(USERQ_JOB_LOG), "Log more informations when using userq"},
+
+   {"safe", DBG(SAFE), "Disable basic optimizations"},
+   {"safer", DBG(SAFER), "Disable basic and medium optimizations"},
+   {"safest", DBG(SAFEST), "Disable all optimizations"},
 
    DEBUG_NAMED_VALUE_END /* must be last */
 };
@@ -117,7 +124,7 @@ static struct pipe_context *si_pipe_create_context(struct pipe_screen *screen, v
    ctx = si_create_context(screen, flags);
    sctx = (struct si_context *)ctx;
 
-   if (!(flags & PIPE_CONTEXT_PREFER_THREADED))
+   if (!(flags & PIPE_CONTEXT_PREFER_THREADED) || sscreen->debug_flags & DBG(SAFEST))
       return ctx;
 
    /* Clover (compute-only) is unsupported. */
@@ -191,7 +198,8 @@ void si_destroy_screen(struct pipe_screen *pscreen)
 }
 
 static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
-                                                       const struct pipe_screen_config *config)
+                                                       const struct pipe_screen_config *config,
+                                                       uint64_t debug_flags)
 {
    struct si_screen *sscreen = CALLOC_STRUCT(si_screen);
 
@@ -210,8 +218,7 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    sscreen->ws = ws;
    ws->query_info(ws, &sscreen->info);
 
-   sscreen->debug_flags = debug_get_flags_option("R600_DEBUG", radeonsi_debug_options, 0);
-   sscreen->debug_flags |= debug_get_flags_option("AMD_DEBUG", radeonsi_debug_options, 0);
+   sscreen->debug_flags = debug_flags;
 
    if ((sscreen->debug_flags & DBG(TMZ)) &&
        !sscreen->info.has_tmz_support) {
@@ -225,6 +232,7 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
    /* Set functions first. */
    sscreen->b.context_create = si_pipe_create_context;
    sscreen->b.destroy = si_destroy_screen;
+   sscreen->b.is_format_supported = si_is_format_supported;
 
    si_init_screen_buffer_functions(sscreen);
    si_init_screen_fence_functions(sscreen);
@@ -279,20 +287,53 @@ struct pipe_screen *radeonsi_screen_create(int fd, const struct pipe_screen_conf
    driParseConfigFiles(config->options, config->options_info,
                        &(driConfigFileParseParams) { .driverName = "radeonsi" });
 
+   uint64_t debug_flags = debug_get_flags_option("R600_DEBUG", radeonsi_debug_options, 0);
+   debug_flags |= debug_get_flags_option("AMD_DEBUG", radeonsi_debug_options, 0);
+
+   if (debug_flags & DBG(SAFEST)) {
+      debug_flags |= DBG(SAFER);
+      debug_flags |= DBG(NO_HYPERZ);
+      debug_flags |= DBG(NO_TILING);
+      debug_flags |= DBG(NO_DPBB);
+      debug_flags |= DBG(NO_FMASK);
+   }
+   if (debug_flags & DBG(SAFER)) {
+      debug_flags |= DBG(SAFE);
+      debug_flags |= DBG(NO_DCC);
+      debug_flags |= DBG(IB_CACHES_FLUSH);
+   }
+   if (debug_flags & DBG(SAFE)) {
+      debug_flags |= DBG(NO_DISPLAY_DCC);
+      debug_flags |= DBG(NO_EXPORTED_DCC);
+   }
+
+   struct amdgpu_winsys_options options = {
+      .is_virtio = false,
+      .check_vm = debug_flags & DBG(CHECK_VM),
+      .reserve_vmid = debug_flags & (DBG(RESERVE_VMID) | DBG(SQTT)),
+      .userq_job_log = debug_flags & DBG(USERQ_JOB_LOG),
+      .noop_cs = debug_get_bool_option("RADEON_NOOP", false),
+      .zero_vram = driQueryOptionb(config->options, "radeonsi_zerovram") ||
+                   (debug_flags & DBG(SAFE)),
+      .ib_caches_flush = debug_flags & DBG(IB_CACHES_FLUSH),
+   };
+
 #ifdef HAVE_AMDGPU_VIRTIO
    if (strcmp(version->name, "virtio_gpu") == 0) {
-      rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create_impl, true);
+      options.is_virtio = true;
+      rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create_impl, debug_flags, &options);
    } else if (debug_get_bool_option("AMD_FORCE_VPIPE", false)) {
-      rw = amdgpu_winsys_create(-1, config, radeonsi_screen_create_impl, true);
+      options.is_virtio = true;
+      rw = amdgpu_winsys_create(-1, config, radeonsi_screen_create_impl, debug_flags, &options);
    } else
 #endif
    {
       switch (version->version_major) {
       case 2:
-         rw = radeon_drm_winsys_create(fd, config, radeonsi_screen_create_impl);
+         rw = radeon_drm_winsys_create(fd, config, radeonsi_screen_create_impl, debug_flags);
          break;
       case 3:
-         rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create_impl, false);
+         rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create_impl, debug_flags, &options);
          break;
       }
    }

@@ -233,6 +233,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .EXT_calibrated_timestamps             = true,
    .EXT_color_write_enable                = true,
    .EXT_conditional_rendering             = true,
+   .EXT_cooperative_matrix_maintenance1   = true,
    .EXT_debug_marker                      = true,
    .EXT_depth_bias_control                = true,
    .EXT_depth_clip_enable                 = true,
@@ -909,10 +910,18 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       .cooperativeMatrix = has_cooperative_matrix(),
       .cooperativeMatrixRobustBufferAccess = has_cooperative_matrix(),
 
-      .cooperativeMatrixFlexibleDimensions = true,
-      .cooperativeMatrixConversions = true,
+      .cooperativeMatrixProperties2 = true,
       .cooperativeMatrixReductions = true,
+      .cooperativeMatrixConversions = true,
       .cooperativeMatrixPerElementOperations = true,
+      .cooperativeMatrixGetCoordinate = true,
+
+      .cooperativeMatrixFlexibleDimensions = true,
+      .cooperativeMatrixConversionsNV = true,
+      .cooperativeMatrixReductionsNV = true,
+      .cooperativeMatrixPerElementOperationsNV = true,
+      .cooperativeMatrixTensorAddressing = true,
+      .cooperativeMatrixBlockLoads = true,
 
       /* VK_KHR_shader_untyped_pointers */
       .shaderUntypedPointers = true,
@@ -1195,6 +1204,7 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
       .pCopyDstLayouts = lvp_host_copy_image_layouts,
       .copyDstLayoutCount = ARRAY_SIZE(lvp_host_copy_image_layouts),
       .identicalMemoryTypeRequirements = VK_FALSE,
+      .dynamicRenderingLocalReadDepthStencilAttachments = true,
 
       /* VK_EXT_blend_operation_advanced */
       .advancedBlendMaxColorAttachments = device->pscreen->caps.max_render_targets,
@@ -2061,8 +2071,6 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroyDevice(
 {
    VK_FROM_HANDLE(lvp_device, device, _device);
 
-   lvp_device_finish_accel_struct_state(device);
-
    vk_meta_device_finish(&device->vk, &device->meta);
 
    util_dynarray_foreach(&device->bda_texture_handles, struct lp_texture_handle *, handle)
@@ -2172,8 +2180,8 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_AllocateMemory(
    assert(pAllocateInfo->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
    int priority = 0;
 
-   vk_foreach_struct_const(ext, pAllocateInfo->pNext) {
-      switch ((unsigned)ext->sType) {
+   vk_foreach_struct_const(sType, ext, pAllocateInfo->pNext) {
+      switch ((unsigned)sType) {
       case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
          import_info = (VkImportMemoryFdInfoKHR*)ext;
          assert_memhandle_type(import_info->handleType);
@@ -2184,7 +2192,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_AllocateMemory(
          break;
       }
       case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO:
-         mem_flags = (void*)ext;
+         mem_flags = ext;
          break;
       default:
          break;
@@ -2452,8 +2460,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetBufferMemoryRequirements2(
 {
    lvp_GetBufferMemoryRequirements(device, pInfo->buffer,
                                    &pMemoryRequirements->memoryRequirements);
-   vk_foreach_struct(ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
          VkMemoryDedicatedRequirements *req =
             (VkMemoryDedicatedRequirements *) ext;
@@ -2489,8 +2497,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetImageMemoryRequirements2(
    lvp_GetImageMemoryRequirements(device, pInfo->image,
                                   &pMemoryRequirements->memoryRequirements);
 
-   vk_foreach_struct(ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
          VkMemoryDedicatedRequirements *req =
             (VkMemoryDedicatedRequirements *) ext;
@@ -3027,6 +3035,26 @@ fill_matrix_prop_khr(struct __vk_outarray *base, struct matrix_prop *prop)
 }
 
 static void
+fill_matrix_prop_ext(struct __vk_outarray *base, struct matrix_prop *prop)
+{
+   vk_outarray(VkCooperativeMatrixProperties2EXT) *out = (void *)base;
+
+   vk_outarray_append_typed(VkCooperativeMatrixProperties2EXT, out, p)
+   {
+      *p = (struct VkCooperativeMatrixProperties2EXT){
+         .sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_2_EXT,
+         .MGranularity = 8,
+         .NGranularity = 8,
+         .KGranularity = 8,
+         .AType = prop->a_type,
+         .BType = prop->b_type,
+         .CType = prop->c_type,
+         .ResultType = prop->r_type
+      };
+   }
+}
+
+static void
 fill_flexible_matrix_prop_nv(struct __vk_outarray *base, struct matrix_prop *prop)
 {
    vk_outarray(VkCooperativeMatrixFlexibleDimensionsPropertiesNV) *out = (void *)base;
@@ -3090,5 +3118,19 @@ lvp_GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(
 {
    VK_OUTARRAY_MAKE_TYPED(VkCooperativeMatrixFlexibleDimensionsPropertiesNV, out, pProperties, pPropertyCount);
    fill_array_sizes_structs(&out.base, fill_flexible_matrix_prop_nv);
+   return vk_outarray_status(&out);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+lvp_GetPhysicalDeviceCooperativeMatrixProperties2EXT(VkPhysicalDevice physicalDevice,
+                                                     const VkPhysicalDeviceCooperativeMatrixInfo2EXT *info,
+                                                     uint32_t *pPropertyCount,
+                                                     VkCooperativeMatrixProperties2EXT *pProperties)
+{
+   VK_OUTARRAY_MAKE_TYPED(VkCooperativeMatrixProperties2EXT, out, pProperties, pPropertyCount);
+
+   if (info->scope == VK_SCOPE_SUBGROUP_KHR &&
+       !(info->flags & VK_COOPERATIVE_MATRIX_SATURATING_ACCUMULATION_BIT_EXT))
+      fill_array_sizes_structs(&out.base, fill_matrix_prop_ext);
    return vk_outarray_status(&out);
 }

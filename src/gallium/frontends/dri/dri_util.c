@@ -1103,7 +1103,8 @@ driGetDriInfoXML(const char* driverName)
 
 bool
 dri_get_drm_device_info(const char *device_name, uint8_t *device_uuid, uint8_t *driver_uuid,
-                        char **vendor_name, char **renderer_name, char **driver_name)
+                        char **vendor_name, char **renderer_name, char **driver_name,
+                        enum pipe_device_type *device_type)
 {
 #ifdef HAVE_LIBDRM
    struct pipe_loader_device *pldev;
@@ -1137,6 +1138,7 @@ dri_get_drm_device_info(const char *device_name, uint8_t *device_uuid, uint8_t *
    if (pscreen->get_name)
       *renderer_name = strdup(pscreen->get_name(pscreen));
 
+   *device_type = pscreen->caps.device_type;
    *driver_name = loader_get_driver_for_fd(fd);
 
    pscreen->destroy(pscreen);

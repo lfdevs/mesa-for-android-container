@@ -751,33 +751,34 @@ nir_unlower_io_to_vars(nir_shader *nir, bool keep_intrinsics)
       nir->num_outputs += get_var_num_slots(nir->info.stage, var, true);
    }
 
-   /* llvmpipe and other drivers require that variables are sorted by location,
-    * otherwise a lot of tests fails.
-    *
-    * It looks like location and driver_location are not the only values that
-    * determine behavior. The order in which the variables are declared also
-    * affect behavior.
-    */
-   unsigned varying_var_mask =
-      nir_var_shader_in |
-      (nir->info.stage != MESA_SHADER_FRAGMENT ? nir_var_shader_out : 0);
-   nir_sort_variables_by_location(nir, varying_var_mask);
-
    /* Fix locations and info for dual-slot VS inputs. Intel needs this.
     * All other drivers only use driver_location.
+    *
+    * Each dual-slot input shifts the location of all inputs at higher
+    * locations by one. The variable list isn't sorted by location, so
+    * gather the dual-slot locations first and shift each variable by
+    * the number of dual-slot inputs below it.
     */
    if (nir->info.stage == MESA_SHADER_VERTEX) {
-      unsigned num_dual_slots = 0;
+      uint64_t dual_slot_mask = 0;
+
+      nir_foreach_variable_with_modes(var, nir, nir_var_shader_in) {
+         if (glsl_type_is_dual_slot(glsl_without_array(var->type)))
+            dual_slot_mask |= BITFIELD64_BIT(var->data.location);
+      }
+
       nir->num_inputs = 0;
       nir->info.inputs_read = 0;
 
       nir_foreach_variable_with_modes(var, nir, nir_var_shader_in) {
-         var->data.location += num_dual_slots;
+         unsigned orig_location = var->data.location;
+
+         var->data.location +=
+            util_bitcount64(dual_slot_mask & BITFIELD64_MASK(orig_location));
          nir->info.inputs_read |= BITFIELD64_BIT(var->data.location);
          nir->num_inputs++;
 
          if (glsl_type_is_dual_slot(glsl_without_array(var->type))) {
-            num_dual_slots++;
             nir->info.inputs_read |= BITFIELD64_BIT(var->data.location + 1);
             nir->num_inputs++;
          }

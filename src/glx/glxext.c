@@ -1053,9 +1053,13 @@ __glXInitialize(Display * dpy)
       if (env) {
          if (!strcmp(env, "applegl"))
             glx_driver |= GLX_DRIVER_APPLEGL;
+      } else if (__builtin_available(macOS 26.6, *)) {
+         /* macOS 26.6 fixed the breakage described below, so elect AppleGL as usual. */
+         glx_driver |= GLX_DRIVER_APPLEGL;
       } else if (__builtin_available(macOS 26.0, *)) {
-         /* AppleGL is not working on macOS 26 (https://github.com/XQuartz/XQuartz/issues/446);
-          * skip its election and let the screen-creation walk fall through to drisw / zink.
+         /* AppleGL is not working on macOS 26.0 through 26.5
+          * (https://github.com/XQuartz/XQuartz/issues/446); skip its election and let the
+          * screen-creation walk fall through to drisw / zink.
           * MESA_LOADER_DRIVER_OVERRIDE=applegl above is the escape hatch for testing.
           */
       } else {

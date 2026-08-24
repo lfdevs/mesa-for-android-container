@@ -45,18 +45,23 @@ descriptor_layout_create(struct zink_screen *screen, enum zink_descriptor_type t
    dcslci.pNext = NULL;
    VkDescriptorSetLayoutBindingFlagsCreateInfo fci = {0};
    VkDescriptorBindingFlags flags[ZINK_MAX_DESCRIPTORS_PER_TYPE];
-   dcslci.pNext = &fci;
    /* TODO bindless */
    if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB && t != ZINK_DESCRIPTOR_BINDLESS)
       dcslci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
    else if (t == ZINK_DESCRIPTOR_TYPE_UNIFORMS)
       dcslci.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-   fci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-   fci.bindingCount = num_bindings;
-   fci.pBindingFlags = flags;
-   for (unsigned i = 0; i < num_bindings; i++) {
-      flags[i] = 0;
+
+   if (screen->info.have_EXT_descriptor_indexing) {
+      dcslci.pNext = &fci;
+
+      fci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+      fci.bindingCount = num_bindings;
+      fci.pBindingFlags = flags;
+      for (unsigned i = 0; i < num_bindings; i++) {
+         flags[i] = 0;
+      }
    }
+
    dcslci.bindingCount = num_bindings;
    dcslci.pBindings = bindings;
    VkDescriptorSetLayoutSupport supp;

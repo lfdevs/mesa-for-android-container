@@ -1,0 +1,6 @@
+# Speed up pre-merge testing by removing redundant coverage in force-gmem mode
+gmem-dEQP-VK.api.*
+gmem-dEQP-VK.renderpass\..*
+gmem-dEQP-VK.synchronization\..*
+gmem-dEQP-VK.wsi.*
+

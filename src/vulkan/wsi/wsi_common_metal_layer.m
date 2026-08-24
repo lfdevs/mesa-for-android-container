@@ -144,7 +144,7 @@ VkResult
 wsi_metal_layer_configure(const CAMetalLayer *metal_layer,
    uint32_t width, uint32_t height, uint32_t image_count,
    VkFormat format, VkColorSpaceKHR color_space,
-   bool enable_opaque, bool enable_immediate)
+   bool enable_opaque, bool enable_immediate, bool framebuffer_only)
 {
    @autoreleasepool {
       MTLPixelFormat metal_format;
@@ -163,8 +163,7 @@ wsi_metal_layer_configure(const CAMetalLayer *metal_layer,
 
       /* So acquire timeout works */
       metal_layer.allowsNextDrawableTimeout = YES;
-      /* So we can blit to the drawable */
-      metal_layer.framebufferOnly = NO;
+      metal_layer.framebufferOnly = framebuffer_only;
 
       metal_layer.maximumDrawableCount = image_count;
       metal_layer.drawableSize = (CGSize){.width = width, .height = height};
@@ -281,6 +280,19 @@ wsi_metal_release_drawable(CAMetalDrawable *drawable_ptr)
    [(id<CAMetalDrawable>)drawable_ptr release];
 }
 
+void
+wsi_metal_layer_add_presented_handler(CAMetalDrawable *drawable_ptr,
+                                      void (*presented_handler)(void *, uint64_t),
+                                      void *present_info_ptr, uint64_t present_id)
+{
+   @autoreleasepool {
+      id<CAMetalDrawable> drawable = (id<CAMetalDrawable>)drawable_ptr;
+      [drawable addPresentedHandler: ^(id<MTLDrawable> mtlDrwbl) {
+         presented_handler(present_info_ptr, present_id);
+      }];
+   }
+}
+
 struct wsi_metal_layer_blit_context {
    id<MTLDevice> device;
    id<MTLCommandQueue> commandQueue;
@@ -342,4 +354,42 @@ wsi_metal_layer_blit_and_present(struct wsi_metal_layer_blit_context *context,
 
       *drawable_ptr = nil;
    }
+}
+
+void
+wsi_metal_layer_present(CAMetalDrawable **drawable_ptr)
+{
+   @autoreleasepool {
+      id<CAMetalDrawable> drawable = [(id<CAMetalDrawable>)*drawable_ptr autorelease];
+      [drawable present];
+
+      *drawable_ptr = nil;
+   }
+}
+
+void
+wsi_metal_layer_make_queue_resident(const CAMetalLayer *metal_layer,
+   void *mtl4_command_queue)
+{
+/* Metal4 was introduced in macOS26 */
+#if defined(MAC_OS_VERSION_26_0) && __MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_26_0
+   @autoreleasepool {
+      id<MTL4CommandQueue> queue = (id<MTL4CommandQueue>)mtl4_command_queue;
+      [queue addResidencySet:metal_layer.residencySet];
+      [metal_layer.residencySet requestResidency];
+   }
+#endif
+}
+
+void
+wsi_metal_layer_remove_queue_resident(const CAMetalLayer *metal_layer,
+   void *mtl4_command_queue)
+{
+/* Metal4 was introduced in macOS26 */
+#if defined(MAC_OS_VERSION_26_0) && __MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_26_0
+   @autoreleasepool {
+      id<MTL4CommandQueue> queue = (id<MTL4CommandQueue>)mtl4_command_queue;
+      [queue removeResidencySet:metal_layer.residencySet];
+   }
+#endif
 }

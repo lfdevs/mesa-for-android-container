@@ -440,7 +440,8 @@ pan_preload_get_shader(struct pan_fb_preload_cache *cache,
    }
 
    const nir_shader_compiler_options *compiler_options =
-      pan_get_nir_shader_compiler_options(PAN_ARCH, false);
+      pan_get_nir_shader_compiler_options(PAN_ARCH, MESA_SHADER_FRAGMENT,
+                                          false);
    nir_builder b = nir_builder_init_simple_shader(
       MESA_SHADER_FRAGMENT, compiler_options, "pan_preload(%s)", sig);
 

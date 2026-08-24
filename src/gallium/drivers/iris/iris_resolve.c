@@ -409,6 +409,7 @@ flush_previous_aux_mode(struct iris_batch *batch,
    void *v_aux_usage = (void *) (uintptr_t)
       (aux_usage == ISL_AUX_USAGE_FCV_CCS_E ? ISL_AUX_USAGE_CCS_E :
        aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT ? ISL_AUX_USAGE_HIZ_CCS :
+       aux_usage == ISL_AUX_USAGE_ZCS ? ISL_AUX_USAGE_HIZ_CCS :
        aux_usage);
 
    struct hash_entry *entry =
@@ -601,6 +602,7 @@ iris_depth_texture_aux_usage(const struct intel_device_info *devinfo,
                              const struct iris_resource *res)
 {
    switch (res->aux.usage) {
+   case ISL_AUX_USAGE_ZCS:
    case ISL_AUX_USAGE_HIZ_CCS_WT:
       /* Always support sampling with HIZ_CCS_WT.  Although the sampler
        * doesn't comprehend HiZ, write-through means that the correct data
@@ -874,8 +876,9 @@ iris_resource_prepare_access(struct iris_context *ice,
             iris_mcs_exec(ice, batch, res, layer, 1, aux_op);
          } else if (isl_aux_usage_has_hiz(res->aux.usage)) {
             iris_hiz_exec(ice, batch, res, level, layer, 1, aux_op);
-         } else if (res->aux.usage == ISL_AUX_USAGE_STC_CCS) {
-            UNREACHABLE("iris doesn't resolve STC_CCS resources");
+         } else if (res->aux.usage == ISL_AUX_USAGE_ZCS ||
+                    res->aux.usage == ISL_AUX_USAGE_STC_CCS) {
+            UNREACHABLE("iris doesn't resolve ZCS and STC_CCS resources");
          } else {
             assert(isl_aux_usage_has_ccs(res->aux.usage));
             iris_resolve_color(ice, batch, res, level, layer, aux_op);
@@ -974,6 +977,7 @@ iris_resource_texture_aux_usage(struct iris_context *ice,
    const struct intel_device_info *devinfo = screen->devinfo;
 
    switch (res->aux.usage) {
+   case ISL_AUX_USAGE_ZCS:
    case ISL_AUX_USAGE_HIZ:
    case ISL_AUX_USAGE_HIZ_CCS:
    case ISL_AUX_USAGE_HIZ_CCS_WT:
@@ -1220,6 +1224,7 @@ iris_resource_render_aux_usage(struct iris_context *ice,
       return ISL_AUX_USAGE_NONE;
 
    switch (res->aux.usage) {
+   case ISL_AUX_USAGE_ZCS:
    case ISL_AUX_USAGE_HIZ:
    case ISL_AUX_USAGE_HIZ_CCS:
    case ISL_AUX_USAGE_HIZ_CCS_WT:

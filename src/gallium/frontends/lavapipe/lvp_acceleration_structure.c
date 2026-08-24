@@ -7,74 +7,25 @@
 #include "lvp_entrypoints.h"
 #include "lvp_private.h"
 
-#include "radix_sort/radix_sort_u64.h"
 #include "bvh/vk_bvh_defines.h"
 
-struct radix_sort_vk_target_config lvp_radix_sort_config = {
-   .keyval_dwords = 2,
-   .init = {
-      .workgroup_size_log2 = 4,
-   },
-   .fill = {
-      .workgroup_size_log2 = 4,
-      .block_rows = 4,
-   },
-   .histogram = {
-      .workgroup_size_log2 = 7,
-      .subgroup_size_log2 = 3,
-      .block_rows = 16,
-   },
-   .prefix = {
-      .workgroup_size_log2 = 8,
-      .subgroup_size_log2 = 3,
-   },
-   .scatter = {
-      .workgroup_size_log2 = 7,
-      .subgroup_size_log2 = 3,
-      .block_rows = 8,
-   },
-   .nonsequential_dispatch = true,
-};
-
-static void
-lvp_init_radix_sort(struct lvp_device *device)
-{
-   simple_mtx_lock(&device->radix_sort_lock);
-   if (device->radix_sort) {
-      simple_mtx_unlock(&device->radix_sort_lock);
-      return;
-   }
-
-   device->radix_sort =
-      vk_create_radix_sort_u64(lvp_device_to_handle(device),
-                               &device->vk.alloc, VK_NULL_HANDLE,
-                               lvp_radix_sort_config);
-
-   device->accel_struct_args.radix_sort_64 = device->radix_sort;
-
-   simple_mtx_unlock(&device->radix_sort_lock);
-}
-
-static void
-lvp_get_leaf_node_size(VkGeometryTypeKHR geometry_type, uint32_t *ir_leaf_node_size,
-                       uint32_t *output_leaf_node_size)
+static uint32_t
+lvp_get_leaf_node_size(VkGeometryTypeKHR geometry_type)
 {
    switch (geometry_type) {
    case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
-      *ir_leaf_node_size = sizeof(struct vk_ir_triangle_node);
-      *output_leaf_node_size = sizeof(struct lvp_bvh_triangle_node);
+      return sizeof(struct lvp_bvh_triangle_node);
       break;
    case VK_GEOMETRY_TYPE_AABBS_KHR:
-      *ir_leaf_node_size = sizeof(struct vk_ir_aabb_node);
-      *output_leaf_node_size = sizeof(struct lvp_bvh_aabb_node);
+      return sizeof(struct lvp_bvh_aabb_node);
       break;
    case VK_GEOMETRY_TYPE_INSTANCES_KHR:
-      *ir_leaf_node_size = sizeof(struct vk_ir_instance_node);
-      *output_leaf_node_size = sizeof(struct lvp_bvh_instance_node);
+      return sizeof(struct lvp_bvh_instance_node);
       break;
    default:
       break;
    }
+   return 0;
 }
 
 static VkDeviceSize
@@ -83,11 +34,7 @@ lvp_get_as_size_internal(VkGeometryTypeKHR geometry_type, uint32_t leaf_node_cou
    uint32_t internal_node_count = MAX2(leaf_node_count, 2) - 1;
    uint32_t nodes_size = internal_node_count * sizeof(struct lvp_bvh_box_node);
 
-   uint32_t ir_leaf_node_size = 0;
-   uint32_t output_leaf_node_size = 0;
-   lvp_get_leaf_node_size(geometry_type, &ir_leaf_node_size, &output_leaf_node_size);
-
-   nodes_size += leaf_node_count * output_leaf_node_size;
+   nodes_size += leaf_node_count * lvp_get_leaf_node_size(geometry_type);
 
    nodes_size = util_align_npot(nodes_size, LVP_BVH_NODE_PREFETCH_SIZE);
 
@@ -171,9 +118,12 @@ lvp_cmd_fill_buffer_addr(VkCommandBuffer cmdbuf, VkDeviceAddress addr,
 static void
 lvp_enqueue_encode(VkCommandBuffer commandBuffer, struct vk_device *device, struct vk_meta_device *meta,
                    const struct vk_acceleration_structure_build_args *args, struct vk_acceleration_structure_build_state *states,
-                   uint32_t build_count, bool flushed_cp_after_init_update_scratch, bool flushed_compute_after_init_update_scratch)
+                   uint32_t build_count, bool flushed_compute_after_init_update_scratch)
 {
    VK_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
+
+   /* Insert barrier so that build data gets reflected properly for encode pass */
+   vk_bvh_build_barrier_compute_to_compute(commandBuffer, false);
 
    for (uint32_t i = 0; i < build_count; i++) {
       struct vk_acceleration_structure_build_state *state = &states[i];
@@ -413,9 +363,8 @@ lvp_encode_as(struct vk_acceleration_structure *dst, VkDeviceAddress intermediat
    uint8_t *output = (void *)(uintptr_t)vk_acceleration_structure_get_va(dst);
    struct lvp_bvh_header *output_header = (void *)output;
 
-   uint32_t ir_leaf_node_size = 0;
-   uint32_t output_leaf_node_size = 0;
-   lvp_get_leaf_node_size(geometry_type, &ir_leaf_node_size, &output_leaf_node_size);
+   uint32_t ir_leaf_node_size = vk_ir_node_size(geometry_type, 0);
+   uint32_t output_leaf_node_size = lvp_get_leaf_node_size(geometry_type);
 
    uint32_t root_offset = leaf_count * ir_leaf_node_size;
    const struct vk_ir_box_node *ir_box_nodes = (const void *)(ir_bvh + root_offset);
@@ -568,8 +517,6 @@ lvp_GetAccelerationStructureBuildSizesKHR(
 {
    VK_FROM_HANDLE(lvp_device, device, _device);
 
-   lvp_init_radix_sort(device);
-
    vk_get_as_build_sizes(_device, buildType, pBuildInfo, pMaxPrimitiveCounts,
                          pSizeInfo, &device->accel_struct_args);
 }
@@ -639,6 +586,8 @@ VkResult
 lvp_device_init_accel_struct_state(struct lvp_device *device)
 {
    device->accel_struct_args.subgroup_size = lp_native_vector_width / 32;
+   device->accel_struct_args.morton_sort_workgroup_size = 512;
+   device->accel_struct_args.morton_sort_kvs_per_thread = 2;
 
    device->vk.as_build_ops = &accel_struct_ops;
    device->vk.write_buffer_cp = lvp_write_buffer_cp;
@@ -646,18 +595,7 @@ lvp_device_init_accel_struct_state(struct lvp_device *device)
    device->vk.cmd_dispatch_unaligned = lvp_cmd_dispatch_unaligned;
    device->vk.cmd_fill_buffer_addr = lvp_cmd_fill_buffer_addr;
 
-   simple_mtx_init(&device->radix_sort_lock, mtx_plain);
-
    return VK_SUCCESS;
-}
-
-void
-lvp_device_finish_accel_struct_state(struct lvp_device *device)
-{
-   simple_mtx_destroy(&device->radix_sort_lock);
-
-   if (device->radix_sort)
-      radix_sort_vk_destroy(device->radix_sort, lvp_device_to_handle(device), &device->vk.alloc);
 }
 
 static void
@@ -697,7 +635,6 @@ lvp_CmdBuildAccelerationStructuresKHR(VkCommandBuffer commandBuffer, uint32_t in
 {
    VK_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
    struct lvp_device *device = lvp_cmd_buffer_device(cmd_buffer);
-   lvp_init_radix_sort(device);
 
    lvp_enqueue_save_state(commandBuffer);
 

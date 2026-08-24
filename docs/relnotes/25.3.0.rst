@@ -24,6 +24,14 @@ SHA checksums
    SHA256: 0fd54fea7dbbddb154df05ac752b18621f26d97e27863db3be951417c6abe8ae  mesa-25.3.0.tar.xz
    SHA512: 46df9e5e27f9a36cf893a68ad4a465fcc6efe1bcb46ad8d4b015699ad1a11e582b8d41f4157326556af603fe454b2ff34ecc17a0c742b5fd9ce5f0097106fec5  mesa-25.3.0.tar.xz
 
+Note for distros:
+-----------------
+
+Starting with Mesa 25.3.0, we no longer support the Vulkan API on Linux
+kernel versions older than 6.0 due to the deprecation of implicit
+synchronization in favor of the dma-buf sync file import/export ioctls.
+More information can be found in MR
+`!36783 <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/36783>`__.
 
 New features
 ------------

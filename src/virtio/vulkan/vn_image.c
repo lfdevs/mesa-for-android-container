@@ -10,11 +10,11 @@
 
 #include "vn_image.h"
 
-#include "venus-protocol/vn_protocol_driver_image.h"
-#include "venus-protocol/vn_protocol_driver_image_view.h"
-#include "venus-protocol/vn_protocol_driver_sampler.h"
-#include "venus-protocol/vn_protocol_driver_sampler_ycbcr_conversion.h"
 #include "vk_format.h"
+#include "vn_protocol_driver_image.h"
+#include "vn_protocol_driver_image_view.h"
+#include "vn_protocol_driver_sampler.h"
+#include "vn_protocol_driver_sampler_ycbcr_conversion.h"
 
 #include "vn_android.h"
 #include "vn_device.h"
@@ -100,8 +100,8 @@ vn_image_get_image_reqs_key(struct vn_device *dev,
    _mesa_blake3_init(&blake3_ctx);
 
    /* Hash relevant fields in the pNext chain */
-   vk_foreach_struct_const(src, create_info->pNext) {
-      switch (src->sType) {
+   vk_foreach_struct_const(sType, src, create_info->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO: {
          struct VkExternalMemoryImageCreateInfo *ext_mem =
             (struct VkExternalMemoryImageCreateInfo *)src;
@@ -484,9 +484,9 @@ vn_image_fix_create_info(
    local_info->create = *create_info;
    VkBaseOutStructure *cur = (void *)&local_info->create;
 
-   vk_foreach_struct_const(src, create_info->pNext) {
+   vk_foreach_struct_const(sType, src, create_info->pNext) {
       void *next = NULL;
-      switch (src->sType) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO:
          memcpy(&local_info->external, src, sizeof(local_info->external));
          local_info->external.handleTypes = renderer_handle_type;
@@ -546,21 +546,21 @@ vn_CreateImage(VkDevice device,
    const VkExternalMemoryImageCreateInfo *external_info = NULL;
    bool ahb_info = false;
 
-   vk_foreach_struct_const(pnext, pCreateInfo->pNext) {
-      switch ((uint32_t)pnext->sType) {
+   vk_foreach_struct_const(sType, pnext, pCreateInfo->pNext) {
+      switch ((uint32_t)sType) {
       case VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA:
-         wsi_info = (void *)pnext;
+         wsi_info = pnext;
          break;
       case VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID:
-         anb_info = (void *)pnext;
+         anb_info = pnext;
          break;
       case VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR:
-         swapchain_info = (void *)pnext;
+         swapchain_info = pnext;
          if (!swapchain_info->swapchain)
             swapchain_info = NULL;
          break;
       case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO:
-         external_info = (void *)pnext;
+         external_info = pnext;
          if (!external_info->handleTypes)
             external_info = NULL;
          else if (

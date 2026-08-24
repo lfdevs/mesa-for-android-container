@@ -389,6 +389,10 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRe
          VkImageLayout dst_layout = att->resolveImageLayout;
          struct radv_image *dst_img = dst_iview->image;
 
+         const bool dst_is_3d = dst_img->vk.image_type == VK_IMAGE_TYPE_3D;
+         const uint32_t dst_base_layer = dst_is_3d ? 0 : dst_iview->vk.base_array_layer;
+         const uint32_t dst_offset_z = dst_is_3d ? dst_iview->vk.base_array_layer : 0;
+
          const enum radv_resolve_method resolve_method = radv_get_resolve_method(src_img, dst_img);
 
          VkImageResolve2 region = {
@@ -410,11 +414,11 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRe
                (VkImageSubresourceLayers){
                   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                   .mipLevel = dst_iview->vk.base_mip_level,
-                  .baseArrayLayer = dst_iview->vk.base_array_layer,
+                  .baseArrayLayer = dst_base_layer,
                   .layerCount = layer_count,
                },
             .srcOffset = {resolve_area.offset.x, resolve_area.offset.y, 0},
-            .dstOffset = {resolve_area.offset.x, resolve_area.offset.y, 0},
+            .dstOffset = {resolve_area.offset.x, resolve_area.offset.y, dst_offset_z},
          };
 
          VkFormat src_format = src_iview->vk.format;

@@ -1,5 +1,6 @@
 dEQP-VK.api.external.semaphore.sync_fd.export_multiple_times_temporary
 dEQP-VK.api.info.vulkan1p2.feature_bits_influence
+dEQP-VK.api.object_management.max_concurrent.device_group
 dEQP-VK.api.object_management.multithreaded_shared_resources.device
 dEQP-VK.draw.dynamic_rendering.complete_secondary_cmd_buff.shader_layer.tessellation_shader_256
 dEQP-VK.draw.dynamic_rendering.complete_secondary_cmd_buff.shader_layer.vertex_shader_256
@@ -10,6 +11,10 @@ dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.shader_layer.vertex_shader_256
 dEQP-VK.draw.renderpass.shader_layer.tessellation_shader_256
 dEQP-VK.draw.renderpass.shader_layer.vertex_shader_256
 dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.multisample_resolve.*
+dEQP-VK.pipeline.fast_linked_library.blend.dual_source.multi_attachments.a1r5g5b5_unorm_pack16
+dEQP-VK.pipeline.fast_linked_library.blend.dual_source.multi_attachments.a2r10g10b10_unorm_pack32
+dEQP-VK.pipeline.fast_linked_library.blend.dual_source.multi_attachments.r16g16b16a16_unorm
+dEQP-VK.pipeline.fast_linked_library.blend.dual_source.multi_attachments.r8g8b8a8_unorm
 dEQP-VK.pipeline.monolithic.blend.dual_source.multi_attachments.a2b10g10r10_unorm_pack32
 dEQP-VK.pipeline.monolithic.blend.dual_source.multi_attachments.r8g8b8a8_unorm
 dEQP-VK.pipeline.pipeline_library.blend.dual_source.multi_attachments.a2r10g10b10_unorm_pack32
@@ -19,6 +24,7 @@ dEQP-VK.pipeline.pipeline_library.blend.dual_source.multi_attachments.r16g16b16a
 dEQP-VK.pipeline.pipeline_library.blend.dual_source.multi_attachments.r8g8b8a8_srgb
 dEQP-VK.pipeline.shader_object_unlinked_spirv.blend.dual_source.multi_attachments.a2r10g10b10_unorm_pack32
 dEQP-VK.pipeline.shader_object_unlinked_spirv.blend.dual_source.multi_attachments.r16g16b16a16_sfloat
+dEQP-VK.pipeline.shader_object_unlinked_spirv.blend.dual_source.multi_attachments.r16g16b16a16_unorm
 dEQP-VK.pipeline.shader_object_unlinked_spirv.blend.dual_source.multi_attachments.r8g8b8a8_snorm
 dEQP-VK.pipeline.shader_object_unlinked_spirv.blend.dual_source.multi_attachments.r8g8b8a8_unorm
 dEQP-VK.pipeline.shader_object_unlinked_spirv.multisample.misc.dynamic_rendering.multi_renderpass.r8g8b8a8_unorm_r16g16b16a16_sfloat_r16g16b16a16_sint_s8_uint.random_105

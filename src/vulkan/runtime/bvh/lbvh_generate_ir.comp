@@ -76,7 +76,7 @@ main(void)
 
       REF(vk_ir_box_node) node = REF(vk_ir_box_node)(OFFSET(args.bvh, current_offset));
       vk_aabb bounds = previous_bounds;
-      uint32_t flags = VK_BVH_BOX_FLAG_ONLY_OPAQUE | VK_BVH_BOX_FLAG_NO_OPAQUE;
+      uint32_t flags = 0xffffffff;
 
       lbvh_node_info info = DEREF(INDEX(lbvh_node_info, args.node_info, idx));
 

@@ -212,9 +212,9 @@ traces:
 
   neverball/neverball-v2.trace:
     broadcom-rpi4:
-      checksum: c8e8ee352bdb303e4ed144b69272575e
+      checksum: 786c5820b9eebde8e49a00e4f34a14c0
     broadcom-rpi5:
-      checksum: 56a0adb0efdf799f269da2d734a6817c
+      checksum: e0276eb4f93d0c96c373abc61d5feeed
 
   nheko/nheko-colors.trace:
     broadcom-rpi4:

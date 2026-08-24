@@ -142,12 +142,19 @@ impl ProgramBuild {
                     continue;
                 }
 
-                let Some(build_result) =
-                    convert_spirv_to_nir(build, kernel_name, &args, &mut self.spec_constants, dev)
-                else {
-                    build.status = CL_BUILD_ERROR;
-                    build.log = c"Internal compilation error".to_owned();
-                    return;
+                let build_result = match convert_spirv_to_nir(
+                    build,
+                    kernel_name,
+                    &args,
+                    &mut self.spec_constants,
+                    dev,
+                ) {
+                    Ok(build_result) => build_result,
+                    Err(err) => {
+                        build.status = CL_BUILD_ERROR;
+                        build.log = c"Internal compilation error: ".concat(err);
+                        return;
+                    }
                 };
                 kernel_info_set.insert(build_result.kernel_info);
 
@@ -218,12 +225,14 @@ impl DeviceProgramBuild {
         cache: Option<&DiskCacheBorrowed>,
         name: &CStr,
         spec_constants: &HashMap<u32, Vec<u8>>,
+        libclc: &NirShader,
     ) -> Option<cache_key> {
         if let Some(cache) = cache {
             assert_eq!(self.status, CL_BUILD_SUCCESS as cl_build_status);
 
             let spirv = self.spirv.as_ref().unwrap();
             let mut bin = spirv.to_bin().to_vec();
+            bin.extend_from_slice(libclc.source_hash());
             bin.extend_from_slice(name.to_bytes());
 
             for (k, v) in spec_constants {
@@ -246,7 +255,7 @@ impl DeviceProgramBuild {
         kernel: &CStr,
         device: &Device,
         spec_constants: &mut HashMap<u32, Vec<u8>>,
-    ) -> Option<NirShader> {
+    ) -> Result<NirShader, &'static CStr> {
         assert_eq!(self.status, CL_BUILD_SUCCESS as cl_build_status);
 
         let mut spec_constants: Vec<_> = spec_constants
@@ -265,16 +274,21 @@ impl DeviceProgramBuild {
         };
 
         let mut log = Platform::dbg().program.then(Vec::new);
-        let nir = self.spirv.as_ref().unwrap().to_nir(
-            kernel,
-            device
-                .screen
-                .nir_shader_compiler_options(mesa_shader_stage::MESA_SHADER_COMPUTE),
-            device.spirv_to_nir_opts(),
-            &device.lib_clc,
-            &mut spec_constants,
-            log.as_mut(),
-        );
+        let nir = self
+            .spirv
+            .as_ref()
+            .unwrap()
+            .to_nir(
+                kernel,
+                device
+                    .screen
+                    .nir_shader_compiler_options(mesa_shader_stage::MESA_SHADER_COMPUTE),
+                device.spirv_to_nir_opts(),
+                &device.lib_clc,
+                &mut spec_constants,
+                log.as_mut(),
+            )
+            .ok_or(c"spirv_to_nir failed");
 
         if let Some(log) = log {
             for line in log {
@@ -642,11 +656,15 @@ impl Program {
         }))
     }
 
-    pub fn from_spirv(context: Arc<Context>, spirv: &[u8]) -> Arc<Program> {
-        let builds = Self::create_default_builds(&context.devs);
+    pub fn from_spirv_with_devs(
+        devs: Vec<&'static Device>,
+        context: Arc<Context>,
+        spirv: &[u8],
+    ) -> Arc<Program> {
+        let builds = Self::create_default_builds(&devs);
         Arc::new(Self {
             base: CLObjectBase::new(RusticlTypes::Program),
-            devs: context.devs.clone(),
+            devs: devs,
             context: context,
             src: ProgramSourceType::Il(SPIRVBin::from_bin(spirv)),
             build: Mutex::new(ProgramBuild {
@@ -656,6 +674,10 @@ impl Program {
                 kernel_info: HashMap::new(),
             }),
         })
+    }
+
+    pub fn from_spirv(context: Arc<Context>, spirv: &[u8]) -> Arc<Program> {
+        Self::from_spirv_with_devs(context.devs.clone(), context, spirv)
     }
 
     pub fn build_info(&self) -> MutexGuard<'_, ProgramBuild> {
@@ -749,7 +771,7 @@ impl Program {
     }
 
     pub fn build(
-        self: Arc<Self>,
+        self: &Arc<Self>,
         devices: Vec<&'static Device>,
         options: CompileOptions,
         callback: Option<ProgramCB>,
@@ -761,7 +783,7 @@ impl Program {
             Platform::get()
                 .worker_queue
                 .add_job_sync(create_build_closure(
-                    Arc::clone(&self),
+                    Arc::clone(self),
                     devices.clone(),
                     options,
                     callback,
@@ -777,7 +799,7 @@ impl Program {
             }
         } else {
             Platform::get().worker_queue.add_job(create_build_closure(
-                Arc::clone(&self),
+                Arc::clone(self),
                 devices,
                 options,
                 callback,

@@ -855,6 +855,7 @@ nir_shader_clone(void *mem_ctx, const nir_shader *s)
    ns->info.name = ralloc_strdup(ns, ns->info.name);
    if (ns->info.label)
       ns->info.label = ralloc_strdup(ns, ns->info.label);
+   ns->info.spec = ralloc_strdup(ns, ns->info.spec);
 
    ns->num_inputs = s->num_inputs;
    ns->num_uniforms = s->num_uniforms;

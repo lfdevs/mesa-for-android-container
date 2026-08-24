@@ -215,8 +215,6 @@ populate_base_prog_key(const struct anv_device *device,
                        struct elk_base_prog_key *key)
 {
    key->robust_flags = robust_flags;
-   key->limit_trig_input_range =
-      device->physical->instance->drirc.debug.limit_trig_input_range;
 
    populate_sampler_prog_key(device->info, &key->tex);
 }

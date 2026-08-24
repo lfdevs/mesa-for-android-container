@@ -191,7 +191,7 @@ radv_fmask_copy(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf
                            .pNext = &src_iview_usage_info,
                            .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                            .image = radv_image_to_handle(src->image),
-                           .viewType = radv_meta_get_view_type(src->image),
+                           .viewType = radv_meta_get_view_type(src->image, false),
                            .format = vk_format_no_srgb(src->image->vk.format),
                            .subresourceRange =
                               {
@@ -215,7 +215,7 @@ radv_fmask_copy(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf
                            .pNext = &dst_iview_usage_info,
                            .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                            .image = radv_image_to_handle(dst->image),
-                           .viewType = radv_meta_get_view_type(dst->image),
+                           .viewType = radv_meta_get_view_type(dst->image, false),
                            .format = vk_format_no_srgb(dst->image->vk.format),
                            .subresourceRange =
                               {

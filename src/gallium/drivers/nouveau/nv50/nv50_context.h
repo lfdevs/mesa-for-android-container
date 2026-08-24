@@ -268,9 +268,11 @@ nv50_resource_validate(struct nv50_context *context, struct nv04_resource *res, 
          res->status |= NOUVEAU_BUFFER_STATUS_GPU_READING;
 
       if (res->mm) {
-         nouveau_fence_ref(context->base.fence, &res->fence);
+         nouveau_fence_ref(context->base.fence, &res->fence,
+                           context->base.screen);
          if (flags & NOUVEAU_BO_WR)
-            nouveau_fence_ref(context->base.fence, &res->fence_wr);
+            nouveau_fence_ref(context->base.fence, &res->fence_wr,
+                              context->base.screen);
       }
    }
 }
@@ -280,7 +282,7 @@ struct pipe_context *nv50_create(struct pipe_screen *, void *, unsigned flags);
 
 void nv50_bufctx_fence(struct nv50_context *, struct nouveau_bufctx *, bool on_flush);
 
-void nv50_default_kick_notify(struct nouveau_context *);
+MUST_CHECK bool nv50_default_kick_notify(struct nouveau_context *);
 
 /* nv50_draw.c */
 extern struct draw_stage *nv50_draw_render_stage(struct nv50_context *);

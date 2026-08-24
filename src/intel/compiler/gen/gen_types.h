@@ -69,6 +69,9 @@ typedef struct gen_lsc_desc {
    enum lsc_vect_size vect_size;
    bool transpose;
 
+   /* Block2d only. */
+   bool vnni;
+
    /* CMask only. */
    enum lsc_cmask cmask;
 
@@ -169,6 +172,15 @@ typedef struct gen_lsc_ex_desc {
          unsigned index;
          int base_offset;
       } bti;
+
+      /* Block2d flat form: signed 10-bit immediate (x, y) offset added to
+       * the block start in the address payload.  Element-coordinate units;
+       * x * data-size bytes must be dword aligned.
+       */
+      struct {
+         int x_off;
+         int y_off;
+      } block2d;
    };
 } gen_lsc_ex_desc;
 

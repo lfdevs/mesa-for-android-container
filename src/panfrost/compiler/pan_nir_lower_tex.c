@@ -169,13 +169,6 @@ scalar_as_imm_i4(nir_scalar s)
    return nir_scalar_as_uint(s) & 0xf;
 }
 
-#define PAN_AS_U32(x) ({\
-   static_assert(sizeof(x) == 4, "x must be 4 bytes"); \
-   uint32_t _u; \
-   memcpy(&_u, &(x), 4); \
-   _u; \
-})
-
 static bool
 bi_lower_txf_buf(nir_builder *b, nir_tex_instr *tex, uint64_t gpu_id)
 {

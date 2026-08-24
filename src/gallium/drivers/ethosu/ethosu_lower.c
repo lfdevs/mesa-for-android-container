@@ -22,12 +22,32 @@ is_depthwise(const struct pipe_ml_operation *poperation)
 }
 
 static unsigned
-needed_total_padding(int input_size, int stride, int filter_size)
+needed_total_padding(unsigned input_size, unsigned output_size,
+                     unsigned stride, unsigned filter_size)
 {
-   if (input_size % stride == 0)
-      return MAX2(filter_size - stride, 0);
+   int total = (output_size - 1) * stride + filter_size - input_size;
 
-   return MAX2(filter_size - (input_size % stride), 0);
+   return MAX2(total, 0);
+}
+
+static void
+trim_padding_to_output(struct ethosu_operation *operation,
+                       const struct pipe_tensor *input,
+                       const struct pipe_tensor *output)
+{
+   unsigned total_y =
+      needed_total_padding(input->dims[1], output->dims[1],
+                           operation->kernel.stride_y,
+                           operation->kernel.height);
+   unsigned total_x =
+      needed_total_padding(input->dims[2], output->dims[2],
+                           operation->kernel.stride_x,
+                           operation->kernel.width);
+
+   operation->pad.top = MIN2(operation->pad.top, total_y);
+   operation->pad.bottom = total_y - operation->pad.top;
+   operation->pad.left = MIN2(operation->pad.left, total_x);
+   operation->pad.right = total_x - operation->pad.left;
 }
 
 static void
@@ -52,6 +72,7 @@ set_feature_map(struct ethosu_subgraph *subgraph,
                 struct ethosu_feature_map *fm)
 {
    fm->tensor = ethosu_find_tensor(subgraph, tensor->index);
+   fm->region = IO_REGION;
    fm->shape.height = tensor->dims[1];
    fm->shape.width = tensor->dims[2];
    fm->shape.depth = tensor->dims[3];
@@ -86,6 +107,43 @@ ethosu_find_first_consumer(const struct pipe_ml_operation *poperations,
    }
 
    return NULL;
+}
+
+static bool
+ethosu_fc_needs_flatten(const struct pipe_ml_operation *poperation)
+{
+   const struct pipe_tensor *input;
+   const struct pipe_tensor *output;
+   const struct pipe_tensor *weight;
+
+   if (poperation->type != PIPE_ML_OPERATION_TYPE_FULLY_CONNECTED)
+      return false;
+
+   input = poperation->input_tensors[0];
+   output = poperation->output_tensors[0];
+   weight = poperation->fcon.weight_tensor;
+
+   return weight &&
+          (weight->dims[3] != input->dims[3] ||
+           output->dims[1] != 1 ||
+           output->dims[2] != input->dims[1] * input->dims[2]);
+}
+
+static bool
+ethosu_has_flattened_fc_consumer(const struct pipe_ml_operation *poperations,
+                                 unsigned count, unsigned tensor_index)
+{
+   for (unsigned i = 0; i < count; i++) {
+      const struct pipe_ml_operation *poperation = &poperations[i];
+
+      for (unsigned j = 0; j < poperation->input_count; j++) {
+         if (poperation->input_tensors[j]->index == tensor_index &&
+             ethosu_fc_needs_flatten(poperation))
+            return true;
+      }
+   }
+
+   return false;
 }
 
 static unsigned
@@ -129,6 +187,37 @@ allocate_feature_maps(struct ethosu_subgraph *subgraph, struct ethosu_operation 
    operation->ifm.tiles.width_0 = operation->ifm.shape.width;
 }
 
+static unsigned
+ethosu_add_constant(struct ethosu_subgraph *subgraph,
+                    const void *data,
+                    unsigned size)
+{
+   unsigned address = subgraph->coefs_used;
+
+   subgraph->coefs_used += ALIGN_POT(size, 16);
+   subgraph->coefs = realloc(subgraph->coefs, subgraph->coefs_used);
+   memcpy(subgraph->coefs + address, data, size);
+
+   return address;
+}
+
+static int32_t
+ethosu_read_scalar(const struct pipe_tensor *tensor)
+{
+   assert(tensor->data);
+
+   if (tensor->type_size == 1)
+      return tensor->is_signed ? *(int8_t *)tensor->data :
+                                 *(uint8_t *)tensor->data;
+
+   if (tensor->type_size == 2)
+      return tensor->is_signed ? *(int16_t *)tensor->data :
+                                 *(uint16_t *)tensor->data;
+
+   assert(tensor->type_size == 4);
+   return *(int32_t *)tensor->data;
+}
+
 static void
 operation_set_defaults(struct ethosu_operation *operation)
 {
@@ -140,6 +229,26 @@ operation_set_defaults(struct ethosu_operation *operation)
    operation->kernel.stride_x = 1;
    operation->kernel.dilation_y = 1;
    operation->kernel.dilation_x = 1;
+}
+
+static void
+set_full_activation_range(struct ethosu_operation *operation)
+{
+   if (operation->ofm.is_signed) {
+      if (operation->ofm.precision == 0) {
+         operation->conv.activation_min = INT8_MIN;
+         operation->conv.activation_max = INT8_MAX;
+      } else {
+         operation->conv.activation_min = INT16_MIN;
+         operation->conv.activation_max = INT16_MAX;
+      }
+   } else {
+      operation->conv.activation_min = 0;
+      if (operation->ofm.precision == 0)
+         operation->conv.activation_max = UINT8_MAX;
+      else
+         operation->conv.activation_max = UINT16_MAX;
+   }
 }
 
 static const struct pipe_ml_operation *
@@ -156,6 +265,51 @@ ethosu_find_first_producer(const struct pipe_ml_operation *poperations, unsigned
    }
 
    return NULL;
+}
+
+static void
+set_sparse_weight_format(struct ethosu_subgraph *subgraph,
+                         struct ethosu_operation *operation,
+                         const struct pipe_tensor *weight)
+{
+   unsigned depth = weight->dims[3];
+   unsigned padded_depth = align(depth, 4);
+
+   if (ethosu_ml_device(subgraph->base.device)->is_u65 ||
+       operation->conv.depthwise)
+      return;
+
+   for (unsigned o = 0; o < weight->dims[0]; o++) {
+      for (unsigned y = 0; y < weight->dims[1]; y++) {
+         for (unsigned x = 0; x < weight->dims[2]; x++) {
+            for (unsigned c = 0; c < padded_depth; c += 4) {
+               unsigned zeros = 0;
+
+               for (unsigned i = c; i < c + 4; i++) {
+                  int value = 0;
+
+                  if (i < depth) {
+                     unsigned index = ((o * weight->dims[1] + y) *
+                                       weight->dims[2] + x) * depth + i;
+                     value = weight->is_signed ?
+                        (int)(int8_t)weight->data[index] : weight->data[index];
+                     value -= operation->kernel.zero_point;
+                  }
+
+                  if (value == 0)
+                     zeros++;
+                  else if (value < -127 || value > 127)
+                     return;
+               }
+
+               if (zeros < 2)
+                  return;
+            }
+         }
+      }
+   }
+
+   operation->conv.weight_sparse = true;
 }
 
 static void
@@ -184,7 +338,7 @@ lower_conv_common(struct ethosu_subgraph *subgraph,
    }
 
    allocate_feature_maps(subgraph, operation);
-
+   set_sparse_weight_format(subgraph, operation, weight);
    ethosu_sched_operation(subgraph, operation);
    fill_coefs(subgraph, operation, bias_data, weight->data,
               weight->dims[0] * weight->dims[1] * weight->dims[2] * weight->dims[3]);
@@ -203,15 +357,22 @@ ethosu_lower_fully_connected(struct ethosu_subgraph *subgraph,
    struct pipe_tensor *output_tensors[1] = {output_tensor};
    struct pipe_tensor *weight = poperation->fcon.weight_tensor;
 
-   flat_input.dims[1] = 1;
-   flat_input.dims[2] = 1;
-   flat_input.dims[3] = input_tensor->dims[1] * input_tensor->dims[2] *
-                        input_tensor->dims[3];
+   if (ethosu_fc_needs_flatten(poperation)) {
+      unsigned rows = input_tensor->dims[1] * input_tensor->dims[2] *
+                      input_tensor->dims[3] / weight->dims[3];
 
-   if (weight->dims[1] == 1 &&
-       weight->dims[3] == input_tensor->dims[3] &&
-       output_tensor->dims[1] == 1 &&
-       output_tensor->dims[2] == input_tensor->dims[1] * input_tensor->dims[2]) {
+      flat_input.dims[1] = rows;
+      flat_input.dims[2] = 1;
+      flat_input.dims[3] = weight->dims[3];
+
+      spatial_output.dims[1] = rows;
+      spatial_output.dims[2] = 1;
+      spatial_output.dims[3] = weight->dims[2];
+      output_tensors[0] = &spatial_output;
+   } else if (weight->dims[1] == 1 &&
+              weight->dims[3] == input_tensor->dims[3] &&
+              output_tensor->dims[1] == 1 &&
+              output_tensor->dims[2] == input_tensor->dims[1] * input_tensor->dims[2]) {
       flat_input = *input_tensor;
 
       spatial_output.dims[1] = input_tensor->dims[1];
@@ -225,11 +386,16 @@ ethosu_lower_fully_connected(struct ethosu_subgraph *subgraph,
    operation->kernel.scale = poperation->fcon.weight_tensor->scale;
    operation->kernel.zero_point = poperation->fcon.weight_tensor->zero_point;
    operation->kernel.is_signed = poperation->fcon.weight_tensor->is_signed;
+   operation->kernel.scale_as_float =
+      poperation->fcon.weight_tensor->scales == NULL;
 
    lower_conv_common(subgraph, &conv_operation, &flat_input,
                      weight,
                      (int32_t *)poperation->fcon.bias_tensor->data,
                      operation);
+   set_full_activation_range(operation);
+   if (poperation->fcon.relu)
+      operation->conv.activation_min = operation->ofm.zero_point;
 }
 
 static void
@@ -282,6 +448,8 @@ ethosu_lower_convolution(struct ethosu_subgraph *subgraph,
    operation->pad.bottom = poperation->conv.padding_bottom;
    operation->pad.left = poperation->conv.padding_left;
    operation->pad.right = poperation->conv.padding_right;
+   operation->conv.activation_min = poperation->conv.activation_min;
+   operation->conv.activation_max = poperation->conv.activation_max;
 
    lower_conv_common(subgraph, poperation, input_tensor,
                      &conv_weight,
@@ -296,6 +464,8 @@ ethosu_lower_pooling(struct ethosu_subgraph *subgraph,
                      const struct pipe_ml_operation *poperation,
                      struct ethosu_operation *operation)
 {
+   bool avg_pool = poperation->pooling.type == PIPE_ML_POOLING_TYPE_AVG;
+
    operation->type = ETHOSU_OPERATION_TYPE_POOLING;
 
    switch (poperation->pooling.type) {
@@ -315,6 +485,12 @@ ethosu_lower_pooling(struct ethosu_subgraph *subgraph,
    }
 
    set_feature_maps(subgraph, poperation->input_tensors[0], poperation->output_tensors[0], operation);
+
+   if (avg_pool) {
+      operation->ifm.zero_point = 0;
+      operation->ofm.zero_point = 0;
+      operation->round_mode = ETHOSU_ROUNDING_NATURAL;
+   }
 
    operation->kernel.height = poperation->pooling.filter_height;
    operation->kernel.width = poperation->pooling.filter_width;
@@ -642,6 +818,8 @@ ethosu_lower_quantize(struct ethosu_subgraph *subgraph,
                       const struct pipe_ml_operation *poperation,
                       struct ethosu_operation *operation)
 {
+   struct pipe_tensor *input = poperation->input_tensors[0];
+
    operation->type = ETHOSU_OPERATION_TYPE_POOLING;
    operation->round_mode = ETHOSU_ROUNDING_DOUBLE;
    operation->pooling.nop = true;
@@ -651,7 +829,19 @@ ethosu_lower_quantize(struct ethosu_subgraph *subgraph,
    else
       operation->pooling.type = ETHOSU_POOLING_TYPE_SUM;
 
-   set_feature_maps(subgraph, poperation->input_tensors[0], poperation->output_tensors[0], operation);
+   set_feature_maps(subgraph, input, poperation->output_tensors[0], operation);
+
+   if (input->data) {
+      unsigned size = input->dims[1] * input->dims[2] * input->dims[3] *
+         input->type_size;
+
+      operation->ifm.region = COEFS_REGION;
+      operation->ifm.tiles.addresses[0] =
+         ethosu_add_constant(subgraph, input->data, size);
+      operation->ifm.tiles.height_0 = operation->ifm.shape.height;
+      operation->ifm.tiles.height_1 = operation->ifm.shape.height;
+      operation->ifm.tiles.width_0 = operation->ifm.shape.width;
+   }
 
    allocate_feature_maps(subgraph, operation);
    ethosu_sched_operation(subgraph, operation);
@@ -680,30 +870,46 @@ ethosu_lower_concatenation(struct ethosu_subgraph *subgraph,
                            struct ethosu_operation *operation)
 {
    operation->type = ETHOSU_OPERATION_TYPE_POOLING;
+   operation->round_mode = ETHOSU_ROUNDING_NATURAL;
 
    if (ethosu_ml_device(subgraph->base.device)->is_u65) {
       operation->pooling.type = ETHOSU_POOLING_TYPE_AVG;
-      operation->round_mode = ETHOSU_ROUNDING_NATURAL;
    } else
       operation->pooling.type = ETHOSU_POOLING_TYPE_SUM;
    operation->pooling.nop = true;
 
    set_feature_maps(subgraph, poperation->input_tensors[input_idx], poperation->output_tensors[0], operation);
    operation->ofm.shape = operation->ifm.shape;
-   if (poperation->conc.axis == 1)
-      operation->ofm.stride = operation->ifm.stride;
 
    allocate_feature_maps(subgraph, operation);
    for (unsigned i = 0; i < input_idx; i++) {
-      if (operation->ofm.tensor->layout == ETHOSU_LAYOUT_NHWC)
-         if (poperation->conc.axis == 1)
-            operation->ofm.tiles.addresses[0] += poperation->input_tensors[i]->dims[3] * poperation->input_tensors[i]->dims[2] * poperation->input_tensors[i]->dims[1];
-         else
-            operation->ofm.tiles.addresses[0] += poperation->input_tensors[i]->dims[3];
-      else if (operation->ofm.tensor->layout == ETHOSU_LAYOUT_NHCWB16)
-         operation->ofm.tiles.addresses[0] += poperation->input_tensors[i]->dims[2] * align(poperation->input_tensors[i]->dims[3], 16);
-      else
+      switch (poperation->conc.axis) {
+      case 1:
+         operation->ofm.tiles.addresses[0] +=
+            poperation->input_tensors[i]->dims[1] * operation->ofm.stride.y;
+         break;
+      case 2:
+         operation->ofm.tiles.addresses[0] +=
+            poperation->input_tensors[i]->dims[2] * operation->ofm.stride.x;
+         break;
+      case 3:
+         if (operation->ofm.tensor->layout == ETHOSU_LAYOUT_NHWC) {
+            operation->ofm.tiles.addresses[0] +=
+               poperation->input_tensors[i]->dims[3] * operation->ofm.stride.c;
+         } else if (operation->ofm.tensor->layout == ETHOSU_LAYOUT_NHCWB16) {
+            unsigned depth = poperation->input_tensors[i]->dims[3];
+            unsigned elem_size = 1 << operation->ofm.precision;
+
+            operation->ofm.tiles.addresses[0] +=
+               (depth / 16) * operation->ofm.stride.c +
+               (depth % 16) * elem_size;
+         } else {
+            assert(0 && "Unsupported layout");
+         }
+         break;
+      default:
          assert(0 && "Unsupported layout");
+      }
    }
 
    ethosu_sched_operation(subgraph, operation);
@@ -732,27 +938,41 @@ ethosu_lower_strided_slice(struct ethosu_subgraph *subgraph,
 {
    operation->type = ETHOSU_OPERATION_TYPE_POOLING;
    operation->pooling.type = ETHOSU_POOLING_TYPE_AVG;
+   operation->round_mode = ETHOSU_ROUNDING_NATURAL;
 
    set_feature_maps(subgraph, poperation->input_tensors[0], poperation->output_tensors[0], operation);
+   unsigned input_span = operation->ifm.shape.height * operation->ifm.shape.width;
+
+   if (operation->ifm.tensor->layout == ETHOSU_LAYOUT_NHCWB16)
+      input_span *= align(operation->ifm.shape.depth, 16);
+   else
+      input_span *= operation->ifm.shape.depth;
+   input_span *= 1 << operation->ifm.precision;
+
    operation->ifm.shape = operation->ofm.shape;
 
    allocate_feature_maps(subgraph, operation);
 
-   unsigned augmented_coord[5] = {};
-   for (int i = 0; i < poperation->input_tensors[1]->dims[3]; ++i) {
-      augmented_coord[i + 1] = poperation->slice.begin[i];
-   }
-
-   unsigned augmented_strides[5];
-   augmented_strides[0] = operation->ifm.shape.depth * operation->ifm.shape.width * operation->ifm.shape.height;
-   augmented_strides[1] = 1;
-   augmented_strides[2] = operation->ifm.shape.depth * operation->ifm.shape.width;
-   augmented_strides[3] = operation->ifm.shape.depth;
-   augmented_strides[4] = 1;
-
+   unsigned rank = poperation->input_tensors[1]->dims[3];
    unsigned address_offset = 0;
-   for (int i = 0; i < 5; ++i)
-      address_offset += augmented_coord[i] * augmented_strides[i];
+
+   assert(rank <= 4);
+   for (unsigned i = 0; i < rank; i++) {
+      switch (i + 4 - rank) {
+      case 0:
+         address_offset += poperation->slice.begin[i] * input_span;
+         break;
+      case 1:
+         address_offset += poperation->slice.begin[i] * operation->ifm.stride.y;
+         break;
+      case 2:
+         address_offset += poperation->slice.begin[i] * operation->ifm.stride.x;
+         break;
+      case 3:
+         address_offset += poperation->slice.begin[i] * operation->ifm.stride.c;
+         break;
+      }
+   }
 
    operation->ifm.tiles.addresses[0] += address_offset;
 
@@ -791,16 +1011,17 @@ ethosu_lower_eltwise(struct ethosu_subgraph *subgraph,
    if (poperation->input_tensors[ifm2_idx]->data) {
       if (operation->ifm2.shape.width == 1 &&
           operation->ifm2.shape.height == 1 &&
-          operation->ifm2.shape.depth == 1)
-         operation->ifm2.scalar = *poperation->input_tensors[ifm2_idx]->data;
-      else {
+          operation->ifm2.shape.depth == 1) {
+         operation->ifm2.scalar =
+            ethosu_read_scalar(poperation->input_tensors[ifm2_idx]);
+         operation->ifm2.has_scalar = true;
+      } else {
          size_t size = operation->ifm2.shape.height * operation->ifm2.shape.width *
                        operation->ifm2.shape.depth * poperation->input_tensors[ifm2_idx]->type_size;
 
          operation->ifm2.region = COEFS_REGION;
-         operation->ifm2.tiles.addresses[0] = subgraph->coefs_used;
-         subgraph->coefs_used += size;
-         subgraph->coefs = realloc(subgraph->coefs, subgraph->coefs_used);
+         operation->ifm2.tiles.addresses[0] =
+            ethosu_allocate_coefs(subgraph, size);
          memcpy(subgraph->coefs + operation->ifm2.tiles.addresses[0],
                 poperation->input_tensors[ifm2_idx]->data, size);
       }
@@ -855,12 +1076,16 @@ register_tensors(struct ethosu_subgraph *subgraph,
          struct pipe_tensor *ptensor = poperation->output_tensors[j];
          ethosu_register_tensor(subgraph, ptensor);
 
-         if (!DBG_ENABLED(ETHOSU_DBG_DISABLE_NHCWB16)) {
+         if (!ptensor->is_external_output &&
+             !DBG_ENABLED(ETHOSU_DBG_DISABLE_NHCWB16)) {
             struct ethosu_tensor *tensor = ethosu_find_tensor(subgraph, ptensor->index);
             if (tensor->shape.depth % 16 == 0) {
                const struct pipe_ml_operation *consumer =
                   ethosu_find_first_consumer(poperations, count, ptensor->index);
-               if (consumer && consumer->type != PIPE_ML_OPERATION_TYPE_RESHAPE)
+               if (consumer && consumer->type != PIPE_ML_OPERATION_TYPE_RESHAPE &&
+                   !ethosu_fc_needs_flatten(poperation) &&
+                   !ethosu_has_flattened_fc_consumer(poperations, count,
+                                                     ptensor->index))
                   tensor->layout = ETHOSU_LAYOUT_NHCWB16;
             }
          }
@@ -906,6 +1131,8 @@ ethosu_lower_graph(struct ethosu_subgraph *subgraph,
             operation.pad.bottom += producer->pad.after_y;
             operation.pad.left += producer->pad.before_x;
             operation.pad.right += producer->pad.after_x;
+            trim_padding_to_output(&operation, input_tensor,
+                                   poperations[i].output_tensors[0]);
          }
 
          if (operation.conv.scales.size + operation.conv.weights.size <=

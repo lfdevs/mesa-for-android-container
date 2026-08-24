@@ -53,7 +53,8 @@ zink_cache_create_vertex_state(struct pipe_screen *pscreen,
 void
 zink_cache_vertex_state_destroy(struct pipe_screen *pscreen, struct pipe_vertex_state *vstate);
 
-
+void
+zink_update_depth_state(struct zink_context *ctx);
 #ifdef __cplusplus
 }
 #endif

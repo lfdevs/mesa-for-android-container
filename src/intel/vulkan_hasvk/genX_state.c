@@ -274,6 +274,20 @@ genX(emit_multisample)(struct anv_batch *batch, uint32_t samples,
    }
 }
 
+static const VkSampleLocationEXT *
+sample_locations(const struct vk_sample_locations_state *sl, unsigned samples)
+{
+   /* We don't do 1x MSAA, and we can't support custom sample
+    * positions without MSAA, so always program the default for this
+    * case.
+    */
+   if (sl && sl->per_pixel == samples && samples > 1) {
+      return sl->locations;
+   } else {
+      return vk_standard_sample_locations_state(samples)->locations;
+   }
+}
+
 #if GFX_VER >= 8
 void
 genX(emit_sample_pattern)(struct anv_batch *batch,
@@ -303,40 +317,10 @@ genX(emit_sample_pattern)(struct anv_batch *batch,
        * lit sample and that it's the same for all samples in a pixel; they
        * have no requirement that it be the one closest to center.
        */
-      for (uint32_t i = 1; i <= 8; i *= 2) {
-         switch (i) {
-         case VK_SAMPLE_COUNT_1_BIT:
-            /* We don't do 1x MSAA, and we can't support custom sample
-             * positions without MSAA, so always program the default for this
-             * case.
-             */
-            INTEL_SAMPLE_POS_1X(sp._1xSample);
-            break;
-         case VK_SAMPLE_COUNT_2_BIT:
-            if (sl && sl->per_pixel == i) {
-               INTEL_SAMPLE_POS_2X_ARRAY(sp._2xSample, sl->locations);
-            } else {
-               INTEL_SAMPLE_POS_2X(sp._2xSample);
-            }
-            break;
-         case VK_SAMPLE_COUNT_4_BIT:
-            if (sl && sl->per_pixel == i) {
-               INTEL_SAMPLE_POS_4X_ARRAY(sp._4xSample, sl->locations);
-            } else {
-               INTEL_SAMPLE_POS_4X(sp._4xSample);
-            }
-            break;
-         case VK_SAMPLE_COUNT_8_BIT:
-            if (sl && sl->per_pixel == i) {
-               INTEL_SAMPLE_POS_8X_ARRAY(sp._8xSample, sl->locations);
-            } else {
-               INTEL_SAMPLE_POS_8X(sp._8xSample);
-            }
-            break;
-         default:
-            UNREACHABLE("Invalid sample count");
-         }
-      }
+      INTEL_SAMPLE_POS_1X_ARRAY(sp._1xSample, sample_locations(sl, 1));
+      INTEL_SAMPLE_POS_2X_ARRAY(sp._2xSample, sample_locations(sl, 2));
+      INTEL_SAMPLE_POS_4X_ARRAY(sp._4xSample, sample_locations(sl, 4));
+      INTEL_SAMPLE_POS_8X_ARRAY(sp._8xSample, sample_locations(sl, 8));
    }
 }
 #endif
@@ -428,8 +412,8 @@ VkResult genX(CreateSampler)(
    }
 
    const struct vk_format_ycbcr_info *ycbcr_info = NULL;
-   vk_foreach_struct_const(ext, pCreateInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pCreateInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO: {
          VkSamplerYcbcrConversionInfo *pSamplerConversion =
             (VkSamplerYcbcrConversionInfo *) ext;
@@ -487,7 +471,7 @@ VkResult genX(CreateSampler)(
       case VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT:
          break;
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }

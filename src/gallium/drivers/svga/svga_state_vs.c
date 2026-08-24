@@ -198,6 +198,9 @@ compile_passthrough_vs(struct svga_context *svga,
    struct ureg_program *ureg;
    struct svga_compile_key key;
    enum pipe_error ret;
+   int8_t passthrough_color_index = -1;
+   int8_t passthrough_fog_index = -1;
+   uint64_t passthrough_generic_outputs = 0;
 
    assert(svga_have_vgpu10(svga));
    assert(fs);
@@ -222,18 +225,22 @@ compile_passthrough_vs(struct svga_context *svga,
     * number of inputs to the vertex shader.
     */
    for (i = 0; i < num_inputs; i++) {
-      switch (fs->base.tgsi_info.input_semantic_name[i]) {
-      case TGSI_SEMANTIC_COLOR:
-      case TGSI_SEMANTIC_GENERIC:
-      case TGSI_SEMANTIC_FOG:
-         dst[num_elements] = ureg_DECL_output(ureg,
-                                fs->base.tgsi_info.input_semantic_name[i],
-                                fs->base.tgsi_info.input_semantic_index[i]);
+      uint8_t tgsi_semantic_name = fs->base.tgsi_info.input_semantic_name[i];
+      uint8_t tgsi_index = fs->base.tgsi_info.input_semantic_index[i];
+      if (tgsi_semantic_name == TGSI_SEMANTIC_GENERIC ||
+          tgsi_semantic_name == TGSI_SEMANTIC_COLOR ||
+	 tgsi_semantic_name ==  TGSI_SEMANTIC_FOG) {
+         if (tgsi_semantic_name == TGSI_SEMANTIC_GENERIC) {
+            passthrough_generic_outputs |= (uint64_t) 1 << tgsi_index;
+         } else if (tgsi_semantic_name == TGSI_SEMANTIC_COLOR) {
+            passthrough_color_index = tgsi_index;
+         } else if (tgsi_semantic_name == TGSI_SEMANTIC_FOG) {
+            passthrough_fog_index = tgsi_index;
+         }
+         dst[num_elements] = ureg_DECL_output(ureg, tgsi_semantic_name,
+                                tgsi_index);
          src[num_elements] = ureg_DECL_vs_input(ureg, num_elements);
          num_elements++;
-         break;
-      default:
-         break;
       }
    }
 
@@ -248,19 +255,29 @@ compile_passthrough_vs(struct svga_context *svga,
    svga_tgsi_scan_shader(&new_vs.base);
 
    memset(&key, 0, sizeof(key));
-   key.vs.undo_viewport = 1;
 
-   ret = svga_compile_shader(svga, &new_vs.base, &key, &variant);
-   if (ret != PIPE_OK)
-      return ret;
+   key.vs.passthrough = 1;
+   key.vs.undo_viewport = 1;
+   key.vs.passthrough_generic_outputs = passthrough_generic_outputs;
+   key.vs.passthrough_color_index = passthrough_color_index;
+   key.vs.passthrough_fog_index = passthrough_fog_index;
+
+   variant = svga_search_shader_key(&vs->base, &key);
+
+   if (!variant) {
+      ret = svga_compile_shader(svga, &new_vs.base, &key, &variant);
+      if (ret != PIPE_OK)
+         return ret;
+
+      memcpy(&variant->key, &key, sizeof(variant->key));
+
+      /* insert variant at head of linked list */
+      variant->next = vs->base.variants;
+      vs->base.variants = variant;
+   }
 
    ureg_free_tokens(new_vs.base.tokens);
    ureg_destroy(ureg);
-
-   /* Overwrite the variant key to indicate it's a pass-through VS */
-   memset(&variant->key, 0, sizeof(variant->key));
-   variant->key.vs.passthrough = 1;
-   variant->key.vs.undo_viewport = 1;
 
    *out_variant = variant;
 

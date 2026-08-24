@@ -76,6 +76,8 @@ specific to NVK:
    ``coherent``
       Forces all memory maps to be coherent with the CPU caches.  This only
       applies to Tegra devices.
+   ``no_compression``
+      Disables image compression.
 
 .. envvar:: NVK_EXPERIMENTAL
 
@@ -86,6 +88,9 @@ specific to NVK:
 
    ``dlss_backwards_compat``
       Allow using DLSS bytecode intended for earlier architectures if compatible.
+
+   ``video``
+      Enable video support
 
 .. envvar:: NVK_I_WANT_A_BROKEN_VULKAN_DRIVER
 

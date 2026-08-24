@@ -35,9 +35,13 @@ radv_nir_lower_io(nir_shader *nir)
 
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out, type_size_vec4,
             nir_lower_io_lower_64bit_to_32 | nir_lower_io_use_interpolated_input_intrinsics);
+   nir->info.io_lowered = true;
 
    /* Fold constant offset srcs for IO. */
    NIR_PASS(_, nir, nir_opt_constant_folding);
+
+   if (nir->info.stage == MESA_SHADER_FRAGMENT)
+      NIR_PASS(_, nir, nir_lower_io_indirect_loads, nir_var_shader_in, true);
 
    if (nir->xfb_info)
       NIR_PASS(_, nir, nir_io_add_intrinsic_xfb_info);

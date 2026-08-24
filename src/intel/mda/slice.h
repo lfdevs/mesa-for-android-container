@@ -52,6 +52,7 @@ typedef struct slice_cut_result {
 } slice_cut_result;
 
 slice_cut_result slice_cut(slice s, char c);
+slice_cut_result slice_cut_any(slice s, const char *chars);
 slice_cut_result slice_cut_n(slice s, char c, int n);
 
 /* Hash table support.

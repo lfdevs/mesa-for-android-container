@@ -92,6 +92,7 @@ nvk_init_debug_flags(struct nvk_instance *instance)
       { "edb_bview", NVK_DEBUG_FORCE_EDB_BVIEW },
       { "gart", NVK_DEBUG_FORCE_GART },
       { "coherent", NVK_DEBUG_FORCE_COHERENT },
+      { "no_compression", NVK_DEBUG_NO_COMPRESSION },
       { NULL, 0 },
    };
 
@@ -104,6 +105,7 @@ nvk_init_experimental_flags(struct nvk_instance *instance)
    const struct debug_control flags[] = {
       { "dlss", NVK_EXPERIMENTAL_DLSS },
       { "dlss_backwards_compat", NVK_EXPERIMENTAL_DLSS_BACK_COMPAT },
+      { "video", NVK_EXPERIMENTAL_VIDEO },
       { NULL, 0 },
    };
 

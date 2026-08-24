@@ -6,6 +6,7 @@
 #include "util/hash_table.h"
 #include "util/lut.h"
 #include "util/macros.h"
+#include "util/sparse_bitset.h"
 #include "util/u_math.h"
 #include "jay_builder.h"
 #include "jay_builder_opcodes.h"
@@ -166,10 +167,12 @@ lower_immediates(jay_builder *b, jay_inst *I, struct hash_table_u64 *constants)
                        !jay_type_is_any_float(I->type) &&
                        jay_as_uint(I->src[s]) <= UINT16_MAX;
 
-            /* Some instructions on some platforms can have at most one
-             * immediate source. TODO: Refine.
-             */
-            allowed &= ((s == 0) || !jay_is_imm(I->src[0]));
+            /* MAD/DP4A can have at most one immediate source on Gfx11 */
+            allowed &= (ver >= 12 || s == 0 || !jay_is_imm(I->src[0])) ||
+                       !(I->op == JAY_OPCODE_MAD ||
+                         I->op == JAY_OPCODE_DP4A_SS ||
+                         I->op == JAY_OPCODE_DP4A_SU ||
+                         I->op == JAY_OPCODE_DP4A_UU);
          }
 
          /* SENDs have immediate messages descriptors but not payloads */
@@ -202,6 +205,39 @@ lower_bf16_restrictions(jay_inst *I, jay_function *f)
    }
 }
 
+/*
+ * If multiple phis in a block read the same source, RA will need to insert at
+ * least one copy regardless, but the messy resulting phi webs means RA will end
+ * up inserting many copies (or even swaps). Instead, we lower away repeated
+ * sources pre-RA by inserting that single copy preemptively, allowing RA's phi
+ * web heuristics to do their job.
+ *
+ * This is less heavyhanded than a full CSSA lowering.
+ */
+static void
+lower_repeated_phi_srcs(jay_function *f,
+                        jay_block *block,
+                        struct u_sparse_bitset *seen)
+{
+   jay_foreach_phi_src_in_block(block, phi) {
+      unsigned idx = jay_index(phi->src[0]);
+      if (u_sparse_bitset_test(seen, idx)) {
+         jay_builder b = jay_init_builder(f, jay_after_block_logical(block));
+         jay_def repl = jay_alloc_def(&b, phi->src[0].file, 1);
+         jay_inst *mov = jay_MOV(&b, repl, phi->src[0]);
+         if (jay_is_flag(phi->src[0])) {
+            mov->type = jay_flag_type(f);
+         }
+
+         jay_replace_src(&phi->src[0], repl);
+      } else {
+         u_sparse_bitset_set(seen, idx);
+      }
+   }
+
+   u_sparse_bitset_clear_all(seen);
+}
+
 void
 jay_lower_pre_ra(jay_shader *s)
 {
@@ -215,6 +251,9 @@ jay_lower_pre_ra(jay_shader *s)
        */
       _mesa_hash_table_u64_clear(constants);
 
+      struct u_sparse_bitset phi_srcs;
+      u_sparse_bitset_init(&phi_srcs, f->ssa_alloc, NULL);
+
       jay_foreach_block(f, block) {
          if (f->prioritize_pressure) {
             _mesa_hash_table_u64_clear(constants);
@@ -224,6 +263,21 @@ jay_lower_pre_ra(jay_shader *s)
             jay_builder b = { .shader = s, .func = f };
 
             lower_bf16_restrictions(I, f);
+
+            /* We use predicated-default with flags to optimize OR/AND of
+             * booleans. RA forcibly ties the flags for this case, so insert
+             * copies to legalize that. These copies are usually coalesced.
+             */
+            if (I->predication == JAY_PREDICATED_DEFAULT) {
+               b.cursor = jay_before_inst(I);
+               jay_def copy = jay_alloc_def(&b, FLAG, 1);
+               jay_MOV(&b, copy, I->src[I->num_srcs - 1])->type =
+                  jay_flag_type(f);
+               assert(jay_defs_equivalent(I->src[I->num_srcs - 1],
+                                          I->src[I->num_srcs - 2]));
+               jay_replace_src(&I->src[I->num_srcs - 1], copy);
+               jay_replace_src(&I->src[I->num_srcs - 2], copy);
+            }
 
             /* Shuffle(UGPR) can result from copyprop if there's a mismatch
              * between isel and divergence analysis (e.g. because multipolygon
@@ -241,7 +295,11 @@ jay_lower_pre_ra(jay_shader *s)
                                                 jay_before_function(f);
             lower_immediates(&b, I, constants);
          }
+
+         lower_repeated_phi_srcs(f, block, &phi_srcs);
       }
+
+      u_sparse_bitset_free(&phi_srcs);
    }
 
    _mesa_hash_table_u64_destroy(constants);

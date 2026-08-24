@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2026 NXP
  * Copyright (C) 2008 VMware, Inc.
  * Copyright (C) 2014 Broadcom
  * Copyright (C) 2018-2019 Alyssa Rosenzweig
@@ -134,6 +135,10 @@ struct pan_image_layout_constraints {
 
    /* Row pitch in bytes. Non-zero if layout is explicit. */
    uint32_t wsi_row_pitch_B;
+
+   /* Array stride in bytes for explicit multi-layer imports. When non-zero
+    * and array_size > 1, used as array_stride_B directly. */
+   uint64_t wsi_array_pitch_B;
 
    /* When true, AFBC/AFRC imports are stricter than they were when those
     * modifiers where introduced. */

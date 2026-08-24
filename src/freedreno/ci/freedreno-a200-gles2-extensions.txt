@@ -11,7 +11,6 @@ GL_EXT_debug_label
 GL_EXT_discard_framebuffer
 GL_EXT_draw_buffers
 GL_EXT_draw_elements_base_vertex
-GL_EXT_frag_depth
 GL_EXT_map_buffer_range
 GL_EXT_memory_object
 GL_EXT_memory_object_fd

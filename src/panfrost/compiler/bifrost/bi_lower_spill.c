@@ -41,8 +41,31 @@ lower_memmov(struct lower_spill_ctx* ctx, bi_instr *I, uint32_t tls_base)
    bi_remove_instruction(I);
 }
 
+/* For vector phis, bi_out_of_ssa expects the width in bi_instr::table. */
 static void
-lower_mem_phi(struct lower_spill_ctx* ctx, bi_instr *I, uint32_t tls_base)
+lower_phi_size(struct lower_spill_ctx *ctx, bi_instr *I)
+{
+   assert(I->op == BI_OPCODE_PHI);
+   assert(I->nr_dests == 1);
+
+#ifndef NDEBUG
+   /* Sanity check. */
+
+   unsigned words = 1;
+   words = MAX2(words, ctx->sizes[I->dest[0].value]);
+
+   bi_foreach_ssa_src(I, s)
+      words = MAX2(words, ctx->sizes[I->src[s].value]);
+
+   assert(words == ctx->sizes[I->dest[0].value]);
+#endif
+
+   I->table = ctx->sizes[I->dest[0].value];
+   assert(I->table <= 4);
+}
+
+static void
+lower_mem_phi(struct lower_spill_ctx *ctx, bi_instr *I, uint32_t tls_base)
 {
    assert(I->op == BI_OPCODE_PHI);
    assert(I->nr_dests == 1);
@@ -51,24 +74,8 @@ lower_mem_phi(struct lower_spill_ctx* ctx, bi_instr *I, uint32_t tls_base)
     * provide the actual TLS offset as bi_index::value.
     */
 
-   unsigned words = 1;
-
-   if (I->dest[0].memory)
-      words = MAX2(words, ctx->sizes[I->dest[0].value]);
-
-   bi_foreach_src(I, s) {
-      if (I->src[s].memory)
-         words = MAX2(words, ctx->sizes[I->src[s].value]);
-   }
-
-   assert(words <= 4);
-   I->table = words;
-
    if (I->dest[0].memory) {
       const bi_index dst = I->dest[0];
-      /* Preserve the memory value long enough to look up its assigned TLS
-       * slot. bi_out_of_ssa uses I->table to lower all words of the PHI.
-       */
       I->dest[0].value = tls_base + ctx->tls_loc[dst.value];
    }
 
@@ -121,6 +128,12 @@ bi_lower_spill(bi_context* ctx, uint32_t tls_base) {
    };
 
    assign_tls_locations(&lctx);
+
+   /* Before adding SSA values, lower phi sizes. */
+   bi_foreach_instr_global_safe(ctx, I) {
+      if (I->op == BI_OPCODE_PHI)
+         lower_phi_size(&lctx, I);
+   }
 
    bi_foreach_instr_global_safe(ctx, I) {
       switch (I->op) {

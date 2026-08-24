@@ -328,7 +328,8 @@ d3d12_video_buffer_destroy(struct pipe_video_buffer *buffer)
    // For texture arrays, only delete the underlying resource allocation when
    // there are no more in use slots into it
    bool bKeepUnderlyingAlloc = false;
-   if (pD3D12VideoBuffer->texture->base.b.array_size > 1)
+   if (pD3D12VideoBuffer->texture &&
+      pD3D12VideoBuffer->texture->base.b.array_size > 1)
    {
       // Mark slot used by the video buffer being destroyed as unused
       (*pD3D12VideoBuffer->m_spVideoTexArrayDPBPoolInUse) &= ~(1 << pD3D12VideoBuffer->idx_texarray_slots); // mark bit idx_texarray_slots as zero

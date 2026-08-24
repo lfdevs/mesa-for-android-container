@@ -1,3 +1,1 @@
 dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.*
-
-dEQP-VK.binding_model.descriptor_buffer.sparse_binding_buffer.capture_replay.compute_comp_sampler_custom_border_color

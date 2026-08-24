@@ -5,6 +5,7 @@ mod bitview;
 mod builder;
 mod compile;
 mod data_type;
+mod dst_mod_prop;
 mod encode_v9;
 mod flow;
 mod foldable;
@@ -12,9 +13,9 @@ mod foldable;
 mod hw_tests;
 mod ir;
 mod isa;
-mod legalize_imm;
+mod jump_thread;
+mod legalize;
 mod legalize_src_swizzles;
-mod legalize_vec_srcs;
 mod liveness;
 mod lower_copy;
 mod lower_mkvec_swz;
@@ -24,11 +25,18 @@ mod nir;
 mod ops;
 mod opt_copy_prop;
 mod opt_dce;
+mod opt_end;
+mod opt_promote_consts;
 mod parallel_copy;
+mod phi;
 mod ra;
+mod reconvergence;
 mod remat_constants;
+mod repair_ssa;
 mod small_constants;
+mod spill;
 mod ssa_value;
+mod stats;
 mod swizzle;
 mod validate;
 mod widen_alu_ops;
@@ -37,6 +45,8 @@ mod debug {
     bitflags::bitflags! {
         pub struct DebugFlags: u32 {
             const PRINT = 1 << 0;
+            const VALIDATE = 1 << 1;
+            const SPILL = 1 << 2;
         }
     }
 
@@ -50,6 +60,8 @@ mod debug {
         for flag in debug_str.split(',') {
             match flag.trim() {
                 "print" => flags |= DebugFlags::PRINT,
+                "validate" => flags |= DebugFlags::VALIDATE,
+                "spill" => flags |= DebugFlags::SPILL,
                 unk => eprintln!("Unknown {debug_var} flag \"{}\"", unk),
             }
         }
@@ -71,4 +83,9 @@ mod debug {
     pub static DEBUG: Debug = Debug {
         flags: std::sync::OnceLock::new(),
     };
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kraid_get_compiler_flags() -> u32 {
+    debug::DEBUG.bits().into()
 }

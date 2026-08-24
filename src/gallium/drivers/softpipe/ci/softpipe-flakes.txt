@@ -4,6 +4,7 @@ glx@glx-multithread-shader-compile
 glx@glx-multithread-texture
 
 glx@glx-swap-singlebuffer
+glx@glx-visuals-depth
 
 # Sometimes crashes, less so since moving to the google runners
 spec@arb_sync@sync_api

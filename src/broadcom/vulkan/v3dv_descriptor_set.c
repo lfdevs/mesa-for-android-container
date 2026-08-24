@@ -525,7 +525,9 @@ v3dv_CreateDescriptorPool(VkDevice _device,
    pool->max_entry_count = pCreateInfo->maxSets;
 
    if (bo_size > 0) {
-      pool->bo = v3dv_bo_alloc(device, bo_size, "descriptor pool bo", true);
+      pool->bo = v3dv_bo_alloc(device, bo_size, "descriptor pool bo", true,
+                               VK_OBJECT_TYPE_DESCRIPTOR_POOL,
+                               vk_object_to_u64_handle(&pool->base));
       if (!pool->bo)
          goto out_of_device_memory;
 
@@ -593,7 +595,7 @@ v3dv_DestroyDescriptorPool(VkDevice _device,
    }
 
    if (pool->bo) {
-      v3dv_bo_free(device, pool->bo);
+      v3dv_bo_free(device, pool->bo, 0);
       pool->bo = NULL;
    }
 

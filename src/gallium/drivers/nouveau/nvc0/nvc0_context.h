@@ -312,9 +312,9 @@ static inline void
 nvc0_resource_fence(struct nvc0_context *nvc0, struct nv04_resource *res, uint32_t flags)
 {
    if (res->mm) {
-      nouveau_fence_ref(nvc0->base.fence, &res->fence);
+      nouveau_fence_ref(nvc0->base.fence, &res->fence, nvc0->base.screen);
       if (flags & NOUVEAU_BO_WR)
-         nouveau_fence_ref(nvc0->base.fence, &res->fence_wr);
+         nouveau_fence_ref(nvc0->base.fence, &res->fence_wr, nvc0->base.screen);
    }
 }
 
@@ -336,7 +336,7 @@ nvc0_resource_validate(struct nvc0_context *nvc0, struct nv04_resource *res, uin
 struct pipe_context *nvc0_create(struct pipe_screen *, void *, unsigned flags);
 void nvc0_bufctx_fence(struct nvc0_context *, struct nouveau_bufctx *,
                        bool on_flush);
-void nvc0_default_kick_notify(struct nouveau_context *);
+MUST_CHECK bool nvc0_default_kick_notify(struct nouveau_context *);
 const void *nvc0_get_sample_locations(unsigned);
 
 /* nvc0_draw.c */

@@ -308,6 +308,8 @@ directory.  You can hack on mesa and iterate testing the build with:
 
    sudo docker run --rm -v `pwd`:/mesa $IMAGE meson compile -C /mesa/_build
 
+.. _filtering-ci-jobs:
+
 Filtering the CI hardware jobs
 ------------------------------
 
@@ -376,6 +378,53 @@ without needing the target hardware by using ``drm-shim``.
    :maxdepth: 1
 
    drm-shim
+
+Embedding the Mesa CI pipeline in related projects
+--------------------------------------------------
+
+Mesa CI depends on projects such as the Linux kernel to operate, so to make
+development of such projects easier it is possible to embed the Mesa CI
+pipeline in the CI pipeline of these projects.
+
+.. warning::
+   The container building jobs are not executing when running as a downstream
+   pipeline. So, please make sure to run the pipeline once first, or limit
+   yourself to a commit that has been ``HEAD`` of main or a release branch.
+
+Configuration
+^^^^^^^^^^^^^
+
+Here are the list of options you can set from your pipeline:
+
+  * CI inputs:
+
+    * ``hw_jobs``: Control the list of hardware jobs created. See
+      :ref:`filtering-ci-jobs`.
+
+  * Variables
+
+    * ``KERNEL_IMAGE_BASE``: An HTTP/S3 URL that contains kernel build
+      artifacts, stored in the expected format (See
+      :ref:`output-kernel-build-jobs`)
+    * More variables coming soon
+
+Example
+^^^^^^^
+
+.. code-block:: yaml
+
+   mesa-main:
+     stage: test
+     inherit:
+       variables: false
+     variables:
+       KERNEL_IMAGE_BASE: https://s3.freedesktop.org/mesa-rootfs/gfx-ci/linux/$CI_COMMIT_SHORT_SHA
+     trigger:
+       strategy: mirror
+       project: mesa/mesa
+       branch: main
+       inputs:
+          hw_jobs: ["amdgpu.ko", "anv"]
 
 Marge queue
 -----------

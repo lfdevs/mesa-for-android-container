@@ -402,10 +402,10 @@ kk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
       .bufferFeatures = vk_format_features2_to_features(buffer2),
    };
 
-   vk_foreach_struct(ext, pFormatProperties->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pFormatProperties->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3: {
-         VkFormatProperties3 *p = (void *)ext;
+         VkFormatProperties3 *p = ext;
          p->linearTilingFeatures = linear2;
          p->optimalTilingFeatures = optimal2;
          p->bufferFeatures = buffer2;
@@ -413,7 +413,7 @@ kk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
       }
 
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }

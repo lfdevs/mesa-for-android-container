@@ -97,6 +97,18 @@ impl<T> SmallVec<T> {
             }
         }
     }
+
+    pub fn retain(&mut self, mut f: impl FnMut(&T) -> bool) {
+        match &mut self.0 {
+            SmallVecImpl::None => {}
+            SmallVecImpl::One(x) => {
+                if !f(x) {
+                    self.0 = SmallVecImpl::None;
+                }
+            }
+            SmallVecImpl::Many(v) => v.retain(f),
+        }
+    }
 }
 
 impl<T> std::ops::Deref for SmallVec<T> {

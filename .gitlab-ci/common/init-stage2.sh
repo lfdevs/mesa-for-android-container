@@ -165,6 +165,7 @@ fi
 # Increase freedreno hangcheck timer because it's right at the edge of the
 # spilling tests timing out (and some traces, too)
 if [ -n "$FREEDRENO_HANGCHECK_MS" ]; then
+    findmnt --mountpoint /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug
     echo $FREEDRENO_HANGCHECK_MS | tee -a /sys/kernel/debug/dri/128/hangcheck_period_ms
 fi
 

@@ -77,7 +77,7 @@ d3d12_video_encoder_references_manager_av1::is_current_frame_used_as_reference()
 }
 
 void
-d3d12_video_encoder_references_manager_av1::begin_frame(const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1& curFrameData,
+d3d12_video_encoder_references_manager_av1::begin_frame(const d3d12_video_encoder_picture_control_codec_data_mutable& curFrameData,
                                                         bool bUsedAsReference,
                                                         struct pipe_picture_desc *picture)
 {
@@ -296,7 +296,7 @@ d3d12_video_encoder_references_manager_av1::get_dpb_physical_slot_refcount_from_
 
 bool
 d3d12_video_encoder_references_manager_av1::get_current_frame_picture_control_data(
-   D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation)
+   d3d12_video_encoder_picture_control_codec_data_mutable &codecAllocation)
 {
    assert(m_CurrentFrameReferencesData.pVirtualDPBEntries.size() == NUM_REF_FRAMES);
    assert(codecAllocation.DataSize == sizeof(D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_CODEC_DATA));

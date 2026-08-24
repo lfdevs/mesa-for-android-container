@@ -957,3 +957,21 @@ nir_sort_unstructured_blocks(nir_function_impl *impl)
    nir_progress(true, impl, nir_metadata_live_defs);
    impl->valid_metadata |= nir_metadata_block_index;
 }
+
+/**
+ * Removes any uses of SSA defs which might be outside the list. It does this
+ * by rematerializing derefs and inserting load/store register instructions.
+ */
+void
+nir_cf_list_detach_ssa(nir_cf_list *cf_list)
+{
+   foreach_list_typed(nir_cf_node, node, node, &cf_list->list) {
+      nir_foreach_block_in_cf_node(block, node) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type == nir_instr_type_deref)
+               nir_rematerialize_deref_in_use_blocks(nir_instr_as_deref(instr));
+         }
+         nir_lower_ssa_defs_to_regs_block(block);
+      }
+   }
+}

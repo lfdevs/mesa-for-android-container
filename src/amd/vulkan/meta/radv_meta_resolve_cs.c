@@ -274,7 +274,7 @@ radv_compute_resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image
                            .pNext = &dst_iview_usage_info,
                            .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                            .image = radv_image_to_handle(dst_image),
-                           .viewType = radv_meta_get_view_type(dst_image),
+                           .viewType = radv_meta_get_view_type(dst_image, false),
                            .format = vk_format_no_srgb(dst_format),
                            .subresourceRange =
                               {

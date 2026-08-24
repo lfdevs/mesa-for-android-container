@@ -41,6 +41,10 @@ static const struct {
         { 42, 0x9c094adef634b000ull, "ffloor.ifb rf30.l, r3         ; fmul.pushz rf43.l, r5, r1.h" },
         { 42, 0xb0044c56ba326840ull, "flpop rf22, rf33              ; fmul.pushz rf49.l, r4.h, r1.abs" },
 
+        /* 32-bit input unpacks */
+        { 71, 0x38000411f9190250ull, "fmov rf17, rf9.sat            ; fmov rf16, rf6.sat" },
+        { 71, 0x3800000af503f168ull, "ffloor rf10, rf5.l            ; nop" },
+
         /* vfmul input packing */
         { 42, 0x101e8b6e8aad4000ull, "fmax.nornn rf46, r4.l, r2.l   ; vfmul.ifnb rf45, r3, r5" },
         { 42, 0x1857d3c219825000ull, "faddnf.norc r2.l, r5.l, r4    ; vfmul.ifb rf15, r0.ll, r4   ; ldunif" },

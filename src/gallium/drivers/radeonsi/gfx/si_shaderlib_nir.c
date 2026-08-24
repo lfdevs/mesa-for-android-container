@@ -192,7 +192,8 @@ void *si_create_passthrough_tcs(struct si_context *sctx)
 void *si_clear_image_dcc_single_shader(struct si_context *sctx, bool is_msaa, unsigned wg_dim)
 {
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, sctx->screen->nir_options,
-                                                  "write_clear_color_dcc_single");
+                                                  "write_clear_color_dcc_single_%swgdim-%d",
+                                                  is_msaa ? "msaa_" : "", wg_dim);
    b.shader->info.num_images = 1;
    if (is_msaa)
       BITSET_SET(b.shader->info.msaa_images, 0);
@@ -256,7 +257,7 @@ void *si_create_ubyte_to_ushort_compute_shader(struct si_context *sctx)
 void *si_create_fmask_expand_cs(struct si_context *sctx, unsigned num_samples, bool is_array)
 {
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, sctx->screen->nir_options,
-                                                  "create_fmask_expand_cs");
+                                                  "create_fmask_expand_cs%s", is_array ? "_array" : "");
    b.shader->info.workgroup_size[0] = 8;
    b.shader->info.workgroup_size[1] = 8;
    b.shader->info.workgroup_size[2] = 1;
@@ -337,7 +338,8 @@ void *si_get_blitter_vs(struct si_context *sctx, enum blitter_attrib_type type, 
       vs_blit_property++;
 
    nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, sctx->screen->nir_options,
-                                                  "get_blitter_vs");
+                                                  "get_blitter_vs_type-%d_layers-%d",
+                                                  type, num_layers   );
 
    /* Tell the shader to load VS inputs from SGPRs: */
    b.shader->info.vs.blit_sgprs_amd = vs_blit_property;

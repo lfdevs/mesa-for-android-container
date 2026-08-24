@@ -44,11 +44,33 @@ vk_query_pool_init(struct vk_device *device,
       pCreateInfo->queryType == VK_QUERY_TYPE_PIPELINE_STATISTICS ?
       pCreateInfo->pipelineStatistics : 0;
 
+   if (pCreateInfo->queryType == VK_QUERY_TYPE_RESULT_STATUS_ONLY_KHR ||
+       pCreateInfo->queryType == VK_QUERY_TYPE_VIDEO_ENCODE_FEEDBACK_KHR) {
+      const VkVideoProfileInfoKHR *profile =
+         vk_find_struct_const(pCreateInfo->pNext, VIDEO_PROFILE_INFO_KHR);
+      if (profile) {
+         query_pool->video_profile.op = profile->videoCodecOperation;
+         query_pool->video_profile.chroma_subsampling = profile->chromaSubsampling;
+         query_pool->video_profile.luma_bit_depth = profile->lumaBitDepth;
+         query_pool->video_profile.chroma_bit_depth = profile->chromaBitDepth;
+      }
+   }
+
    if (pCreateInfo->queryType == VK_QUERY_TYPE_VIDEO_ENCODE_FEEDBACK_KHR) {
       const struct VkQueryPoolVideoEncodeFeedbackCreateInfoKHR *feedback_info =
          vk_find_struct_const(pCreateInfo->pNext, QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR);
       if (feedback_info)
          query_pool->encode_feedback_flags = feedback_info->encodeFeedbackFlags;
+
+      const VkQueryPoolVideoEncodePerPartitionFeedbackCreateInfoKHR *per_partition_info =
+         vk_find_struct_const(pCreateInfo->pNext,
+                              QUERY_POOL_VIDEO_ENCODE_PER_PARTITION_FEEDBACK_CREATE_INFO_KHR);
+      if (per_partition_info) {
+         query_pool->encode_max_per_partition_count =
+            per_partition_info->maxPerPartitionFeedbackEntries;
+         query_pool->encode_per_partition_feedback_flags =
+            per_partition_info->perPartitionEncodeFeedbackFlags;
+      }
    }
 }
 

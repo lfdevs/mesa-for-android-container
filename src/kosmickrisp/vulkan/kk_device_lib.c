@@ -5,7 +5,7 @@
  */
 
 #include "kk_device.h"
-
+#include "kk_physical_device.h"
 #include "kk_shader.h"
 
 #include "kosmickrisp/clc/kk_precompiled_shader.h"
@@ -20,13 +20,17 @@
 static VkResult
 build_precompiled_shaders(struct kk_device *dev)
 {
+   struct kk_physical_device *pdev = kk_device_physical(dev);
+
    uint32_t i = 0u;
    for (; i < LIBKK_NUM_PROGRAMS; ++i) {
       const uint32_t *bin = libkk_AppleSilicon[i];
       const struct kk_precompiled_info *info = (void *)bin;
       const char *msl = (const char *)bin + sizeof(*info);
 
-      mtl_library *library = mtl_new_library(dev->mtl_compiler_handle, msl);
+      mtl_library *library = mtl_new_library(
+         dev->mtl_compiler_handle, msl, pdev->info.msl_version,
+         MTL_MATH_MODE_FAST, MTL_MATH_FLOATING_POINT_FUNCTIONS_FAST);
       if (library == NULL)
          goto fail;
 

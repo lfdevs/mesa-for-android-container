@@ -186,6 +186,26 @@ TEST_F(nir_opt_algebraic_test, msad)
    require_one_alu(nir_op_msad_4x8);
 }
 
+TEST_F(nir_opt_algebraic_test, commutative_match_does_not_leak_fp_math_ctrl)
+{
+   nir_def *src = nir_load_var(
+      b, nir_local_variable_create(b->impl, glsl_float_type(), "src"));
+   nir_def *inner = nir_fneg(b, src);
+   nir_def_as_alu(inner)->fp_math_ctrl = nir_fp_exact;
+   nir_def *outer = nir_fneg(b, inner);
+   nir_def *result = nir_fmin(b, outer, inner);
+   nir_variable *result_var =
+      nir_local_variable_create(b->impl, glsl_float_type(), "result");
+   nir_intrinsic_instr *store = nir_build_store_deref(
+      b, &nir_build_deref_var(b, result_var)->def, result, 0x1);
+
+   ASSERT_TRUE(nir_opt_algebraic(b->shader));
+   nir_alu_instr *optimized = nir_src_as_alu(store->src[1]);
+   ASSERT_NE(optimized, nullptr);
+   EXPECT_EQ(optimized->op, nir_op_fneg);
+   EXPECT_EQ(optimized->fp_math_ctrl & nir_fp_exact, 0);
+}
+
 TEST_F(nir_opt_mqsad_test, mqsad)
 {
    options.lower_bitfield_extract = true;

@@ -21,6 +21,17 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+static inline bool is_inline_ubo(unsigned desc_set,
+                                 unsigned binding,
+                                 const pco_common_data *common)
+{
+   const pco_descriptor_set_data *desc_set_data = &common->desc_sets[desc_set];
+   assert(desc_set_data->bindings && binding < desc_set_data->binding_count);
+
+   const pco_binding_data *binding_data = &desc_set_data->bindings[binding];
+   return binding_data->is_inline_ubo;
+}
+
 /**
  * \brief Lowers an I/O instruction.
  *
@@ -30,7 +41,7 @@
  * \return True if progress was made.
  */
 static bool
-lower_io(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *cb_data)
+lower_io(nir_builder *b, nir_intrinsic_instr *intr, void *cb_data)
 {
    b->cursor = nir_before_instr(&intr->instr);
 
@@ -42,14 +53,29 @@ lower_io(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *cb_data)
    case nir_intrinsic_store_shared:
       break;
 
+   case nir_intrinsic_load_ubo: {
+      const pco_common_data *common = cb_data;
+      unsigned desc_set;
+      unsigned binding;
+
+      nir_scalar scalar = nir_scalar_resolved(intr->src[0].ssa, 0);
+      uint32_t packed_desc = nir_scalar_as_uint(scalar);
+
+      pco_unpack_desc(packed_desc, &desc_set, &binding);
+
+      if (!is_inline_ubo(desc_set, binding, common))
+         return false;
+
+      break;
+   }
+
    default:
       return false;
    }
 
    nir_src *offset_src = nir_get_io_offset_src(intr);
 
-   ASSERTED unsigned base = nir_intrinsic_base(intr);
-   assert(!base);
+   assert(!nir_intrinsic_has_base(intr) || !nir_intrinsic_base(intr));
 
    /* Byte offset to DWORD offset. */
    nir_src_rewrite(offset_src, nir_ushr_imm(b, offset_src->ssa, 2));
@@ -63,14 +89,15 @@ lower_io(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *cb_data)
  * \param[in,out] shader NIR shader.
  * \return True if the pass made progress.
  */
-bool pco_nir_lower_io(nir_shader *shader)
+bool pco_nir_lower_io(nir_shader *shader, pco_data *data)
 {
+   pco_common_data *common = &data->common;
    bool progress = false;
 
    progress |= nir_shader_intrinsics_pass(shader,
                                           lower_io,
                                           nir_metadata_control_flow,
-                                          NULL);
+                                          common);
 
    return progress;
 }
@@ -227,6 +254,8 @@ static bool prop_intr_access_to_vars(nir_builder *b,
 
    nir_variable *var =
       nir_get_binding_variable(b->shader, nir_chase_binding(intr->src[0]));
+   if (!var)
+      return false;
 
    enum gl_access_qualifier intr_access = nir_intrinsic_access(intr);
 

@@ -24,9 +24,9 @@ set -x
 # - the GLES release produces `deqp-gles*` and `deqp-egl`
 
 DEQP_MAIN_COMMIT=634a3fc62d82c34de68c3b1add25e6b7f5777524
-DEQP_VK_VERSION=1.4.5.3
-DEQP_GL_VERSION=4.6.8.0
-DEQP_GLES_VERSION=3.2.14.0
+DEQP_VK_VERSION=1.4.6.2
+DEQP_GL_VERSION=4.6.8.1
+DEQP_GLES_VERSION=3.2.14.1
 
 # Patches to VulkanCTS may come from commits in their repo (listed in
 # cts_commits_to_backport) or patch files stored in our repo (in the patch
@@ -38,6 +38,8 @@ DEQP_GLES_VERSION=3.2.14.0
 main_cts_commits_to_backport=(
   # If you find yourself wanting to add something in here, consider whether
   # bumping DEQP_MAIN_COMMIT is not a better solution :)
+  # Use -frounding-math by default with GCC
+  ded32883bf36e5bdf7ac6b0512d5314adc0849d4
 )
 
 # shellcheck disable=SC2034
@@ -46,70 +48,37 @@ main_cts_patch_files=(
 
 # shellcheck disable=SC2034
 vk_cts_commits_to_backport=(
-  # Provide non-NULL setup slot for B frame tests
-  ebe05a88f36e3be8e232bfce97812353c396674a
-  # Fix enabling features in wsi incremental_present tests
-  fd8792395803546d03ee096f98fc20b21f22f047
-  # Check requirements in checkSupport, part 4 (draw module)
-  862a7d3c40be651aabc04913977db2cba6001ce9
-  # Check requirements in checkSupport, part 2 (spirv_assembly module)
-  fd3d404c142de4b0f68cb950b1a480c25c87c719
-  # Check requirements in checkSupport, part 1 (renderpass module)
-  3c6d790f5dd52f6e7a1d6a5264d5d4736c740b4c
-  # Check requirements in checkSupport, part 3 (ubo)
-  c2834cc642b55d4ffa3507a3ba3167862acb834b
-  # Add presentTimingSupported check
-  ef67ebbd16f8a5eb240227b172740e497887f057
-  # VulkanDisplayDirectDrm destructor for DRM direct display
-  d00394f5d14564a58d9e9a112ec04b8a38c36867
-  # Enable required extension for Vulkan 1.0
-  7cc6a1ad32e59861cb0a33f8b27646c41730c1b1
-  # Check requirements in checkSupport, part 7 (memory and memory_model modules)
-  59f04c088e30866e84f013a75029540b44d1f965
-  # Match VkImage size and render size for VkBindImageMemorySwapchainInfoKHR
-  1cf4ed5bc0620ea514404609b1a2958c4518b86d
-  # Add feature checks to present timing tests
-  7d783824ba621d9eab664f05e07143d8f88f27d5
-  # Allow VK_NOT_READY as a result of GetSwapchainTimingPropertiesEXT
-  84a468ec510060ff5af91822316562281e2d6d0a
-  # Fix crashing when vkAcquireDrmDisplayEXT fails
-  a3f15b1800d9b4892ad1776690abf5a1ac14efae
-  # accept VK_SUBOPTIMAL_KHR as success from vkAcquireNextImageKHR
-  46cb8b4dc7a45f2ec4aa4afc6dc5216fc24d570a
-  # Speedup sparse residency copies
-  a172173f1087a8c9229f4f16ef91f8ce0d00805b
-  # Add descriptor array/indexing feature checks
-  3f8cb8d341d9aed709a97493afac9c935d5afb81
-  # Fix for KHR_display query
-  ac8dc20073b2af60595615f661005c1f8680f4ee
-  # Delay shader object rendering test case creation to init method
-  e8f74066c15a2f94ec4457d75ab998d315a06bd7
-  # Fix invalid descriptor test
-  589820590126ca860dbbd0db26eb6bcdaa63dea0
-  # Fix validation errors found on qualcomm turnip
-  39ee33cd4be94216a9b657d089283b79767dc372
-  # Wait for sparse memory binds to finish in host image copy tests
-  976d729ae7982a32d117b0132e2bb8d3cd0df4d2
+  # android: Implement headless WSI fallback using AImageReader
+  6368ee8503dd9ca46eabfa2df293075d9034a214
+  # Check requirements in checkSupport, part 11 (binding_model module)
+  541ed0874565d642069c59fe3b31fc42f495a470
+  # Use -frounding-math by default with GCC
+  ded32883bf36e5bdf7ac6b0512d5314adc0849d4
+  # Check requirements in checkSupport, part 12 (conditional_rendering module)
+  b1a2490aaa2cc0429dca4f8efcce7e0d4a9e619f
 )
 
 # shellcheck disable=SC2034
 vk_cts_patch_files=(
-  build-deqp-android-Implement-headless-WSI-fallback-using-AImageR.patch
-  build-deqp-Delay-SPIR-V-assembly-type-test-case-creation-to-ini.patch
 )
 
 # shellcheck disable=SC2034
 gl_cts_commits_to_backport=(
+  # android: Implement headless WSI fallback using AImageReader
+  6368ee8503dd9ca46eabfa2df293075d9034a214
+  # Fix a memory leak with the atomic counter tests
+  e39758bc9262f8593cf0fddf1364179c1fedf756
+  # Fix a memory leak with the direct state access texture tests
+  fe92180156795a641b684722a199bdb64c69bf2a
+  # Fix a memory leak with the sparse buffer storage tests
+  bf307df9e5c6c27499c2c799409d17554d39cafc
+  # Fix a memory leak with the texture image sample tests
+  5d392ccf4fa09d38d06ca66875a2aaac4fde2b11
 )
 
 # shellcheck disable=SC2034
 gl_cts_patch_files=(
-  build-deqp-android-Implement-headless-WSI-fallback-using-AImageR.patch  # We're only applying this avoid conflicts in the second patch
   build-deqp-gl_Build-Don-t-build-Vulkan-utilities-for-GL-builds.patch
-  build-deqp-Fix-a-memory-leak-with-the-atomic-counter-tests.patch
-  build-deqp-Fix-a-memory-leak-with-the-direct-state-access-textu.patch
-  build-deqp-Fix-a-memory-leak-with-the-sparse-buffer-storage-tes.patch
-  build-deqp-Fix-a-memory-leak-with-the-texture-image-sample-test.patch
 )
 
 # shellcheck disable=SC2034
@@ -117,18 +86,21 @@ gl_cts_patch_files=(
 gles_cts_commits_to_backport=(
   # Fix EGL render tests for rgba16 and rgb16 unorm fixed point
   b5ed8718f19492781f8e9be3eb9d3346e961efa9
-  # Fix glGetnUniform* error codes when bufSize < 0
-  34259553e0cc77061465ae0c4bcd4c4658a0fb4a
+  # android: Implement headless WSI fallback using AImageReader
+  6368ee8503dd9ca46eabfa2df293075d9034a214
+  # Fix a memory leak with the atomic counter tests
+  e39758bc9262f8593cf0fddf1364179c1fedf756
+  # Fix a memory leak with the direct state access texture tests
+  fe92180156795a641b684722a199bdb64c69bf2a
+  # Fix a memory leak with the sparse buffer storage tests
+  bf307df9e5c6c27499c2c799409d17554d39cafc
+  # Fix a memory leak with the texture image sample tests
+  5d392ccf4fa09d38d06ca66875a2aaac4fde2b11
 )
 
 # shellcheck disable=SC2034
 gles_cts_patch_files=(
-  build-deqp-android-Implement-headless-WSI-fallback-using-AImageR.patch
   build-deqp-gl_Build-Don-t-build-Vulkan-utilities-for-GL-builds.patch
-  build-deqp-Fix-a-memory-leak-with-the-atomic-counter-tests.patch
-  build-deqp-Fix-a-memory-leak-with-the-direct-state-access-textu.patch
-  build-deqp-Fix-a-memory-leak-with-the-sparse-buffer-storage-tes.patch
-  build-deqp-Fix-a-memory-leak-with-the-texture-image-sample-test.patch
 )
 
 

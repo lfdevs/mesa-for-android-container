@@ -13,6 +13,7 @@
 #include "nvk_event.h"
 #include "nvk_mme.h"
 #include "nvk_physical_device.h"
+#include "nvk_rust.h"
 #include "nvk_shader.h"
 #include "nvkmd/nvkmd.h"
 
@@ -63,6 +64,7 @@ nvk_destroy_cmd_buffer(struct vk_command_buffer *vk_cmd_buffer)
    nvk_cmd_pool_free_gart_mem_list(pool, &cmd->owned_gart_mem);
    nvk_cmd_pool_free_qmd_list(pool, &cmd->owned_qmd);
    util_dynarray_fini(&cmd->pushes);
+   util_dynarray_fini(&cmd->copy_memory_indirect_temps);
    vk_command_buffer_finish(&cmd->vk);
    vk_free(&pool->vk.alloc, cmd);
 }
@@ -375,6 +377,11 @@ nvk_BeginCommandBuffer(VkCommandBuffer commandBuffer,
    if (queue_flags & VK_QUEUE_GRAPHICS_BIT)
       nvk_cmd_buffer_begin_graphics(cmd, pBeginInfo);
 
+   if (queue_flags & VK_QUEUE_VIDEO_DECODE_BIT_KHR)
+      nvk_cmd_buffer_begin_video_decode(cmd, pBeginInfo);
+
+   assert(!(queue_flags & VK_QUEUE_VIDEO_ENCODE_BIT_KHR));
+
    return VK_SUCCESS;
 }
 
@@ -601,6 +608,19 @@ nvk_cmd_flush_wait_dep(struct nvk_cmd_buffer *cmd,
          barriers |= NVK_BARRIER_HOST_WFI_INVALIDATE_SYSMEM;
    }
 
+   const VkMemoryRangeBarriersInfoKHR *mem_barriers_info =
+      vk_find_struct_const(dep->pNext, MEMORY_RANGE_BARRIERS_INFO_KHR);
+   if (mem_barriers_info) {
+      for (uint32_t i = 0; i < mem_barriers_info->memoryRangeBarrierCount; i++) {
+         const VkMemoryRangeBarrierKHR *bar = &mem_barriers_info->pMemoryRangeBarriers[i];
+         barriers |= nvk_barrier_flushes_waits(bar->srcStageMask,
+                                            bar->srcAccessMask);
+
+         if (bar->srcQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+            barriers |= NVK_BARRIER_HOST_WFI_INVALIDATE_SYSMEM;
+      }
+   }
+
    if (!(engines & (NVKMD_ENGINE_3D | NVKMD_ENGINE_COMPUTE)))
       barriers &= ~NVK_BARRIER_FLUSH_SHADER_DATA;
 
@@ -643,20 +663,25 @@ nvk_cmd_flush_wait_dep(struct nvk_cmd_buffer *cmd,
          assert(!"Unknown subc");
          FALLTHROUGH;
       case SUBC_NV90B5: {
-         struct nv_push *p = nvk_cmd_buffer_push(cmd, 5);
-         P_MTHD(p, NV90B5, LINE_LENGTH_IN);
-         P_NV90B5_LINE_LENGTH_IN(p, 0);
-         P_NV90B5_LINE_COUNT(p, 0);
+         if (nvk_cmd_buffer_queue_flags(cmd) & VK_QUEUE_VIDEO_DECODE_BIT_KHR) {
+            struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
+            __push_immd(p, SUBC_NV90B5, NVA16F_WFI, 0);
+         } else {
+            struct nv_push *p = nvk_cmd_buffer_push(cmd, 5);
+            P_MTHD(p, NV90B5, LINE_LENGTH_IN);
+            P_NV90B5_LINE_LENGTH_IN(p, 0);
+            P_NV90B5_LINE_COUNT(p, 0);
 
-         P_IMMD(p, NV90B5, LAUNCH_DMA, {
-            .data_transfer_type = DATA_TRANSFER_TYPE_NON_PIPELINED,
-            .multi_line_enable = false,
-            .flush_enable = FLUSH_ENABLE_TRUE,
-            /* Note: FLUSH_TYPE=SYS implicitly for NVC3B5+ */
-            .src_memory_layout = SRC_MEMORY_LAYOUT_PITCH,
-            .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
-            .remap_enable = REMAP_ENABLE_TRUE,
-         });
+            P_IMMD(p, NV90B5, LAUNCH_DMA, {
+               .data_transfer_type = DATA_TRANSFER_TYPE_NON_PIPELINED,
+               .multi_line_enable = false,
+               .flush_enable = FLUSH_ENABLE_TRUE,
+               /* Note: FLUSH_TYPE=SYS implicitly for NVC3B5+ */
+               .src_memory_layout = SRC_MEMORY_LAYOUT_PITCH,
+               .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
+               .remap_enable = REMAP_ENABLE_TRUE,
+            });
+         }
          break;
       }
       }
@@ -723,6 +748,19 @@ nvk_cmd_invalidate_deps(struct nvk_cmd_buffer *cmd,
 
          if (bar->dstQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
             barriers |= NVK_BARRIER_HOST_WFI_FLUSH_SYSMEM;
+      }
+
+      const VkMemoryRangeBarriersInfoKHR *mem_barriers_info =
+         vk_find_struct_const(dep->pNext, MEMORY_RANGE_BARRIERS_INFO_KHR);
+      if (mem_barriers_info) {
+         for (uint32_t i = 0; i < mem_barriers_info->memoryRangeBarrierCount; i++) {
+            const VkMemoryRangeBarrierKHR *bar = &mem_barriers_info->pMemoryRangeBarriers[i];
+            barriers |= nvk_barrier_invalidates(bar->dstStageMask,
+                                                bar->dstAccessMask);
+
+            if (bar->dstQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+               barriers |= NVK_BARRIER_HOST_WFI_FLUSH_SYSMEM;
+         }
       }
    }
 

@@ -198,6 +198,7 @@ vc4_init_screen_caps(struct vc4_screen *screen)
 
         caps->max_varyings = 8;
 
+        caps->device_type = PIPE_DEVICE_TYPE_INTEGRATED_GPU;
         caps->vendor_id = 0x14E4;
 
         caps->video_memory = os_get_gpu_heap_size(1.0f, NULL) >> 20;

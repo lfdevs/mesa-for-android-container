@@ -1053,9 +1053,15 @@ static int si_dec_av1(struct si_video_dec *vid, struct pipe_video_buffer *target
    av1->quantization.delta_q_u_ac = pic->picture_parameter.u_ac_delta_q;
    av1->quantization.delta_q_v_dc = pic->picture_parameter.v_dc_delta_q;
    av1->quantization.delta_q_v_ac = pic->picture_parameter.v_ac_delta_q;
-   av1->quantization.qm_y = pic->picture_parameter.qmatrix_fields.qm_y | 0xf0;
-   av1->quantization.qm_u = pic->picture_parameter.qmatrix_fields.qm_u | 0xf0;
-   av1->quantization.qm_v = pic->picture_parameter.qmatrix_fields.qm_v | 0xf0;
+   if (pic->picture_parameter.qmatrix_fields.using_qmatrix) {
+      av1->quantization.qm_y = pic->picture_parameter.qmatrix_fields.qm_y;
+      av1->quantization.qm_u = pic->picture_parameter.qmatrix_fields.qm_u;
+      av1->quantization.qm_v = pic->picture_parameter.qmatrix_fields.qm_v;
+   } else {
+      av1->quantization.qm_y = 0xff;
+      av1->quantization.qm_u = 0xff;
+      av1->quantization.qm_v = 0xff;
+   }
 
    av1->segmentation.flags.segmentation_enabled = pic->picture_parameter.seg_info.segment_info_fields.enabled;
    av1->segmentation.flags.segmentation_update_map = pic->picture_parameter.seg_info.segment_info_fields.update_map;

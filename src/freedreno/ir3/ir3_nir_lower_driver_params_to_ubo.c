@@ -82,15 +82,22 @@ lower_driver_param_to_ubo(nir_builder *b, nir_intrinsic_instr *intr, void *in)
       result = load_primitive_param_ubo(b, v, components, 6);
       break;
    default: {
-      /* On current hw these are still pushed the old way for VS, because of
-       * the way SQE patches draw_id/base_vertex/first_vertex/base_instance.
-       */
-      if (v->type == MESA_SHADER_VERTEX)
-         return false;
-
       struct driver_param_info param_info;
       if (!ir3_get_driver_param_info(b->shader, intr, &param_info))
          return false;
+
+      /* VS is a bit special because SQE patches in draw_id/base_vertex/
+       * first_vertex/base_instance, so these are still loaded the "old"
+       * way.
+       *
+       * So the driver-params are split, with the first vec4 being pushed
+       * via CP_LOAD_STATE, and the remainder (if present, only used by
+       * gl/gallium) pushed via UBO.
+       */
+      if ((v->type == MESA_SHADER_VERTEX) &&
+          (param_info.offset < IR3_DP_VS(is_indexed_draw))) {
+         return false;
+      }
 
       result = load_driver_params_ubo(b, v, components, param_info.offset);
    }

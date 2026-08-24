@@ -8,6 +8,7 @@ libmsl_compiler_files = files(
     'msl_iomap.c',
     'msl_nir_gather_common.c',
     'msl_nir_lower_common.c',
+    'msl_nir_lower_input_attachments.c',
     'msl_nir_lower_subgroups.c',
 )
 
@@ -25,7 +26,7 @@ msl_nir_algebraic_c = custom_target(
 libmsl_compiler = static_library(
     'msl_compiler',
     [libmsl_compiler_files, msl_nir_algebraic_c],
-    dependencies : [idep_nir, idep_mesautil],
+    dependencies : [idep_nir, idep_mesautil, idep_vulkan_runtime],
     gnu_symbol_visibility: 'hidden',
     build_by_default: false,
 )

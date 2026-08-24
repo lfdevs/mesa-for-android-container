@@ -133,6 +133,7 @@ vl_create_proc(struct pipe_context *context, struct pipe_video_codec *templat)
          goto error;
    }
 
+#if HAVE_GFX_COMPUTE
    if (context->screen->caps.graphics || context->screen->caps.compute) {
       bool compute_only = context->screen->caps.prefer_compute_for_multimedia;
       struct pipe_video_codec *comp = vl_compositor_create_proc(context, compute_only);
@@ -143,6 +144,7 @@ vl_create_proc(struct pipe_context *context, struct pipe_video_codec *templat)
             proc->main = comp;
       }
    }
+#endif
 
    if (!proc->main)
       goto error;

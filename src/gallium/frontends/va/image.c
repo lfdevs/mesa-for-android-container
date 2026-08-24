@@ -483,18 +483,18 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
    }
 
    if (format != surf->buffer->buffer_format) {
-      struct pipe_video_buffer templat = {
-         .buffer_format = format,
-         .width = vaimage->width,
-         .height = vaimage->height,
-      };
       tmp_surf = CALLOC(1, sizeof(vlVaSurface));
       if (!tmp_surf) {
          mtx_unlock(&drv->mutex);
          return VA_STATUS_ERROR_ALLOCATION_FAILED;
       }
+      tmp_surf->templat = (struct pipe_video_buffer){
+         .buffer_format = format,
+         .width = vaimage->width,
+         .height = vaimage->height,
+      };
       VAStatus ret =
-         vlVaHandleSurfaceAllocate(drv, tmp_surf, &templat, NULL, 0);
+         vlVaHandleSurfaceAllocate(drv, tmp_surf, NULL, 0);
       if (ret != VA_STATUS_SUCCESS) {
          FREE(tmp_surf);
          mtx_unlock(&drv->mutex);
@@ -677,17 +677,17 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
    if (format != surf->buffer->buffer_format ||
        dest_width != src_width || dest_height != src_height ||
        src_x != 0 || dest_x != 0 || src_y != 0 || dest_y != 0) {
-      struct pipe_video_buffer templat = {
-         .buffer_format = format,
-         .width = vaimage->width,
-         .height = vaimage->height,
-      };
       vlVaSurface *tmp_surf = CALLOC(1, sizeof(vlVaSurface));
       if (!tmp_surf) {
          mtx_unlock(&drv->mutex);
          return VA_STATUS_ERROR_ALLOCATION_FAILED;
       }
-      ret = vlVaHandleSurfaceAllocate(drv, tmp_surf, &templat, NULL, 0);
+      tmp_surf->templat = (struct pipe_video_buffer){
+         .buffer_format = format,
+         .width = vaimage->width,
+         .height = vaimage->height,
+      };
+      ret = vlVaHandleSurfaceAllocate(drv, tmp_surf, NULL, 0);
       if (ret != VA_STATUS_SUCCESS) {
          FREE(tmp_surf);
          mtx_unlock(&drv->mutex);
@@ -695,7 +695,7 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
       }
       ret = vlVaUploadImage(drv, tmp_surf, img_buf, vaimage);
       if (ret != VA_STATUS_SUCCESS) {
-         FREE(tmp_surf);
+         vlVaDestroySurface(drv, tmp_surf);
          mtx_unlock(&drv->mutex);
          return ret;
       }

@@ -93,6 +93,7 @@ struct aux_usage_info {
 #define x false
 static const struct aux_usage_info info[] = {
 /*         write_behavior c fc pr fra */
+   AUX(         COMPRESS, Y, x, x, x, ZCS)
    AUX(     COMPRESS_HIZ, Y, Y, x, x, HIZ)
    AUX(     COMPRESS_HIZ, Y, Y, x, x, HIZ_CCS)
    AUX(         COMPRESS, Y, Y, x, x, HIZ_CCS_WT)
@@ -173,6 +174,7 @@ isl_aux_get_initial_state(const struct intel_device_info *devinfo,
    case ISL_AUX_USAGE_CCS_E:
    case ISL_AUX_USAGE_FCV_CCS_E:
    case ISL_AUX_USAGE_STC_CCS:
+   case ISL_AUX_USAGE_ZCS:
       if (zeroed) {
          /* From the Sky Lake PRM, "MCS Buffer for Render Target(s)":
           *

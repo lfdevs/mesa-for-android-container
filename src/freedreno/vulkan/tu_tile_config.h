@@ -20,9 +20,14 @@ struct tu_tile_config {
    uint32_t visible_views;
    
    /* Whether to use subsampled_pos instead of the normal origin in
-    * framebuffer space when storing this tile.
+    * framebuffer space when storing this tile for subsampled images.
     */
    bool subsampled;
+
+   /* If subsampled is true, whether custom resolves store to subsampled
+    * images or not. If false, custom resolves ignore subsampled state.
+    */
+   bool custom_resolve_subsampled;
 
    /* If subsampled is true, whether this is a border tile that may not be
     * aligned.

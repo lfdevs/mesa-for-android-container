@@ -95,4 +95,16 @@ void apple_glx_context_update(Display * dpy, void *ptr);
 
 bool apple_glx_context_uses_stereo(void *ptr);
 
+/* CGL truncates kCGLCPSwapInterval to 8 bits: 256 reads back as 0 and
+ * disables vsync, and -1 reads back as 255.  This is the largest
+ * interval it actually honors.
+ */
+#define APPLE_GLX_MAX_SWAP_INTERVAL 255
+
+bool apple_glx_context_set_swap_interval(void *ptr, int interval);
+bool apple_glx_context_get_swap_interval(void *ptr, int *interval);
+
+/* Defined in apple_glx_swap_interval.c. */
+struct glx_context *apple_glx_get_current_context(void);
+
 #endif /*APPLE_GLX_CONTEXT_H */

@@ -148,10 +148,18 @@ struct wsi_device {
    } win32;
 
    struct {
+      /* Metal4 requires making CAMetalLayer's residencySet resident for the
+       * queue that will render to it. We need a way to query the queue to
+       * make it possible. */
+      void *(*get_mtl4_command_queue)(VkDevice device);
       VkResult (*bind_drawable_to_vkimage)(VkImage image, void *drawable);
       /* Does not transfer the ownership to the command buffer. The command
        * buffer must retain the drawable to ensure lifespan. */
       void (*encode_drawable_present)(VkCommandBuffer cmd, void *drawable);
+      /* Required to work around Metal4 presentation bug. */
+      void (*cmd_blit_image)(VkCommandBuffer cmd,
+                             const VkBlitImageInfo2 *blit_info,
+                             bool opaque_alpha);
    } metal;
 
 

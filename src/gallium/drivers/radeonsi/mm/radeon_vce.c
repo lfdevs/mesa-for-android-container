@@ -24,6 +24,8 @@
 
 #define INTRAREFRESH_METHOD_BAR_BASED                 6
 
+#define FEEDBACK_SIZE                                 768
+
 static void task_info(struct rvce_encoder *enc, uint32_t op, uint32_t fb_idx)
 {
    RVCE_BEGIN(0x00000002); // task info
@@ -713,7 +715,7 @@ static void rvce_destroy(struct pipe_video_codec *encoder)
    struct rvce_encoder *enc = (struct rvce_encoder *)encoder;
    if (enc->stream_handle) {
       struct rvce_fb_buffer fb = {
-         .res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, 512),
+         .res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, FEEDBACK_SIZE),
       };
       enc->fb = &fb;
       session(enc);
@@ -817,7 +819,7 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder, struct pipe_video
    if (!enc->stream_handle) {
       enc->stream_handle = si_vid_alloc_stream_handle();
       struct rvce_fb_buffer fb = {
-         .res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, 512),
+         .res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, FEEDBACK_SIZE),
       };
       enc->fb = &fb;
       session(enc);
@@ -920,7 +922,7 @@ static void rvce_encode_bitstream(struct pipe_video_codec *encoder,
    enc->bs_offset = 0;
 
    *fb = enc->fb = CALLOC_STRUCT(rvce_fb_buffer);
-   enc->fb->res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, 512);
+   enc->fb->res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, FEEDBACK_SIZE);
    if (!enc->fb->res) {
       RVID_ERR("Can't create feedback buffer.\n");
       return;

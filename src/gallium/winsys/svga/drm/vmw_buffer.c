@@ -35,19 +35,6 @@
 struct vmw_dma_bufmgr;
 
 
-struct vmw_dma_buffer
-{
-   struct pb_buffer base;
-
-   struct vmw_dma_bufmgr *mgr;
-
-   struct vmw_region *region;
-   void *map;
-   unsigned map_flags;
-   unsigned map_count;
-};
-
-
 extern const struct pb_vtbl vmw_dma_buffer_vtbl;
 
 
@@ -59,6 +46,12 @@ vmw_pb_to_dma_buffer(struct pb_buffer *buf)
    return container_of(buf, struct vmw_dma_buffer, base);
 }
 
+struct vmw_dma_buffer *
+vmw_winsys_to_dma_buffer(struct svga_winsys_buffer *buffer)
+{
+   struct pb_buffer *p_buf = vmw_pb_buffer(buffer);
+   return vmw_pb_to_dma_buffer(p_buf);
+}
 
 struct vmw_dma_bufmgr
 {

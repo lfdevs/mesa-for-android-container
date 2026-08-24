@@ -41,7 +41,6 @@
 
 using namespace Microsoft::WRL;
 using Microsoft::WRL::ComPtr;
-using namespace std;
 
 class stats_buffer_manager : public IUnknown
 {

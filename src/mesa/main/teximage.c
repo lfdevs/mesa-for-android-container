@@ -2026,7 +2026,6 @@ texture_error_check( struct gl_context *ctx,
 
    /* additional checks for compressed textures */
    if (_mesa_is_compressed_format(ctx, internalFormat)) {
-      GLenum err;
       if (!_mesa_target_can_be_compressed(ctx, target, internalFormat, &err)) {
          _mesa_error(ctx, err,
                      "glTexImage%dD(target can't be compressed)", dimensions);

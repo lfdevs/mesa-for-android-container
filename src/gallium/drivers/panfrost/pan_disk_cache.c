@@ -22,9 +22,6 @@
 static bool debug = false;
 #endif
 
-extern int midgard_debug;
-extern int bifrost_debug;
-
 /**
  * Compute a disk cache key for the given uncompiled shader and shader key.
  */
@@ -163,7 +160,7 @@ panfrost_disk_cache_init(struct panfrost_screen *screen)
 
    /* Consider any flags affecting the compile when caching */
    uint64_t driver_flags = screen->dev.debug;
-   driver_flags |= ((uint64_t)(midgard_debug | bifrost_debug) << 32);
+   driver_flags |= ((uint64_t)pan_get_compiler_flags(screen->dev.arch)) << 32;
 
    screen->disk_cache = disk_cache_create(renderer, timestamp, driver_flags);
 #endif

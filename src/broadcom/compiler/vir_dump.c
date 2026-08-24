@@ -49,10 +49,6 @@ vir_dump_uniform(enum quniform_contents contents,
                 return ralloc_asprintf(NULL, "push[%d]", data);
                 break;
 
-        case QUNIFORM_TEXTURE_CONFIG_P1:
-                return ralloc_asprintf(NULL, "tex[%d].p1", data);
-                break;
-
         case QUNIFORM_TMU_CONFIG_P0:
                 return ralloc_asprintf(NULL, "tex[%d].p0 | 0x%x",
                                        v3d_unit_data_get_unit(data),
@@ -131,12 +127,8 @@ vir_dump_uniform(enum quniform_contents contents,
                 break;
 
         default:
-                if (quniform_contents_is_texture_p0(contents)) {
-                        return ralloc_asprintf(NULL, "tex[%d].p0: 0x%08x",
-                                               contents - QUNIFORM_TEXTURE_CONFIG_P0_0,
-                                               data);
-                } else if (contents < ARRAY_SIZE(quniform_names) &&
-                           quniform_names[contents]) {
+                if (contents < ARRAY_SIZE(quniform_names) &&
+                    quniform_names[contents]) {
                         return ralloc_asprintf(NULL, "%s",
                                                quniform_names[contents]);
                 } else {

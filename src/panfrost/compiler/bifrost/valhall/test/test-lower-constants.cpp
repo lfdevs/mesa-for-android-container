@@ -26,6 +26,7 @@ class LowerConstants : public testing::Test {
    LowerConstants()
    {
       mem_ctx = ralloc_context(NULL);
+      arch = 9;
    }
 
    ~LowerConstants()
@@ -34,6 +35,7 @@ class LowerConstants : public testing::Test {
    }
 
    void *mem_ctx;
+   unsigned arch;
 };
 
 TEST_F(LowerConstants, Float32)

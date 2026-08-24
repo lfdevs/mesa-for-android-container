@@ -38,7 +38,7 @@ nir_intrinsic_${name}(const nir_intrinsic_instr *instr)
 {
    const nir_intrinsic_info *info = &nir_intrinsic_infos[instr->intrinsic];
    assert(info->index_map[${enum}] > 0);
-% if "struct" in data_type:
+% if "struct" in data_type or index.size > 1:
    ${data_type} res;
    STATIC_ASSERT(sizeof(instr->const_index[0]) * ${index.size} == sizeof(res));
    memcpy(&res, &instr->const_index[info->index_map[${enum}] - 1], sizeof(res));
@@ -53,7 +53,7 @@ nir_intrinsic_set_${name}(nir_intrinsic_instr *instr, ${data_type} val)
 {
    const nir_intrinsic_info *info = &nir_intrinsic_infos[instr->intrinsic];
    assert(info->index_map[${enum}] > 0);
-% if "struct" in data_type:
+% if "struct" in data_type or index.size > 1:
    STATIC_ASSERT(sizeof(instr->const_index[0]) * ${index.size} == sizeof(val));
    /* NOTE: gcc has a a false positive here, silenced with the pragmas */
    PRAGMA_DIAGNOSTIC_PUSH

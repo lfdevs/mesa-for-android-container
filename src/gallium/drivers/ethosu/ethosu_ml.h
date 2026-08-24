@@ -112,7 +112,8 @@ struct ethosu_feature_map {
    struct ethosu_tile_box tiles;
    unsigned zero_point;
    float scale;
-   uint16_t scalar;
+   int32_t scalar;
+   bool has_scalar;
    uint8_t region;
 };
 
@@ -130,6 +131,7 @@ struct ethosu_kernel {
    /* Per-channel quantization (NULL for per-tensor) */
    float *scales;
    int *zero_points;
+   bool scale_as_float;
 };
 
 struct ethosu_padding {
@@ -181,6 +183,7 @@ enum ethosu_pooling_type {
 };
 
 #define ETHOSU_POOLING_ACTIVATION_LUT(n)  (0x10 | (n))
+#define ETHOSU_U85_ACTIVATION_CLIP_RANGE_NONE (1 << 12)
 
 #define MAX_MEMORY_ACCESSES 5 /* IFM, IFM2, Scales, Weights, LUT*/
 
@@ -194,8 +197,12 @@ struct ethosu_operation {
          struct ethosu_address_range weights;
          struct ethosu_address_range scales;
          bool depthwise;
+         bool weight_sparse;
          unsigned scale;
          unsigned shift;
+         uint16_t activation;
+         int activation_min;
+         int activation_max;
       } conv;
 
       struct {
@@ -261,6 +268,7 @@ struct ethosu_subgraph {
 
    struct pipe_resource *io_rsrc;
    unsigned io_used;
+   bool failed;
 
    uint8_t *coefs;
    struct pipe_resource *coefs_rsrc;

@@ -489,6 +489,7 @@ if with_tests
     'tests/sparse_bitset_test.cpp',
     'tests/string_buffer_test.cpp',
     'tests/timespec_test.cpp',
+    'tests/u_dynarray_test.cpp',
     'tests/u_atomic_test.cpp',
     'tests/u_shader_variant_cache_test.cpp',
     'tests/u_call_once_test.cpp',

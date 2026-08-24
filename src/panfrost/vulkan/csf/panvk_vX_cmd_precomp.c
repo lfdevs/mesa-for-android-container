@@ -112,32 +112,33 @@ panvk_per_arch(dispatch_precomp)(struct panvk_precomp_ctx *ctx,
          cs_move32_to(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_Z), grid.count[2]);
       } else {
          /* If job size is dynamic, JOB_SIZE_* were already filled by the
-          * caller. We need to patch num_workgroups sysvals with the dynamic
-          * values. */
-         bool patch_x = shader_uses_sysval(shader, compute, num_work_groups.x);
-         bool patch_y = shader_uses_sysval(shader, compute, num_work_groups.y);
-         bool patch_z = shader_uses_sysval(shader, compute, num_work_groups.z);
-         bool patch_faus = patch_x || patch_y || patch_z;
+          * caller. Patch the num_workgroups sysvals with the dynamic values
+          * if the kernel reads them. Precompiled kernels read them from
+          * fixed FAU slots.
+          */
+         uint8_t wg_mask = shader->info.cs.precomp_num_workgroups_mask;
 
-         struct cs_index fau_addr = cs_scratch_reg64(b, 0);
-         if (patch_faus)
+         if (wg_mask) {
+            struct cs_index fau_addr = cs_scratch_reg64(b, 0);
+
             cs_move64_to(b, fau_addr, push_uniforms.gpu);
-
-         if (patch_x)
-            cs_store32(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_X), fau_addr,
-                       shader_remapped_sysval_offset(
-                          shader, sysval_offset(compute, num_work_groups.x)));
-         if (patch_y)
-            cs_store32(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_Y), fau_addr,
-                       shader_remapped_sysval_offset(
-                          shader, sysval_offset(compute, num_work_groups.y)));
-         if (patch_z)
-            cs_store32(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_Z), fau_addr,
-                       shader_remapped_sysval_offset(
-                          shader, sysval_offset(compute, num_work_groups.z)));
-
-         if (patch_faus)
+            if (wg_mask & BITFIELD_BIT(0))
+               cs_store32(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_X), fau_addr,
+                          BIFROST_PRECOMPILED_KERNEL_SYSVALS_OFFSET +
+                             offsetof(struct bifrost_precompiled_kernel_sysvals,
+                                      num_workgroups.x));
+            if (wg_mask & BITFIELD_BIT(1))
+               cs_store32(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_Y), fau_addr,
+                          BIFROST_PRECOMPILED_KERNEL_SYSVALS_OFFSET +
+                             offsetof(struct bifrost_precompiled_kernel_sysvals,
+                                      num_workgroups.y));
+            if (wg_mask & BITFIELD_BIT(2))
+               cs_store32(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_Z), fau_addr,
+                          BIFROST_PRECOMPILED_KERNEL_SYSVALS_OFFSET +
+                             offsetof(struct bifrost_precompiled_kernel_sysvals,
+                                      num_workgroups.z));
             cs_flush_stores(b);
+         }
       }
    }
 

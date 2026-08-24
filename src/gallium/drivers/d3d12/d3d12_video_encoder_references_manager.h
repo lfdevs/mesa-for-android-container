@@ -27,13 +27,24 @@
 
 #include "d3d12_video_types.h"
 
+struct d3d12_video_encoder_picture_control_codec_data_mutable
+{
+   UINT DataSize;
+   union
+   {
+      D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_H264* pH264PicData;
+      D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA_HEVC2* pHEVCPicData;
+      D3D12_VIDEO_ENCODER_AV1_PICTURE_CONTROL_CODEC_DATA* pAV1PicData;
+   };
+};
+
 class d3d12_video_encoder_references_manager_interface
 {
  public:
-   virtual void                                      begin_frame(const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1&, bool bUsedAsReference, struct pipe_picture_desc* picture) = 0;
+   virtual void                                      begin_frame(const d3d12_video_encoder_picture_control_codec_data_mutable&, bool bUsedAsReference, struct pipe_picture_desc* picture) = 0;
    virtual void                                      end_frame()                                                 = 0;
    virtual D3D12_VIDEO_ENCODER_RECONSTRUCTED_PICTURE get_current_frame_recon_pic_output_allocation()             = 0;
-   virtual bool                                get_current_frame_picture_control_data(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation) = 0;
+   virtual bool                                get_current_frame_picture_control_data(d3d12_video_encoder_picture_control_codec_data_mutable &codecAllocation) = 0;
    virtual bool                                is_current_frame_used_as_reference() = 0;
    virtual D3D12_VIDEO_ENCODE_REFERENCE_FRAMES get_current_reference_frames()       = 0;
    virtual ~d3d12_video_encoder_references_manager_interface()

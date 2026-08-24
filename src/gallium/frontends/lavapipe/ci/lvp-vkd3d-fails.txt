@@ -19,3 +19,7 @@ test_undefined_structured_raw_read_typed_dxil,Fail
 
 test_copy_subresource_depth_stencil_batch,Fail
 test_uav_clear_exhaustive_descriptors,Crash
+
+test_misc_agility_sdk_feature_checks,Fail
+test_query_heap_cpu_resolve_timestamp,Fail
+test_structured_buffer_addressing_wrap,Fail

@@ -94,23 +94,15 @@ is_extension_of_16(uint32_t x, bool is_signed)
 static bi_index
 va_move_const_to_fau(bi_builder *b, uint32_t value)
 {
-   const unsigned push_base = b->shader->inputs->fau_consts.offset;
-   uint32_t *values = b->shader->inputs->fau_consts.values;
+   struct pan_fau_layout *fau = b->shader->info.fau;
 
-   assert(b->shader->inputs->fau_consts.max_amount == 0 || values != NULL);
-   assert(b->shader->fau_consts_count <=
-          b->shader->inputs->fau_consts.max_amount);
-
-   for (unsigned i = 0; i < b->shader->fau_consts_count; ++i) {
-      if (values[i] == value) {
-         const unsigned idx = push_base + i;
-         return bi_fau((enum bir_fau)(BIR_FAU_UNIFORM | (idx >> 1)), idx & 1);
-      }
+   int idx = pan_lookup_pushed_imm(fau, value);
+   if (idx >= 0) {
+      return bi_fau((enum bir_fau)(BIR_FAU_UNIFORM | (idx >> 1)), idx & 1);
    }
 
-   if (b->shader->fau_consts_count < b->shader->inputs->fau_consts.max_amount) {
-      const unsigned int idx = push_base + b->shader->fau_consts_count;
-      values[b->shader->fau_consts_count++] = value;
+   if (pan_fau_available(fau) > 0) {
+      const unsigned int idx = pan_fau_emit_const(fau, value);
       return bi_fau((enum bir_fau)(BIR_FAU_UNIFORM | (idx >> 1)), idx & 1);
    }
 

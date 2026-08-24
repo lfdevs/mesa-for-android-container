@@ -411,6 +411,7 @@ _mesa_initialize_texture_object( struct gl_context *ctx,
    obj->Attrib.ImageFormatCompatibilityType = GL_IMAGE_FORMAT_COMPATIBILITY_BY_SIZE;
    obj->CompressionRate = GL_SURFACE_COMPRESSION_FIXED_RATE_NONE_EXT;
    obj->AstcDecodePrecision = GL_RGBA16F;
+   obj->TextureTiling = GL_OPTIMAL_TILING_EXT;
 
    /* GL_ARB_bindless_texture */
    _mesa_init_texture_handles(obj);

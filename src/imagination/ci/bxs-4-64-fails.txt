@@ -1,2 +1,0 @@
-dEQP-VK.ycbcr.conversion.g8_b8_r8_3plane_420_unorm.chroma_reconstruction.nearest.default_nearest_cosited_cosited_tiling_optimal,Fail
-dEQP-VK.ycbcr.conversion.g8_b8r8_2plane_420_unorm.color_conversion.rgb_identity_tiling_linear_cosited_binding_31,Fail

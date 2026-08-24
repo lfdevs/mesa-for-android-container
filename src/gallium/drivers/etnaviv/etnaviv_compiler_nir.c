@@ -399,35 +399,6 @@ get_src(struct etna_compile *c, nir_src *src)
          return (hw_src) { .use = 1, .rgroup = ISA_REG_GROUP_INTERNAL };
       case nir_intrinsic_load_frag_coord:
          return SRC_REG(0, INST_SWIZ_IDENTITY);
-      case nir_intrinsic_load_texture_scale: {
-         int sampler = nir_src_as_int(intr->src[0]);
-         nir_const_value values[] = {
-            TEXSCALE(sampler, 0),
-            TEXSCALE(sampler, 1),
-         };
-
-         return src_swizzle(const_src(c, values, 2), SWIZZLE(X,Y,X,X));
-      }
-      case nir_intrinsic_load_texture_size_etna: {
-         int sampler = nir_src_as_int(intr->src[0]);
-         nir_const_value values[] = {
-            TEXSIZE(sampler, 0),
-            TEXSIZE(sampler, 1),
-            TEXSIZE(sampler, 2),
-         };
-
-         return src_swizzle(const_src(c, values, 3), SWIZZLE(X,Y,Z,X));
-      }
-      case nir_intrinsic_load_sampler_lod_parameters: {
-         int sampler = nir_src_as_int(intr->src[0]);
-         nir_const_value values[] = {
-            SAMPLERLOD(sampler, 0),
-            SAMPLERLOD(sampler, 1),
-            SAMPLERLOD(sampler, 2),
-         };
-
-         return src_swizzle(const_src(c, values, 3), SWIZZLE(X,Y,Z,X));
-      }
       default:
          compile_error(c, "Unhandled NIR intrinsic type: %s\n",
                        nir_intrinsic_infos[intr->intrinsic].name);
@@ -560,7 +531,7 @@ emit_alu(struct etna_compile *c, nir_alu_instr * alu)
    if (alu->op == nir_op_bitfield_insert_etna)
       srcs[2] = src_swizzle(get_src(c, &alu->src[2].src), SWIZZLE(X, Y, Y, Y));
 
-   etna_emit_alu(c, alu->op, dst, srcs, alu->op == nir_op_fsat);
+   etna_emit_alu(c, alu, dst, srcs);
 }
 
 static void
@@ -688,9 +659,6 @@ emit_intrinsic(struct etna_compile *c, nir_intrinsic_instr * intr)
    case nir_intrinsic_load_input:
    case nir_intrinsic_load_instance_id:
    case nir_intrinsic_load_vertex_id:
-   case nir_intrinsic_load_texture_scale:
-   case nir_intrinsic_load_texture_size_etna:
-   case nir_intrinsic_load_sampler_lod_parameters:
    case nir_intrinsic_decl_reg:
    case nir_intrinsic_load_reg:
    case nir_intrinsic_store_reg:
@@ -1033,29 +1001,53 @@ emit_shader(struct etna_compile *c, unsigned *num_temps, unsigned *num_consts)
          } break;
          case nir_instr_type_intrinsic: {
             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            nir_const_value value[4];
+
             /* TODO: load_ubo can also become a constant in some cases
              * (at the moment it can end up emitting a LOAD with two
              *  uniform sources, which could be a problem on HALTI2)
              */
-            if (intr->intrinsic != nir_intrinsic_load_uniform)
-               break;
-            nir_const_value *off = nir_src_as_const_value(intr->src[0]);
-            if (!off || off[0].u64 >> 32 != ETNA_UNIFORM_CONSTANT) {
-               have_indirect_uniform = true;
-               indirect_max = nir_intrinsic_base(intr) + nir_intrinsic_range(intr);
-               break;
+            switch (intr->intrinsic) {
+            case nir_intrinsic_load_uniform: {
+               nir_const_value *off = nir_src_as_const_value(intr->src[0]);
+               if (!off || off[0].u64 >> 32 != ETNA_UNIFORM_CONSTANT) {
+                  have_indirect_uniform = true;
+                  indirect_max = nir_intrinsic_base(intr) +
+                                 nir_intrinsic_range(intr);
+                  continue;
+               }
+
+               unsigned base = nir_intrinsic_base(intr);
+               /* pre halti2 uniform offset will be float */
+               if (c->info->halti < 2)
+                  base += (unsigned) off[0].f32;
+               else
+                  base += off[0].u32;
+
+               for (unsigned i = 0; i < intr->def.num_components; i++)
+                  value[i] = UNIFORM(base * 4 + i);
+            } break;
+            case nir_intrinsic_load_texture_scale: {
+               int sampler = nir_src_as_int(intr->src[0]);
+
+               for (unsigned i = 0; i < intr->def.num_components; i++)
+                  value[i] = TEXSCALE(sampler, i);
+            } break;
+            case nir_intrinsic_load_texture_size_etna: {
+               int sampler = nir_src_as_int(intr->src[0]);
+
+               for (unsigned i = 0; i < intr->def.num_components; i++)
+                  value[i] = TEXSIZE(sampler, i);
+            } break;
+            case nir_intrinsic_load_sampler_lod_parameters: {
+               int sampler = nir_src_as_int(intr->src[0]);
+
+               for (unsigned i = 0; i < intr->def.num_components; i++)
+                  value[i] = SAMPLERLOD(sampler, i);
+            } break;
+            default:
+               continue;
             }
-
-            unsigned base = nir_intrinsic_base(intr);
-            /* pre halti2 uniform offset will be float */
-            if (c->info->halti < 2)
-               base += (unsigned) off[0].f32;
-            else
-               base += off[0].u32;
-            nir_const_value value[4];
-
-            for (unsigned i = 0; i < intr->def.num_components; i++)
-               value[i] = UNIFORM(base * 4 + i);
 
             b.cursor = nir_after_instr(instr);
             nir_def *def = nir_build_imm(&b, intr->def.num_components, 32, value);

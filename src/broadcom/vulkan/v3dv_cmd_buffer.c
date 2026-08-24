@@ -149,8 +149,8 @@ job_destroy_gpu_cl_resources(struct v3dv_job *job)
     */
    _mesa_set_destroy(job->bos, NULL);
 
-   v3dv_bo_free(job->device, job->tile_alloc);
-   v3dv_bo_free(job->device, job->tile_state);
+   v3dv_bo_free(job->device, job->tile_alloc, 0);
+   v3dv_bo_free(job->device, job->tile_state, 0);
 }
 
 static void
@@ -197,7 +197,7 @@ job_destroy_gpu_csd_resources(struct v3dv_job *job)
    _mesa_set_destroy(job->bos, NULL);
 
    if (job->csd.shared_memory)
-      v3dv_bo_free(job->device, job->csd.shared_memory);
+      v3dv_bo_free(job->device, job->csd.shared_memory, 0);
 }
 
 void
@@ -258,7 +258,7 @@ v3dv_cmd_buffer_destroy_bo_cb(VkDevice _device,
 {
    V3DV_FROM_HANDLE(v3dv_device, device, _device);
    struct v3dv_bo *bo = (struct v3dv_bo *)((uintptr_t) pobj);
-   v3dv_bo_free(device, bo);
+   v3dv_bo_free(device, bo, 0);
 }
 
 static void
@@ -293,7 +293,8 @@ cmd_buffer_free_resources(struct v3dv_cmd_buffer *cmd_buffer)
       vk_free(&cmd_buffer->device->vk.alloc, cmd_buffer->state.query.end.states);
 
    if (cmd_buffer->push_constants_resource.bo)
-      v3dv_bo_free(cmd_buffer->device, cmd_buffer->push_constants_resource.bo);
+      v3dv_bo_free(cmd_buffer->device,
+                   cmd_buffer->push_constants_resource.bo, 0);
 
    list_for_each_entry_safe(struct v3dv_cmd_buffer_private_obj, pobj,
                             &cmd_buffer->private_objs, list_link) {
@@ -490,7 +491,9 @@ v3dv_job_allocate_tile_state(struct v3dv_job *job)
                         &tile_state_size);
 
    job->tile_alloc = v3dv_bo_alloc(job->device, tile_alloc_size,
-                                   "tile_alloc", true);
+                                   "tile_alloc", true,
+                                   VK_OBJECT_TYPE_COMMAND_BUFFER,
+                                   job_get_cmd_buffer_vk_handle(job));
    if (!job->tile_alloc) {
       v3dv_flag_oom(NULL, job);
       return false;
@@ -498,7 +501,9 @@ v3dv_job_allocate_tile_state(struct v3dv_job *job)
 
    v3dv_job_add_bo_unchecked(job, job->tile_alloc);
 
-   job->tile_state = v3dv_bo_alloc(job->device, tile_state_size, "TSDA", true);
+   job->tile_state = v3dv_bo_alloc(job->device, tile_state_size, "TSDA", true,
+                                   VK_OBJECT_TYPE_COMMAND_BUFFER,
+                                   job_get_cmd_buffer_vk_handle(job));
    if (!job->tile_state) {
       v3dv_flag_oom(NULL, job);
       return false;
@@ -2545,7 +2550,7 @@ v3dv_cmd_buffer_meta_state_push(struct v3dv_cmd_buffer *cmd_buffer,
     * we are no longer in a subpass because Vulkan disallows image resolves
     * via vkCmdResolveImage during subpasses, but we still need to preserve
     * attachment state because we may have more subpasses to go through
-    * after processing resolves in the current subass.
+    * after processing resolves in the current subpass.
     */
    const uint32_t attachment_state_item_size =
       sizeof(struct v3dv_cmd_buffer_attachment_state);
@@ -2594,6 +2599,8 @@ v3dv_cmd_buffer_meta_state_push(struct v3dv_cmd_buffer *cmd_buffer,
       if (gfx_descriptor_state->valid != 0) {
          memcpy(&state->meta.gfx.descriptor_state, gfx_descriptor_state,
                 sizeof(state->gfx.descriptor_state));
+      } else {
+         state->meta.gfx.descriptor_state.valid = 0;
       }
       state->meta.has_descriptor_state = true;
    } else {
@@ -4331,7 +4338,9 @@ cmd_buffer_create_csd_job(struct v3dv_cmd_buffer *cmd_buffer,
       job->csd.shared_memory =
          v3dv_bo_alloc(cmd_buffer->device,
                        cs_variant->prog_data.cs->shared_size * num_wgs,
-                       "shared_vars", true);
+                       "shared_vars", true,
+                       VK_OBJECT_TYPE_COMMAND_BUFFER,
+                       vk_object_to_u64_handle(&cmd_buffer->vk.base));
       if (!job->csd.shared_memory) {
          v3dv_flag_oom(cmd_buffer, NULL);
          return job;

@@ -28,9 +28,12 @@ bi_lower_divergent_indirects_impl(nir_builder *b, nir_intrinsic_instr *intr,
 
    /* Not all indirect access needs this workaround */
    switch (intr->intrinsic) {
+   case nir_intrinsic_load_attr_pan:
+      offset = &intr->src[2];
+      break;
+
    case nir_intrinsic_load_input:
    case nir_intrinsic_load_interpolated_input:
-   case nir_intrinsic_load_attribute_pan:
       /* Attributes and varyings */
       offset = nir_get_io_offset_src(intr);
       break;

@@ -47,7 +47,7 @@ lower_base_workgroup_id(nir_builder *b, nir_intrinsic_instr *intrin)
    b->cursor = nir_before_instr(&intrin->instr);
 
    nir_def *base_workgroup_id =
-      anv_load_driver_uniform(b, 3, cs.base_workgroup[0]);
+      anv_load_driver_uniform(b, 3, drv_data.cs.base_workgroup[0]);
    nir_def_replace(&intrin->def, base_workgroup_id);
 
    return true;
@@ -62,7 +62,7 @@ lower_subgroup_id(nir_builder *b, nir_intrinsic_instr *intrin,
 
    b->cursor = nir_before_instr(&intrin->instr);
    nir_def_replace(&intrin->def,
-                   anv_load_driver_uniform(b, 1, cs.subgroup_id));
+                   anv_load_driver_uniform(b, 1, subgroup_id));
 
    return true;
 }
@@ -72,7 +72,7 @@ lower_ray_query_globals(nir_builder *b, nir_intrinsic_instr *intrin)
 {
    b->cursor = nir_before_instr(&intrin->instr);
 
-   nir_def *rq_globals = anv_load_driver_uniform(b, 1, ray_query_globals);
+   nir_def *rq_globals = anv_load_driver_uniform(b, 1, drv_data.ray_query_globals);
    nir_def_replace(&intrin->def, rq_globals);
 
    return true;
@@ -107,7 +107,7 @@ lower_num_workgroups(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
 
    b->cursor = nir_before_instr(&intrin->instr);
    nir_def *num_workgroups =
-      anv_load_driver_uniform(b, 3, cs.num_workgroups[0]);
+      anv_load_driver_uniform(b, 3, drv_data.cs.num_workgroups[0]);
 
    nir_def *num_workgroups_indirect;
    nir_push_if(b, nir_ieq_imm(b, nir_channel(b, num_workgroups, 0), UINT32_MAX));

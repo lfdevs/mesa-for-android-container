@@ -794,4 +794,12 @@ v3dv_cmd_buffer_get_descriptor_state(struct v3dv_cmd_buffer *cmd_buffer,
 VK_DEFINE_HANDLE_CASTS(v3dv_cmd_buffer, vk.base, VkCommandBuffer,
                        VK_OBJECT_TYPE_COMMAND_BUFFER)
 
+static inline uint64_t
+job_get_cmd_buffer_vk_handle(struct v3dv_job *job)
+{
+   assert(job);
+   return job->cmd_buffer ?
+     vk_object_to_u64_handle(&job->cmd_buffer->vk.base) : 0;
+}
+
 #endif /* V3DV_CMD_BUFFER_H */

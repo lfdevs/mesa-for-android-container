@@ -69,9 +69,8 @@ vk_instance_init(struct vk_instance *instance,
     * vk_errorf and friends.
     */
    list_inithead(&instance->debug_utils.instance_callbacks);
-   vk_foreach_struct_const(ext, pCreateInfo->pNext) {
-      if (ext->sType ==
-          VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT) {
+   vk_foreach_struct_const(sType, ext, pCreateInfo->pNext) {
+      if (sType == VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT) {
          const VkDebugUtilsMessengerCreateInfoEXT *debugMessengerCreateInfo =
             (const VkDebugUtilsMessengerCreateInfoEXT *)ext;
          struct vk_debug_utils_messenger *messenger =

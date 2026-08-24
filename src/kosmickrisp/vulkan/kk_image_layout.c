@@ -6,8 +6,10 @@
 
 #include "kk_image_layout.h"
 
+#include "kk_debug.h"
 #include "kk_device.h"
 #include "kk_format.h"
+#include "kk_physical_device.h"
 
 #include "kosmickrisp/bridge/mtl_bridge.h"
 #include "kosmickrisp/bridge/mtl_format.h"
@@ -49,9 +51,9 @@ vk_image_usage_flags_to_mtl_texture_usage(VkImageUsageFlags usage_flags,
    if (usage_flags & shader_write)
       usage |= MTL_TEXTURE_USAGE_SHADER_WRITE;
 
-   const VkImageUsageFlags shader_read = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                         VK_IMAGE_USAGE_SAMPLED_BIT |
-                                         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+   const VkImageUsageFlags shader_read =
+      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+      VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
    if (usage_flags & shader_read)
       usage |= MTL_TEXTURE_USAGE_SHADER_READ;
 
@@ -76,7 +78,8 @@ vk_image_usage_flags_to_mtl_texture_usage(VkImageUsageFlags usage_flags,
 }
 
 bool
-kk_image_layout_can_optimize(VkImageUsageFlags usage, VkImageTiling tiling,
+kk_image_layout_can_optimize(const struct kk_physical_device *pdev,
+                             VkImageUsageFlags usage, VkImageTiling tiling,
                              VkImageCreateFlags flags, enum pipe_format format)
 {
    /* Can only optimize if tiling is optimal */
@@ -89,6 +92,13 @@ kk_image_layout_can_optimize(VkImageUsageFlags usage, VkImageTiling tiling,
     * decompressed by GPU vs CPU. */
    if ((usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT) &&
        !util_format_is_compressed(format))
+      return false;
+
+   if (!KK_EXPERIMENTAL(M5_OPTIMIZE_E5B9G9R9) &&
+       pdev->info.gpu_apple_family >= 10 &&
+       format == PIPE_FORMAT_R9G9B9E5_FLOAT &&
+       (usage &
+        (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)))
       return false;
 
    /* Attachment feedback usage may produce incorrect results with
@@ -205,6 +215,7 @@ kk_image_layout_init(const struct kk_device *dev, const struct vk_image *image,
                      enum pipe_format format, const uint8_t width_scale,
                      const uint8_t height_scale, struct kk_image_layout *layout)
 {
+   const struct kk_physical_device *pdev = kk_device_physical(dev);
    const struct kk_va_format *supported_format = kk_get_va_format(format);
    layout->type = vk_image_to_mtl_texture_type(image);
    layout->width_px = image->extent.width / width_scale;
@@ -214,7 +225,7 @@ kk_image_layout_init(const struct kk_device *dev, const struct vk_image *image,
    layout->levels = image->mip_levels;
    layout->linear = image->tiling != VK_IMAGE_TILING_OPTIMAL;
    layout->optimized_layout = kk_image_layout_can_optimize(
-      image->usage, image->tiling, image->create_flags, format);
+      pdev, image->usage, image->tiling, image->create_flags, format);
    layout->usage = vk_image_usage_flags_to_mtl_texture_usage(
       image->usage, image->create_flags, supported_format->atomic);
    layout->create_flags = image->create_flags;

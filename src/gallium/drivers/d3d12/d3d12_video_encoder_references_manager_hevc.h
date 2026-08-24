@@ -31,10 +31,10 @@
 class d3d12_video_encoder_references_manager_hevc : public d3d12_video_encoder_references_manager_interface
 {
  public:
-   void begin_frame(const D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1& curFrameData,
+   void begin_frame(const d3d12_video_encoder_picture_control_codec_data_mutable& curFrameData,
                     bool bUsedAsReference,
                     struct pipe_picture_desc *picture);
-   bool get_current_frame_picture_control_data(D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA1 &codecAllocation);
+   bool get_current_frame_picture_control_data(d3d12_video_encoder_picture_control_codec_data_mutable &codecAllocation);
    D3D12_VIDEO_ENCODE_REFERENCE_FRAMES get_current_reference_frames();
 
    bool is_current_frame_used_as_reference()

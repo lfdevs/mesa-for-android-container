@@ -1808,6 +1808,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    device->compiler->constant_buffer_0_is_relative =
       device->info.ver < 8 || !device->info.has_context_isolation;
    device->compiler->supports_shader_constants = true;
+   device->compiler->limit_trig_input_range = true;
 
    isl_device_init(&device->isl_dev, &device->info);
 
@@ -2041,8 +2042,8 @@ void anv_GetPhysicalDeviceQueueFamilyProperties2(
          p->queueFamilyProperties.queueFlags = queue_family->queueFlags;
          p->queueFamilyProperties.queueCount = queue_family->queueCount;
 
-         vk_foreach_struct(ext, p->pNext) {
-            switch (ext->sType) {
+         vk_foreach_struct(sType, ext, p->pNext) {
+            switch (sType) {
             case VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_KHR: {
                VkQueueFamilyGlobalPriorityPropertiesKHR *properties =
                   (VkQueueFamilyGlobalPriorityPropertiesKHR *)ext;
@@ -2068,7 +2069,7 @@ void anv_GetPhysicalDeviceQueueFamilyProperties2(
             }
 
             default:
-               vk_debug_ignored_stype(ext->sType);
+               vk_debug_ignored_stype(sType);
             }
          }
       }
@@ -2164,13 +2165,13 @@ void anv_GetPhysicalDeviceMemoryProperties2(
    anv_GetPhysicalDeviceMemoryProperties(physicalDevice,
                                          &pMemoryProperties->memoryProperties);
 
-   vk_foreach_struct(ext, pMemoryProperties->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryProperties->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT:
-         anv_get_memory_budget(physicalDevice, (void*)ext);
+         anv_get_memory_budget(physicalDevice, ext);
          break;
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -2991,32 +2992,32 @@ VkResult anv_AllocateMemory(
    VkMemoryAllocateFlags vk_flags = 0;
    uint64_t client_address = 0;
 
-   vk_foreach_struct_const(ext, pAllocateInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pAllocateInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO:
-         export_info = (void *)ext;
+         export_info = ext;
          break;
 
       case VK_STRUCTURE_TYPE_IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID:
-         ahw_import_info = (void *)ext;
+         ahw_import_info = ext;
          break;
 
       case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
-         fd_info = (void *)ext;
+         fd_info = ext;
          break;
 
       case VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT:
-         host_ptr_info = (void *)ext;
+         host_ptr_info = ext;
          break;
 
       case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO: {
-         const VkMemoryAllocateFlagsInfo *flags_info = (void *)ext;
+         const VkMemoryAllocateFlagsInfo *flags_info = ext;
          vk_flags = flags_info->flags;
          break;
       }
 
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO:
-         dedicated_info = (void *)ext;
+         dedicated_info = ext;
          break;
 
       case VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO: {
@@ -3027,11 +3028,11 @@ VkResult anv_AllocateMemory(
       }
 
       default:
-         if (ext->sType != VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA)
+         if (sType != VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA)
             /* this isn't a real enum value,
              * so use conditional to avoid compiler warn
              */
-            vk_debug_ignored_stype(ext->sType);
+            vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -3636,8 +3637,8 @@ anv_get_buffer_memory_requirements(struct anv_device *device,
 
    pMemoryRequirements->memoryRequirements.memoryTypeBits = memory_types;
 
-   vk_foreach_struct(ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
          VkMemoryDedicatedRequirements *requirements = (void *)ext;
          requirements->prefersDedicatedAllocation = false;
@@ -3646,7 +3647,7 @@ anv_get_buffer_memory_requirements(struct anv_device *device,
       }
 
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -3818,6 +3819,6 @@ void anv_GetPhysicalDeviceMultisamplePropertiesEXT(
    }
    pMultisampleProperties->maxSampleLocationGridSize = grid_size;
 
-   vk_foreach_struct(ext, pMultisampleProperties->pNext)
-      vk_debug_ignored_stype(ext->sType);
+   vk_foreach_struct(sType, ext, pMultisampleProperties->pNext)
+      vk_debug_ignored_stype(sType);
 }

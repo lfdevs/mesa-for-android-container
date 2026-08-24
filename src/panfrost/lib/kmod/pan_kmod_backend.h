@@ -166,3 +166,248 @@ pan_kmod_vm_op_check(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
 
    return 0;
 }
+
+static inline void
+pan_kmod_perf_session_init(struct pan_kmod_perf_session *session,
+                           struct pan_kmod_dev *dev,
+                           struct pan_kmod_perf_caps caps,
+                           struct mali_perf_backend backend)
+{
+   session->dev = dev;
+   session->caps = caps;
+   session->mali_perf_backend = backend;
+}
+
+struct pan_kmod_perf_sample_section {
+   struct {
+      enum mali_perf_block_type type;
+      uint32_t index;
+   } block;
+   uint32_t hw_sample_offset;
+   uint32_t consolidated_sample_offset;
+};
+
+struct pan_kmod_perf_sample_layout {
+   uint32_t block_type_offset[MALI_PERF_BLOCK_TYPE_COUNT];
+   uint32_t consolidated_sample_size;
+   uint32_t section_count;
+   const struct pan_kmod_perf_sample_section *sections;
+};
+
+struct pan_kmod_perf_consolidated_sample {
+   struct {
+      uint64_t start_gpu_ts;
+      uint64_t end_gpu_ts;
+   } time_span;
+   void *data;
+};
+
+struct pan_kmod_perf_dumped_sample {
+   void *data;
+};
+
+static inline int
+pan_kmod_perf_sample_layout_init(struct pan_kmod_dev *dev,
+                                 struct pan_kmod_perf_sample_layout *layout,
+                                 uint32_t hw_blk_cnt)
+{
+   *layout = (struct pan_kmod_perf_sample_layout){
+      .sections = pan_kmod_dev_alloc(dev, hw_blk_cnt * sizeof(*layout->sections)),
+   };
+
+   if (!layout->sections)
+      return -1;
+
+   return 0;
+}
+
+static inline void
+pan_kmod_perf_sample_layout_cleanup(struct pan_kmod_dev *dev,
+                                    struct pan_kmod_perf_sample_layout *layout)
+{
+   if (layout->sections)
+      pan_kmod_dev_free(dev, (void *)layout->sections);
+}
+
+static inline void
+pan_kmod_perf_sample_layout_add_section(
+   struct pan_kmod_dev *dev, struct pan_kmod_perf_sample_layout *layout,
+   enum mali_perf_block_type blk_type, uint32_t blk_idx,
+   uint32_t *hw_sample_offset)
+{
+   uint32_t counters_per_block = pan_query_perf_counter_per_block(&dev->props);
+   uint32_t hw_blk_sz = counters_per_block * sizeof(uint32_t);
+   uint32_t consolidated_blk_sz = counters_per_block * sizeof(uint64_t);
+   struct pan_kmod_perf_sample_section *sections =
+      (struct pan_kmod_perf_sample_section *)layout->sections;
+
+   if (!blk_idx)
+      layout->block_type_offset[blk_type] = layout->consolidated_sample_size;
+
+   sections[layout->section_count++] = (struct pan_kmod_perf_sample_section){
+      .block.type = blk_type,
+      .block.index = blk_idx,
+      .hw_sample_offset = *hw_sample_offset,
+      .consolidated_sample_offset = layout->consolidated_sample_size,
+   };
+
+   layout->consolidated_sample_size += consolidated_blk_sz;
+   *hw_sample_offset += hw_blk_sz;
+}
+
+static inline void
+pan_kmod_perf_sample_layout_add_shader_core_sections(
+   struct pan_kmod_dev *dev, struct pan_kmod_perf_sample_layout *layout,
+   uint32_t *hw_sample_offset)
+{
+   uint32_t arch = pan_arch(dev->props.gpu_id);
+   bool supports_virtual_sc = arch >= 14;
+   uint64_t shader_present = dev->props.shader_present;
+   uint32_t counters_per_block = pan_query_perf_counter_per_block(&dev->props);
+   uint32_t hw_blk_sz = counters_per_block * sizeof(uint32_t);
+
+   for (uint32_t phys_sc = 0, virt_sc = 0; phys_sc < 64; phys_sc++) {
+      if (!(shader_present & BITFIELD64_BIT(phys_sc))) {
+         if (!supports_virtual_sc)
+            *hw_sample_offset += hw_blk_sz;
+
+         continue;
+      }
+
+      pan_kmod_perf_sample_layout_add_section(
+         dev, layout, MALI_PERF_BLOCK_SHADER_CORE, virt_sc++, hw_sample_offset);
+   }
+}
+
+static inline void
+pan_kmod_perf_sample_layout_add_memsys_sections(
+   struct pan_kmod_dev *dev, struct pan_kmod_perf_sample_layout *layout,
+   uint32_t *hw_sample_offset)
+{
+   uint32_t l2_slice_count = pan_query_l2_slices(&dev->props);
+
+   for (uint32_t l2_slice = 0; l2_slice < l2_slice_count; l2_slice++) {
+      pan_kmod_perf_sample_layout_add_section(
+         dev, layout, MALI_PERF_BLOCK_MEMSYS, l2_slice, hw_sample_offset);
+   }
+}
+
+static inline int
+pan_kmod_perf_consolidated_sample_init(
+   struct pan_kmod_dev *dev, const struct pan_kmod_perf_sample_layout *layout,
+   struct pan_kmod_perf_consolidated_sample *consolidated_sample)
+{
+   *consolidated_sample = (struct pan_kmod_perf_consolidated_sample){
+      .data = pan_kmod_dev_alloc(dev, layout->consolidated_sample_size),
+   };
+
+   if (!consolidated_sample->data)
+      return -1;
+
+   return 0;
+}
+
+static inline void
+pan_kmod_perf_consolidated_sample_cleanup(
+   struct pan_kmod_dev *dev,
+   struct pan_kmod_perf_consolidated_sample *consolidated_sample)
+{
+   if (consolidated_sample->data)
+      pan_kmod_dev_free(dev, consolidated_sample->data);
+}
+
+static inline int
+pan_kmod_perf_dumped_sample_init(
+   struct pan_kmod_dev *dev, const struct pan_kmod_perf_sample_layout *layout,
+   struct pan_kmod_perf_dumped_sample *dumped_sample)
+{
+   *dumped_sample = (struct pan_kmod_perf_dumped_sample){
+      .data = pan_kmod_dev_alloc(dev, layout->consolidated_sample_size),
+   };
+
+   if (!dumped_sample->data)
+      return -1;
+
+   return 0;
+}
+
+static inline void
+pan_kmod_perf_dumped_sample_cleanup(
+   struct pan_kmod_dev *dev, struct pan_kmod_perf_dumped_sample *dumped_sample)
+{
+   if (dumped_sample->data)
+      pan_kmod_dev_free(dev, dumped_sample->data);
+}
+
+static inline void
+pan_kmod_perf_consolidate_sample(
+   struct pan_kmod_dev *dev, const struct pan_kmod_perf_sample_layout *layout,
+   void *hw_sample,
+   struct pan_kmod_perf_consolidated_sample *consolidated_sample)
+{
+   uint32_t counters_per_block = pan_query_perf_counter_per_block(&dev->props);
+
+   /* First we update the consolidated sample. */
+   for (uint32_t s = 0; s < layout->section_count; s++) {
+      const struct pan_kmod_perf_sample_section *section = &layout->sections[s];
+      uint64_t *out =
+         consolidated_sample->data + section->consolidated_sample_offset;
+      uint32_t *in = hw_sample + section->hw_sample_offset;
+      uint64_t gpu_ts = in[0] | ((uint64_t)in[1]) << 32;
+      uint32_t en_mask = in[2];
+
+      /* Update sample time span. */
+      if (en_mask && gpu_ts) {
+         if (!consolidated_sample->time_span.start_gpu_ts ||
+             consolidated_sample->time_span.start_gpu_ts > gpu_ts)
+            consolidated_sample->time_span.start_gpu_ts = gpu_ts;
+
+         if (consolidated_sample->time_span.end_gpu_ts < gpu_ts)
+            consolidated_sample->time_span.end_gpu_ts = gpu_ts;
+      }
+
+      /* Reset the TIMESTAMP to make sure we don't read stale data next time. */
+      in[0] = 0;
+      in[1] = 0;
+
+      /* Reset PERFCNT_EN to acknowledge the processining of this sample. */
+      in[2] = 0;
+
+      /* Accumulate all the counters starting at offset 4. */
+      for (uint32_t c = 4; c < counters_per_block; c += 4) {
+         if ((en_mask & BITFIELD_BIT(c / 4))) {
+            out[c] += in[c];
+            out[c + 1] += in[c + 1];
+            out[c + 2] += in[c + 2];
+            out[c + 3] += in[c + 3];
+         }
+      }
+   }
+}
+
+static inline struct mali_perf_dump_info
+pan_kmod_perf_dump_sample(
+   struct pan_kmod_dev *dev,
+   const struct pan_kmod_perf_sample_layout *layout,
+   struct pan_kmod_perf_consolidated_sample *consolidated_sample,
+   struct pan_kmod_perf_dumped_sample *dumped_sample)
+{
+   uint64_t start_gpu_ts, end_gpu_ts;
+
+   memcpy(dumped_sample->data, consolidated_sample->data,
+          layout->consolidated_sample_size);
+   start_gpu_ts = consolidated_sample->time_span.start_gpu_ts;
+   end_gpu_ts = consolidated_sample->time_span.end_gpu_ts;
+   memset(consolidated_sample->data, 0, layout->consolidated_sample_size);
+
+   /* Counters start accumulating again after the last sample. */
+   consolidated_sample->time_span.start_gpu_ts = end_gpu_ts;
+
+   return (struct mali_perf_dump_info){
+      /* time_span is in cycles, turn it into nanoseconds. */
+      .time_span = {
+         .start_ns = pan_kmod_timestamp_cycles_to_ns(dev, start_gpu_ts),
+         .end_ns = pan_kmod_timestamp_cycles_to_ns(dev, end_gpu_ts),
+      },
+   };
+}

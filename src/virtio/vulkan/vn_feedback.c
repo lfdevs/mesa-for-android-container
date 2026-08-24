@@ -10,6 +10,7 @@
 #include "vn_physical_device.h"
 #include "vn_query_pool.h"
 #include "vn_queue.h"
+#include "vn_sync.h"
 
 static uint32_t
 vn_get_memory_type_index(const VkPhysicalDeviceMemoryProperties *mem_props,
@@ -51,9 +52,9 @@ vn_feedback_buffer_create(struct vn_device *dev,
    const VkBufferCreateInfo buf_create_info = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .size = size,
-      /* Feedback for fences and timeline semaphores will write to this buffer
-       * as a DST when signalling. Timeline semaphore feedback will also read
-       * from this buffer as a SRC to retrieve the counter value to signal.
+      /* Timeline semaphore feedback will write to this buffer as a DST when
+       * signalling, and it will also read from this buffer as a SRC to
+       * retrieve the counter value to signal.
        */
       .usage =
          VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -263,7 +264,7 @@ vn_feedback_pool_alloc(struct vn_feedback_pool *pool,
    slot->type = type;
    slot->offset = offset;
    slot->buf_handle = fb_buf->buf_handle;
-   slot->data = fb_buf->data + offset;
+   slot->data = (char *)fb_buf->data + offset;
 
    return slot;
 }
@@ -440,14 +441,9 @@ vn_feedback_cmd_record(VkCommandBuffer cmd_handle,
                        struct vn_feedback_slot *dst_slot,
                        struct vn_feedback_slot *src_slot)
 {
-   STATIC_ASSERT(sizeof(*dst_slot->status) == 4);
    STATIC_ASSERT(sizeof(*dst_slot->counter) == 8);
    STATIC_ASSERT(sizeof(*src_slot->counter) == 8);
-
-   /* slot size is 8 bytes for timeline semaphore and 4 bytes fence.
-    * src slot is non-null for timeline semaphore.
-    */
-   const VkDeviceSize buf_size = src_slot ? 8 : 4;
+   const VkDeviceSize buf_size = 8;
 
    static const VkCommandBufferBeginInfo begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -488,34 +484,36 @@ vn_feedback_cmd_record(VkCommandBuffer cmd_handle,
                          &mem_barrier_before, 1, &buf_barrier_before, 0,
                          NULL);
 
-   /* If passed a src_slot, timeline semaphore feedback records a
-    * cmd to copy the counter value from the src slot to the dst slot.
-    * If src_slot is NULL, then fence feedback records a cmd to fill
-    * the dst slot with VK_SUCCESS.
+   /* Timeline semaphore feedback records a cmd to copy the counter value from
+    * the src slot to the dst slot.
     */
-   if (src_slot) {
-      assert(src_slot->type == VN_FEEDBACK_TYPE_SEMAPHORE);
-      assert(dst_slot->type == VN_FEEDBACK_TYPE_SEMAPHORE);
+   assert(src_slot->type == VN_FEEDBACK_TYPE_SEMAPHORE);
+   assert(dst_slot->type == VN_FEEDBACK_TYPE_SEMAPHORE);
 
-      const VkBufferCopy buffer_copy = {
-         .srcOffset = src_slot->offset,
-         .dstOffset = dst_slot->offset,
-         .size = buf_size,
-      };
-      vn_CmdCopyBuffer(cmd_handle, src_slot->buf_handle, dst_slot->buf_handle,
-                       1, &buffer_copy);
-   } else {
-      assert(dst_slot->type == VN_FEEDBACK_TYPE_FENCE);
-
-      vn_CmdFillBuffer(cmd_handle, dst_slot->buf_handle, dst_slot->offset,
-                       buf_size, VK_SUCCESS);
-   }
+   const VkBufferCopy buffer_copy = {
+      .srcOffset = src_slot->offset,
+      .dstOffset = dst_slot->offset,
+      .size = buf_size,
+   };
+   vn_CmdCopyBuffer(cmd_handle, src_slot->buf_handle, dst_slot->buf_handle, 1,
+                    &buffer_copy);
 
    vn_feedback_cmd_record_flush_barrier(cmd_handle, dst_slot->buf_handle,
                                         dst_slot->offset, buf_size);
 
    return vn_EndCommandBuffer(cmd_handle);
 }
+
+static VkResult
+vn_feedback_cmd_alloc(VkDevice dev_handle,
+                      struct vn_feedback_cmd_pool *fb_cmd_pool,
+                      struct vn_feedback_slot *dst_slot,
+                      struct vn_feedback_slot *src_slot,
+                      VkCommandBuffer *out_cmd_handle);
+static void
+vn_feedback_cmd_free(VkDevice dev_handle,
+                     struct vn_feedback_cmd_pool *fb_cmd_pool,
+                     VkCommandBuffer cmd_handle);
 
 static struct vn_sync_feedback_cmd *
 vn_sync_feedback_cmd_alloc(struct vn_device *dev,
@@ -631,23 +629,6 @@ vn_sync_feedback_query(struct vn_device *dev,
    simple_mtx_lock(&sfb->counter_mtx);
    const uint64_t counter = vn_feedback_get_counter(sfb->slot);
    if (sfb->signaled_counter < counter) {
-      /* search pending cmds for already signaled values */
-      simple_mtx_lock(&sfb->cmd_mtx);
-      list_for_each_entry_safe(struct vn_sync_feedback_cmd, sfb_cmd,
-                               &sfb->pending_cmds, head) {
-         if (counter >= vn_feedback_get_counter(sfb_cmd->src_slot)) {
-            /* avoid over-caching more than normal runtime usage */
-            if (sfb->free_cmd_count > 5) {
-               list_del(&sfb_cmd->head);
-               vn_sync_feedback_cmd_free(dev, sfb_cmd);
-            } else {
-               list_move_to(&sfb_cmd->head, &sfb->free_cmds);
-               sfb->free_cmd_count++;
-            }
-         }
-      }
-      simple_mtx_unlock(&sfb->cmd_mtx);
-
       sfb->signaled_counter = counter;
       signaled_counter_updated = true;
    }
@@ -659,6 +640,29 @@ vn_sync_feedback_query(struct vn_device *dev,
    simple_mtx_unlock(&sfb->counter_mtx);
 
    return signaled_counter_updated;
+}
+
+void
+vn_sync_feedback_cmd_recycle(struct vn_device *dev,
+                             struct vn_sync_feedback *sfb)
+{
+   /* search pending cmds for already signaled values */
+   simple_mtx_lock(&sfb->cmd_mtx);
+   list_for_each_entry_safe(struct vn_sync_feedback_cmd, sfb_cmd,
+                            &sfb->pending_cmds, head) {
+      const uint64_t cmd_counter = vn_feedback_get_counter(sfb_cmd->src_slot);
+      if (sfb->signaled_counter >= cmd_counter) {
+         /* avoid over-caching more than normal runtime usage */
+         if (sfb->free_cmd_count > 5) {
+            list_del(&sfb_cmd->head);
+            vn_sync_feedback_cmd_free(dev, sfb_cmd);
+         } else {
+            list_move_to(&sfb_cmd->head, &sfb->free_cmds);
+            sfb->free_cmd_count++;
+         }
+      }
+   }
+   simple_mtx_unlock(&sfb->cmd_mtx);
 }
 
 void
@@ -923,7 +927,7 @@ vn_query_feedback_cmd_free(struct vn_query_feedback_cmd *qfb_cmd)
    simple_mtx_unlock(&qfb_cmd->fb_cmd_pool->mutex);
 }
 
-VkResult
+static VkResult
 vn_feedback_cmd_alloc(VkDevice dev_handle,
                       struct vn_feedback_cmd_pool *fb_cmd_pool,
                       struct vn_feedback_slot *dst_slot,
@@ -965,7 +969,7 @@ out_unlock:
    return result;
 }
 
-void
+static void
 vn_feedback_cmd_free(VkDevice dev_handle,
                      struct vn_feedback_cmd_pool *fb_cmd_pool,
                      VkCommandBuffer cmd_handle)
@@ -991,11 +995,12 @@ vn_feedback_cmd_pools_init(struct vn_device *dev)
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
    };
 
-   if (VN_PERF(NO_FENCE_FEEDBACK) && VN_PERF(NO_SEMAPHORE_FEEDBACK) &&
-       VN_PERF(NO_QUERY_FEEDBACK))
+   if (VN_PERF(NO_SEMAPHORE_FEEDBACK) && VN_PERF(NO_QUERY_FEEDBACK))
       return VK_SUCCESS;
 
-   assert(dev->queue_family_count);
+   /* allowed in maintenance9 */
+   if (!dev->queue_family_count)
+      return VK_SUCCESS;
 
    fb_cmd_pools =
       vk_zalloc(alloc, sizeof(*fb_cmd_pools) * dev->queue_family_count,

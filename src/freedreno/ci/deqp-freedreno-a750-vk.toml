@@ -88,7 +88,6 @@ TU_DEBUG = "dynamic"
 # TU_DEBUG = "gmem,forcebin"
 # TU_DEBUG_STALE_REGS_RANGE = "0x0c00,0xbe01"
 # TU_DEBUG_STALE_REGS_FLAGS = "cmdbuf,renderpass"
-# FREEDRENO_HANGCHECK_MS = "2000"
 
 # force multi queue emulation
 [[deqp]]

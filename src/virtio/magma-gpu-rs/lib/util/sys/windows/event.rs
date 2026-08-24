@@ -14,15 +14,15 @@ impl Event {
         Err(Error::Unsupported)
     }
 
-    pub fn add(&mut self, _value: u64) -> MagmaGpuResult<()> {
+    pub fn add(&self, _value: u64) -> MagmaGpuResult<()> {
         Err(Error::Unsupported)
     }
 
-    pub fn signal(&mut self) -> MagmaGpuResult<()> {
+    pub fn signal(&self) -> MagmaGpuResult<()> {
         Err(Error::Unsupported)
     }
 
-    pub fn wait(&mut self) -> MagmaGpuResult<u64> {
+    pub fn wait(&self) -> MagmaGpuResult<u64> {
         Err(Error::Unsupported)
     }
 

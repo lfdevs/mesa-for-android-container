@@ -568,17 +568,6 @@ handle_timestamp_query_cpu_job(struct v3dv_queue *queue,
    assert(job->type == V3DV_JOB_TYPE_CPU_TIMESTAMP_QUERY);
    struct v3dv_timestamp_query_cpu_job_info *info = &job->cpu.query_timestamp;
 
-   struct drm_v3d_submit_cpu submit = {0};
-
-   submit.bo_handle_count = 1;
-   submit.bo_handles = (uintptr_t)(void *)&info->pool->timestamp.bo->handle;
-
-   struct drm_v3d_timestamp_query timestamp = {0};
-
-   v3d_submit_ext_set(&timestamp.base, NULL, DRM_V3D_EXT_ID_CPU_TIMESTAMP_QUERY, 0);
-
-   timestamp.count = info->count;
-
    uint32_t *offsets =
       (uint32_t *) malloc(sizeof(uint32_t) * info->count);
    uint32_t *syncs =
@@ -593,9 +582,6 @@ handle_timestamp_query_cpu_job(struct v3dv_queue *queue,
       syncs[i] = vk_sync_as_drm_syncobj(query->timestamp.sync)->syncobj;
    }
 
-   timestamp.offsets = (uintptr_t)(void *)offsets;
-   timestamp.syncs = (uintptr_t)(void *)syncs;
-
    struct v3d_multisync ms = {0};
 
    /* The CPU job should be serialized so it only executes after all previously
@@ -603,18 +589,16 @@ handle_timestamp_query_cpu_job(struct v3dv_queue *queue,
     */
    job->serialize = V3DV_BARRIER_ALL;
 
-   if (!set_multisync(&ms, sync_info, NULL, 0, (void *)&timestamp, queue, job,
+   if (!set_multisync(&ms, sync_info, NULL, 0, NULL, queue, job,
                      V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU)) {
       free(offsets);
       free(syncs);
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
-   submit.flags |= DRM_V3D_SUBMIT_EXTENSION;
-   submit.extensions = (uintptr_t)(void *)&ms.ext;
-
-   int ret = v3d_ioctl(device->pdevice->render_fd,
-			DRM_IOCTL_V3D_SUBMIT_CPU, &submit);
+   int ret = v3d_submit_timestamp_query_ioctl(
+      device->pdevice->render_fd, info->pool->timestamp.bo->handle,
+      offsets, syncs, info->count, &ms.ext.base);
 
    free(offsets);
    free(syncs);

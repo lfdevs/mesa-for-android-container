@@ -75,7 +75,7 @@ anv_nir_update_resource_intel_block(nir_shader *shader)
 }
 
 struct lower_resource_state {
-   enum anv_descriptor_set_layout_type desc_type;
+   enum anv_shader_binding_mode binding_mode;
    const struct anv_physical_device *device;
 };
 
@@ -105,7 +105,7 @@ lower_resource_intel(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
 
    /* Ignore binding table accesses & embedded samplers */
    if (is_embedded_sampler) {
-      assert(state->desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER);
+      assert(state->binding_mode == ANV_SHADER_BINDING_MODE_BUFFER);
       return false;
    }
 
@@ -120,8 +120,8 @@ lower_resource_intel(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
    /* When using indirect descriptor, the surface handles are loaded from the
     * descriptor buffer and do not need any offset.
     */
-   if (state->desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_DIRECT ||
-       state->desc_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER) {
+   if (state->binding_mode == ANV_SHADER_BINDING_MODE_LEGACY ||
+       state->binding_mode == ANV_SHADER_BINDING_MODE_BUFFER) {
       if (!intel_has_extended_bindless(&state->device->info)) {
          /* We're trying to reduce the number of instructions in the shaders
           * to compute surface handles. The assumption is that we're using
@@ -142,8 +142,10 @@ lower_resource_intel(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
           * resource_intel::src[0]. That way the shader can just do a single
           * ADD and get the surface handle.
           */
-         if (!is_sampler)
+         if (!is_sampler) {
+            set_offset = nir_ishl_imm(b, set_offset, 6);
             binding_offset = nir_ishl_imm(b, binding_offset, 6);
+         }
       }
 
       nir_src_rewrite(&intrin->src[1],
@@ -160,10 +162,10 @@ lower_resource_intel(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
 bool
 anv_nir_lower_resource_intel(nir_shader *shader,
                              const struct anv_physical_device *device,
-                             enum anv_descriptor_set_layout_type desc_type)
+                             enum anv_shader_binding_mode binding_mode)
 {
    struct lower_resource_state state = {
-      .desc_type = desc_type,
+      .binding_mode = binding_mode,
       .device = device,
    };
    return nir_shader_intrinsics_pass(shader, lower_resource_intel,

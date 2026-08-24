@@ -178,7 +178,7 @@ impl RegLatencySM75 {
             Op::Tmml(_) => Decoupled,
             Op::Txd(_) => Decoupled,
             Op::Txq(_) => Decoupled,
-            Op::Ldc(_) => Decoupled,
+            Op::Ldc(_) | Op::Ldcg(_) => Decoupled,
             Op::ALd(_) => Decoupled,
             Op::ASt(_) => Decoupled,
             Op::Out(_) => Decoupled,
@@ -198,6 +198,7 @@ impl RegLatencySM75 {
             Op::LdTram(_) => Decoupled,
             Op::Shfl(_) => Decoupled,
             Op::Ldsm(_) => Decoupled,
+            Op::Nanosleep(_) => Decoupled,
             x => {
                 panic!("Illegal instuction in reg category {}", x);
             }
@@ -940,6 +941,7 @@ impl URegLatencySM75 {
                     vdecoupled
                 }
             }
+            Op::Ldcg(_) => Uldc,
             Op::Lea(_) => vcoupled,
             Op::LeaX(_) => vcoupled,
             Op::Lop2(_) | Op::Lop3(_) => vcoupled,
@@ -1123,7 +1125,7 @@ impl URegLatencySM75 {
     ) -> u32 {
         use URegLatencySM75::*;
         match reader {
-            Udp => match writer {
+            Udp | Uldc => match writer {
                 Udp => 4,
                 VoteU => 1,
                 _ => {

@@ -744,8 +744,6 @@ fd_set_global_binding(struct pipe_context *pctx, unsigned first, unsigned count,
       if (prscs && prscs[i]) {
          pipe_resource_reference(res, prscs[i]);
 
-         prscs[i]->bind |= FD_BIND_GLOBAL_BUFFER;
-
          struct fd_resource *rsc = fd_resource(prscs[i]);
          uint32_t offset = *handles[i];
          uint64_t iova = fd_bo_get_iova(rsc->bo) + offset;

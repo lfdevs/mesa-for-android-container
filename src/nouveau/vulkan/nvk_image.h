@@ -215,11 +215,21 @@ nvk_image_memory_aspects_to_plane(ASSERTED const struct nvk_image *image,
                      VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT |
                      VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT |
                      VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT)) {
-      /* We don't support DRM format modifiers on anything but single-plane
-       * color at the moment.
+      /* A modifier image has one memory plane per image plane: single-plane
+       * color takes the tiled modifiers and multi-planar formats only ever
+       * get LINEAR, and both report drmFormatModifierPlaneCount as the image
+       * plane count.
        */
-      assert(aspectMask == VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT);
-      return 0;
+      uint8_t plane;
+      switch (aspectMask) {
+      case VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT: plane = 0; break;
+      case VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT: plane = 1; break;
+      case VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT: plane = 2; break;
+      case VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT: plane = 3; break;
+      default: UNREACHABLE("invalid memory plane aspect mask");
+      }
+      assert(plane < image->plane_count);
+      return plane;
    } else {
       return nvk_image_aspects_to_plane(image, aspectMask);
    }

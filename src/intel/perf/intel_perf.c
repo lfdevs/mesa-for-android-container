@@ -1593,6 +1593,7 @@ intel_perf_init_metrics(struct intel_perf_config *perf_cfg,
 {
    perf_cfg->devinfo = devinfo;
    perf_cfg->oa_sample_size = intel_perf_get_oa_format_size(devinfo);
+   perf_cfg->use_metrics_library = debug_get_bool_option("INTEL_USE_METRICS_LIBRARY", false);
 
    intel_perf_init_query_fields(perf_cfg, devinfo, use_register_snapshots);
 

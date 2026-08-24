@@ -245,6 +245,9 @@ etna_coalsence_emit_reloc(struct etna_cmd_stream *stream,
 }
 
 void
+etna_reserve_emit_space(struct etna_context *ctx);
+
+void
 etna_emit_state(struct etna_context *ctx);
 
 #endif

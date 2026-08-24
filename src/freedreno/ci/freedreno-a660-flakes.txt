@@ -60,3 +60,9 @@ KHR-GL46.gpu_shader_fp64.builtin.smoothstep_dvec4
 # Nightly run expectations update
 dEQP-VK.synchronization.internally_synchronized_objects.pipeline_cache_graphics
 
+#
+# OpenCL-CTS
+#
+
+Device timer
+Device timer@device_and_host_timers

@@ -389,7 +389,8 @@ static void r300_translate_fragment_shader(
         compiler.Base.remove_unused_constants = true;
     }
 
-    if (face != ATTR_UNUSED) {
+    /* R3xx/R4xx emulation already provides FACE in the API convention. */
+    if (face != ATTR_UNUSED && r300->screen->caps.is_r500) {
         rc_transform_fragment_face(&compiler.Base, face);
     }
 

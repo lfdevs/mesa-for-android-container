@@ -85,8 +85,6 @@ struct radv_meta_state {
    mtx_t mtx;
 
    struct {
-      struct radix_sort_vk *radix_sort_64;
-      struct radix_sort_vk *radix_sort_96;
       struct vk_acceleration_structure_build_ops build_ops;
       struct vk_acceleration_structure_build_args build_args;
    } accel_struct_build;
@@ -288,7 +286,9 @@ struct radv_device {
    /* Whether per-vertex VRS is forced. */
    bool force_vrs_enabled;
 
-   simple_mtx_t pstate_mtx;
+   mtx_t pstate_mtx;
+   cnd_t pstate_cond;
+   bool pstate_pending;
    unsigned pstate_cnt;
 
    /* BO to contain some performance counter helpers:
@@ -366,9 +366,9 @@ void radv_emit_default_sample_locations(const struct radv_physical_device *pdev,
 void radv_gfx11_set_db_render_control(const struct radv_device *device, unsigned num_samples,
                                       unsigned *db_render_control);
 
-bool radv_device_set_pstate(struct radv_device *device, bool enable);
+VkResult radv_device_set_pstate(struct radv_device *device, bool enable, uint64_t timeout);
 
-bool radv_device_acquire_performance_counters(struct radv_device *device);
+VkResult radv_device_acquire_performance_counters(struct radv_device *device, uint64_t timeout);
 
 void radv_device_release_performance_counters(struct radv_device *device);
 

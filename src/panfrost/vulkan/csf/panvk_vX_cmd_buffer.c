@@ -47,8 +47,7 @@ emit_tls(struct panvk_cmd_buffer *cmdbuf)
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(dev->vk.physical);
-   unsigned core_id_range;
-   pan_query_core_count(&phys_dev->kmod.dev->props, &core_id_range);
+   unsigned core_id_range = pan_query_core_id_range(&phys_dev->kmod.dev->props);
 
    if (cmdbuf->state.tls.info.tls.size) {
       unsigned thread_tls_alloc =

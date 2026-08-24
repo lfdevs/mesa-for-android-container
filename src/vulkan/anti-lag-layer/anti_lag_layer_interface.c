@@ -253,8 +253,8 @@ get_device_context(const void *object)
 static VkLayerDeviceCreateInfo *
 get_device_chain_info(const VkDeviceCreateInfo *pCreateInfo, VkLayerFunction func)
 {
-   vk_foreach_struct_const (item, pCreateInfo->pNext) {
-      if (item->sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO &&
+   vk_foreach_struct_const (sType, item, pCreateInfo->pNext) {
+      if (sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO &&
           ((VkLayerDeviceCreateInfo *)item)->function == func)
          return (VkLayerDeviceCreateInfo *)item;
    }

@@ -181,12 +181,14 @@ radv_shader_object_init_graphics(struct radv_shader_object *shader_obj, struct r
    struct radv_graphics_state_key gfx_state = {0};
 
    gfx_state.vs.has_prolog = true;
-   gfx_state.ps.has_epilog = true;
+   gfx_state.ps.color_outputs_need_epilog = true;
+   gfx_state.ps.depth_output_needs_epilog = true;
+   gfx_state.ps.stencil_output_needs_epilog = true;
+   gfx_state.ps.sample_mask_output_needs_epilog = true;
    gfx_state.dynamic_rasterization_samples = true;
-   gfx_state.unknown_rast_prim = true;
    gfx_state.dynamic_provoking_vtx_mode = true;
-   gfx_state.dynamic_line_rast_mode = true;
-   gfx_state.ps.exports_mrtz_via_epilog = true;
+   gfx_state.smooth_lines_may_be_enabled = true;
+   gfx_state.rs.polygon_mode_unknown = true;
 
    for (uint32_t i = 0; i < MAX_RTS; i++)
       gfx_state.ps.epilog.color_map[i] = i;
@@ -445,12 +447,11 @@ radv_shader_object_create_linked(VkDevice _device, uint32_t createInfoCount, con
    struct radv_graphics_state_key gfx_state = {0};
 
    gfx_state.vs.has_prolog = true;
-   gfx_state.ps.has_epilog = true;
+   gfx_state.ps.color_outputs_need_epilog = true;
    gfx_state.dynamic_rasterization_samples = true;
-   gfx_state.unknown_rast_prim = true;
    gfx_state.dynamic_provoking_vtx_mode = true;
-   gfx_state.dynamic_line_rast_mode = true;
-   gfx_state.ps.exports_mrtz_via_epilog = true;
+   gfx_state.smooth_lines_may_be_enabled = true;
+   gfx_state.rs.polygon_mode_unknown = true;
 
    for (uint32_t i = 0; i < MAX_RTS; i++)
       gfx_state.ps.epilog.color_map[i] = i;

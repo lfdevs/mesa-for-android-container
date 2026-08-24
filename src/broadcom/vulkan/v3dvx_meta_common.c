@@ -1558,9 +1558,11 @@ meta_fill_buffer_tfu_stride0(struct v3dv_cmd_buffer *cmd_buffer,
       mtx_lock(&device->meta.mtx);
       struct v3dv_bo *zero_bo = device->meta.tfu_fill_zero.src_bo;
       if (!zero_bo) {
-         zero_bo = v3dv_bo_alloc(device, src_size, "tfu_fill_zero", true);
+         zero_bo = v3dv_bo_alloc(device, src_size, "tfu_fill_zero", true,
+                                 VK_OBJECT_TYPE_DEVICE,
+                                 vk_object_to_u64_handle(&device->vk.base));
          if (zero_bo && !v3dv_bo_map(device, zero_bo, src_size)) {
-            v3dv_bo_free(device, zero_bo);
+            v3dv_bo_free(device, zero_bo, 0);
             zero_bo = NULL;
          }
          if (zero_bo) {
@@ -1577,13 +1579,15 @@ meta_fill_buffer_tfu_stride0(struct v3dv_cmd_buffer *cmd_buffer,
    } else {
       src_bo = cmd_buffer->meta.tfu_fill.src_bo;
       if (!src_bo || cmd_buffer->meta.tfu_fill.data != data) {
-         src_bo = v3dv_bo_alloc(device, src_size, "tfu_fill_src", true);
+         src_bo = v3dv_bo_alloc(device, src_size, "tfu_fill_src", true,
+                                VK_OBJECT_TYPE_COMMAND_BUFFER,
+                                vk_object_to_u64_handle(&cmd_buffer->vk.base));
          if (!src_bo) {
             v3dv_flag_oom(cmd_buffer, NULL);
             return;
          }
          if (!v3dv_bo_map(device, src_bo, src_size)) {
-            v3dv_bo_free(device, src_bo);
+            v3dv_bo_free(device, src_bo, 0);
             v3dv_flag_oom(cmd_buffer, NULL);
             return;
          }

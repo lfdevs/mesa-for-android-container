@@ -15,12 +15,12 @@ build_surface_handle(nir_builder *b, nir_def *heap_offset,
 {
    if (plane != 0)
       heap_offset = nir_iadd_imm(b, heap_offset, plane * ANV_SURFACE_STATE_SIZE);
-   nir_def *surface_handle =
-      intel_has_extended_bindless(&pdevice->info) ?
-      nir_iadd(b,
-               anv_load_driver_uniform(b, 1, desc_surface_offsets[0]),
-               heap_offset) :
-      nir_ishl_imm(b, heap_offset, 6);
+   nir_def *surface_handle = nir_iadd(
+      b, anv_load_driver_uniform(b, 1, heap.surfaces_offset),
+      heap_offset);
+   if (!intel_has_extended_bindless(&pdevice->info))
+      surface_handle = nir_ishl_imm(b, surface_handle, 6);
+
    return nir_resource_intel(
       b,
       nir_imm_int(b, 0xdeaddead),
@@ -41,9 +41,7 @@ build_deref_surface_handle(nir_builder *b, nir_deref_instr *deref,
 {
    nir_def *surface_handle = nir_explicit_io_address_from_deref(
       b, deref,
-      intel_has_extended_bindless(&pdevice->info) ?
-      anv_load_driver_uniform(b, 1, desc_surface_offsets[0]) :
-      nir_imm_int(b, 0),
+      anv_load_driver_uniform(b, 1, heap.surfaces_offset),
       nir_address_format_32bit_offset);
    if (!intel_has_extended_bindless(&pdevice->info))
       surface_handle = nir_ishl_imm(b, surface_handle, 6);
@@ -75,7 +73,7 @@ build_sampler_handle(nir_builder *b, nir_def *heap_offset,
    } else {
       sampler_handle = nir_iadd(
          b,
-         anv_load_driver_uniform(b, 1, desc_surface_offsets[1]),
+         anv_load_driver_uniform(b, 1, heap.samplers_offset),
          plane == 0 ? heap_offset :
          nir_iadd_imm(b, heap_offset, plane * ANV_SAMPLER_STATE_SIZE));
    }
@@ -99,12 +97,14 @@ static nir_def *
 build_descriptor_addr(nir_builder *b, nir_def *heap_offset,
                       const struct anv_physical_device *pdevice)
 {
-   return nir_pack_64_2x32_split(
+   nir_def *offset = nir_iadd(
       b,
-      nir_iadd(
-         b,
-         anv_load_driver_uniform(b, 1, desc_surface_offsets[0]),
-         heap_offset),
+      anv_load_driver_uniform(b, 1, heap.surfaces_offset),
+      heap_offset);
+   if (!intel_has_extended_bindless(&pdevice->info))
+      offset = nir_iadd(b, offset, anv_load_driver_uniform(b, 1, heap.surfaces_base_offset));
+   return nir_pack_64_2x32_split(
+      b, offset,
       nir_load_reloc_const_intel(
          b, BRW_SHADER_RELOC_DESCRIPTORS_BUFFER_ADDR_HIGH));
 }
@@ -486,6 +486,7 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, void *data)
             b, BRW_SHADER_RELOC_EMBEDDED_SAMPLER_HANDLE + tex->sampler_index),
          plane, tex->sampler_non_uniform, true, data);
       nir_tex_instr_add_src(tex, nir_tex_src_sampler_handle, sampler_index);
+      tex->sampler_index = 0;
       progress = true;
    }
 
@@ -493,13 +494,13 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, void *data)
 }
 
 static nir_def *
-build_buffer_addr_for_deref(nir_builder *b, nir_deref_instr *deref,
-                            const struct anv_physical_device *pdevice)
+build_direct_buffer_addr_for_deref(nir_builder *b, nir_deref_instr *deref,
+                                   const struct anv_physical_device *pdevice)
 {
    if (deref->deref_type != nir_deref_type_cast) {
       nir_deref_instr *parent = nir_deref_instr_parent(deref);
       nir_def *addr =
-         build_buffer_addr_for_deref(b, parent, pdevice);
+         build_direct_buffer_addr_for_deref(b, parent, pdevice);
 
       b->cursor = nir_before_instr(&deref->instr);
       return nir_explicit_io_address_from_deref(
@@ -555,7 +556,7 @@ try_lower_direct_buffer_intrinsic(nir_builder *b,
 
    b->cursor = nir_before_instr(&intrin->instr);
 
-   nir_def *addr = build_buffer_addr_for_deref(b, deref, pdevice);
+   nir_def *addr = build_direct_buffer_addr_for_deref(b, deref, pdevice);
    nir_lower_explicit_io_instr(b, intrin, addr,
                                nir_address_format_32bit_index_offset);
 

@@ -248,22 +248,31 @@ v3d_generate_mipmap(struct pipe_context *pctx,
         if (format != prsc->format)
                 return false;
 
-        /* We could maybe support looping over layers for array textures, but
-         * we definitely don't support 3D.
-         */
-        if (first_layer != last_layer)
+        /* We don't support 3D */
+        if (prsc->target == PIPE_TEXTURE_3D)
                 return false;
 
         struct v3d_context *v3d = v3d_context(pctx);
         struct v3d_screen *screen = v3d->screen;
         struct v3d_device_info *devinfo = &screen->devinfo;
 
-        return v3d_X(devinfo, tfu)(pctx,
-                                   prsc, prsc,
-                                   base_level,
-                                   base_level, last_level,
-                                   first_layer, first_layer,
-                                   true);
+        /* Loop over the array layers to generate the mipmaps. If it is works
+         * for the first layer, it must work for the rest, hence the
+         * assertion.
+         */
+        for (unsigned int layer = first_layer; layer <= last_layer; layer++) {
+                if (!v3d_X(devinfo, tfu)(pctx,
+                                         prsc, prsc,
+                                         base_level,
+                                         base_level, last_level,
+                                         layer, layer,
+                                         true)) {
+                        assert(layer == first_layer);
+                        return false;
+                }
+        }
+
+        return true;
 }
 
 static void
@@ -281,12 +290,11 @@ v3d_tfu_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
             info->dst.box.y != 0 ||
             info->dst.box.width != dst_width ||
             info->dst.box.height != dst_height ||
-            info->dst.box.depth != 1 ||
             info->src.box.x != 0 ||
             info->src.box.y != 0 ||
             info->src.box.width != info->dst.box.width ||
             info->src.box.height != info->dst.box.height ||
-            info->src.box.depth != 1) {
+            info->src.box.depth != info->dst.box.depth) {
                 return;
         }
 
@@ -297,13 +305,23 @@ v3d_tfu_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         struct v3d_screen *screen = v3d->screen;
         struct v3d_device_info *devinfo = &screen->devinfo;
 
-        if (v3d_X(devinfo, tfu)(pctx, info->dst.resource, info->src.resource,
-                                info->src.level,
-                                info->dst.level, info->dst.level,
-                                info->src.box.z, info->dst.box.z,
-                                false)) {
-                info->mask &= ~PIPE_MASK_RGBA;
+        /* Loop over the array layers to do the TFU blit. If it works for the
+         * first layer it must work for the rest, hence the assertion.
+         */
+        for (int i = 0; i < info->dst.box.depth; i++) {
+                if (!v3d_X(devinfo, tfu)(pctx,
+                                         info->dst.resource, info->src.resource,
+                                         info->src.level,
+                                         info->dst.level, info->dst.level,
+                                         info->src.box.z + i,
+                                         info->dst.box.z + i,
+                                         false)) {
+                        assert(i == 0);
+                        return;
+                }
         }
+
+        info->mask &= ~PIPE_MASK_RGBA;
 }
 
 static bool
@@ -819,7 +837,8 @@ v3d_sand8_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         MESA_TRACE_FUNC();
 
         v3d_blitter_save(v3d, info->render_condition_enable ?
-                         V3D_BLIT_COND : V3D_BLIT);
+                         V3D_BLIT_COND | V3D_SAVE_FRAGMENT_CONSTANT :
+                         V3D_BLIT | V3D_SAVE_FRAGMENT_CONSTANT);
 
         struct pipe_surface dst_surf;
         /* Although the src textures are cpp=1 or cpp=2, the dst texture
@@ -1131,7 +1150,8 @@ v3d_sand30_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
         MESA_TRACE_FUNC();
 
         v3d_blitter_save(v3d, info->render_condition_enable ?
-                         V3D_BLIT_COND : V3D_BLIT);
+                         V3D_BLIT_COND | V3D_SAVE_FRAGMENT_CONSTANT :
+                         V3D_BLIT | V3D_SAVE_FRAGMENT_CONSTANT);
 
         struct pipe_surface dst_surf;
         v3d_set_blit_surface(&dst_surf, pctx, info->dst.resource,

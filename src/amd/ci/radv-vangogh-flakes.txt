@@ -2,15 +2,9 @@ dEQP-VK.api.copy_and_blit.core.use_after_copy.b8g8r8a8_srgb.transfer_dst_optimal
 dEQP-VK.api.copy_and_blit.core.use_after_copy.d16_unorm_s8_uint.transfer_dst_optimal.64x64x2_tq_img2img
 dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat.transfer_dst_optimal.64x64x2_tq_img2img
 dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat_s8_uint.transfer_dst_optimal.64x64x2_tq
-dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x2_tq_color_att_flag
-dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x2_tq_color_att_flag_img2img
-dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x2_tq_regions_color_att_flag
-dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x2_tq_regions_color_att_flag_img2img
+dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.*
 dEQP-VK.api.copy_and_blit.core.use_after_copy.r8_srgb.transfer_dst_optimal.1024x1024x2_tq_color_att_flag
 dEQP-VK.pipeline.pipeline_library.vertex_input.multiple_attributes.binding_one_to_many.attributes.ivec3.vec2.vec3
 dEQP-VK.ray_tracing_pipeline.pipeline_library.configurations.rgen_miss_in_library.s0_l1_aabbs
 dEQP-VK.ray_tracing_pipeline.pipeline_library.configurations.rgen_miss_in_library.s0_l23
 dEQP-VK.transform_feedback.primitives_generated_query.get.queue_reset.64bit.geom.no_xfb.no_rast.line_list_with_adjacency.pgq_1.two_draws.pqg_first.none_2_queries
-dEQP-VK.wsi.direct.present_timing.basic.retired_swapchain
-dEQP-VK.wsi.direct.present_timing.time_domain.calibration.present_stage_local
-dEQP-VK.wsi.direct_drm.present_timing.basic.retired_swapchain

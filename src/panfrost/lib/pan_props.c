@@ -17,6 +17,13 @@ pan_query_l2_slices(const struct pan_kmod_dev_props *props)
    return ((props->mem_features >> 8) & 0xF) + 1;
 }
 
+unsigned
+pan_query_bus_width(const struct pan_kmod_dev_props *props)
+{
+   /* BUS_WIDTH is L2_FEATURES[31:24] log2 */
+   return 1 << ((props->l2_features >> 24) & 0xF);
+}
+
 struct pan_tiler_features
 pan_query_tiler_features(const struct pan_kmod_dev_props *props)
 {
@@ -31,21 +38,20 @@ pan_query_tiler_features(const struct pan_kmod_dev_props *props)
 }
 
 unsigned
-pan_query_core_count(const struct pan_kmod_dev_props *props,
-                     unsigned *core_id_range)
+pan_query_core_count(const struct pan_kmod_dev_props *props)
 {
-   /* On older kernels, worst-case to 16 cores */
+   /* The actual core count skips overs the gaps */
+   return util_bitcount64(props->shader_present);
+}
 
-   unsigned mask = props->shader_present;
-
+unsigned
+pan_query_core_id_range(const struct pan_kmod_dev_props *props)
+{
    /* Some cores might be absent. In some cases, we care
     * about the range of core IDs (that is, the greatest core ID + 1). If
     * the core mask is contiguous, this equals the core count.
     */
-   *core_id_range = util_last_bit(mask);
-
-   /* The actual core count skips overs the gaps */
-   return util_bitcount(mask);
+   return util_last_bit64(props->shader_present);
 }
 
 unsigned
@@ -159,4 +165,9 @@ pan_choose_gpu_va_alignment(const struct pan_kmod_vm *vm, uint64_t size)
       align = pgsize;
    }
    return align;
+}
+
+unsigned pan_query_perf_counter_per_block(const struct pan_kmod_dev_props *props)
+{
+   return pan_arch(props->gpu_id) <= 10 ? 64 : 128;
 }

@@ -1,6 +1,7 @@
 /*
  * Copyright 2024 Google LLC
  * Copyright 2025 Arm Ltd.
+ * Copyright 2026 NXP
  * SPDX-License-Identifier: MIT
  */
 
@@ -59,6 +60,11 @@ panvk_utrace_create_buffer(struct u_trace_context *utctx, uint64_t size_B)
 void
 panvk_utrace_delete_buffer(struct u_trace_context *utctx, void *buffer)
 {
+   /* u_trace_fini() frees the NULL container stored when a clone allocation
+    * failed; nothing to release in that case. */
+   if (!buffer)
+      return;
+
    struct panvk_device *dev = to_dev(utctx);
    struct panvk_utrace_buf *buf = buffer;
 
@@ -82,6 +88,14 @@ panvk_utrace_read_ts(struct u_trace_context *utctx, void *timestamps,
 
    assert(props->timestamp_frequency);
 
+   /* The buffer may be NULL if its clone-time allocation failed; the trace
+    * point has no valid timestamp. */
+   if (!buf) {
+      mesa_loge("utrace: missing timestamp buffer (clone alloc failed); "
+                "reporting no timestamp for this trace point");
+      return U_TRACE_NO_TIMESTAMP;
+   }
+
    /* wait for the submit */
    if (data->sync) {
       if (vk_sync_wait(&dev->vk, data->sync, data->wait_value,
@@ -95,7 +109,7 @@ panvk_utrace_read_ts(struct u_trace_context *utctx, void *timestamps,
    const uint64_t *ts_ptr = buf->host + offset_B;
    uint64_t ts = *ts_ptr;
    if (ts != U_TRACE_NO_TIMESTAMP)
-      ts = (ts * NSEC_PER_SEC) / props->timestamp_frequency;
+      ts = pan_kmod_timestamp_cycles_to_ns(pdev->kmod.dev, ts);
 
    return ts;
 }
@@ -105,6 +119,15 @@ panvk_utrace_get_data(struct u_trace_context *utctx, void *buffer,
                       uint64_t offset_B, uint32_t size_B)
 {
    const struct panvk_utrace_buf *buf = buffer;
+
+   /* The buffer may be NULL if its clone-time allocation failed; report
+    * no data rather than dereferencing NULL. */
+   if (!buf) {
+      mesa_loge("utrace: missing indirect data buffer (clone alloc failed); "
+                "reporting no data for this trace point");
+      return NULL;
+   }
+
    return buf->host + offset_B;
 }
 
@@ -113,10 +136,9 @@ panvk_utrace_delete_flush_data(struct u_trace_context *utctx, void *flush_data)
 {
    struct panvk_utrace_flush_data *data = flush_data;
 
-   if (data->clone_cs_root) {
-      panvk_utrace_delete_buffer(utctx, data->clone_cs_root);
-      data->clone_cs_root = NULL;
-   }
+   util_dynarray_foreach(&data->clone_cs_bufs, struct panvk_utrace_buf *, buf)
+      panvk_utrace_delete_buffer(utctx, *buf);
+   util_dynarray_fini(&data->clone_cs_bufs);
 
    if (data->free_self)
       free(data);

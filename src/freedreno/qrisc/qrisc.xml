@@ -1025,10 +1025,29 @@ SOFTWARE.
 	<pattern low="26" high="31">110111</pattern>
 </bitset>
 
+<bitset name="jumpd" extends="#jump-a7xx">
+	<doc>
+		This seems to behave equivalently to jumpr, with a second source
+		that's ignored (?!?). It's only used by hand-written AQE
+		assembly support routines (i.e. not by the
+		compiled C code, and not in SQE firmware), and only used as
+		"jumpd $lr, $lr" for returning to C code.
+	</doc>
+
+	<display>
+		jumpd {SRC1}, {SRC2}
+	</display>
+
+	<field name="SRC1" low="21" high="25" type="#src"/>
+	<pattern pos="20">1</pattern>
+	<pattern low="5" high="19">000000000000000</pattern>
+	<field name="SRC2" low="0" high="4" type="#src"/>
+</bitset>
+
 <bitset name="jumpr" extends="#jump-a7xx">
 	<doc>
-                Indirect jump instruction. Jump to the given offset.
-                Used as a return instruction together with bl:
+		Indirect jump instruction. Jump to the given offset.
+		Used as a return instruction together with bl:
 
 			bl #fxn
 			...
@@ -1038,33 +1057,15 @@ SOFTWARE.
 			jump $lr
 			nop
 
-		However this is only used by hand-crafted assembly
-		routines that make sure to never use any stack space. Otherwise
-		sret is used.
+		or for jump tables.
 	</doc>
 
 	<display>
 		jump {SRC1}
 	</display>
 
-	<pattern low="20" high="25">110111</pattern>
-	<pattern low="5" high="19">000000000000000</pattern>
-	<field name="SRC1" low="0" high="4" type="#src"/>
-</bitset>
-
-<bitset name="sret" extends="#jump-a7xx">
-	<doc>
-		Seems to be equivalent to "jump $lr". This seems to be used by
-		the compiled code, and is always immediately followed by a
-		"sub $sp, $sp, imm" instruction to restore the stack frame. It's
-		therefore possible this also includes a stack overflow check.
-	</doc>
-
-	<display>
-		sret
-	</display>
-
-	<pattern low="20" high="25">110110</pattern>
+	<field name="SRC1" low="21" high="25" type="#src"/>
+	<pattern pos="20">0</pattern>
 	<pattern low="0" high="19">00000000000000000000</pattern>
 </bitset>
 

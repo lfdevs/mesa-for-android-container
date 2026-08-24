@@ -67,6 +67,7 @@ struct radeon_enc_dpb_buffer {
 struct radeon_enc_fb_buffer {
    struct si_resource *res;
    void *data;
+   unsigned max_bitstream_size;
 };
 
 struct radeon_enc_pic {
@@ -103,6 +104,7 @@ struct radeon_enc_pic {
    rvcn_enc_quality_modes_t quality_modes;
 
    bool use_rc_per_pic_ex;
+   bool hevc_per_slice_loop_filter;
    bool av1_tile_splitting_legacy_flag;
    bool av1_unidir_rc_available;
 

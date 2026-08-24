@@ -16,6 +16,7 @@
 #include "util/os_time.h"
 #include "util/stack_array.h"
 #include "util/simple_mtx.h"
+#include "util/timespec.h"
 #include "util/u_debug.h"
 #include "util/vma.h"
 
@@ -164,6 +165,7 @@ panthor_dev_query_props(struct panthor_kmod_dev *panthor_dev)
       .mem_features = panthor_dev->props.gpu.mem_features,
       .mmu_features = panthor_dev->props.gpu.mmu_features,
       .pgsize_bitmap = panthor_dev->props.mmu.page_size_bitmap,
+      .l2_features = panthor_dev->props.gpu.l2_features,
 
       /* This register does not exist because AFBC is no longer optional. */
       .afbc_features = 0,
@@ -180,6 +182,11 @@ panthor_dev_query_props(struct panthor_kmod_dev *panthor_dev)
                             PAN_KMOD_BO_FLAG_NO_MMAP |
                             PAN_KMOD_BO_FLAG_GPU_UNCACHED,
    };
+
+   if (props->timestamp_frequency) {
+      props->timestamp_cycles_to_ns_factor =
+         (double)NSEC_PER_SEC / props->timestamp_frequency;
+   }
 
    if (pan_kmod_driver_version_at_least(&panthor_dev->base.driver, 1, 6))
       props->timestamp_device_coherent = true;

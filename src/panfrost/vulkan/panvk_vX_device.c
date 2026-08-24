@@ -258,7 +258,7 @@ panvk_queue_check_status(struct vk_queue *queue)
    case PANVK_QUEUE_FAMILY_GPU:
       return panvk_per_arch(gpu_queue_check_status)(queue);
    case PANVK_QUEUE_FAMILY_BIND:
-      return panvk_per_arch(bind_queue_check_status)(queue);
+      return panvk_bind_queue_check_status(queue);
    default:
       UNREACHABLE("Unknown queue family");
    }
@@ -305,8 +305,7 @@ panvk_queue_create(struct panvk_device *dev,
       return panvk_per_arch(create_gpu_queue)(
          dev, create_info, queue_idx, out_queue);
    case PANVK_QUEUE_FAMILY_BIND:
-      return panvk_per_arch(create_bind_queue)(
-         dev, create_info, queue_idx, out_queue);
+      return panvk_create_bind_queue(dev, create_info, queue_idx, out_queue);
    default:
       return panvk_error(dev, VK_ERROR_INITIALIZATION_FAILED);
    }
@@ -320,7 +319,7 @@ panvk_queue_destroy(struct vk_queue *queue)
       panvk_per_arch(destroy_gpu_queue)(queue);
       break;
    case PANVK_QUEUE_FAMILY_BIND:
-      panvk_per_arch(destroy_bind_queue)(queue);
+      panvk_destroy_bind_queue(queue);
       break;
    default:
       UNREACHABLE("Unknown queue family");

@@ -88,7 +88,9 @@ kk_files = files(
   'kk_image.c',
   'kk_instance.h',
   'kk_instance.c',
+  'kk_nir_lower_custom_border.c',
   'kk_nir_lower_descriptors.c',
+  'kk_nir_lower_image_view_min_lod.c',
   'kk_nir_lower_multiview.c',
   'kk_nir_lower_null_images.c',
   'kk_nir_lower_textures.c',
@@ -174,7 +176,7 @@ kosmickrisp_mesa_icd = custom_target(
   output : 'kosmickrisp_mesa_icd.' + vulkan_manifest_suffix,
   command : [
     prog_python, '@INPUT0@',
-    '--api-version', '1.3', '--xml', '@INPUT1@',
+    '--api-version', '1.4', '--xml', '@INPUT1@',
     '--icd-lib-path', vulkan_icd_lib_path,
     '--icd-filename', icd_file_name,
     '--out', '@OUTPUT@',
@@ -191,7 +193,7 @@ kosmickrisp_icd = custom_target(
   output : 'kosmickrisp_mesa_devenv_icd.@0@.json'.format(host_machine.cpu()),
   command : [
     prog_python, '@INPUT0@',
-    '--api-version', '1.3', '--xml', '@INPUT1@',
+    '--api-version', '1.4', '--xml', '@INPUT1@',
     '--icd-lib-path', meson.current_build_dir(),
     '--icd-filename', icd_file_name,
     '--out', '@OUTPUT@',

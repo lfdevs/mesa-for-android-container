@@ -168,6 +168,7 @@ struct gl_extensions
    GLboolean EXT_draw_buffers2;
    GLboolean EXT_EGL_image_storage;
    GLboolean EXT_float_blend;
+   GLboolean EXT_frag_depth;
    GLboolean EXT_framebuffer_multisample;
    GLboolean EXT_framebuffer_multisample_blit_scaled;
    GLboolean EXT_framebuffer_sRGB;
@@ -977,6 +978,13 @@ struct gl_constants
    GLuint ShaderSubgroupSupportedStages;
    GLuint ShaderSubgroupSupportedFeatures;
    bool ShaderSubgroupQuadAllStages;
+
+   /**
+    * Whether GL_LINEAR_TILING_EXT affects regular GL textures, not just
+    * memory objects. For microbenchmarking. Enabled via
+    * MESA_DEBUG=api-tiling-linear.
+    */
+   bool AllowGLTextureLinearTiling;
 };
 
 #endif

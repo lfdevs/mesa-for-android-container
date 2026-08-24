@@ -71,8 +71,12 @@ draw_emit_xfb(fd_cs &cs, struct CP_DRAW_INDX_OFFSET_0 *draw0,
       .add(pack_CP_DRAW_INDX_OFFSET_0(*draw0))
       .add(CP_DRAW_AUTO_1(info->instance_count))
       .add(CP_DRAW_AUTO_NUM_VERTICES_BASE(offset->bo, 0))
-      /* byte counter offset subtraced from the value read from above: */
-      .add(CP_DRAW_AUTO_4(0))
+      /* byte counter offset subtracted from the value read from above.  The
+       * CP shifts it right by two before the subtraction on both a6xx and
+       * a7xx, which cancels out against the units of the counter in either
+       * case, so this stays in bytes.
+       */
+      .add(CP_DRAW_AUTO_4(target->base.buffer_offset))
       .add(CP_DRAW_AUTO_5(target->stride));
 }
 
@@ -430,12 +434,12 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
       /* maximum number of patches that can fit in tess factor/param buffers */
       uint32_t subdraw_size = MIN2(FD6_TESS<CHIP>::FACTOR_SIZE / factor_stride,
                                    FD6_TESS<CHIP>::PARAM_SIZE / (emit.hs->output_size * 4));
-      /* convert from # of patches to draw count */
-      subdraw_size *= ctx->patch_vertices;
-
       /* For gen8 tess_bo is sized for two draws, adjust subdraw size accordingly: */
       if (CHIP >= A8XX)
          subdraw_size /= 2;
+
+      /* convert from # of patches to draw count */
+      subdraw_size *= ctx->patch_vertices;
 
       fd_pkt7(cs, CP_SET_SUBDRAW_SIZE, 1)
          .add(subdraw_size);

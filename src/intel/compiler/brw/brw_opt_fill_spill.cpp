@@ -20,11 +20,11 @@ static bool
 scratch_intersects(const intel_device_info *devinfo,
                    const brw_scratch_inst *a, const brw_scratch_inst *b)
 {
-   const auto a_first = a->offset;
+   const auto a_first = a->logical_offset;
    const auto a_last = (a->opcode == SHADER_OPCODE_LSC_SPILL ?
                         a->size_read(devinfo, SPILL_SRC_PAYLOAD2) :
                         a->size_written) + a_first - 1;
-   const auto b_first = b->offset;
+   const auto b_first = b->logical_offset;
    const auto b_last = (b->opcode == SHADER_OPCODE_LSC_SPILL ?
                         b->size_read(devinfo, SPILL_SRC_PAYLOAD2) :
                         b->size_written) + b_first - 1;
@@ -36,11 +36,11 @@ static bool
 scratch_superset(const intel_device_info *devinfo,
                    const brw_scratch_inst *super, const brw_scratch_inst *sub)
 {
-   const auto a_first = super->offset;
+   const auto a_first = super->logical_offset;
    const auto a_last = (super->opcode == SHADER_OPCODE_LSC_SPILL ?
                         super->size_read(devinfo, SPILL_SRC_PAYLOAD2) :
                         super->size_written) + a_first - 1;
-   const auto b_first = sub->offset;
+   const auto b_first = sub->logical_offset;
    const auto b_last = (sub->opcode == SHADER_OPCODE_LSC_SPILL ?
                         sub->size_read(devinfo, SPILL_SRC_PAYLOAD2) :
                         sub->size_written) + b_first - 1;
@@ -96,7 +96,7 @@ brw_opt_fill_and_spill(brw_shader &s)
             /* Instruction is a fill from the same location as the spill. */
             if (scan_inst->opcode == SHADER_OPCODE_LSC_FILL &&
                 scan_inst->force_writemask_all == inst->force_writemask_all &&
-                scan_inst->as_scratch()->offset == inst->as_scratch()->offset) {
+                scan_inst->as_scratch()->logical_offset == inst->as_scratch()->logical_offset) {
                /* This limitation is necessary because (currently) a spill may
                 * be split into multiple writes while the correspoing fill is
                 * implemented as a single transpose read. When this occurs,
@@ -174,7 +174,7 @@ brw_opt_fill_and_spill(brw_shader &s)
 
             if (scan_inst->opcode == SHADER_OPCODE_LSC_FILL &&
                 scan_inst->force_writemask_all == inst->force_writemask_all &&
-                scan_inst->as_scratch()->offset == inst->as_scratch()->offset &&
+                scan_inst->as_scratch()->logical_offset == inst->as_scratch()->logical_offset &&
                 scan_inst->size_written == inst->size_written &&
                 scan_inst->group == inst->group &&
                 scan_inst->as_scratch()->use_transpose == inst->as_scratch()->use_transpose) {
@@ -244,10 +244,16 @@ brw_opt_fill_and_spill(brw_shader &s)
    /* Remove any left-over spill that has no fills.  This can
     * happen when RA decides to spill a value but the value remains
     * live for all its fills.
+    *
+    * Use the logical scratch offset here instead of the physical offset: the
+    * physical storage may be reused by non-interfering spilled values, so a
+    * remaining fill from the same physical byte range does not necessarily
+    * read this spill's value.
     */
    {
       /* Spills and fills operate on register granularity. */
-      const unsigned scratch_regs = DIV_ROUND_UP(s.last_scratch, REG_SIZE);
+      const unsigned scratch_regs =
+         DIV_ROUND_UP(s.last_logical_scratch, REG_SIZE);
       BITSET_WORD *covered =
          rzalloc_array(NULL, BITSET_WORD, BITSET_WORDS(scratch_regs));
 
@@ -256,9 +262,9 @@ brw_opt_fill_and_spill(brw_shader &s)
          if (inst->opcode != SHADER_OPCODE_LSC_FILL)
             continue;
          const brw_scratch_inst *fill = inst->as_scratch();
-         assert(fill->offset % REG_SIZE == 0 &&
+         assert(fill->logical_offset % REG_SIZE == 0 &&
                 fill->size_written % REG_SIZE == 0);
-         const unsigned first = fill->offset / REG_SIZE;
+         const unsigned first = fill->logical_offset / REG_SIZE;
          const unsigned end = first + fill->size_written / REG_SIZE;
          assert(end <= scratch_regs);
          BITSET_SET_RANGE(covered, first, end - 1);
@@ -270,8 +276,9 @@ brw_opt_fill_and_spill(brw_shader &s)
             continue;
          const brw_scratch_inst *spill = inst->as_scratch();
          const unsigned size = spill->size_read(devinfo, SPILL_SRC_PAYLOAD2);
-         assert(spill->offset % REG_SIZE == 0 && size % REG_SIZE == 0);
-         const unsigned first = spill->offset / REG_SIZE;
+         assert(spill->logical_offset % REG_SIZE == 0 &&
+                size % REG_SIZE == 0);
+         const unsigned first = spill->logical_offset / REG_SIZE;
          const unsigned end = first + size / REG_SIZE;
          assert(end <= scratch_regs);
          if (!BITSET_TEST_RANGE(covered, first, end - 1)) {

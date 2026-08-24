@@ -177,6 +177,7 @@ debian-build-x86_64:
   extends:
     - .meson-build-for-tests
     - .use-debian/x86_64_build
+    - .build-run-long  # but it really shouldn't! tracked in mesa#12544
   variables:
     UNWIND: "enabled"
     C_ARGS: >
@@ -427,6 +428,7 @@ debian-arm32:
       -D gallium-rusticl=false
       -D mesa-clc=system
       -D precomp-compiler=system
+      -D tools=drm-shim
     HOST_BUILD_OPTIONS: >
       -D build-tests=false
       -D enable-glcpp-tests=false
@@ -483,6 +485,7 @@ debian-arm64:
       -D perfetto=true
       -D vulkan-layers=screenshot
       -D panfrost-rust=true
+      -D tools=drm-shim
     GALLIUM_ST:
       -D gallium-rusticl=true
       -D legacy-wayland=bind-wayland-display

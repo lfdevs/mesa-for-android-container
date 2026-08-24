@@ -1,1 +1,1 @@
-Models.Op/efficientdet_efficientdet_tflite_lite0_int8_v1,Fail
+Models.Op/vww4_vww4_128_128_INT8,Fail

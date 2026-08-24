@@ -97,7 +97,7 @@ radv_init_wsi(struct radv_physical_device *pdev)
 
    VkResult result =
       wsi_device_init(&pdev->wsi_device, radv_physical_device_to_handle(pdev), radv_wsi_proc_addr, &instance->vk.alloc,
-                      pdev->wsi_master_fd, &instance->drirc.options, &(struct wsi_device_options){.sw_device = false});
+                      pdev->wsi_master_fd, &pdev->drirc.options, &(struct wsi_device_options){.sw_device = false});
    if (result != VK_SUCCESS)
       return result;
 
@@ -120,6 +120,9 @@ void
 radv_finish_wsi(struct radv_physical_device *pdev)
 {
    const struct radv_instance *instance = radv_physical_device_instance(pdev);
+
+   if (!pdev->vk.wsi_device)
+      return;
 
    pdev->vk.wsi_device = NULL;
    wsi_device_finish(&pdev->wsi_device, &instance->vk.alloc);

@@ -43,4 +43,18 @@ struct gl_context;
 
 extern void _mesa_init_fog( struct gl_context * ctx );
 
+/**
+ * The fixed-function vertex program stores the *signed* eye-space Z in
+ * gl_FogFragCoord and defers the abs() of the GL_EYE_PLANE_ABSOLUTE_NV
+ * distance mode to the fragment stage, so that it is applied per fragment
+ * rather than baked into the interpolated per-vertex value (mesa #15407).
+ *
+ * Returns true when the fog coordinate reaching the fragment stage was
+ * produced that way -- i.e. fixed-function vertex processing feeding the
+ * GL_FRAGMENT_DEPTH / GL_EYE_PLANE_ABSOLUTE_NV fog coordinate -- meaning the
+ * fragment stage must take abs() of gl_FogFragCoord.
+ */
+extern bool
+_mesa_fog_coord_needs_deferred_abs(const struct gl_context *ctx);
+
 #endif

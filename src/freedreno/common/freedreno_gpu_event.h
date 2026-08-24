@@ -51,6 +51,8 @@ enum fd_gpu_event : uint32_t {
     FD_CCU_RESOLVE,
     FD_LABEL,
     FD_DUMMY_EVENT,
+    FD_SUBPASS_FENCE,
+    FD_SUBPASS_SLICE_FENCE,
 
     FD_GPU_EVENT_MAX,
 };
@@ -96,7 +98,7 @@ constexpr inline struct fd_gpu_event_info fd_gpu_events<chip_range(CHIP == A6XX)
 };
 
 template <chip CHIP>
-constexpr inline struct fd_gpu_event_info fd_gpu_events<chip_range(CHIP >= A7XX)>[FD_GPU_EVENT_MAX] = {
+constexpr inline struct fd_gpu_event_info fd_gpu_events<chip_range(CHIP == A7XX)>[FD_GPU_EVENT_MAX] = {
     {WRITE_PRIMITIVE_COUNTS, false},  /* FD_WRITE_PRIMITIVE_COUNTS */
     {START_PRIMITIVE_CTRS, false},    /* FD_START_PRIMITIVE_CTRS */
     {STOP_PRIMITIVE_CTRS, false},     /* FD_STOP_PRIMITIVE_CTRS */
@@ -126,6 +128,42 @@ constexpr inline struct fd_gpu_event_info fd_gpu_events<chip_range(CHIP >= A7XX)
     {CCU_RESOLVE, false},             /* FD_CCU_RESOLVE */
     {DEBUG_LABEL, false},             /* FD_LABEL */
     {DUMMY_EVENT, false},             /* FD_DUMMY_EVENT */
+    {SUBPASS_FENCE, false},           /* FD_SUBPASS_FENCE */
+};
+
+template <chip CHIP>
+constexpr inline struct fd_gpu_event_info fd_gpu_events<chip_range(CHIP >= A8XX)>[FD_GPU_EVENT_MAX] = {
+    {WRITE_PRIMITIVE_COUNTS, false},  /* FD_WRITE_PRIMITIVE_COUNTS */
+    {START_PRIMITIVE_CTRS, false},    /* FD_START_PRIMITIVE_CTRS */
+    {STOP_PRIMITIVE_CTRS, false},     /* FD_STOP_PRIMITIVE_CTRS */
+    {START_FRAGMENT_CTRS, false},     /* FD_START_FRAGMENT_CTRS */
+    {STOP_FRAGMENT_CTRS, false},      /* FD_STOP_FRAGMENT_CTRS */
+    {START_COMPUTE_CTRS, false},      /* FD_START_COMPUTE_CTRS */
+    {STOP_COMPUTE_CTRS, false},       /* FD_STOP_COMPUTE_CTRS */
+    {ZPASS_DONE, false},              /* FD_ZPASS_DONE */
+    {RB_DONE_TS, true},               /* FD_RB_DONE */
+    {FLUSH_SO_0, false},              /* FD_FLUSH_SO_0 */
+    {FLUSH_SO_1, false},              /* FD_FLUSH_SO_1 */
+    {FLUSH_SO_2, false},              /* FD_FLUSH_SO_2 */
+    {FLUSH_SO_3, false},              /* FD_FLUSH_SO_3 */
+    {CACHE_CLEAN, false},             /* FD_CACHE_CLEAN */
+    {CACHE_INVALIDATE7, false},       /* FD_CACHE_INVALIDATE */
+    {CCU_INVALIDATE_DEPTH, false},    /* FD_CCU_INVALIDATE_DEPTH */
+    {CCU_INVALIDATE_COLOR, false},    /* FD_CCU_INVALIDATE_COLOR */
+    {CCU_RESOLVE_CLEAN, false},       /* FD_CCU_CLEAN_BLIT_CACHE */
+    {CCU_CLEAN_DEPTH, false},         /* FD_CCU_CLEAN_DEPTH */
+    {CCU_CLEAN_COLOR, false},         /* FD_CCU_CLEAN_COLOR */
+    {LRZ_CLEAR, false},               /* FD_LRZ_CLEAR */
+    {LRZ_FLIP_BUFFER, false},         /* FD_LRZ_FLIP */
+    {LRZ_CACHE_FLUSH, false},         /* FD_LRZ_FLUSH */
+    {LRZ_CACHE_INVALIDATE, false},    /* FD_LRZ_INVALIDATE */
+    {VSC_BINNING_START, false},       /* FD_VSC_BINNING_START */
+    {VSC_BINNING_END, false},         /* FD_VSC_BINNING_END */
+    {CCU_RESOLVE, false},             /* FD_CCU_RESOLVE */
+    {DEBUG_LABEL, false},             /* FD_LABEL */
+    {DUMMY_EVENT, false},             /* FD_DUMMY_EVENT */
+    {SUBPASS_FENCE, false},           /* FD_SUBPASS_FENCE */
+    {SUBPASS_SLICE_FENCE, false},     /* FD_SUBPASS_SLICE_FENCE */
 };
 
 #endif

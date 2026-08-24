@@ -51,6 +51,7 @@ DEPS=(
     libelf-dev
     libexpat1-dev
     "libllvm${LLVM_VERSION}"
+    "libllvmspirvlib-${LLVM_VERSION}-dev"
     libpng-dev
     libvulkan-dev
     libx11-dev
@@ -71,6 +72,7 @@ DEPS=(
     libwayland-dev
     libwayland-egl-backend-dev
     "llvm-${LLVM_VERSION}-dev"
+    "llvm-spirv-${LLVM_VERSION}"
     ninja-build
     openssh-server
     pkgconf
@@ -108,8 +110,6 @@ arch=armhf
 . .gitlab-ci/container/container_pre_build.sh
 
 . .gitlab-ci/container/build-mold.sh
-
-. .gitlab-ci/container/build-llvm-spirv.sh
 
 . .gitlab-ci/container/build-libclc.sh
 

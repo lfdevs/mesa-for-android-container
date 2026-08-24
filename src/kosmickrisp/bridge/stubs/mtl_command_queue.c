@@ -57,11 +57,11 @@ mtl_command_queue_commit(mtl_command_queue *queue,
 }
 
 void
-mtl_command_queue_signal_drawable(mtl_command_queue *queue, void *drawable)
+mtl_command_queue_wait_for_drawable(mtl_command_queue *queue, void *drawable)
 {
 }
 
 void
-mtl_drawable_present(void *drawable)
+mtl_command_queue_signal_drawable(mtl_command_queue *queue, void *drawable)
 {
 }

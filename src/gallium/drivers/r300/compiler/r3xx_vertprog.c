@@ -12,7 +12,6 @@
 
 #include "radeon_compiler_util.h"
 #include "radeon_dataflow.h"
-#include "radeon_list.h"
 #include "radeon_program.h"
 #include "radeon_program_alu.h"
 #include "radeon_regalloc.h"
@@ -30,14 +29,14 @@
                     t_swizzle(y), t_src_class(vpi->SrcReg[x].File), RC_MASK_NONE) |             \
     (vpi->SrcReg[x].RelAddr << 4))
 
-static unsigned long
+static uint32_t
 t_dst_mask(unsigned int mask)
 {
    /* RC_MASK_* is equivalent to VSF_FLAG_* */
    return mask & RC_MASK_XYZW;
 }
 
-static unsigned long
+static uint32_t
 t_dst_class(rc_register_file file)
 {
    switch (file) {
@@ -53,7 +52,7 @@ t_dst_class(rc_register_file file)
    }
 }
 
-static unsigned long
+static uint32_t
 t_dst_index(struct r300_vertex_program_code *vp, struct rc_dst_register *dst)
 {
    if (dst->File == RC_FILE_OUTPUT)
@@ -62,7 +61,7 @@ t_dst_index(struct r300_vertex_program_code *vp, struct rc_dst_register *dst)
    return dst->Index;
 }
 
-static unsigned long
+static uint32_t
 t_src_class(rc_register_file file)
 {
    switch (file) {
@@ -82,8 +81,8 @@ t_src_class(rc_register_file file)
 static int
 t_src_conflict(struct rc_src_register a, struct rc_src_register b)
 {
-   unsigned long aclass = t_src_class(a.File);
-   unsigned long bclass = t_src_class(b.File);
+   uint32_t aclass = t_src_class(a.File);
+   uint32_t bclass = t_src_class(b.File);
 
    if (aclass != bclass)
       return 0;
@@ -98,14 +97,14 @@ t_src_conflict(struct rc_src_register a, struct rc_src_register b)
    return 0;
 }
 
-static inline unsigned long
-t_swizzle(unsigned int swizzle)
+static inline uint32_t
+t_swizzle(uint32_t swizzle)
 {
    /* this is in fact a NOP as the Mesa RC_SWIZZLE_* are all identical to VSF_IN_COMPONENT_* */
    return swizzle;
 }
 
-static unsigned long
+static uint32_t
 t_src_index(struct r300_vertex_program_code *vp, struct rc_src_register *src)
 {
    if (src->File == RC_FILE_INPUT) {
@@ -122,7 +121,7 @@ t_src_index(struct r300_vertex_program_code *vp, struct rc_src_register *src)
 
 /* these two functions should probably be merged... */
 
-static unsigned long
+static uint32_t
 t_src(struct r300_vertex_program_code *vp, struct rc_src_register *src)
 {
    /* src->Negate uses the RC_MASK_ flags from program_instruction.h,
@@ -135,7 +134,7 @@ t_src(struct r300_vertex_program_code *vp, struct rc_src_register *src)
           (src->RelAddr << 4) | (src->Abs << 3);
 }
 
-static unsigned long
+static uint32_t
 t_src_scalar(struct r300_vertex_program_code *vp, struct rc_src_register *src)
 {
    /* src->Negate uses the RC_MASK_ flags from program_instruction.h,
@@ -384,16 +383,11 @@ translate_vertex_program(struct radeon_compiler *c, void *user)
       if (!valid_dst(compiler->code, &vpi->DstReg))
          continue;
 
-      if (info->HasDstReg) {
-         /* Neither is Saturate. */
-         if (vpi->SaturateMode != RC_SATURATE_NONE && !c->is_r500) {
-            rc_error(&compiler->Base, "Vertex program does not support the Saturate "
-                                      "modifier (yet).\n");
-         }
-      }
+      assert(!(info->HasDstReg && vpi->SaturateMode != RC_SATURATE_NONE && !c->is_r500));
 
       if (compiler->code->length >= c->max_alu_insts * 4) {
-         rc_error(&compiler->Base, "Vertex program has too many instructions\n");
+         rc_error(&compiler->Base, "Vertex program has too many instructions: %d, max: %d",
+                  rc_recompute_ips(c), c->max_alu_insts);
          return;
       }
 
@@ -510,7 +504,7 @@ translate_vertex_program(struct radeon_compiler *c, void *user)
          last_addr = (compiler->code->length / 4) - 1;
 
          if (loop_depth >= R300_VS_MAX_FC_OPS) {
-            rc_error(&compiler->Base, "Too many flow control instructions.");
+            rc_error(&compiler->Base, "Cannot add more flow control instructions.");
             return;
          }
          /* Maximum of R500_PVS_FC_LOOP_CNT_JMP_INST is 0xff, here
@@ -602,7 +596,7 @@ translate_vertex_program(struct radeon_compiler *c, void *user)
       }
 
       if (compiler->code->num_temporaries > compiler->Base.max_temp_regs) {
-         rc_error(&compiler->Base, "Too many temporaries.\n");
+         rc_error(&compiler->Base, "Ran out of temporaries.\n");
          return;
       }
 
@@ -642,8 +636,7 @@ allocate_temporary_registers(struct radeon_compiler *c, void *user)
 {
    unsigned int node_count, node_index;
    struct ra_class **node_classes;
-   struct rc_list *var_ptr;
-   struct rc_list *variables;
+   struct util_dynarray *variables;
    struct ra_graph *graph;
    const struct rc_regalloc_state *ra_state = c->regalloc_state;
 
@@ -651,21 +644,22 @@ allocate_temporary_registers(struct radeon_compiler *c, void *user)
 
    /* Get list of program variables */
    variables = rc_get_variables(c);
-   node_count = rc_list_count(variables);
-   node_classes = memory_pool_malloc(&c->Pool, node_count * sizeof(struct ra_class *));
+   node_count = util_dynarray_num_elements(variables, struct rc_variable *);
+   node_classes = linear_alloc_array(c->Pool, struct ra_class *, node_count);
 
-   for (var_ptr = variables, node_index = 0; var_ptr; var_ptr = var_ptr->Next, node_index++) {
+   for (node_index = 0; node_index < node_count; node_index++) {
       unsigned int class_index = 0;
       int index;
+      struct rc_variable *var = rc_variable_list_element(variables, node_index);
       /* Compute the live intervals */
-      rc_variable_compute_live_intervals(var_ptr->Item);
-      unsigned int writemask = rc_variable_writemask_sum(var_ptr->Item);
+      rc_variable_compute_live_intervals(var);
+      unsigned int writemask = rc_variable_writemask_sum(var);
       index = rc_find_class(c->regalloc_state->class_list, writemask, 6);
       if (index > -1) {
          class_index = c->regalloc_state->class_list[index].ID;
       } else {
          rc_error(c, "Could not find class for index=%u mask=%u\n",
-                  ((struct rc_variable *)var_ptr->Item)->Dst.Index, writemask);
+                  var->Dst.Index, writemask);
       }
       node_classes[node_index] = ra_state->classes[class_index];
    }
@@ -685,11 +679,11 @@ allocate_temporary_registers(struct radeon_compiler *c, void *user)
    }
 
    /* Rewrite the registers */
-   for (var_ptr = variables, node_index = 0; var_ptr; var_ptr = var_ptr->Next, node_index++) {
+   for (node_index = 0; node_index < node_count; node_index++) {
       int reg = ra_get_node_reg(graph, node_index);
       unsigned int writemask = reg_get_writemask(reg);
       unsigned int index = reg_get_index(reg);
-      struct rc_variable *var = var_ptr->Item;
+      struct rc_variable *var = rc_variable_list_element(variables, node_index);
 
       rc_variable_change_dst(var, index, writemask);
    }

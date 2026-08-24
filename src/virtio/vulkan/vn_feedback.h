@@ -30,7 +30,6 @@ struct vn_feedback_pool {
 };
 
 enum vn_feedback_type {
-   VN_FEEDBACK_TYPE_FENCE = 0x1,
    VN_FEEDBACK_TYPE_SEMAPHORE = 0x2,
    VN_FEEDBACK_TYPE_EVENT = 0x4,
    VN_FEEDBACK_TYPE_QUERY = 0x8,
@@ -158,17 +157,14 @@ vn_feedback_get_status(struct vn_feedback_slot *slot)
 static inline void
 vn_feedback_reset_status(struct vn_feedback_slot *slot)
 {
-   assert(slot->type == VN_FEEDBACK_TYPE_FENCE ||
-          slot->type == VN_FEEDBACK_TYPE_EVENT);
-   *slot->status =
-      slot->type == VN_FEEDBACK_TYPE_FENCE ? VK_NOT_READY : VK_EVENT_RESET;
+   assert(slot->type == VN_FEEDBACK_TYPE_EVENT);
+   *slot->status = VK_EVENT_RESET;
 }
 
 static inline void
 vn_feedback_set_status(struct vn_feedback_slot *slot, VkResult status)
 {
-   assert(slot->type == VN_FEEDBACK_TYPE_FENCE ||
-          slot->type == VN_FEEDBACK_TYPE_EVENT);
+   assert(slot->type == VN_FEEDBACK_TYPE_EVENT);
    *slot->status = status;
 }
 
@@ -216,6 +212,10 @@ vn_sync_feedback_query(struct vn_device *dev,
                        uint64_t *out_counter);
 
 void
+vn_sync_feedback_cmd_recycle(struct vn_device *dev,
+                             struct vn_sync_feedback *sfb);
+
+void
 vn_sync_feedback_write(struct vn_sync_feedback *sfb, uint64_t counter);
 
 void
@@ -252,17 +252,6 @@ vn_query_feedback_cmd_alloc(VkDevice dev_handle,
 
 void
 vn_query_feedback_cmd_free(struct vn_query_feedback_cmd *qfb_cmd);
-
-VkResult
-vn_feedback_cmd_alloc(VkDevice dev_handle,
-                      struct vn_feedback_cmd_pool *fb_cmd_pool,
-                      struct vn_feedback_slot *dst_slot,
-                      struct vn_feedback_slot *src_slot,
-                      VkCommandBuffer *out_cmd_handle);
-void
-vn_feedback_cmd_free(VkDevice dev_handle,
-                     struct vn_feedback_cmd_pool *fb_cmd_pool,
-                     VkCommandBuffer cmd_handle);
 
 VkResult
 vn_feedback_cmd_pools_init(struct vn_device *dev);

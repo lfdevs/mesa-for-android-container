@@ -76,7 +76,9 @@ lower_rt_io_derefs(nir_shader *shader, const struct intel_device_info *devinfo)
       assert(stage == MESA_SHADER_ANY_HIT ||
              stage == MESA_SHADER_CLOSEST_HIT ||
              stage == MESA_SHADER_INTERSECTION);
-      hit_attrib_addr = brw_nir_rt_hit_attrib_data_addr(&b, devinfo);
+      hit_attrib_addr = brw_nir_rt_hit_attrib_data_addr(&b,
+                                                        stage == MESA_SHADER_CLOSEST_HIT,
+                                                        devinfo);
 
       /* For tri, we store tri_bary at hit_attrib_data_addr.
        * The reason we don't directly provide the address where u and v is

@@ -81,25 +81,6 @@ used.
       dst.w = src.w
 
 
-.. opcode:: LIT - Light Coefficients
-
-   .. math::
-
-      dst.x = 1
-
-      dst.y = max(src.x, 0)
-
-      dst.z =
-      \left\{
-      \begin{array}{ c l }
-         max(src.y, 0)^{clamp(src.w, -128, 128)} & \quad \textrm{if } src.x \gt 0 \\
-         0                                       & \quad \textrm{otherwise}
-      \end{array}
-      \right.
-
-      dst.w = 1
-
-
 .. opcode:: RCP - Reciprocal
 
    This instruction replicates its result.
@@ -125,26 +106,6 @@ used.
    .. math::
 
       dst = {\sqrt{src.x}}
-
-
-.. opcode:: EXP - Approximate Exponential Base 2
-
-   .. math::
-
-      dst.x &= 2^{\lfloor src.x\rfloor} \\
-      dst.y &= src.x - \lfloor src.x\rfloor \\
-      dst.z &= 2^{src.x} \\
-      dst.w &= 1
-
-
-.. opcode:: LOG - Approximate Logarithm Base 2
-
-   .. math::
-
-      dst.x &= \lfloor\log_2{|src.x|}\rfloor \\
-      dst.y &= \frac{|src.x|}{2^{\lfloor\log_2{|src.x|}\rfloor}} \\
-      dst.z &= \log_2{|src.x|} \\
-      dst.w &= 1
 
 
 .. opcode:: MUL - Multiply
@@ -198,16 +159,6 @@ used.
             & src0.z \times src1.z +\\
             & src0.w \times src1.w
       \end{aligned}
-
-
-.. opcode:: DST - Distance Vector
-
-   .. math::
-
-      dst.x &= 1\\
-      dst.y &= src0.y \times src1.y\\
-      dst.z &= src0.z\\
-      dst.w &= src1.w
 
 
 .. opcode:: MIN - Minimum
@@ -440,46 +391,6 @@ used.
       dst = & f32\_to\_f16(src.x) | \\
           ( & f32\_to\_f16(src.y) \ll 16)
       \end{aligned}
-
-.. opcode:: PK2US - Pack Two Unsigned 16-bit Scalars
-
-   This instruction replicates its result.
-
-   .. math::
-
-      \begin{aligned}
-      dst = & f32\_to\_unorm16(src.x) | \\
-          ( & f32\_to\_unorm16(src.y) \ll 16)
-      \end{aligned}
-
-
-.. opcode:: PK4B - Pack Four Signed 8-bit Scalars
-
-   This instruction replicates its result.
-
-   .. math::
-
-      \begin{aligned}
-      dst = & f32\_to\_snorm8(src.x) | \\
-          ( & f32\_to\_snorm8(src.y) \ll 8) | \\
-          ( & f32\_to\_snorm8(src.z) \ll 16) | \\
-          ( & f32\_to\_snorm8(src.w) \ll 24)
-      \end{aligned}
-
-
-.. opcode:: PK4UB - Pack Four Unsigned 8-bit Scalars
-
-   This instruction replicates its result.
-
-   .. math::
-
-      \begin{aligned}
-      dst = & f32\_to\_unorm8(src.x) | \\
-          ( & f32\_to\_unorm8(src.y) \ll 8) | \\
-          ( & f32\_to\_unorm8(src.z) \ll 16) | \\
-          ( & f32\_to\_unorm8(src.w) \ll 24)
-      \end{aligned}
-
 
 .. opcode:: SEQ - Set On Equal
 

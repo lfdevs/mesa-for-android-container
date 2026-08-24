@@ -69,9 +69,9 @@ vk_pipeline_shader_stage_is_null(const VkPipelineShaderStageCreateInfo *info)
    if (info->module != VK_NULL_HANDLE)
       return false;
 
-   vk_foreach_struct_const(ext, info->pNext) {
-      if (ext->sType == VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO ||
-          ext->sType == VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT)
+   vk_foreach_struct_const(sType, ext, info->pNext) {
+      if (sType == VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO ||
+          sType == VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT)
          return false;
    }
 
@@ -232,11 +232,11 @@ vk_pipeline_shader_stage_to_nir(struct vk_device *device,
    return VK_SUCCESS;
 }
 
-static void
-vk_pipeline_hash_shader_stage_blake3(VkPipelineCreateFlags2KHR pipeline_flags,
-                                     const VkPipelineShaderStageCreateInfo *info,
-                                     const struct vk_pipeline_robustness_state *rstate,
-                                     blake3_hash stage_blake3)
+void
+vk_pipeline_hash_shader_stage(VkPipelineCreateFlags2KHR pipeline_flags,
+                              const VkPipelineShaderStageCreateInfo *info,
+                              const struct vk_pipeline_robustness_state *rstate,
+                              unsigned char *stage_blake3)
 {
    VK_FROM_HANDLE(vk_shader_module, module, info->module);
 
@@ -319,18 +319,6 @@ vk_pipeline_hash_shader_stage_blake3(VkPipelineCreateFlags2KHR pipeline_flags,
    _mesa_blake3_update(&ctx, &req_subgroup_size, sizeof(req_subgroup_size));
 
    _mesa_blake3_final(&ctx, stage_blake3);
-}
-
-void
-vk_pipeline_hash_shader_stage(VkPipelineCreateFlags2KHR pipeline_flags,
-                              const VkPipelineShaderStageCreateInfo *info,
-                              const struct vk_pipeline_robustness_state *rstate,
-                              unsigned char *stage_blake3)
-{
-   blake3_hash blake_hash;
-
-   vk_pipeline_hash_shader_stage_blake3(pipeline_flags, info, rstate, blake_hash);
-   _mesa_blake3_compute(blake_hash, sizeof(blake_hash), stage_blake3);
 }
 
 void
@@ -536,10 +524,8 @@ vk_pipeline_shader_deserialize(struct vk_device *device,
    struct vk_shader *shader;
    VkResult result = ops->deserialize(device, blob, version,
                                       &device->alloc, &shader);
-   if (result != VK_SUCCESS) {
-      assert(result == VK_ERROR_OUT_OF_HOST_MEMORY);
+   if (result != VK_SUCCESS)
       return NULL;
-   }
 
    vk_shader_init_cache_obj(device, shader, key_data, key_size);
 
@@ -912,8 +898,8 @@ vk_pipeline_hash_precomp_shader_stage(struct vk_device *device,
    vk_pipeline_robustness_state_fill(&device->robustness_state, &rs,
                                      pipeline_info_pNext, info->pNext);
 
-   vk_pipeline_hash_shader_stage_blake3(pipeline_flags, info,
-                                        &rs, stage->precomp_key);
+   vk_pipeline_hash_shader_stage(pipeline_flags, info,
+                                 &rs, stage->precomp_key);
 }
 
 static VkResult
@@ -1261,9 +1247,6 @@ vk_pipeline_to_shader_flags(VkPipelineCreateFlags2KHR pipeline_flags,
    if (pipeline_flags & VK_PIPELINE_CREATE_2_INDIRECT_BINDABLE_BIT_EXT)
       shader_flags |= VK_SHADER_CREATE_INDIRECT_BINDABLE_BIT_EXT;
 
-   if (pipeline_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT)
-      shader_flags |= VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT;
-
    if (stage == MESA_SHADER_FRAGMENT) {
       if (pipeline_flags & VK_PIPELINE_CREATE_2_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR)
          shader_flags |= VK_SHADER_CREATE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_EXT;
@@ -1278,6 +1261,24 @@ vk_pipeline_to_shader_flags(VkPipelineCreateFlags2KHR pipeline_flags,
 
       if (pipeline_flags & VK_PIPELINE_CREATE_2_UNALIGNED_DISPATCH_BIT_MESA)
          shader_flags |= VK_SHADER_CREATE_UNALIGNED_DISPATCH_BIT_MESA;
+   }
+
+   /* Binding model information */
+   if (pipeline_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT) {
+      shader_flags |= VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT;
+   } else if (pipeline_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_BUFFER_BIT_EXT) {
+      shader_flags |= VK_SHADER_CREATE_DESCRIPTOR_BUFFER_BIT_MESA;
+   } else if (pipeline_layout != NULL) {
+      for (uint32_t i = 0; i < pipeline_layout->set_count; i++) {
+         if (pipeline_layout->set_layouts[i] != NULL) {
+            shader_flags |=
+               (pipeline_layout->set_layouts[i]->flags &
+                VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) ?
+               VK_SHADER_CREATE_DESCRIPTOR_BUFFER_BIT_MESA :
+               VK_SHADER_CREATE_DESCRIPTOR_LEGACY_BIT_MESA;
+            break;
+         }
+      }
    }
 
    /* Independent sets has no impact on compute shaders since there is only
@@ -2723,6 +2724,8 @@ struct vk_rt_shader_group {
 struct vk_rt_pipeline {
    struct vk_pipeline base;
 
+   struct vk_pipeline_layout *layout;
+
    uint32_t group_count;
    struct vk_rt_shader_group *groups;
 
@@ -2781,6 +2784,8 @@ vk_rt_pipeline_destroy(struct vk_device *device,
       vk_rt_shader_group_destroy(device, &rt_pipeline->groups[i]);
    for (uint32_t i = 0; i < rt_pipeline->stage_count; i++)
       vk_pipeline_stage_finish(device, &rt_pipeline->stages[i]);
+   if (rt_pipeline->layout != NULL)
+      vk_pipeline_layout_unref(device, rt_pipeline->layout);
    vk_pipeline_free(device, pAllocator, pipeline);
 }
 
@@ -2796,6 +2801,7 @@ vk_rt_pipeline_cmd_bind(struct vk_command_buffer *cmd_buffer,
          container_of(pipeline, struct vk_rt_pipeline, base);
 
       ops->cmd_set_rt_state(cmd_buffer,
+                            rt_pipeline->layout,
                             rt_pipeline->scratch_size,
                             rt_pipeline->ray_queries,
                             rt_pipeline->dynamic_descriptor_offsets);
@@ -3273,6 +3279,19 @@ vk_pipeline_compile_rt_shader(struct vk_device *device,
    return VK_SUCCESS;
 }
 
+static void
+vk_pipeline_stages_unref_shader(struct vk_device *device,
+                                struct vk_pipeline_stage *stages,
+                                uint32_t stage_count)
+{
+   for (uint32_t i = 0; i < stage_count; i++) {
+      if (stages[i].shader) {
+         vk_shader_unref(device, stages[i].shader);
+         stages[i].shader = NULL;
+      }
+   }
+}
+
 static VkResult
 vk_pipeline_compile_rt_shader_group(struct vk_device *device,
                                     struct vk_pipeline_cache *cache,
@@ -3286,15 +3305,9 @@ vk_pipeline_compile_rt_shader_group(struct vk_device *device,
 
    assert(stage_count > 1 && stage_count <= 3);
 
-   /* Unref all the shaders found in the cache, we're going to do a compile
-    * anyway.
+   /* Unref all the shaders to do cache lookup.
     */
-   for (uint32_t i = 0; i < stage_count; i++) {
-      if (stages[i].shader) {
-         vk_shader_unref(device, stages[i].shader);
-         stages[i].shader = NULL;
-      }
-   }
+   vk_pipeline_stages_unref_shader(device, stages, stage_count);
 
    if (cache != NULL) {
       *all_cache_hit = true;
@@ -3328,6 +3341,11 @@ vk_pipeline_compile_rt_shader_group(struct vk_device *device,
    if (pipeline_flags &
        VK_PIPELINE_CREATE_2_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_KHR)
       return VK_PIPELINE_COMPILE_REQUIRED;
+
+   /* Unref all the shaders found in the cache, we're going to do a compile
+    * anyway.
+    */
+   vk_pipeline_stages_unref_shader(device, stages, stage_count);
 
    struct vk_shader_compile_info compile_info[3] = { 0 };
    for (uint32_t i = 0; i < stage_count; i++) {
@@ -3799,6 +3817,9 @@ vk_create_rt_pipeline(struct vk_device *device,
       if (pipeline->stack_size == 0)
          pipeline->stack_size = 1;
    }
+
+   if (pipeline_layout != NULL)
+      pipeline->layout = vk_pipeline_layout_ref(pipeline_layout);
 
    vk_release_rt_pipeline_compile_info(&compile_info, device, pAllocator);
 
@@ -4536,7 +4557,7 @@ vk_common_GetPipelineBinaryDataKHR(
    pPipelineBinaryKey->keySize = sizeof(binary->key);
    memcpy(pPipelineBinaryKey->key, binary->key, sizeof(binary->key));
 
-   if (*pPipelineBinaryDataSize == 0) {
+   if (pPipelineBinaryData == NULL) {
       *pPipelineBinaryDataSize = binary->size;
       return VK_SUCCESS;
    }

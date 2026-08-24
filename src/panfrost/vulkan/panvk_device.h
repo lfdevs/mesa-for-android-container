@@ -216,11 +216,20 @@ panvk_as_free(struct panvk_device *device, struct util_vma_heap *heap,
    simple_mtx_unlock(&device->as.lock);
 }
 
-struct nir_shader;
+struct vk_queue;
+struct vk_queue_submit;
 
-bool panvk_nir_lower_tile_image(struct nir_shader *nir,
-                                uint32_t *color_read_out, bool *z_read_out,
-                                bool *s_read_out);
+VkResult panvk_create_bind_queue(struct panvk_device *dev,
+                                 const VkDeviceQueueCreateInfo *create_info,
+                                 uint32_t queue_idx,
+                                 struct vk_queue **out_queue);
+void panvk_destroy_bind_queue(struct vk_queue *vk_queue);
+VkResult panvk_bind_queue_submit(struct vk_queue *vk_queue,
+                                 struct vk_queue_submit *vk_submit);
+VkResult panvk_bind_queue_check_status(struct vk_queue *vk_queue);
+VkResult panvk_queue_vm_bind(struct vk_queue *vk_queue,
+                             struct vk_queue_submit *vk_submit,
+                             uint32_t syncobj_handle);
 
 #if PAN_ARCH
 VkResult

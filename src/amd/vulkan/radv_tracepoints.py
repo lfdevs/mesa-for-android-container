@@ -98,7 +98,6 @@ begin_end_tp('compute_copy_memory', toggle_name='internal', tp_args=[Arg(type='u
 begin_end_tp('cp_dma_copy_memory', toggle_name='internal', tp_args=[Arg(type='uint32_t', var='size', c_format=r'%u')])
 
 begin_end_tp('leaves', toggle_name='internal')
-begin_end_tp('morton_generate', toggle_name='internal')
 begin_end_tp('morton_sort', toggle_name='internal')
 begin_end_tp('lbvh_main', toggle_name='internal')
 begin_end_tp('lbvh_generate_ir', toggle_name='internal')

@@ -57,3 +57,12 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv
 spec@ext_external_objects@vk-ping-pong-multi-sem
 spec@ext_external_objects@vk-ping-pong-single-sem
 
+# HW issue fixed in Xe3, due to use of GPL/ESO.
+dEQP-GLES3.functional.occlusion_query.conservative_depth_clear_stencil_write_stencil_clear
+dEQP-GLES3.functional.occlusion_query.conservative_depth_clear_stencil_clear
+dEQP-GLES3.functional.occlusion_query.conservative_depth_write
+dEQP-GLES3.functional.occlusion_query.scissor_depth_write_stencil_write_stencil_clear
+spec@!opengl 2.0@occlusion-query-discard
+spec@arb_occlusion_query@occlusion_query_meta_fragments
+spec@arb_occlusion_query@occlusion_query_meta_save
+multisample-dEQP-GLES3.functional.occlusion_query.depth_write_depth_clear_stencil_clear

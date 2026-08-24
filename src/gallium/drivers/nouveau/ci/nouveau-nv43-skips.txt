@@ -1,0 +1,68 @@
+# nv30 can currently freeze OS with piglit tests (in single threaded run)
+# after freeze you see something like this in kernel logs
+# Aug 12 19:29:14 Hostname kernel: nouveau 0000:01:00.0: pbo-readpixels-[287235]: failed to idle channel 1 [pbo-readpixels-[287235]]
+# Aug 12 19:29:59 Hostname kernel: nouveau 0000:01:00.0: pbo-readpixels-[287260]: failed to idle channel 1 [pbo-readpixels-[287260]]
+# Aug 12 19:30:14 Hostname kernel: nouveau 0000:01:00.0: pbo-readpixels-[287260]: failed to idle channel 1 [pbo-readpixels-[287260]]
+# Aug 12 19:30:29 Hostname kernel: nouveau 0000:01:00.0: pbo-readpixels-[287260]: failed to idle channel 1 [pbo-readpixels-[287260]]
+# Aug 12 19:30:44 Hostname kernel: nouveau 0000:01:00.0: pbo-readpixels-[287260]: failed to idle channel 1 [pbo-readpixels-[287260]]
+#
+# in example pbo-readpixels is test causing problem (so needs to be added to skips)
+
+# to recover: (echo 1 | sudo tee /sys/bus/pci/devices/0000:01:00.0/remove) && (echo 1 | sudo tee /sys/bus/pci/rescan)
+
+# currently reaches 5000th test in single threaded run
+# todo rest later, when I figure how to speed up process (usually once per 100 tests there's freezing test)
+# (unfortunetly each new run takes longer)
+
+spec@ext_texture_compression_s3tc@gen-compressed-teximage
+spec@!opengl 1.2@teximage-errors
+object namespace pollution@vertex-array with glgetteximage
+spec@ext_packed_depth_stencil@getteximage
+spec@ext_texture_srgb@fbo-generatemipmap-formats-s3tc
+spec@arb_clear_texture@arb_clear_texture-base-formats
+object namespace pollution@framebuffer with glgetteximage
+spec@ext_framebuffer_blit@fbo-blit
+spec@arb_pixel_buffer_object@fbo-pbo-readpixels
+object namespace pollution@texture with glcleartexsubimage
+spec@ext_packed_depth_stencil@texsubimage
+spec@ati_texture_compression_3dc@fbo-generatemipmap-formats
+spec@ext_framebuffer_object@fbo-finish-deleted
+spec@!opengl 1.4@triangle-rasterization-fbo
+object namespace pollution@texture with gldrawpixels
+spec@nv_copy_image@nv_copy_image-simple --rb-to-rb
+pec@!opengl 1.1@getteximage-luminance
+
+# seen many times so disabled all
+s3tc
+
+# seen many times so disabled all
+pollution
+
+spec@!opengl 1.1@getteximage-targets 2d
+spec@arb_clear_texture@arb_clear_texture-clear-max-level
+spec@arb_get_texture_sub_image@arb_get_texture_sub_image-errors
+spec@nv_copy_image@nv_copy_image-simple --rb-to-tex
+spec@!opengl 3.0@generatemipmap-base-change format
+spec@ext_framebuffer_object@fbo-fragcoord2
+spec@ext_texture_srgb@fbo-srgb
+spec@!opengl 1.4@gl-1.4-rgba-mipmap-texture-with-rgb-visual
+spec@!opengl 1.2@getteximage-targets 3d
+spec@ext_texture_srgb@fbo-generatemipmap-formats
+spec@arb_clear_texture@arb_clear_texture-sized-formats
+spec@arb_pixel_buffer_object@pbo-getteximage
+spec@arb_clear_texture@arb_clear_texture-depth-stencil
+
+# this one is really bad, kernel corruption that requires reboot
+spec@!opengl 1.1@ppgtt_memory_alignment
+
+
+spec@!opengl 1.1@getteximage-depth
+spec@arb_texture_compression@fbo-generatemipmap-formats
+spec@arb_texture_cube_map@getteximage-targets
+
+# seen many times so disabled all
+srgb
+
+spec@ext_framebuffer_object@fbo-depth-sample-compare
+spec@arb_pixel_buffer_object@pbo-readpixels-small
+spec@ext_framebuffer_object@fbo-nodepth-test

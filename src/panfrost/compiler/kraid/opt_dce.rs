@@ -39,7 +39,7 @@ impl Shader<'_> {
                                 ssa_map.insert(*ssa, instr);
                             }
                         }
-                        DstRef::Reg(_) => {
+                        DstRef::Reg(_) | DstRef::Mem(_) => {
                             panic!("opt_dce() must be run in SSA form");
                         }
                     }
@@ -82,7 +82,7 @@ impl Shader<'_> {
                     DstRef::SSA(vec) => {
                         vec.iter().any(|ssa| live_ssa_set.contains(*ssa))
                     }
-                    DstRef::Reg(_) => true,
+                    DstRef::Reg(_) | DstRef::Mem(_) => true,
                 })
             };
 

@@ -21,12 +21,16 @@ namespace {
  * (1) The first pass collects information for each ssa-def,
  *     propagates reg->reg operands of the same type, inline constants
  *     and neg/abs input modifiers.
- * (2) The second pass combines instructions like mad, omod, clamp and
+ * (2) The second pass rematerializes constants in every block to decrease
+ *     their live ranges.
+ * (3) The third pass combines instructions like mad, omod, clamp and
  *     propagates sgpr's on VALU instructions.
  *     This pass depends on information collected in the first pass.
- * (3) The third pass goes backwards, and selects instructions,
+ * (4) The fourth pass tries to swap cndmask by inverting the condition,
+ *     for better code size and DPP.
+ * (5) The fifth pass goes backwards, and selects instructions,
  *     i.e. decides if a mad instruction is profitable and eliminates dead code.
- * (4) The fourth pass cleans up the sequence: literals get applied and dead
+ * (6) The sixth pass cleans up the sequence: literals get applied and dead
  *     instructions are removed from the sequence.
  */
 
@@ -255,6 +259,7 @@ struct opt_ctx {
    std::vector<ssa_info> info;
    std::vector<aco_ptr<Instruction>> pre_combine_instrs;
    std::vector<uint16_t> uses;
+   std::vector<int32_t> cond_weights;
    std::unordered_map<Instruction*, aco_ptr<Instruction>> replacement_instr;
 };
 
@@ -764,9 +769,17 @@ alu_opt_info_is_valid(opt_ctx& ctx, alu_opt_info& info)
          info.opcode = aco_opcode::s_pack_lh_b32_b16;
       } else if (info.operands[0].extract[0].offset() == 2 &&
                  info.operands[1].extract[0].offset() == 0) {
-         if (ctx.program->gfx_level < GFX11) /* TODO try shifting constant */
+         if (ctx.program->gfx_level >= GFX11) {
+            info.opcode = aco_opcode::s_pack_hl_b32_b16;
+         } else if (info.operands[1].op.isConstant()) {
+            /* No s_pack_hl before GFX11, but a constant operand can be shifted
+             * into the high half in order to use s_pack_hh instead.
+             */
+            info.operands[1].op = Operand::c32(info.operands[1].op.constantValue() << 16);
+            info.opcode = aco_opcode::s_pack_hh_b32_b16;
+         } else {
             return false;
-         info.opcode = aco_opcode::s_pack_hl_b32_b16;
+         }
       }
       info.operands[0].extract[0] = SubdwordSel::dword;
       info.operands[1].extract[0] = SubdwordSel::dword;
@@ -1912,7 +1925,7 @@ skip_smem_offset_align(opt_ctx& ctx, SMEM_instruction* smem, uint32_t align)
          continue;
 
       if (new_op.isTemp()) {
-         op.setTemp(op.getTemp());
+         op.setTemp(new_op.getTemp());
       } else {
          assert(new_op.isFixed());
          op = new_op;
@@ -2537,9 +2550,6 @@ extract_apply_extract(opt_ctx& ctx, aco_ptr<Instruction>& instr)
 void
 label_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
 {
-   if (instr->isSMEM())
-      smem_combine(ctx, instr);
-
    for (unsigned i = 0; i < instr->operands.size(); i++) {
       if (!instr->operands[i].isTemp())
          continue;
@@ -2687,6 +2697,9 @@ label_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
          }
       }
    }
+
+   if (instr->isSMEM())
+      smem_combine(ctx, instr);
 
    /* SALU / VALU: propagate inline constants, temps, and imod */
    if (instr->isSALU() || instr->isVALU()) {
@@ -3505,6 +3518,46 @@ apply_v_not(opt_ctx& ctx, aco_ptr<Instruction>& instr, Instruction* op_instr)
    return op_instr;
 }
 
+aco_opcode
+get_bool_invert(opt_ctx& ctx, Instruction* instr, bool* swap)
+{
+   if (instr->definitions.size() == 2 && ctx.uses[instr->definitions[1].tempId()])
+      return aco_opcode::num_opcodes;
+
+#define INVERT_OP(op1, op2, _swap)                                                                 \
+   case aco_opcode::s_##op1##_b32: *swap = _swap; return aco_opcode::s_##op2##_b32;                \
+   case aco_opcode::s_##op2##_b32: *swap = _swap; return aco_opcode::s_##op1##_b32;                \
+   case aco_opcode::s_##op1##_b64: *swap = _swap; return aco_opcode::s_##op2##_b64;                \
+   case aco_opcode::s_##op2##_b64: *swap = _swap; return aco_opcode::s_##op1##_b64;
+
+   switch (instr->opcode) {
+      INVERT_OP(and, nand, false)
+      INVERT_OP(or, nor, false)
+      INVERT_OP(xor, xnor, false)
+      INVERT_OP(andn2, orn2, true)
+   default:
+      if (!instr->isVOPC())
+         return aco_opcode::num_opcodes;
+      return get_vcmp_inverse(instr->opcode);
+   }
+}
+
+bool
+try_bool_invert(opt_ctx& ctx, Instruction* instr)
+{
+   bool swap = false;
+   aco_opcode opcode = get_bool_invert(ctx, instr, &swap);
+   if (opcode == aco_opcode::num_opcodes)
+      return false;
+
+   instr->opcode = opcode;
+
+   if (swap)
+      std::swap(instr->operands[0], instr->operands[1]);
+
+   return true;
+}
+
 /* s_not_b32(s_and_b32(a, b)) -> s_nand_b32(a, b)
  * s_not_b32(s_or_b32(a, b)) -> s_nor_b32(a, b)
  * s_not_b32(s_xor_b32(a, b)) -> s_xnor_b32(a, b)
@@ -3517,25 +3570,9 @@ apply_s_not(opt_ctx& ctx, aco_ptr<Instruction>& instr, Instruction* op_instr)
 {
    if (op_instr->definitions.size() == 1 && ctx.uses[instr->definitions[1].tempId()])
       return nullptr;
-   else if (op_instr->definitions.size() == 2 && ctx.uses[op_instr->definitions[1].tempId()])
-      return nullptr;
 
-   switch (op_instr->opcode) {
-   case aco_opcode::s_and_b32: op_instr->opcode = aco_opcode::s_nand_b32; break;
-   case aco_opcode::s_or_b32: op_instr->opcode = aco_opcode::s_nor_b32; break;
-   case aco_opcode::s_xor_b32: op_instr->opcode = aco_opcode::s_xnor_b32; break;
-   case aco_opcode::s_and_b64: op_instr->opcode = aco_opcode::s_nand_b64; break;
-   case aco_opcode::s_or_b64: op_instr->opcode = aco_opcode::s_nor_b64; break;
-   case aco_opcode::s_xor_b64: op_instr->opcode = aco_opcode::s_xnor_b64; break;
-   default: {
-      if (!op_instr->isVOPC())
-         return nullptr;
-      aco_opcode new_opcode = get_vcmp_inverse(op_instr->opcode);
-      if (new_opcode == aco_opcode::num_opcodes)
-         return nullptr;
-      op_instr->opcode = new_opcode;
-   }
-   }
+   if (!try_bool_invert(ctx, op_instr))
+      return nullptr;
 
    for (unsigned i = 0; i < op_instr->definitions.size(); i++)
       op_instr->definitions[i] = instr->definitions[i];
@@ -4860,6 +4897,165 @@ insert_replacement_instr(opt_ctx& ctx, aco_ptr<Instruction>& instr)
 }
 
 void
+reevaluate_combined_instr(opt_ctx& ctx, aco_ptr<Instruction>& instr)
+{
+   if (!instr.get() || is_dead(ctx.uses, instr.get())) {
+      instr.reset();
+      return;
+   }
+
+   if (instr->definitions.empty() || !ctx.info[instr->definitions[0].tempId()].is_combined())
+      return;
+
+   aco_ptr<Instruction>& prev_instr =
+      ctx.pre_combine_instrs[ctx.info[instr->definitions[0].tempId()].val];
+   /* Re-check combined instructions, revert to using pre combine instruction if
+    * no operand instruction was eliminated.
+    */
+   bool use_prev = std::all_of(prev_instr->operands.begin(), prev_instr->operands.end(),
+                               [&](Operand op)
+                               {
+                                  return !op.isTemp() ||
+                                         (ctx.info[op.tempId()].parent_instr &&
+                                          !is_dead(ctx.uses, ctx.info[op.tempId()].parent_instr));
+                               });
+
+   if (!use_prev)
+      return;
+
+   for (const Operand& op : prev_instr->operands) {
+      if (op.isTemp())
+         ctx.uses[op.tempId()]++;
+   }
+   for (const Operand& op : instr->operands) {
+      if (op.isTemp())
+         decrease_and_dce(ctx, op.getTemp());
+   }
+
+   instr = std::move(prev_instr);
+   for (Definition& def : instr->definitions)
+      ctx.info[def.tempId()].parent_instr = instr.get();
+}
+
+void
+disallow_invert(opt_ctx& ctx, const Operand& op)
+{
+   if (!op.isTemp())
+      return;
+   ctx.cond_weights[op.tempId()] = INT32_MIN;
+}
+
+Instruction*
+get_dpp_mov(opt_ctx& ctx, const Operand& op)
+{
+   if (!op.isTemp())
+      return NULL;
+
+   /* Applying DPP with many uses is unlikely to be profitable. */
+   if (ctx.uses[op.tempId()] > 3)
+      return NULL;
+   Instruction* parent = ctx.info[op.tempId()].parent_instr;
+
+   if (!parent->isDPP() || parent->opcode != aco_opcode::v_mov_b32)
+      return NULL;
+   return parent;
+}
+
+bool
+could_be_literal(opt_ctx& ctx, const Operand& op)
+{
+   if (!op.isTemp() || op.isFixed())
+      return false;
+   auto& temp_info = ctx.info[op.tempId()];
+   return temp_info.is_constant();
+}
+
+void
+compute_cndmask_weights(opt_ctx& ctx, aco_ptr<Instruction>& instr)
+{
+   if (!instr.get())
+      return;
+
+   bool swap = false;
+   /* Check if we can invert the definition. */
+   if (!instr->definitions.empty() &&
+       (ctx.cond_weights[instr->definitions[0].tempId()] <= 0 ||
+        get_bool_invert(ctx, instr.get(), &swap) == aco_opcode::num_opcodes)) {
+      for (const Definition& def : instr->definitions)
+         ctx.cond_weights[def.tempId()] = INT32_MIN;
+   }
+
+   if ((instr->opcode != aco_opcode::v_cndmask_b32 && instr->opcode != aco_opcode::v_cndmask_b16) ||
+       instr->isDPP()) {
+      for (const Operand& op : instr->operands)
+         disallow_invert(ctx, op);
+      return;
+   }
+
+   disallow_invert(ctx, instr->operands[0]);
+   disallow_invert(ctx, instr->operands[1]);
+
+   if (!instr->operands[2].isTemp())
+      return;
+
+   if (ctx.cond_weights[instr->operands[2].tempId()] == INT32_MIN)
+      return;
+
+   /* If DPP can be used, bias for/against swap.
+    * applying DPP means less VALU - apply a great bias.
+    */
+   for (unsigned i = 0; i < 2; i++) {
+      if ((ctx.program->gfx_level >= GFX11_5 || instr->operands[!i].isOfType(RegType::vgpr)) &&
+          !instr->operands[!i].isLiteral() && get_dpp_mov(ctx, instr->operands[i])) {
+         ctx.cond_weights[instr->operands[2].tempId()] += i == 0 ? -5 : 5;
+      }
+   }
+
+   /* 16bit cndmask or modifiers always need VOP3 - no bias. */
+   if (instr->opcode == aco_opcode::v_cndmask_b16 || instr->usesModifiers())
+      return;
+
+   /* Slight bias for more VOP2. */
+   for (unsigned i = 0; i < 2; i++) {
+      if (instr->operands[!i].isOfType(RegType::vgpr) &&
+          (!instr->operands[i].isOfType(RegType::vgpr) ||
+           could_be_literal(ctx, instr->operands[i]))) {
+         ctx.cond_weights[instr->operands[2].tempId()] += i == 0 ? -1 : 1;
+      }
+   }
+}
+
+void
+swap_cndmask_cond(opt_ctx& ctx, aco_ptr<Instruction>& instr)
+{
+   if (!instr.get() || instr->definitions.empty())
+      return;
+
+   if (instr->opcode == aco_opcode::v_cndmask_b32 || instr->opcode == aco_opcode::v_cndmask_b16) {
+      /* Swapping is either not allowed, or not beneficial. */
+      if (ctx.cond_weights[instr->operands[2].tempId()] <= 0)
+         return;
+
+      instr->valu().swapOperands(0, 1);
+
+      if (instr->opcode == aco_opcode::v_cndmask_b32) {
+         if (!instr->usesModifiers() && instr->operands[1].isOfType(RegType::vgpr))
+            instr->format = Format::VOP2;
+         else if (instr->format == Format::VOP2 && !instr->operands[1].isOfType(RegType::vgpr))
+            instr->format = asVOP3(instr->format);
+      }
+   }
+
+   /* Invert the definition when we have to.
+    * This must succeed because we already checked it in the previous pass.
+    */
+   if (ctx.cond_weights[instr->definitions[0].tempId()] > 0) {
+      ASSERTED bool success = try_bool_invert(ctx, instr.get());
+      assert(success && "cndmask condition can't be inverted");
+   }
+}
+
+void
 select_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
 {
    const uint32_t threshold = 4;
@@ -4950,36 +5146,6 @@ select_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
       }
    }
 
-   if (!instr->definitions.empty() && ctx.info[instr->definitions[0].tempId()].is_combined()) {
-      aco_ptr<Instruction>& prev_instr =
-         ctx.pre_combine_instrs[ctx.info[instr->definitions[0].tempId()].val];
-      /* Re-check combined instructions, revert to using pre combine instruction if
-       * no operand instruction was eliminated.
-       */
-      bool use_prev = std::all_of(
-         prev_instr->operands.begin(), prev_instr->operands.end(),
-         [&](Operand op)
-         {
-            return !op.isTemp() || (ctx.info[op.tempId()].parent_instr &&
-                                    !is_dead(ctx.uses, ctx.info[op.tempId()].parent_instr));
-         });
-
-      if (use_prev) {
-         for (const Operand& op : prev_instr->operands) {
-            if (op.isTemp())
-               ctx.uses[op.tempId()]++;
-         }
-         for (const Operand& op : instr->operands) {
-            if (op.isTemp())
-               decrease_and_dce(ctx, op.getTemp());
-         }
-
-         instr = std::move(prev_instr);
-         for (Definition& def : instr->definitions)
-            ctx.info[def.tempId()].parent_instr = instr.get();
-      }
-   }
-
    /* Mark SCC needed, so the uniform boolean transformation won't swap the definitions
     * when it isn't beneficial */
    if (instr->isBranch() && instr->operands.size() && instr->operands[0].isTemp() &&
@@ -5044,12 +5210,8 @@ select_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
    if (instr->isVALU() && std::any_of(instr->operands.begin(), instr->operands.end(),
                                       [&](const Operand& op)
                                       {
-                                         if (!op.isTemp())
-                                            return false;
-                                         Instruction* parent = ctx.info[op.tempId()].parent_instr;
-                                         return parent->isDPP() &&
-                                                parent->opcode == aco_opcode::v_mov_b32 &&
-                                                parent->pass_flags == instr->pass_flags;
+                                         Instruction* parent = get_dpp_mov(ctx, op);
+                                         return parent && parent->pass_flags == instr->pass_flags;
                                       })) {
 
       alu_opt_info input_info;
@@ -5059,15 +5221,8 @@ select_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
       alu_opt_info dpp_info;
       bool progress = false;
       for (unsigned i = 0; i < input_info.operands.size(); i++) {
-         if (!input_info.operands[i].op.isTemp())
-            continue;
-         /* Applying DPP with many uses is unlikely to be profitable. */
-         if (ctx.uses[input_info.operands[i].op.tempId()] > 3)
-            continue;
-         Instruction* parent = ctx.info[input_info.operands[i].op.tempId()].parent_instr;
-
-         if (!parent->isDPP() || parent->opcode != aco_opcode::v_mov_b32 ||
-             parent->pass_flags != instr->pass_flags)
+         Instruction* parent = get_dpp_mov(ctx, input_info.operands[i].op);
+         if (!parent || parent->pass_flags != instr->pass_flags)
             continue;
 
          /* We won't eliminate the DPP mov if the operand is used twice */
@@ -5169,11 +5324,7 @@ select_instruction(opt_ctx& ctx, aco_ptr<Instruction>& instr)
 
    unsigned literal_mask = 0;
    for (unsigned i = 0; i < input_info.operands.size(); i++) {
-      Operand op = input_info.operands[i].op;
-      if (!op.isTemp() || op.isFixed())
-         continue;
-      auto& temp_info = ctx.info[op.tempId()];
-      if (temp_info.is_constant())
+      if (could_be_literal(ctx, input_info.operands[i].op))
          literal_mask |= BITFIELD_BIT(i);
    }
 
@@ -5751,19 +5902,36 @@ optimize(Program* program)
 
    validate_opt_ctx(ctx, false);
 
-   /* 4. Top-Down DAG pass (backward) to select instructions (includes DCE) */
+   /* 4. Optimize cndmask operand order (includes DCE). */
+   ctx.cond_weights = std::vector<int32_t>(program->peekAllocationId());
    for (auto block_rit = program->blocks.rbegin(); block_rit != program->blocks.rend();
         ++block_rit) {
       Block* block = &(*block_rit);
       ctx.fp_mode = block->fp_mode;
       for (auto instr_rit = block->instructions.rbegin(); instr_rit != block->instructions.rend();
-           ++instr_rit)
+           ++instr_rit) {
+         reevaluate_combined_instr(ctx, *instr_rit);
+         compute_cndmask_weights(ctx, *instr_rit);
+      }
+   }
+
+   validate_opt_ctx(ctx, false);
+
+   /* 5. Top-Down DAG pass (backward) to select instructions (includes DCE) */
+   for (auto block_rit = program->blocks.rbegin(); block_rit != program->blocks.rend();
+        ++block_rit) {
+      Block* block = &(*block_rit);
+      ctx.fp_mode = block->fp_mode;
+      for (auto instr_rit = block->instructions.rbegin(); instr_rit != block->instructions.rend();
+           ++instr_rit) {
+         swap_cndmask_cond(ctx, *instr_rit);
          select_instruction(ctx, *instr_rit);
+      }
    }
 
    validate_opt_ctx(ctx, true);
 
-   /* 5. Add literals to instructions */
+   /* 6. Add literals to instructions */
    for (Block& block : program->blocks) {
       ctx.instructions.reserve(block.instructions.size());
       ctx.fp_mode = block.fp_mode;
@@ -5772,6 +5940,7 @@ optimize(Program* program)
       block.instructions = std::move(ctx.instructions);
    }
 
+   /* 7. Optimize FMA-mix instructions */
    for (Block& block : program->blocks) {
       ctx.fp_mode = block.fp_mode;
       for (aco_ptr<Instruction>& instr : block.instructions) {

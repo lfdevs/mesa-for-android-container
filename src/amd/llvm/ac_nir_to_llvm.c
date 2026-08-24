@@ -2464,7 +2464,7 @@ static void emit_demote(struct ac_nir_context *ctx, const nir_intrinsic_instr *i
 
 static LLVMValueRef visit_first_invocation(struct ac_nir_context *ctx)
 {
-   LLVMValueRef active_set = ac_build_ballot(&ctx->ac, ctx->ac.i32_1);
+   LLVMValueRef active_set = ac_build_ballot(&ctx->ac, ctx->ac.i1true);
    const char *intr = ctx->ac.wave_size == 32 ? "llvm.cttz.i32" : "llvm.cttz.i64";
 
    /* The second argument is whether cttz(0) should be defined, but we do not care. */
@@ -2852,7 +2852,7 @@ static bool visit_intrinsic(struct ac_nir_context *ctx, nir_intrinsic_instr *ins
       } else {
          LLVMValueRef src = get_src(ctx, instr->src[0]);
          LLVMValueRef index = get_src(ctx, instr->src[1]);
-         LLVMValueRef active = ac_build_ballot(&ctx->ac, ctx->ac.i32_1);
+         LLVMValueRef active = ac_build_ballot(&ctx->ac, ctx->ac.i1true);
          LLVMValueRef undef = LLVMGetUndef(LLVMTypeOf(src));
 
          LLVMBasicBlockRef preheader = LLVMGetInsertBlock(ctx->ac.builder);

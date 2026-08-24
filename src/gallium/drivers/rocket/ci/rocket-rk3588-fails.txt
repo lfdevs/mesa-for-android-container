@@ -97,3 +97,7 @@ Models.Op/yolox_119,Fail
 Models.Op/yolox_120,Fail
 Models.Op/yolox_121,Fail
 Models.Op/yolox_122,Fail
+
+# rkt_ml_subgraph_create: Assertion `input_op_2' failed.
+Models.Op/ssdmobilenetv3_ssd_mobilenet_v3_int8,Crash
+Models.Op/vww4_vww4_128_128_INT8,Crash

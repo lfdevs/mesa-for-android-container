@@ -605,6 +605,7 @@ public:
    VIRT2(INT_REMAINDER)
    VIRT1(SIN)
    VIRT1(COS)
+   VIRT1(TANH)
 
 #undef ALU3
 #undef ALU2_ACC

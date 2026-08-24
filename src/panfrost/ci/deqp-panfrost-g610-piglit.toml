@@ -21,5 +21,3 @@ prefix = "afbcp-"
 piglit_folder = "/piglit"
 profile = "cl"
 process_isolation = true
-  [piglit.env]
-  RUSTICL_ENABLE = "panfrost"

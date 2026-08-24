@@ -1027,7 +1027,6 @@ try_optimize_branching_sequence(pr_opt_ctx& ctx, aco_ptr<Instruction>& exec_copy
       return false;
 
    if (is_overwritten_since(ctx, exec, ctx.program->lane_mask, exec_val_idx)) {
-      // TODO: in case nothing needs the previous exec mask, just remove it
       return false;
    }
 

@@ -28,34 +28,79 @@ update_liveness_for_inst(BITSET_WORD *dead_defs,
       }
    }
 
-   if (I->op == JAY_OPCODE_PHI_SRC) {
-      /* Phi sources do not require last-use bits. */
-      jay_foreach_src_index(I, src_idx, comp, index) {
-         u_sparse_bitset_set(live_in, index);
-      }
-   } else {
-      BITSET_ZERO(I->last_use);
-      unsigned last_use_i = 0;
+   jay_foreach_src_index(I, src_idx, comp, index) {
+      u_sparse_bitset_set(live_in, index);
+   }
+}
 
-      jay_foreach_src_index(I, s, comp, index) {
-         /* If the source is not live after this instruction, but becomes
-          * live at this instruction, this is the last use.
+void
+jay_calculate_last_use(jay_function *func)
+{
+   jay_foreach_block(func, block) {
+      ralloc_free(block->last_use);
+
+      /* First, count the number of indices in the block. This will size our
+       * bitset and avoid any dynamic allocations later.
+       */
+      signed nr = 0;
+      jay_foreach_inst_in_block(block, I) {
+         if (I->op != JAY_OPCODE_PHI_SRC) {
+            jay_foreach_src_index(I, s, c, i) {
+               nr++;
+            }
+         }
+      }
+
+      block->last_use = BITSET_RZALLOC(func, nr);
+
+      /* Now iterate liveness collecting kill bits in reverse order */
+      struct u_sparse_bitset live;
+      u_sparse_bitset_dup(&live, &block->live_out);
+
+      jay_foreach_inst_in_block_rev(block, I) {
+         /* No destination is live-in before the instruction, but any
+          * destination not live-in after is immediately dead.
           */
-         if (!u_sparse_bitset_test(live_in, index)) {
-            assert(last_use_i < JAY_NUM_LAST_USE_BITS);
-            BITSET_SET(I->last_use, last_use_i);
+         jay_foreach_dst_index(I, _, def) {
+            if (u_sparse_bitset_test(&live, def)) {
+               u_sparse_bitset_clear(&live, def);
+            }
          }
 
-         u_sparse_bitset_set(live_in, index);
-         ++last_use_i;
+         /* Decrement first so the first appearance of a source is killed. RA
+          * depends on this for killing duplicated sources properly.
+          */
+         if (I->op != JAY_OPCODE_PHI_SRC) {
+            jay_foreach_src_index(I, s, c, index) {
+               --nr;
+            }
+         }
+
+         unsigned offs = 0;
+         jay_foreach_src_index(I, s, comp, index) {
+            /* If the source is not live after this instruction, but becomes
+             * live at this instruction, this is the last use.
+             */
+            if (I->op != JAY_OPCODE_PHI_SRC &&
+                !u_sparse_bitset_test(&live, index)) {
+               assert(nr >= 0 && "sizes match");
+               BITSET_SET(block->last_use, nr + offs);
+            }
+
+            u_sparse_bitset_set(&live, index);
+            offs++;
+         }
       }
+
+      assert(nr == 0 && "sizes match exactly");
+      u_sparse_bitset_free(&live);
    }
 }
 
 /**
  * Calculate liveness information for SSA values.
  *
- * This populates the jay_block::live_in/live_out bitsets and last_use flags.
+ * This populates the jay_block::live_in/live_out bitsets.
  */
 void
 jay_compute_liveness(jay_function *f)
@@ -70,13 +115,12 @@ jay_compute_liveness(jay_function *f)
    jay_foreach_block(f, block) {
       u_sparse_bitset_free(&block->live_out);
       u_sparse_bitset_init(&block->live_out, f->ssa_alloc, block);
-
       jay_worklist_push_head(&worklist, block);
    }
 
    jay_foreach_inst_in_func(f, _, I) {
       jay_foreach_dst_index(I, dst, index) {
-         if (jay_is_uniform(dst)) {
+         if (jay_is_uniform(dst) || dst.file == FLAG) {
             BITSET_SET(uniform, index);
          }
       }
@@ -138,7 +182,7 @@ jay_compute_liveness(jay_function *f)
 
 /*
  * Calculate the register demand for each SSA file using the previously
- * calculated liveness analysis. SSA makes this exact in linear-time.
+ * calculated liveness & last-use analysis. SSA makes this exact in linear-time.
  */
 void
 jay_calculate_register_demands(jay_function *func)
@@ -169,6 +213,7 @@ jay_calculate_register_demands(jay_function *func)
 
    jay_foreach_block(func, block) {
       unsigned demands[JAY_NUM_SSA_FILES] = {};
+      unsigned kill_idx = 0, print_kill_idx = 0;
 
       /* Everything live-in. */
       U_SPARSE_BITSET_FOREACH_SET(&block->live_in, i) {
@@ -203,14 +248,20 @@ jay_calculate_register_demands(jay_function *func)
          /* Late-kill sources. Duplicated sources are only marked killed once,
           * so we do not need to filter out duplicates.
           */
-         jay_foreach_killed(I, s, c) {
-            assert(demands[I->src[s].file] > 0);
-            --demands[I->src[s].file];
+         if (I->op != JAY_OPCODE_PHI_SRC) {
+            jay_foreach_src_index(I, s, c, idx) {
+               if (BITSET_TEST(block->last_use, kill_idx)) {
+                  assert(demands[I->src[s].file] > 0);
+                  --demands[I->src[s].file];
+               }
+
+               ++kill_idx;
+            }
          }
 
          if (jay_debug & JAY_DBG_PRINTDEMAND) {
             printf("(LA) [G:%u\tU:%u] ", demands[GPR], demands[UGPR]);
-            jay_print_inst(stdout, I);
+            jay_print_inst(stdout, block, I, &print_kill_idx);
          }
       }
 

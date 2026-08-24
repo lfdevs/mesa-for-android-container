@@ -36,30 +36,45 @@ fd6_emit_driver_ubo(fd_cs &cs, const struct ir3_shader_variant *v,
 /* A helper to upload driver-params to a UBO, for the case where constants are
  * loaded by shader preamble rather than ST6_CONSTANTS
  */
-static void
-fd6_upload_emit_driver_ubo(struct fd_context *ctx, fd_cs &cs,
-                           const struct ir3_shader_variant *v, int base,
-                           uint32_t sizedwords, const void *dwords)
+static struct pipe_resource *
+fd6_upload_driver_ubo(struct fd_context *ctx, fd_cs &cs,
+                      const struct ir3_shader_variant *v,
+                      uint32_t sizedwords, const void *dwords,
+                      unsigned *buffer_offset)
 {
    struct pipe_context *pctx = &ctx->base;
 
    assert(FD_CALLX(ctx->screen->info, fd6_load_shader_consts_via_preamble)(v));
 
-   if (!sizedwords || (base < 0))
-      return;
-
-   unsigned buffer_offset;
    struct pipe_resource *buffer = NULL;
    u_upload_data_ref(pctx->const_uploader, 0, sizedwords * sizeof(uint32_t),
-                 16, dwords,  &buffer_offset, &buffer);
+                 16, dwords,  buffer_offset, &buffer);
    if (!buffer)
-      return;  /* nothing good will come of this.. */
+      return NULL;  /* nothing good will come of this.. */
 
    /* The backing BO may otherwise not be tracked by the resource, as
     * this allocation happens outside of the context of batch resource
     * tracking.
     */
    cs.attach_bo(fd_resource(buffer)->bo);
+
+   return buffer;
+}
+
+static void
+fd6_upload_emit_driver_ubo(struct fd_context *ctx, fd_cs &cs,
+                           const struct ir3_shader_variant *v, int base,
+                           uint32_t sizedwords, const void *dwords)
+{
+   struct pipe_resource *buffer;
+   unsigned buffer_offset;
+
+   if (!sizedwords || (base < 0))
+      return;
+
+   buffer = fd6_upload_driver_ubo(ctx, cs, v, sizedwords, dwords, &buffer_offset);
+   if (!buffer)
+      return;
 
    fd6_emit_driver_ubo(cs, v, base, sizedwords, buffer_offset,
                        fd_resource(buffer)->bo);
@@ -364,9 +379,7 @@ FD_GENX2(fd6_build_user_consts, fd6_pipeline_type, HAS_TESS_GS);
 template <chip CHIP>
 static inline void
 emit_driver_params(const struct ir3_shader_variant *v, fd_cs &dpconstobj,
-                   struct fd_context *ctx, const struct pipe_draw_info *info,
-                   const struct pipe_draw_indirect_info *indirect,
-                   const struct ir3_driver_params_vs *vertex_params)
+                   struct fd_context *ctx, const struct ir3_driver_params_vs *vertex_params)
 {
    if (fd6_load_shader_consts_via_preamble<CHIP>(v)) {
       const struct ir3_const_state *const_state = ir3_const_state(v);
@@ -376,7 +389,7 @@ emit_driver_params(const struct ir3_shader_variant *v, fd_cs &dpconstobj,
                                  dword_sizeof(*vertex_params),
                                  vertex_params);
    } else {
-      ir3_emit_driver_params(v, dpconstobj, ctx, info, indirect, vertex_params);
+      ir3_emit_driver_params(v, dpconstobj, ctx, vertex_params);
    }
 }
 
@@ -437,14 +450,46 @@ fd6_build_driver_params(struct fd6_emit *emit)
 
    fd_cs dpconstobj(ctx->batch->submit, size_dwords * 4);
 
-   /* VS still works the old way*/
    if (emit->vs->need_driver_params) {
-      ir3_emit_driver_params(emit->vs, dpconstobj, ctx, emit->info, emit->indirect, &p);
+      if (fd6_load_shader_consts_via_preamble<CHIP>(emit->vs)) {
+         /* If shader consts are loaded via preamble, then the DP
+          * params are split, with the draw params (first vec4)
+          * loaded directly via CP_LOAD_STATE_GEOM and the rest
+          * as UBO
+          */
+         const struct ir3_const_state *const_state = ir3_const_state(emit->vs);
+         struct pipe_resource *buffer;
+         unsigned buffer_offset;
+
+         buffer = fd6_upload_driver_ubo(ctx, dpconstobj, emit->vs,
+                                        dword_sizeof(p), &p, &buffer_offset);
+
+         if (const_state->driver_params_ubo.idx > 0) {
+            fd6_emit_driver_ubo(dpconstobj, emit->vs,
+                                const_state->driver_params_ubo.idx,
+                                dword_sizeof(p), buffer_offset,
+                                fd_resource(buffer)->bo);
+         }
+
+         /* Only emit the draw params if not using CP_DRAW_INDIRECT_MULTI
+          * (in which case the SQE does that for us)
+          */
+         if (!emit->indirect) {
+            uint32_t offset =
+               const_state->allocs.consts[IR3_CONST_ALLOC_DRIVER_PARAMS].offset_vec4;
+            fd6_emit_const_bo(dpconstobj, emit->vs, offset * 4, buffer_offset, 16,
+                              fd_resource(buffer)->bo);
+         }
+
+         pipe_resource_reference(&buffer, NULL);
+      } else {
+         ir3_emit_driver_params(emit->vs, dpconstobj, ctx, &p);
+      }
    }
 
    if (PIPELINE == HAS_TESS_GS) {
       if (emit->gs && emit->gs->need_driver_params) {
-         emit_driver_params<CHIP>(emit->gs, dpconstobj, ctx, emit->info, emit->indirect, &p);
+         emit_driver_params<CHIP>(emit->gs, dpconstobj, ctx, &p);
       }
 
       if (emit->hs && emit->hs->need_driver_params) {
@@ -452,7 +497,7 @@ fd6_build_driver_params(struct fd6_emit *emit)
       }
 
       if (emit->ds && emit->ds->need_driver_params) {
-         emit_driver_params<CHIP>(emit->ds, dpconstobj, ctx, emit->info, emit->indirect, &p);
+         emit_driver_params<CHIP>(emit->ds, dpconstobj, ctx, &p);
       }
    }
 

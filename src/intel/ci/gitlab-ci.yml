@@ -30,7 +30,7 @@ anv-rpl-vk:
     FDO_CI_CONCURRENT: 6  # We get OOMkills if we go too wide since VKCTS 1.4.4.0, persisting in 1.4.5.3.
     # Xe regression in 6.19
     # https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/7584
-    KERNEL_TAG: "v6.17-mesa-ddf6"
+    KERNEL_TAG: "v6.17-mesa-e9d0"
   parallel: 10
 
 anv-tgl-vk:

@@ -8,6 +8,7 @@
 #include "si_shader_internal.h"
 #include "util/mesa-blake3.h"
 #include "nir.h"
+#include "nir_builder.h"
 #include "nir_tcs_info.h"
 #include "nir_xfb_info.h"
 #include "aco_interface.h"
@@ -329,10 +330,11 @@ static void gather_io_instrinsic(const nir_shader *nir, struct si_shader_info *i
    }
 }
 
-/* TODO: convert to nir_shader_instructions_pass */
-static void gather_instruction(const struct nir_shader *nir, struct si_shader_info *info,
-                               nir_instr *instr)
+static bool gather_instruction(struct nir_builder *b, nir_instr *instr, void *data)
 {
+   const struct nir_shader *nir = b->shader;
+   struct si_shader_info *info = (struct si_shader_info *)data;
+
    if (instr->type == nir_instr_type_tex) {
       nir_tex_instr *tex = nir_instr_as_tex(instr);
 
@@ -398,6 +400,8 @@ static void gather_instruction(const struct nir_shader *nir, struct si_shader_in
          break;
       }
    }
+
+   return false;
 }
 
 /* Return descriptor slot usage masks from the given shader info. */
@@ -448,7 +452,7 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
       }
    }
 
-   if (sscreen->debug_flags & DBG(USE_LLVM)) {
+   if (sscreen->shader_debug_flags & DBG(USE_LLVM)) {
       nir->info.use_aco_amd = false;
    } else {
       nir->info.use_aco_amd = aco_is_gpu_supported(&sscreen->info) &&
@@ -630,11 +634,8 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
       }
    }
 
-   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-   nir_foreach_block (block, impl) {
-      nir_foreach_instr (instr, block)
-         gather_instruction(nir, info, instr);
-   }
+   nir_function_instructions_pass(nir_shader_get_entrypoint(nir), gather_instruction,
+                                  nir_metadata_all, info);
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       assert(!BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_XY));
@@ -643,7 +644,7 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
       info->allow_flat_shading = !(info->uses_sysval_persp_center || info->uses_sysval_persp_centroid ||
                                    info->uses_sysval_persp_sample || info->uses_sysval_linear_center ||
                                    info->uses_sysval_linear_centroid || info->uses_sysval_linear_sample ||
-                                   info->uses_interp_at_sample || nir->info.writes_memory ||
+                                   info->uses_sysval_pull_model || nir->info.writes_memory ||
                                    nir->info.fs.uses_fbfetch_output ||
                                    nir->info.fs.needs_coarse_quad_helper_invocations ||
                                    BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_Z) ||

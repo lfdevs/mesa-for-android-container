@@ -87,10 +87,25 @@ make_sources_canonical(nir_builder *b, nir_alu_instr *alu, uint32_t start_idx)
       resize_bool_alu_source(b, alu, i, bit_size);
 }
 
-#define CASE_CMP(cmp)                                                          \
-   case nir_op_##cmp:                                                          \
-      opcode = nir_op_##cmp##_pan;                                             \
-      break;
+static nir_op
+nir_to_pan_cmp(nir_op op)
+{
+   switch (op) {
+#define CASE_CMP(cmp) case nir_op_##cmp: return nir_op_##cmp##_pan
+      CASE_CMP(flt);
+      CASE_CMP(fge);
+      CASE_CMP(feq);
+      CASE_CMP(fneu);
+      CASE_CMP(ilt);
+      CASE_CMP(ige);
+      CASE_CMP(ieq);
+      CASE_CMP(ine);
+      CASE_CMP(ult);
+      CASE_CMP(uge);
+#undef CASE_CMP
+      default: UNREACHABLE("Invalid comparison");
+   }
+}
 
 static bool
 lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
@@ -114,76 +129,62 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
    case nir_op_ixor:
       if (alu->def.bit_size > 1)
          return false; /* Not a boolean instruction */
-      FALLTHROUGH;
 
-   case nir_op_ieq:
-   case nir_op_ine:
       make_sources_canonical(b, alu, 0);
-      break;
-
-   case nir_op_bcsel:
-      /* bcsel may be choosing between boolean sources too */
-      if (alu->def.bit_size == 1)
-         make_sources_canonical(b, alu, 0);
-      else
-         resize_bool_alu_source(b, alu, 0, alu->def.bit_size);
-      break;
-
-   default:
-      break;
-   }
-
-   /* Now that we have a canonical boolean bit-size, go on and rewrite the
-    * instruction to match the canonical bit-size.
-    */
-   uint32_t bit_size = nir_src_bit_size(alu->src[0].src);
-   assert(bit_size > 1);
-
-   nir_op opcode = alu->op;
-   switch (opcode) {
-   case nir_op_mov:
-   case nir_op_vec2:
-   case nir_op_vec3:
-   case nir_op_vec4:
-   case nir_op_vec5:
-   case nir_op_vec8:
-   case nir_op_vec16:
-   case nir_op_inot:
-   case nir_op_iand:
-   case nir_op_ior:
-   case nir_op_ixor:
-      /* Nothing to do here, we do not specialize these opcodes by bit-size */
-      break;
+      alu->def.bit_size = nir_src_bit_size(alu->src[0].src);
+      return true;
 
    case nir_op_b2b1:
       /* Since the canonical bit size is the size of the src, it's a no-op */
-      opcode = nir_op_mov;
-      break;
+      alu->op = nir_op_mov;
+      alu->def.bit_size = nir_src_bit_size(alu->src[0].src);
+      return true;
 
    case nir_op_b2b32:
       /* For up-converting booleans, sign-extend */
-      opcode = nir_op_i2i32;
-      break;
+      alu->op = nir_op_i2i32;
+      return true;
 
    case nir_op_bcsel:
-      opcode = nir_op_bcsel_pan;
+      /* bcsel may be choosing between boolean sources too */
+      if (alu->def.bit_size == 1) {
+         make_sources_canonical(b, alu, 0);
+         alu->def.bit_size = nir_src_bit_size(alu->src[1].src);
+      } else {
+         resize_bool_alu_source(b, alu, 0, alu->def.bit_size);
+      }
+      alu->op = nir_op_bcsel_pan;
+      return true;
 
-      /* The destination of the selection may have a different bit-size from
-       * the bcsel condition.
-       */
-      bit_size = nir_src_bit_size(alu->src[1].src);
-      break;
+   case nir_op_flt:
+   case nir_op_fge:
+   case nir_op_feq:
+   case nir_op_fneu:
+   case nir_op_ilt:
+   case nir_op_ige:
+   case nir_op_ieq:
+   case nir_op_ine:
+   case nir_op_ult:
+   case nir_op_uge:
+      assert(alu->def.bit_size == 1);
 
-      CASE_CMP(flt);
-      CASE_CMP(fge);
-      CASE_CMP(feq);
-      CASE_CMP(fneu);
-      CASE_CMP(ilt);
-      CASE_CMP(ige);
-      CASE_CMP(ieq);
-      CASE_CMP(ine);
-      CASE_CMP(ult);
-      CASE_CMP(uge);
+      /* ieq and ine can take boolean sources */
+      if (alu->op == nir_op_ieq || alu->op == nir_op_ine)
+         make_sources_canonical(b, alu, 0);
+
+      alu->op = nir_to_pan_cmp(alu->op);
+      assert(nir_src_bit_size(alu->src[0].src) ==
+             nir_src_bit_size(alu->src[1].src));
+      alu->def.bit_size = nir_src_bit_size(alu->src[0].src);
+
+      /* We don't want to keep 64-bit booleans around */
+      if (alu->def.bit_size == 64) {
+         b->cursor = nir_after_instr(&alu->instr);
+         nir_def *b32 = nir_u2u32(b, &alu->def);
+         nir_def_rewrite_uses_after(&alu->def, b32);
+      }
+
+      return true;
 
    default:
       assert(alu->def.bit_size > 1);
@@ -191,17 +192,7 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *alu)
          assert(alu->src[i].src.ssa->bit_size > 1);
       return false;
    }
-
-   alu->op = opcode;
-   alu->fp_math_ctrl = nir_op_valid_fp_math_ctrl(opcode, alu->fp_math_ctrl);
-
-   if (alu->def.bit_size == 1)
-      alu->def.bit_size = bit_size;
-
-   return true;
 }
-
-#undef CASE_CMP
 
 static bool
 lower_load_const_instr(nir_load_const_instr *load)

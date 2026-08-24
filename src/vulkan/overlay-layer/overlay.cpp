@@ -273,8 +273,8 @@ static void unmap_object(uint64_t obj)
 static VkLayerInstanceCreateInfo *get_instance_chain_info(const VkInstanceCreateInfo *pCreateInfo,
                                                           VkLayerFunction func)
 {
-   vk_foreach_struct_const(item, pCreateInfo->pNext) {
-      if (item->sType == VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO &&
+   vk_foreach_struct_const(sType, item, pCreateInfo->pNext) {
+      if (sType == VK_STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO &&
           ((VkLayerInstanceCreateInfo *) item)->function == func)
          return (VkLayerInstanceCreateInfo *) item;
    }
@@ -285,8 +285,8 @@ static VkLayerInstanceCreateInfo *get_instance_chain_info(const VkInstanceCreate
 static VkLayerDeviceCreateInfo *get_device_chain_info(const VkDeviceCreateInfo *pCreateInfo,
                                                       VkLayerFunction func)
 {
-   vk_foreach_struct_const(item, pCreateInfo->pNext) {
-      if (item->sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO &&
+   vk_foreach_struct_const(sType, item, pCreateInfo->pNext) {
+      if (sType == VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO &&
           ((VkLayerDeviceCreateInfo *) item)->function == func)
          return (VkLayerDeviceCreateInfo *)item;
    }
@@ -295,36 +295,39 @@ static VkLayerDeviceCreateInfo *get_device_chain_info(const VkDeviceCreateInfo *
 }
 
 static void
-free_chain(struct VkBaseOutStructure *chain)
+free_chain(void *chain)
 {
    while (chain) {
       void *node = chain;
-      chain = chain->pNext;
+      chain = vk_pnext_get_next(chain);
       free(node);
    }
 }
 
-static struct VkBaseOutStructure *
-clone_chain(const struct VkBaseInStructure *chain)
+static void *
+clone_chain(const void *chain)
 {
-   struct VkBaseOutStructure *head = NULL, *tail = NULL;
+   void *head = NULL, *tail = NULL;
 
-   vk_foreach_struct_const(item, chain) {
-      size_t item_size = vk_structure_type_size(item);
+   vk_foreach_struct_const(sType, item, chain) {
+      size_t item_size = vk_structure_type_size(sType);
       if (item_size == 0) {
          free_chain(head);
          return NULL;
       }
 
-      struct VkBaseOutStructure *new_item =
-         (struct VkBaseOutStructure *)malloc(item_size);;
+      void *new_item = malloc(item_size);;
+      if (!new_item) {
+          free_chain(head);
+          return NULL;
+      }
 
       memcpy(new_item, item, item_size);
 
       if (!head)
          head = new_item;
       if (tail)
-         tail->pNext = new_item;
+         vk_pnext_set_next(tail, new_item);
       tail = new_item;
    }
 
@@ -2242,8 +2245,7 @@ static VkResult overlay_BeginCommandBuffer(
    if (cmd_buffer_data->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
       VkCommandBufferBeginInfo begin_info = *pBeginInfo;
 
-      struct VkBaseOutStructure *new_pnext =
-         clone_chain((const struct VkBaseInStructure *)pBeginInfo->pNext);
+      void *new_pnext = clone_chain(pBeginInfo->pNext);
       VkCommandBufferInheritanceInfo inhe_info;
 
       /* If there was no pNext chain given or we managed to copy it, we can
@@ -2566,8 +2568,7 @@ static VkResult overlay_CreateDevice(
 
    VkDeviceCreateInfo create_info = *pCreateInfo;
 
-   struct VkBaseOutStructure *new_pnext =
-      clone_chain((const struct VkBaseInStructure *) pCreateInfo->pNext);
+   void *new_pnext = clone_chain(pCreateInfo->pNext);
    if (new_pnext != NULL) {
       create_info.pNext = new_pnext;
 

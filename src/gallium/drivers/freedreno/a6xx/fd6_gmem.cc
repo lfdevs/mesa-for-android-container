@@ -225,7 +225,7 @@ lrzfc_enabled(struct fd_resource *zsbuf)
 {
    if ((CHIP < A7XX) || FD_DBG(NOLRZFC) || !zsbuf)
       return false;
-   return zsbuf->lrz_layout.lrz_fc_size > 0;
+   return fdl6_lrz_fc_fully_covered(&zsbuf->lrz_layout);
 }
 
 template <chip CHIP>

@@ -19,7 +19,7 @@ pub const MAGMA_MAP_ACCESS_READ: u32 = 0x10;
 pub const MAGMA_MAP_ACCESS_WRITE: u32 = 0x20;
 pub const MAGMA_MAP_ACCESS_RW: u32 = 0x30;
 
-/// Mesa handle types (memory and sync in same namespace)
+/// Handle types (memory and sync in same namespace)
 pub const MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD: u32 = 0x0001;
 pub const MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF: u32 = 0x0002;
 pub const MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_WIN32: u32 = 0x0003;
@@ -39,7 +39,7 @@ pub struct Handle {
 }
 
 impl Handle {
-    /// Clones an existing Mesahandle, by using OS specific mechanisms.
+    /// Clones an existing handle, by using OS specific mechanisms.
     pub fn try_clone(&self) -> Result<Handle> {
         let clone = self
             .os_handle
@@ -54,7 +54,7 @@ impl Handle {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-pub struct MesaMapping {
+pub struct RawMapping {
     pub ptr: u64,
     pub size: u64,
 }
@@ -105,7 +105,7 @@ pub unsafe trait MappedRegion: Send + Sync {
     fn size(&self) -> usize;
 
     /// Returns mesa mapping representation of the region
-    fn as_mesa_mapping(&self) -> MesaMapping;
+    fn as_raw_mapping(&self) -> RawMapping;
 }
 
 #[macro_export]

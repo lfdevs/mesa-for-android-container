@@ -162,11 +162,11 @@ struct ir3_context_funcs {
    void (*emit_intrinsic_image_size)(struct ir3_context *ctx,
                                      nir_intrinsic_instr *intr,
                                      struct ir3_instruction **dst);
-   void (*emit_intrinsic_load_global_ir3)(struct ir3_context *ctx,
-                                          nir_intrinsic_instr *intr,
-                                          struct ir3_instruction **dst);
-   void (*emit_intrinsic_store_global_ir3)(struct ir3_context *ctx,
-                                           nir_intrinsic_instr *intr);
+   void (*emit_intrinsic_load_global)(struct ir3_context *ctx,
+                                      nir_intrinsic_instr *intr,
+                                      struct ir3_instruction **dst);
+   void (*emit_intrinsic_store_global)(struct ir3_context *ctx,
+                                       nir_intrinsic_instr *intr);
    struct ir3_instruction *(*emit_intrinsic_atomic_global)(
       struct ir3_context *ctx, nir_intrinsic_instr *intr);
 };

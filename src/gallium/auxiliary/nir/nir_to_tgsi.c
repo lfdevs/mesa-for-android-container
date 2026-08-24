@@ -1545,6 +1545,7 @@ ntt_emit_alu(struct ntt_compile *c, nir_alu_instr *instr)
       [nir_op_ufind_msb] = { TGSI_OPCODE_UMSB },
       [nir_op_find_lsb] = { TGSI_OPCODE_LSB },
       [nir_op_fadd] = { TGSI_OPCODE_ADD, TGSI_OPCODE_DADD },
+      [nir_op_fadd_rtne] = { TGSI_OPCODE_ADD, TGSI_OPCODE_DADD },
       [nir_op_iadd] = { TGSI_OPCODE_UADD, TGSI_OPCODE_U64ADD },
       [nir_op_fmul] = { TGSI_OPCODE_MUL, TGSI_OPCODE_DMUL },
       [nir_op_imul] = { TGSI_OPCODE_UMUL, TGSI_OPCODE_U64MUL },

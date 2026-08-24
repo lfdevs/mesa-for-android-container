@@ -69,6 +69,7 @@ enum pco_debug {
    PCO_DEBUG_GLOBAL_SHMEM = BITFIELD64_BIT(5),
    PCO_DEBUG_RA_FORCE_SPILL = BITFIELD64_BIT(6),
    PCO_DEBUG_RA_SKIP_OPT = BITFIELD64_BIT(7),
+   PCO_DEBUG_NO_DMA_CACHE = BITFIELD64_BIT(8),
 };
 
 extern uint64_t pco_debug;
@@ -1508,6 +1509,18 @@ static inline pco_instr *pco_last_instr(pco_block *block)
 }
 
 /**
+ * \brief Returns whether an instruction is the last instruction in its block.
+ *
+ * \param[in] instr The instruction.
+ * \return True if the instruction is the last instruction in its block.
+ */
+static inline bool pco_is_last_instr(pco_instr *instr)
+{
+   pco_instr *last_instr = pco_last_instr(instr->parent_block);
+   return instr == last_instr;
+}
+
+/**
  * \brief Returns the next instruction.
  *
  * \param[in] instr The current instruction.
@@ -1813,7 +1826,8 @@ bool pco_nir_lower_fs_intrinsics(nir_shader *shader);
 bool pco_nir_lower_vs_intrinsics(nir_shader *shader);
 bool pco_nir_lower_images(nir_shader *shader, pco_data *data, pco_ctx *ctx);
 bool pco_nir_lower_interpolation(nir_shader *shader, pco_fs_data *fs);
-bool pco_nir_lower_io(nir_shader *shader);
+bool pco_nir_lower_io(nir_shader *shader, pco_data *data);
+bool pco_nir_lower_sample_mask_out(nir_shader *shader);
 bool pco_nir_lower_shared_io_to_global(nir_shader *shader, unsigned usc_slots);
 bool pco_nir_lower_subgroups(nir_shader *shader);
 bool pco_nir_lower_tex(nir_shader *shader, pco_data *data, pco_ctx *ctx);
@@ -2143,6 +2157,25 @@ static inline unsigned pco_ref_get_reg_index(pco_ref ref)
    unsigned index = pco_ref_is_idx_reg(ref) ? ref.idx_reg.offset : ref.val;
 
    return index;
+}
+
+/**
+ * \brief Sets the register index of a reference ref.
+ *
+ * \param[in] ref Reference ref.
+ * \param[in] index New index.
+ * \return Updated ref.
+ */
+static inline pco_ref pco_ref_set_reg_index(pco_ref ref, unsigned index)
+{
+   assert(pco_ref_is_reg(ref) || pco_ref_is_idx_reg(ref));
+
+   if (pco_ref_is_idx_reg(ref))
+      ref.idx_reg.offset = index;
+   else
+      ref.val = index;
+
+   return ref;
 }
 
 /**
@@ -2926,6 +2959,40 @@ pco_refs_are_equal(pco_ref ref0, pco_ref ref1, bool ignore_dtype)
       return false;
 
    return true;
+}
+
+/**
+ * \brief Checks whether two register references overlap.
+ *
+ * \param[in] ref0 First register reference.
+ * \param[in] ref1 Second register reference.
+ * \return True if register references overlap.
+ */
+static inline bool pco_refs_are_overlapping_regs(pco_ref ref0, pco_ref ref1)
+{
+   assert(pco_ref_is_reg(ref0) || pco_ref_is_idx_reg(ref0));
+   assert(pco_ref_is_reg(ref1) || pco_ref_is_idx_reg(ref1));
+
+   if (pco_ref_get_reg_class(ref0) != pco_ref_get_reg_class(ref1))
+      return false;
+
+   unsigned ref0_start = pco_ref_get_reg_index(ref0);
+   unsigned ref0_end =
+      pco_ref_get_reg_index(ref0) + pco_ref_get_chans(ref0) - 1;
+   /**
+    * Index register accesses have a known minimum index but an unbounded
+    * maximum possible index.
+    */
+   if (pco_ref_is_idx_reg(ref0))
+      ref0_end = ~0;
+
+   unsigned ref1_start = pco_ref_get_reg_index(ref1);
+   unsigned ref1_end =
+      pco_ref_get_reg_index(ref1) + pco_ref_get_chans(ref1) - 1;
+   if (pco_ref_is_idx_reg(ref1))
+      ref1_end = ~0;
+
+   return ref0_start <= ref1_end && ref1_start <= ref0_end;
 }
 
 /**

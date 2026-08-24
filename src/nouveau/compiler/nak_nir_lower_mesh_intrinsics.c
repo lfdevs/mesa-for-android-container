@@ -374,8 +374,7 @@ lower_emulated_attributes_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
       return false;
 
    b->cursor = nir_before_instr(&intrin->instr);
-   nir_def *shared_offset = nir_iadd_imm(b, offset, nir_intrinsic_base(intrin));
-   shared_offset = nir_iadd(b, shared_offset, nir_imul_imm(b, vtx, 4));
+   nir_def *shared_offset = nir_iadd(b, offset, nir_imul_imm(b, vtx, 4));
 
    if (sem.location == VARYING_SLOT_CULL_PRIMITIVE)
       shared_offset =

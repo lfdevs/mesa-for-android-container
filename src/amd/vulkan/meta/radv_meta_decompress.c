@@ -167,7 +167,7 @@ radv_process_depth_image_layer(struct radv_cmd_buffer *cmd_buffer, struct radv_i
                            .pNext = &iview_usage_info,
                            .flags = VK_IMAGE_VIEW_CREATE_DRIVER_INTERNAL_BIT_MESA,
                            .image = radv_image_to_handle(image),
-                           .viewType = radv_meta_get_view_type(image),
+                           .viewType = radv_meta_get_view_type(image, true),
                            .format = image->vk.format,
                            .subresourceRange =
                               {

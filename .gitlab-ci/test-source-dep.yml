@@ -7,6 +7,12 @@
     - if: &is-scheduled-pipeline '$CI_PIPELINE_SOURCE == "schedule"'
       when: on_success
 
+# Rule to filter for only downstream pipelines.
+.downstream_pipeline-rules:
+  rules:
+    - if: &is-downstream-pipeline $CI_PIPELINE_SOURCE == "pipeline"
+      when: on_success
+
 # Override of the `default: retry:` settings, which automatically retries jobs
 # if one of the tests result didn't match its expectation; this override
 # disables that, but keeps the auto-retry for infrastructure failures.
@@ -30,6 +36,15 @@
     - if: *is-scheduled-pipeline
       when: never
 
+# Generic rule to not run the job in downstream pipelines. This is meant for
+# jobs that are not affected by external factors (kernel, firmware, etc.),
+# such as jobs that are testing mesa's internals, building docker images,
+# documentation, etc.
+.no_downstream_pipeline-rules:
+  rules:
+    - if: *is-downstream-pipeline
+      when: never
+
 # Rule for restricted traces jobs to only run for users with access to those
 # traces (both https://gitlab.freedesktop.org/gfx-ci/tracie/traces-db-private
 # for trace access, and minio bucket access for viewing result images from CI).
@@ -50,6 +65,7 @@
   rules:
     - !reference [.common-rules, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
+    - !reference [.downstream_pipeline-rules, rules]
     - changes: &core_file_list
         - .gitlab-ci.yml
         - .gitlab-ci/**/*
@@ -86,6 +102,7 @@
            $CI_JOB_NAME !~ "/performance$/")'
       when: never
     - !reference [.scheduled_pipeline-rules, rules]
+    - !reference [.downstream_pipeline-rules, rules]
     - changes:
         *core_file_list
       when: manual
@@ -208,6 +225,7 @@
   rules:
     - !reference [.never-post-merge-rules, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
+    - !reference [.no_downstream_pipeline-rules, rules]
     # pre-merge: must succeed if changing Rust, skip if not
     - if: &is-merge-attempt $GITLAB_USER_LOGIN == "marge-bot" && $CI_PIPELINE_SOURCE == "merge_request_event"
       changes: &rustfmt_files
@@ -239,6 +257,7 @@
   rules:
     - !reference [.never-post-merge-rules, rules]
     - !reference [.no_scheduled_pipelines-rules, rules]
+    - !reference [.no_downstream_pipeline-rules, rules]
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - .mr-label-maker.yml

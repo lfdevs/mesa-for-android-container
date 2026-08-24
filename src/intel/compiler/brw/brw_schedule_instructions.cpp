@@ -192,6 +192,7 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
    case SHADER_OPCODE_EXP2:
    case SHADER_OPCODE_SIN:
    case SHADER_OPCODE_COS:
+   case SHADER_OPCODE_TANH:
       /* 2 cycles:
        * math inv(8) g4<1>F g2<0,1,0>F      null       { align1 WE_normal 1Q };
        *

@@ -162,7 +162,7 @@ static inline void
 nv50_screen_tic_unlock(struct nv50_screen *screen, struct nv50_tic_entry *tic)
 {
    if (tic->id >= 0)
-      screen->tic.lock[tic->id / 32] &= ~(1 << (tic->id % 32));
+      screen->tic.lock[tic->id / 32] &= ~(1u << (tic->id % 32));
 }
 
 static inline void
@@ -177,7 +177,7 @@ nv50_screen_tic_free(struct nv50_screen *screen, struct nv50_tic_entry *tic)
 {
    if (tic->id >= 0) {
       screen->tic.entries[tic->id] = NULL;
-      screen->tic.lock[tic->id / 32] &= ~(1 << (tic->id % 32));
+      screen->tic.lock[tic->id / 32] &= ~(1u << (tic->id % 32));
    }
 }
 
@@ -186,7 +186,7 @@ nv50_screen_tsc_free(struct nv50_screen *screen, struct nv50_tsc_entry *tsc)
 {
    if (tsc->id >= 0) {
       screen->tsc.entries[tsc->id] = NULL;
-      screen->tsc.lock[tsc->id / 32] &= ~(1 << (tsc->id % 32));
+      screen->tsc.lock[tsc->id / 32] &= ~(1u << (tsc->id % 32));
    }
 }
 

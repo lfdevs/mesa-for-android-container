@@ -84,7 +84,7 @@ emit_common_so_memcpy(struct anv_memcpy_state *state,
        * distribution.
        */
       vf.GeometryDistributionEnable =
-         device->physical->instance->drirc.debug.vf_distribution;
+         device->physical->drirc.debug.vf_distribution;
 #endif
    }
    anv_batch_emit(batch, GENX(3DSTATE_VF_SGVS), sgvs);

@@ -349,6 +349,7 @@ drm_shim_bo_init(struct shim_bo *bo, size_t size)
       return -ENOMEM;
 
    bo->size = size;
+   drm_shim_bo_get(bo);
 
    return 0;
 }
@@ -380,13 +381,16 @@ drm_shim_bo_get(struct shim_bo *bo)
 void
 drm_shim_bo_put(struct shim_bo *bo)
 {
-   if (p_atomic_dec_return(&bo->refcount) == 0)
+   assert(p_atomic_read(&bo->refcount) > 0);
+
+   if (p_atomic_dec_return(&bo->refcount) > 0)
       return;
 
    if (shim_device.driver_bo_free)
       shim_device.driver_bo_free(bo);
 
    mtx_lock(&shim_device.lock);
+   _mesa_hash_table_u64_remove(shim_device.offset_map, bo->mem_addr);
    util_vma_heap_free(&shim_device.mem_heap, bo->mem_addr, bo->size);
    mtx_unlock(&shim_device.lock);
    free(bo);

@@ -56,32 +56,18 @@ if with_wayland_bind_display
     gen_args += [ '--bind-wl-display' ]
 endif
 
-g_egldispatchstubs_c = custom_target(
-  'g_egldispatchstubs.c',
+g_egldispatchstubs = custom_target(
   input : [
     'generate/gen_egl_dispatch.py',
     'generate/egl.xml', 'generate/egl_other.xml'
   ],
-  output : 'g_egldispatchstubs.c',
+  output : ['g_egldispatchstubs.c', 'g_egldispatchstubs.h'],
   command : [
-    prog_python, '@INPUT0@', gen_args, 'source', '@INPUT1@', '@INPUT2@'
+    prog_python, '@INPUT0@', gen_args,
+   '--source', '@OUTPUT0@', '--header', '@OUTPUT1@',
+   '@INPUT1@', '@INPUT2@'
   ],
-  depend_files : [ 'generate/eglFunctionList.py', glapi_xml_py_deps],
-  capture : true,
-)
-
-g_egldispatchstubs_h = custom_target(
-  'g_egldispatchstubs.h',
-  input : [
-    'generate/gen_egl_dispatch.py',
-    'generate/egl.xml', 'generate/egl_other.xml'
-  ],
-  output : 'g_egldispatchstubs.h',
-  command : [
-    prog_python, '@INPUT0@', gen_args, 'header', '@INPUT1@', '@INPUT2@'
-  ],
-  depend_files : [ 'generate/eglFunctionList.py', glapi_xml_py_deps],
-  capture : true,
+  depend_files : ['generate/eglFunctionList.py', glapi_xml_py_deps],
 )
 
 if with_dri
@@ -175,7 +161,7 @@ else
   egl_lib_version = '0.0.0'
   egl_lib_soversion = '0'
   deps_for_egl += dep_glvnd
-  files_egl += [g_egldispatchstubs_h, g_egldispatchstubs_c]
+  files_egl += [g_egldispatchstubs]
   files_egl += files('main/eglglvnd.c', 'main/egldispatchstubs.c')
 endif
 

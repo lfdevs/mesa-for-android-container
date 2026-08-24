@@ -213,19 +213,19 @@ write_cs_drv_push_constant_data(global struct anv_push_constants *push_data_ptr,
 
 #if GFX_VERx10 >= 125
    /* On Gfx12.5+ we always have the entire push constant space, so it's fine to copy */
-   push_data_ptr->cs.num_workgroups[0] = info->x;
-   push_data_ptr->cs.num_workgroups[1] = info->y;
-   push_data_ptr->cs.num_workgroups[2] = info->z;
+   push_data_ptr->drv_data.cs.num_workgroups[0] = info->x;
+   push_data_ptr->drv_data.cs.num_workgroups[1] = info->y;
+   push_data_ptr->drv_data.cs.num_workgroups[2] = info->z;
 #else
    /* Prior to Gfx12.5, the push constant data has to be aligned to 64B and
     * the beginning is based off the first location the shader needs. So if
     * the read location is does not include the workgroup, don't write it, we
     * would be overwriting some other data in the generated commands/data.
     */
-   if (offset <= offsetof(struct anv_push_constants, cs.num_workgroups[0])) {
-      push_data_ptr->cs.num_workgroups[0] = info->x;
-      push_data_ptr->cs.num_workgroups[1] = info->y;
-      push_data_ptr->cs.num_workgroups[2] = info->z;
+   if (offset <= offsetof(struct anv_push_constants, drv_data.cs.num_workgroups[0])) {
+      push_data_ptr->drv_data.cs.num_workgroups[0] = info->x;
+      push_data_ptr->drv_data.cs.num_workgroups[1] = info->y;
+      push_data_ptr->drv_data.cs.num_workgroups[2] = info->z;
    }
 #endif
 }

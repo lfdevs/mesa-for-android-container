@@ -55,10 +55,10 @@ postra_liveness(jay_function *func)
       /* Calculate liveness locally */
       jay_foreach_successor(blk, succ, GPR) {
          BITSET_OR(blk->postra_gpr_live_out, blk->postra_gpr_live_out,
-                   succ->postra_gpr_live_in);
+                   (*succ)->postra_gpr_live_in);
       }
 
-      BITSET_DECLARE(live, JAY_NUM_PHYS_GRF);
+      BITSET_DECLARE(live, JAY_MAX_PHYS_GRF);
       memcpy(live, blk->postra_gpr_live_out, sizeof(live));
 
       jay_foreach_inst_in_block_rev(blk, ins) {
@@ -107,6 +107,7 @@ source_killed(BITSET_WORD *live, const jay_inst *I, unsigned s)
  */
 struct candidate {
    uint32_t def_ip, last_use_ip;
+   bool mac_candidate;
 };
 
 static int
@@ -180,6 +181,18 @@ can_access_accum(jay_shader *shader, jay_inst *I, signed src)
    return true;
 }
 
+static inline bool
+could_be_mac(const jay_inst *I)
+{
+   /* The bspec says "Instructions that specify an implicit accumulator
+    * source cannot specify an explicit accumulator source operand.". But
+    * it works fine on Lunar Lake so ¯\_(ツ)_/¯ ... gate on !strict.
+    */
+   return (I->op == JAY_OPCODE_MAD && I->type == JAY_TYPE_F32) &&
+          !(I->src[0].negate || I->src[0].abs) &&
+          !(jay_debug & JAY_DBG_STRICT);
+}
+
 static inline void
 substitute_acc(jay_def *x, unsigned acc_p1)
 {
@@ -209,7 +222,7 @@ pass(jay_function *func)
 
    /* in_use[acc][IP] set if acc is in-use /before/ executing instruction IP */
    BITSET_WORD *in_use[JAY_MAX_ACCUMS];
-   unsigned nr_accums = func->shader->dispatch_width == 32 ? 2 : 4;
+   unsigned nr_accums = jay_num_accums(func->shader);
 
    for (unsigned i = 0; i < nr_accums; ++i) {
       in_use[i] = BITSET_LINEAR_ZALLOC(linctx, ip_bound);
@@ -222,12 +235,13 @@ pass(jay_function *func)
       util_dynarray_clear(&candidates);
 
       /* Live-set at each point in the program */
-      BITSET_DECLARE(live, JAY_NUM_PHYS_GRF);
+      BITSET_DECLARE(live, JAY_MAX_PHYS_GRF);
       memcpy(live, block->postra_gpr_live_out, sizeof(live));
 
       uint32_t ip = ip_bound;
-      uint32_t last_use_ip[JAY_NUM_PHYS_GRF] = { 0 };
+      uint32_t last_use_ip[JAY_MAX_PHYS_GRF] = { 0 };
       uint32_t pre_live = 0;
+      bool mac_candidates[JAY_MAX_PHYS_GRF] = { false };
 
       jay_foreach_inst_in_block_rev(block, I) {
          --ip;
@@ -236,20 +250,23 @@ pass(jay_function *func)
          /* Collect candidates */
          if (I->dst.file == GPR && last_use_ip[I->dst.reg]) {
             if (can_access_accum(func->shader, I, -1)) {
-               struct candidate c = { ip, last_use_ip[I->dst.reg] };
+               struct candidate c = { ip, last_use_ip[I->dst.reg],
+                                      mac_candidates[I->dst.reg] };
                util_dynarray_append(&candidates, c);
             }
 
             last_use_ip[I->dst.reg] = 0;
+            mac_candidates[I->dst.reg] = 0;
          }
 
-         if (I->dst.file == ACCUM || I->dst.file == UACCUM) {
+         if (I->dst.file == ACCUM) {
             pre_live &= ~BITFIELD_BIT(I->dst.reg / 2);
          }
 
          jay_foreach_src(I, s) {
             if (I->src[s].file == GPR && source_killed(live, I, s)) {
                last_use_ip[I->src[s].reg] = ip;
+               mac_candidates[I->src[s].reg] |= s == 0 && could_be_mac(I);
             }
          }
 
@@ -260,10 +277,11 @@ pass(jay_function *func)
 
                jay_foreach_comp(I->src[s], c) {
                   last_use_ip[I->src[s].reg + c] = 0;
+                  mac_candidates[I->src[s].reg + c] = false;
                }
             }
 
-            if (I->src[s].file == ACCUM || I->src[s].file == UACCUM) {
+            if (I->src[s].file == ACCUM) {
                pre_live |= BITFIELD_BIT(I->src[s].reg / 2);
             }
          }
@@ -293,7 +311,16 @@ pass(jay_function *func)
 
       /* Greedily assign candidates */
       util_dynarray_foreach(&candidates, struct candidate, c) {
-         for (unsigned i = 0; i < nr_accums; ++i) {
+         /* MAC can only use acc0 but other instructions have no such
+          * restriction. If we know this isn't a candidate for MAC, bias away
+          * from acc0 to keep acc0 for some other MAC.
+          */
+         unsigned bias = c->mac_candidate ? 0 : 1;
+
+         for (unsigned j = 0; j < nr_accums; ++j) {
+            unsigned i = j + bias;
+            i = i >= nr_accums ? i - nr_accums : i;
+
             if (!BITSET_TEST_RANGE(in_use[i], c->def_ip + 1, c->last_use_ip)) {
                BITSET_SET_RANGE(in_use[i], c->def_ip + 1, c->last_use_ip);
                ra[c->def_ip] = i + 1;
@@ -303,7 +330,7 @@ pass(jay_function *func)
       }
 
       uint32_t min_ip = ip;
-      uint8_t gpr_to_acc_p1[JAY_NUM_PHYS_GRF] = { 0 };
+      uint8_t gpr_to_acc_p1[JAY_MAX_PHYS_GRF] = { 0 };
 
       jay_foreach_inst_in_block_safe(block, I) {
          /* Rewrite operands using accumulators */
@@ -321,17 +348,8 @@ pass(jay_function *func)
             substitute_acc(&I->dst, ra[ip]);
          }
 
-         /* Rewrite MAD->MAC where possible to improve code density.
-          *
-          * The bspec says "Instructions that specify an implicit accumulator
-          * source cannot specify an explicit accumulator source operand.". But
-          * it works fine on Lunar Lake so ¯\_(ツ)_/¯ ... gate on !strict.
-          */
-         if ((I->op == JAY_OPCODE_MAD && I->type == JAY_TYPE_F32) &&
-             (I->src[0].file == ACCUM && I->src[0].reg == 0) &&
-             !(I->src[0].negate || I->src[0].abs) &&
-             !(jay_debug & JAY_DBG_STRICT)) {
-
+         /* Rewrite MAD->MAC where possible to improve code density. */
+         if (could_be_mac(I) && I->src[0].file == ACCUM && I->src[0].reg == 0) {
             I->op = JAY_OPCODE_MAC;
             SWAP(I->src[0], I->src[2]);
          }

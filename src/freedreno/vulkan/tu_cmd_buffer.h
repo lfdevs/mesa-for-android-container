@@ -314,6 +314,7 @@ struct tu_render_pass_state
    bool has_zpass_done_sample_count_write_in_rp;
    bool disable_gmem;
    bool sysmem_single_prim_mode;
+   bool lrz_disable_for_next_rp;
 
    /* This is set if, at any point in the render pass, we were not able to
     * duplicate the viewport per-view due to the user using multiple viewports
@@ -562,7 +563,8 @@ struct tu_cmd_state
       struct tu_framebuffer *framebuffer;
       VkRect2D render_areas[MAX_VIEWS];
       bool per_layer_render_area;
-      bool fdm_subsampled;
+      bool fdm_any_subsampled;
+      bool fdm_custom_resolve_subsampled;
       enum tu_gmem_layout gmem_layout;
       uint32_t gmem_layout_divisor;
 
@@ -573,7 +575,8 @@ struct tu_cmd_state
    } suspended_pass;
 
    bool fdm_enabled;
-   bool fdm_subsampled;
+   bool fdm_any_subsampled;
+   bool fdm_custom_resolve_subsampled;
 
    bool tessfactor_addr_set;
    bool predication_active;
@@ -696,6 +699,11 @@ struct tu_cmd_buffer
    struct tu_subpass_attachment dynamic_color_attachments[MAX_RTS];
    struct tu_subpass_attachment dynamic_input_attachments[MAX_RTS + 1];
    struct tu_subpass_attachment dynamic_resolve_attachments[MAX_RTS + 1];
+   /* The color attachments of the custom resolve subpass, which cannot share
+    * dynamic_resolve_attachments: the main subpass still needs its resolve
+    * list for any fixed-function resolves mixed into the pass.
+    */
+   struct tu_subpass_attachment dynamic_custom_resolve_attachments[MAX_RTS];
    struct tu_subpass_attachment dynamic_unresolve_attachments[MAX_RTS + 1];
    const struct tu_image_view *dynamic_attachments[3 * (MAX_RTS + 1) + 2];
    VkClearValue dynamic_clear_values[3 * (MAX_RTS + 1)];

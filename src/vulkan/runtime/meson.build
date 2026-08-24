@@ -278,9 +278,6 @@ vulkan_runtime_deps = [
 
 if prog_glslang.found()
   if with_bvh
-    subdir('radix_sort')
-    vulkan_runtime_files += radix_sort_files
-    vulkan_runtime_files += radix_sort_spv
     subdir('bvh')
     vulkan_runtime_files += files('vk_acceleration_structure.c')
     vulkan_runtime_files += bvh_spv

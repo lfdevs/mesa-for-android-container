@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: MIT
  */
 
-/* Helpers for encoding BVH nodes on different HW generations. */
-
 #ifndef RADV_BVH_INVOCATION_CLUSTER_H
 #define RADV_BVH_INVOCATION_CLUSTER_H
 

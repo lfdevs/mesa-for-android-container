@@ -2180,7 +2180,7 @@ static bool si_is_reduction_mode_supported(struct pipe_screen *screen, enum pipe
    return ac_is_reduction_mode_supported(&sscreen->info, format, true);
 }
 
-static bool si_is_format_supported(struct pipe_screen *screen, enum pipe_format format,
+bool si_is_format_supported(struct pipe_screen *screen, enum pipe_format format,
                                    enum pipe_texture_target target, unsigned sample_count,
                                    unsigned storage_sample_count, unsigned usage)
 {
@@ -4597,6 +4597,15 @@ static void si_set_vertex_buffers(struct pipe_context *ctx, unsigned count,
       si_vs_key_update_inputs(sctx);
 }
 
+static void si_vertex_state_destroy(struct pipe_screen *screen,
+                                    struct pipe_vertex_state *state)
+{
+   pipe_vertex_buffer_unreference(&state->input.vbuffer);
+   pipe_resource_reference(&state->input.indexbuf, NULL);
+   FREE(state);
+}
+
+
 static struct pipe_vertex_state *
 si_create_vertex_state(struct pipe_screen *screen,
                        struct pipe_vertex_buffer *buffer,
@@ -4608,6 +4617,9 @@ si_create_vertex_state(struct pipe_screen *screen,
    struct si_screen *sscreen = (struct si_screen *)screen;
    struct si_vertex_state *state = CALLOC_STRUCT(si_vertex_state);
 
+   if (!state)
+      return NULL;
+
    util_init_pipe_vertex_state(screen, buffer, elements, num_elements, indexbuf, full_velem_mask,
                                &state->b);
 
@@ -4617,6 +4629,12 @@ si_create_vertex_state(struct pipe_screen *screen,
    struct si_context ctx = {};
    ctx.b.screen = screen;
    struct si_vertex_elements *velems = si_create_vertex_elements(&ctx.b, num_elements, elements);
+
+   if (!velems) {
+      si_vertex_state_destroy(screen, &state->b);
+      return NULL;
+   }
+
    state->velems = *velems;
    si_delete_vertex_element(&ctx.b, velems);
 
@@ -4637,14 +4655,6 @@ si_create_vertex_state(struct pipe_screen *screen,
    }
 
    return &state->b;
-}
-
-static void si_vertex_state_destroy(struct pipe_screen *screen,
-                                    struct pipe_vertex_state *state)
-{
-   pipe_vertex_buffer_unreference(&state->input.vbuffer);
-   pipe_resource_reference(&state->input.indexbuf, NULL);
-   FREE(state);
 }
 
 static struct pipe_vertex_state *
@@ -4798,7 +4808,6 @@ void si_init_state_functions(struct si_context *sctx)
 
 void si_init_screen_state_functions(struct si_screen *sscreen)
 {
-   sscreen->b.is_format_supported = si_is_format_supported;
    sscreen->b.create_vertex_state = si_pipe_create_vertex_state;
    sscreen->b.vertex_state_destroy = si_pipe_vertex_state_destroy;
 

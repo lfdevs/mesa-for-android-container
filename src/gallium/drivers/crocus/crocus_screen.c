@@ -374,6 +374,7 @@ crocus_init_screen_caps(struct crocus_screen *screen)
    caps->max_texture_gather_offset = devinfo->ver >= 7 ? 31 :
       (devinfo->ver == 6 ? 7 : 0);
    caps->max_vertex_streams = devinfo->ver >= 7 ? 4 : 1;
+   caps->device_type = PIPE_DEVICE_TYPE_INTEGRATED_GPU;
    caps->vendor_id = 0x8086;
    caps->device_id = screen->pci_id;
 
@@ -620,6 +621,8 @@ crocus_screen_create(int fd, const struct pipe_screen_config *config)
    screen->compiler->shader_perf_log = crocus_shader_perf_log;
    screen->compiler->supports_shader_constants = false;
    screen->compiler->constant_buffer_0_is_relative = true;
+   screen->compiler->limit_trig_input_range =
+      screen->driconf.limit_trig_input_range;
 
    if (screen->devinfo.ver >= 7) {
       screen->l3_config_3d = crocus_get_default_l3_config(&screen->devinfo, false);

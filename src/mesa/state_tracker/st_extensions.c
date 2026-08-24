@@ -1103,6 +1103,7 @@ void st_init_extensions(struct pipe_screen *screen,
    EXT_CAP(EXT_depth_bounds_test,            depth_bounds_test);
    EXT_CAP(EXT_disjoint_timer_query,         query_timestamp);
    EXT_CAP(EXT_draw_buffers2,                indep_blend_enable);
+   EXT_CAP(EXT_frag_depth,                   fragment_shader_depth);
    EXT_CAP(EXT_memory_object,                memobj);
 #ifndef _WIN32
    EXT_CAP(EXT_memory_object_fd,             memobj);
@@ -1186,7 +1187,8 @@ void st_init_extensions(struct pipe_screen *screen,
                           ARRAY_SIZE(depthstencil_mapping), PIPE_TEXTURE_2D,
                           PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_SAMPLER_VIEW);
 
-   if (!screen->caps.native_fp32_depth)
+   if (!screen->caps.native_fp32_depth &&
+       (api == API_OPENGL_CORE || api == API_OPENGL_COMPAT))
       extensions->ARB_depth_buffer_float = GL_FALSE;
 
    init_format_extensions(screen, extensions, texture_mapping,
@@ -1495,14 +1497,14 @@ void st_init_extensions(struct pipe_screen *screen,
                                                   samples,
                                                   storage_samples,
                                                   PIPE_BIND_RENDER_TARGET)) {
-                     unsigned i = consts->NumSupportedMultisampleModes;
+                     unsigned mode = consts->NumSupportedMultisampleModes;
 
-                     assert(i < ARRAY_SIZE(consts->SupportedMultisampleModes));
-                     consts->SupportedMultisampleModes[i].NumColorSamples =
+                     assert(mode < ARRAY_SIZE(consts->SupportedMultisampleModes));
+                     consts->SupportedMultisampleModes[mode].NumColorSamples =
                         samples;
-                     consts->SupportedMultisampleModes[i].NumColorStorageSamples =
+                     consts->SupportedMultisampleModes[mode].NumColorStorageSamples =
                         storage_samples;
-                     consts->SupportedMultisampleModes[i].NumDepthStencilSamples =
+                     consts->SupportedMultisampleModes[mode].NumDepthStencilSamples =
                         depth_samples;
                      consts->NumSupportedMultisampleModes++;
                   }

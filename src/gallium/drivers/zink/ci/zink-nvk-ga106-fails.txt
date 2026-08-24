@@ -34,7 +34,6 @@ spec@!opengl 1.1@polygon-mode-offset@config 5: Expected blue pixel in center,Fai
 spec@!opengl 1.1@polygon-mode-offset@config 6: Expected blue pixel in center,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on right edge,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 6: Expected white pixel on top edge,Fail
-spec@!opengl 1.2@copyteximage 3d,Fail
 spec@!opengl 2.1@pbo,Fail
 spec@!opengl 2.1@pbo@test_polygon_stip,Fail
 spec@!opengl 2.1@polygon-stipple-fs,Fail
@@ -330,13 +329,8 @@ spec@arb_sample_shading@samplemask 8@sample mask_in_one,Fail
 spec@arb_shader_image_load_store@max-size,Crash
 spec@arb_shader_image_load_store@max-size@image2DMS max size test/8x16384x8x1,Fail
 spec@arb_shader_image_load_store@max-size@image3D max size test/8x8x16384x1,Fail
-spec@arb_shader_storage_buffer_object@max-ssbo-size@fs,Crash
-spec@arb_shader_storage_buffer_object@max-ssbo-size@vs,Crash
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
-spec@arb_shading_language_packing@execution@built-in-functions@fs-packhalf2x16,Fail
-spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16,Fail
-spec@arb_texture_cube_map_array@texsubimage cube_map_array,Fail
 spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
 spec@egl 1.4@egl-ext_egl_image_storage,Crash
 spec@egl 1.4@eglterminate then unbind context,Fail
@@ -348,13 +342,10 @@ spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
 spec@ext_external_objects@vk-image-overwrite,Crash
 spec@ext_external_objects@vk-image-overwrite@RGBA 4 UNORM linear,Fail
-spec@ext_texture_array@texsubimage array,Fail
 spec@ext_transform_feedback2@draw-auto,Fail
 spec@ext_transform_feedback@tessellation quad_strip wireframe,Fail
 spec@ext_transform_feedback@tessellation quads wireframe,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-lots-of-tex,Fail
-spec@glsl-es-3.00@execution@built-in-functions@fs-packhalf2x16,Fail
-spec@glsl-es-3.00@execution@built-in-functions@vs-packhalf2x16,Fail
 spec@khr_texture_compression_astc@miptree-gl srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gl srgb-fp@sRGB decode full precision,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
@@ -364,12 +355,9 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp@sRGB decode full 
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
 
-api@clgetcommandqueueinfo,Fail
 api@clgetdeviceinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
-api@clgetkernelarginfo,Fail
 api@cllinkprogram,Fail
-api@clsetkernelarg,Fail
 api@clsetkernelarg@Input checks,Fail
 api@clsetkernelarg@Set kernel argument for array,Fail
 api@clsetkernelarg@Set kernel argument for buffer,Fail
@@ -2473,7 +2461,6 @@ program@execute@global-memory@(16 x 1 x 1) (16 x 1 x 1),Fail
 program@execute@global-memory@(64 x 1 x 1) (4 x 1 x 1),Fail
 program@execute@global-memory@2 global memory objects,Fail
 program@execute@global-memory@Simple,Fail
-program@execute@global-offset,Fail
 program@execute@global-offset@1D- global_size 4 0 0- global_offset 9 0 0,Fail
 program@execute@global-offset@1D- global_size 4 0 0- global_offset 9 8 0,Fail
 program@execute@global-offset@1D- global_size 4 0 0- global_offset 9 8 7,Fail
@@ -4137,5 +4124,10 @@ program@execute@vstore@vstorea_half-float-private@vector storea_half private off
 program@execute@vstore@vstorea_half-float-private@vector storea_half private offset float8,Fail
 
 # Nightly run expectations update
+api@clsetkernelarg@Trigger CL_INVALID_ARG_SIZE if arg_size is zero and the argument is declared with the __local qualifier,Fail
 spec@arb_tessellation_shader@execution@variable-indexing@tcs-output-array-dvec4-index-wr,Crash
+vulkan@shaders@cmat-uniform-ctor,Fail
 
+# uprev Piglit in Mesa
+spec@arb_tessellation_shader@execution@tesslevels-indirect,Fail
+spec@arb_texture_view@tex-view,Fail

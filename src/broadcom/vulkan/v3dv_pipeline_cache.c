@@ -33,9 +33,6 @@ static const bool debug_cache = false;
 static const bool dump_stats = false;
 static const bool dump_stats_on_destroy = false;
 
-/* Shared for nir/variants */
-#define V3DV_MAX_PIPELINE_CACHE_ENTRIES 4096
-
 static uint32_t
 blake3_hash_func(const void *blake3)
 {
@@ -45,7 +42,7 @@ blake3_hash_func(const void *blake3)
 static bool
 blake3_compare_func(const void *blake3_a, const void *blake3_b)
 {
-   return memcmp(blake3_a, blake3_b, 20) == 0;
+   return memcmp(blake3_a, blake3_b, BLAKE3_KEY_LEN) == 0;
 }
 
 struct serialized_nir {
@@ -82,6 +79,15 @@ pipeline_cache_unlock(struct v3dv_pipeline_cache *cache)
       mtx_unlock(&cache->mutex);
 }
 
+static bool
+pipeline_cache_is_full(const struct v3dv_pipeline_cache *cache,
+                       uint32_t entry_count)
+{
+   const uint32_t max_entries =
+      cache->device->instance->pipeline_cache_max_entries;
+   return max_entries > 0 && entry_count >= max_entries;
+}
+
 void
 v3dv_pipeline_cache_upload_nir(struct v3dv_pipeline *pipeline,
                                struct v3dv_pipeline_cache *cache,
@@ -91,7 +97,7 @@ v3dv_pipeline_cache_upload_nir(struct v3dv_pipeline *pipeline,
    if (!cache || !cache->nir_cache)
       return;
 
-   if (cache->nir_stats.count > V3DV_MAX_PIPELINE_CACHE_ENTRIES)
+   if (pipeline_cache_is_full(cache, cache->nir_stats.count))
       return;
 
    pipeline_cache_lock(cache);
@@ -310,7 +316,7 @@ v3dv_pipeline_cache_search_for_pipeline(struct v3dv_pipeline_cache *cache,
     */
    if (disk_cache && device->instance->pipeline_cache_enabled) {
       cache_key cache_key;
-      disk_cache_compute_key(disk_cache, blake3_key, 20, cache_key);
+      disk_cache_compute_key(disk_cache, blake3_key, BLAKE3_KEY_LEN, cache_key);
 
       size_t buffer_size;
       uint8_t *buffer = disk_cache_get(disk_cache, cache_key, &buffer_size);
@@ -365,8 +371,11 @@ v3dv_pipeline_shared_data_destroy(struct v3dv_device *device,
       }
    }
 
-   if (shared_data->assembly_bo)
-      v3dv_bo_free(device, shared_data->assembly_bo);
+   if (shared_data->assembly_bo){
+      shared_data->assembly_bo->report_obj_type = shared_data->owner_type;
+      shared_data->assembly_bo->report_obj_handle = shared_data->owner_handle;
+      v3dv_bo_free(device, shared_data->assembly_bo, 0);
+   }
 
    vk_free(&device->vk.alloc, shared_data);
 }
@@ -400,8 +409,13 @@ v3dv_pipeline_shared_data_new(struct v3dv_pipeline_cache *cache,
       new_entry->variants[stage] = variants[stage];
    }
 
+   new_entry->owner_type = VK_OBJECT_TYPE_PIPELINE_CACHE;
+   new_entry->owner_handle = vk_object_to_u64_handle(&cache->base);
+
    struct v3dv_bo *bo = v3dv_bo_alloc(cache->device, total_assembly_size,
-                                      "pipeline shader assembly", true);
+                                      "pipeline shader assembly", true,
+                                      new_entry->owner_type,
+                                      new_entry->owner_handle);
    if (!bo) {
       mesa_loge("failed to allocate memory for shaders assembly\n");
       goto fail;
@@ -434,7 +448,7 @@ pipeline_cache_upload_shared_data(struct v3dv_pipeline_cache *cache,
    if (!cache || !cache->cache)
       return;
 
-   if (cache->stats.count > V3DV_MAX_PIPELINE_CACHE_ENTRIES)
+   if (pipeline_cache_is_full(cache, cache->stats.count))
       return;
 
    pipeline_cache_lock(cache);
@@ -452,6 +466,10 @@ pipeline_cache_upload_shared_data(struct v3dv_pipeline_cache *cache,
    }
 
    v3dv_pipeline_shared_data_ref(shared_data);
+
+   shared_data->owner_type = VK_OBJECT_TYPE_PIPELINE_CACHE;
+   shared_data->owner_handle = vk_object_to_u64_handle(&cache->base);
+
    _mesa_hash_table_insert(cache->cache, shared_data->blake3_key, shared_data);
    cache->stats.count++;
    if (debug_cache) {
@@ -480,7 +498,7 @@ pipeline_cache_upload_shared_data(struct v3dv_pipeline_cache *cache,
       blob_init(&binary);
       if (v3dv_pipeline_shared_data_write_to_blob(shared_data, &binary)) {
          cache_key cache_key;
-         disk_cache_compute_key(disk_cache, shared_data->blake3_key, 20, cache_key);
+         disk_cache_compute_key(disk_cache, shared_data->blake3_key, BLAKE3_KEY_LEN, cache_key);
 
          if (V3D_DBG(CACHE)) {
             char blake3buf[BLAKE3_HEX_LEN];
@@ -840,6 +858,10 @@ v3dv_MergePipelineCaches(VkDevice device,
             continue;
 
          v3dv_pipeline_shared_data_ref(cache_entry);
+
+         cache_entry->owner_type = VK_OBJECT_TYPE_PIPELINE_CACHE;
+         cache_entry->owner_handle = vk_object_to_u64_handle(&dst->base);
+
          _mesa_hash_table_insert(dst->cache, cache_entry->blake3_key, cache_entry);
 
          dst->stats.count++;

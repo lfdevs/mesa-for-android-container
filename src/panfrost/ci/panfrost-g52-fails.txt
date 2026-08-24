@@ -275,10 +275,9 @@ afbcp-spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp,Fail
 afbcp-spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp@sRGB decode full precision,Fail
 
 # uprev Piglit in Mesa
-afbcp-spec@arb_texture_view@tex-view,Fail
 glx@glx-copy-sub-buffer,Fail
 spec@!opengl 1.1@large-tex,Fail
-spec@arb_texture_view@tex-view,Fail
+spec@arb_framebuffer_object@framebuffer-blit-oblong tall,Fail
 
 # Piglit tests require too much precision in alpha-to-coverage higher sample-counts
 spec@ext_framebuffer_multisample@alpha-to-coverage-dual-src-blend 6,Fail
@@ -297,8 +296,6 @@ dEQP-VK.api.object_management.max_concurrent.device_group,Fail
 # CTS bug: https://gerrit.khronos.org/c/vk-gl-cts/+/19823
 dEQP-VK.api.device_init.create_device_global_priority.basic,Fail
 dEQP-VK.api.device_init.create_device_global_priority_khr.basic,Fail
-dEQP-VK.api.device_init.create_device_global_priority_query.basic,Fail
-dEQP-VK.api.device_init.create_device_global_priority_query_khr.basic,Fail
 
 # New failures with VKCTS 1.4.4.0
 dEQP-VK.pipeline.fast_linked_library.vertex_input.misc.unbound_input,Crash
@@ -327,13 +324,8 @@ dEQP-VK.pipeline.fast_linked_library.vertex_input.misc.unbound_input_dynamic_int
 dEQP-VK.pipeline.fast_linked_library.vertex_input.misc.unbound_input_integer,Crash
 dEQP-VK.pipeline.monolithic.vertex_input.misc.unbound_input_dynamic_integer,Crash
 dEQP-VK.pipeline.monolithic.vertex_input.misc.unbound_input_integer,Crash
-dEQP-VK.wsi.acquire_drm_display.acquire_drm_display_invalid_fd,Crash
-dEQP-VK.wsi.acquire_drm_display.acquire_drm_display_not_master,Crash
-dEQP-VK.wsi.acquire_drm_display.acquire_drm_display_unowned_connector_id,Crash
-dEQP-VK.wsi.acquire_drm_display.acquire_drm_display,Crash
-dEQP-VK.wsi.acquire_drm_display.get_drm_display_invalid_connector_id,Crash
-dEQP-VK.wsi.acquire_drm_display.get_drm_display_invalid_fd,Crash
-dEQP-VK.wsi.acquire_drm_display.get_drm_display_not_master,Crash
-dEQP-VK.wsi.acquire_drm_display.get_drm_display_unowned_connector_id,Crash
-dEQP-VK.wsi.acquire_drm_display.get_drm_display,Crash
-dEQP-VK.wsi.acquire_drm_display.release_display,Crash
+
+# VKCTS 1.4.5.3 -> 1.4.6.1 uprev
+dEQP-VK.rasterization.primitives.no_stipple.lines,Fail
+dEQP-VK.rasterization.primitives.no_stipple.lines_factor_0,Fail
+dEQP-VK.rasterization.primitives.no_stipple.lines_factor_large,Fail

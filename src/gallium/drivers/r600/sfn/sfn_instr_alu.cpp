@@ -1639,6 +1639,7 @@ AluInstr::from_nir(nir_alu_instr *alu, Shader& shader)
          return emit_alu_fma_64bit(*alu, op3_fma_64, shader);
 
       case nir_op_fadd:
+      case nir_op_fadd_rtne:
          return emit_alu_op2_64bit(*alu, op2_add_64, shader);
       case nir_op_fmul:
          return emit_alu_op2_64bit(*alu, op2_mul_64, shader);

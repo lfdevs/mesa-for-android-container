@@ -11,13 +11,19 @@
 #include "util/macros.h"
 #include "util/u_inlines.h"
 
+#include <limits.h>
+#include <stdint.h>
+
 #include "tensorflow/lite/builtin_ops.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/core/c/builtin_op_data.h"
 
 /* TODO: Move to TfLiteAsyncKernel for zero-copy of buffers */
 
-static bool fused_relu6_supported(TfLiteTensor *tensor);
+static bool fill_fused_activation_range(TfLiteFusedActivation activation,
+                                        TfLiteTensor *tensor,
+                                        int *activation_min,
+                                        int *activation_max);
 
 enum teflon_debug_flags {
    TEFLON_DEBUG_VERBOSE = 1 << 1,
@@ -120,9 +126,11 @@ fill_operation(struct teflon_delegate *delegate, TfLiteContext *tf_context, TfLi
          operation->conv.depthwise = false;
          operation->conv.relu = params->activation == kTfLiteActRelu ||
                                 params->activation == kTfLiteActRelu6;
-
-         if (params->activation == kTfLiteActRelu6)
-            return fused_relu6_supported(&tf_context->tensors[node->outputs->data[0]]);
+         if (!fill_fused_activation_range(params->activation,
+                                          &tf_context->tensors[node->outputs->data[0]],
+                                          &operation->conv.activation_min,
+                                          &operation->conv.activation_max))
+            return false;
 
       } else {
          TfLiteDepthwiseConvParams *params = (TfLiteDepthwiseConvParams *)node->builtin_data;
@@ -152,9 +160,11 @@ fill_operation(struct teflon_delegate *delegate, TfLiteContext *tf_context, TfLi
          operation->conv.depthwise = true;
          operation->conv.relu = params->activation == kTfLiteActRelu ||
                                 params->activation == kTfLiteActRelu6;
-
-         if (params->activation == kTfLiteActRelu6)
-            return fused_relu6_supported(&tf_context->tensors[node->outputs->data[0]]);
+         if (!fill_fused_activation_range(params->activation,
+                                          &tf_context->tensors[node->outputs->data[0]],
+                                          &operation->conv.activation_min,
+                                          &operation->conv.activation_max))
+            return false;
       }
       operation->conv.pointwise = operation->conv.weight_tensor->dims[1] == 1 &&
                                   operation->conv.weight_tensor->dims[2] == 1;
@@ -201,9 +211,16 @@ fill_operation(struct teflon_delegate *delegate, TfLiteContext *tf_context, TfLi
    }
    case kTfLiteBuiltinConcatenation: {
       TfLiteConcatenationParams *params = node->builtin_data;
+      int input_rank = tf_context->tensors[node->inputs->data[0]].dims->size;
+      int axis = params->axis;
+
+      if (axis < 0)
+         axis += input_rank;
+      if (axis < 0 || axis >= input_rank || input_rank > 4)
+         return false;
 
       operation->type = PIPE_ML_OPERATION_TYPE_CONCATENATION;
-      operation->conc.axis = params->axis;
+      operation->conc.axis = 4 - input_rank + axis;
       break;
    }
    case kTfLiteBuiltinSplit:
@@ -236,13 +253,19 @@ fill_operation(struct teflon_delegate *delegate, TfLiteContext *tf_context, TfLi
       break;
    }
    case kTfLiteBuiltinFullyConnected: {
+      TfLiteFullyConnectedParams *params = node->builtin_data;
+
       if (tf_context->tensors[node->inputs->data[0]].type != kTfLiteInt8 &&
           tf_context->tensors[node->inputs->data[0]].type != kTfLiteUInt8)
+         return false;
+      if (params->activation != kTfLiteActNone &&
+          params->activation != kTfLiteActRelu)
          return false;
 
       operation->type = PIPE_ML_OPERATION_TYPE_FULLY_CONNECTED;
       operation->fcon.weight_tensor = &tensors[node->inputs->data[1]];
       operation->fcon.bias_tensor = &tensors[node->inputs->data[2]];
+      operation->fcon.relu = params->activation == kTfLiteActRelu;
       break;
    }
    case kTfLiteBuiltinReshape: {
@@ -599,10 +622,16 @@ partition_init(TfLiteContext *tf_context, const char *buffer, size_t length)
    if (debug_get_option_debug_teflon() & TEFLON_DEBUG_VERBOSE)
       dump_graph(delegate->tensors, tf_context->tensors_size, operations, params->nodes_to_replace->size);
 
+   for (int i = 0; i < params->output_tensors->size; i++)
+      delegate->tensors[params->output_tensors->data[i]].is_external_output = true;
+
    struct pipe_ml_subgraph *subgraph;
    subgraph = delegate->ml_dev->ml_subgraph_create(delegate->ml_dev,
                                                    operations,
                                                    params->nodes_to_replace->size);
+
+   for (int i = 0; i < params->output_tensors->size; i++)
+      delegate->tensors[params->output_tensors->data[i]].is_external_output = false;
 
    struct teflon_subgraph *tsubgraph = calloc(1, sizeof(*tsubgraph));
    tsubgraph->base = subgraph;
@@ -621,7 +650,6 @@ partition_init(TfLiteContext *tf_context, const char *buffer, size_t length)
    tsubgraph->output_tensors = malloc(params->output_tensors->size * sizeof(*tsubgraph->output_tensors));
    memcpy(tsubgraph->output_tensors, params->output_tensors->data,
           params->output_tensors->size * sizeof(*tsubgraph->output_tensors));
-
    if (unlikely(debug_get_option_debug_teflon() & TEFLON_DEBUG_VERBOSE)) {
       struct timespec time;
       clock_gettime(CLOCK_MONOTONIC, &time);
@@ -819,31 +847,99 @@ tflite_fused_activation_name(TfLiteFusedActivation activation)
 }
 
 static bool
-fused_relu6_supported(TfLiteTensor *tensor)
+quantize_activation_value(float scale, int zero_point, float value, int *q)
 {
-   TfLiteAffineQuantization *affine;
+   double quantized = value / (double)scale;
+
+   if (quantized < INT_MIN || quantized > INT_MAX)
+      return false;
+
+   *q = zero_point + (int)(quantized + 0.5);
+
+   return true;
+}
+
+static bool
+get_tensor_quantization(TfLiteTensor *tensor, float *scale, int *zero_point)
+{
+   const TfLiteAffineQuantization *quant;
+
+   if (tensor->quantization.type != kTfLiteAffineQuantization)
+      return false;
+
+   quant = (const TfLiteAffineQuantization *)tensor->quantization.params;
+   if (!quant || !quant->scale || !quant->zero_point ||
+       quant->scale->size < 1 || quant->zero_point->size < 1)
+      return false;
+
+   for (int i = 1; i < quant->scale->size; i++) {
+      int zp_idx = quant->zero_point->size == 1 ? 0 : i;
+
+      if (zp_idx >= quant->zero_point->size)
+         return false;
+      if (quant->scale->data[i] != quant->scale->data[0] ||
+          quant->zero_point->data[zp_idx] != quant->zero_point->data[0])
+         return false;
+   }
+
+   *scale = quant->scale->data[0];
+   *zero_point = quant->zero_point->data[0];
+
+   return true;
+}
+
+static bool
+fill_fused_activation_range(TfLiteFusedActivation activation,
+                            TfLiteTensor *tensor,
+                            int *activation_min,
+                            int *activation_max)
+{
+   int quantized_min;
    int quantized_max;
+   float scale;
+   int zero_point;
+   int tmp;
 
    switch (tensor->type) {
    case kTfLiteInt8:
+      quantized_min = INT8_MIN;
       quantized_max = INT8_MAX;
       break;
    case kTfLiteUInt8:
+      quantized_min = 0;
       quantized_max = UINT8_MAX;
       break;
    default:
       return false;
    }
 
-   assert(tensor->quantization.type == kTfLiteAffineQuantization);
-   affine = (TfLiteAffineQuantization *)tensor->quantization.params;
+   if (!get_tensor_quantization(tensor, &scale, &zero_point) || scale <= 0.0f)
+      return false;
 
-   /* Handle per-channel quantization where zero_point->size may be 1 */
-   for (int i = 0; i < affine->scale->size; i++) {
-      int zp_idx = (affine->zero_point->size == 1) ? 0 : i;
-      if ((quantized_max - affine->zero_point->data[zp_idx]) * affine->scale->data[i] > 6.0f)
+   switch (activation) {
+   case kTfLiteActNone:
+      *activation_min = quantized_min;
+      *activation_max = quantized_max;
+      break;
+   case kTfLiteActRelu:
+      if (!quantize_activation_value(scale, zero_point, 0.0f, &tmp))
          return false;
+      *activation_min = MAX2(quantized_min, tmp);
+      *activation_max = quantized_max;
+      break;
+   case kTfLiteActRelu6:
+      if (!quantize_activation_value(scale, zero_point, 0.0f, &tmp))
+         return false;
+      *activation_min = MAX2(quantized_min, tmp);
+
+      if (!quantize_activation_value(scale, zero_point, 6.0f, &tmp))
+         return false;
+      *activation_max = MIN2(quantized_max, tmp);
+      break;
+   default:
+      return false;
    }
+
    return true;
 }
 

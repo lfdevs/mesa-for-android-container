@@ -87,21 +87,13 @@ image_3d_view_as_2d_array(struct nil_image *image,
    view->base_level = 0;
 }
 
-VkResult
-nvk_image_view_init(struct nvk_device *dev,
-                    struct nvk_image_view *view,
-                    const VkImageViewCreateInfo *pCreateInfo)
+static void
+nvk_image_view_init_no_alloc(struct nvk_device *dev,
+                             struct nvk_image_view *view,
+                             const VkImageViewCreateInfo *pCreateInfo)
 {
    const struct nvk_physical_device *pdev = nvk_device_physical(dev);
    VK_FROM_HANDLE(nvk_image, image, pCreateInfo->image);
-   VkResult result;
-
-   const VkOpaqueCaptureDescriptorDataCreateInfoEXT *cap_info =
-      vk_find_struct_const(pCreateInfo->pNext,
-                           OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT);
-   struct nvk_image_view_capture cap = {};
-   if (cap_info != NULL)
-      memcpy(&cap, cap_info->opaqueCaptureDescriptorData, sizeof(cap));
 
    memset(view, 0, sizeof(*view));
 
@@ -191,29 +183,10 @@ nvk_image_view_init(struct nvk_device *dev,
       if (view->vk.usage & (VK_IMAGE_USAGE_SAMPLED_BIT |
                            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) {
          nil_view.access = NIL_VIEW_ACCESS_TEXTURE;
-         const struct nil_descriptor desc =
+
+         view->planes[view_plane].sampled.desc.desc =
             nil_image_view_descriptor(&pdev->info, &nil_image,
                                       &nil_view, base_addr);
-
-         uint32_t desc_index = 0;
-         if (cap_info != NULL) {
-            desc_index = view->plane_count == 1
-               ? cap.single_plane.sampled_desc_index
-               : cap.ycbcr.planes[view_plane].desc_index;
-            result = nvk_descriptor_table_insert(dev, &dev->images,
-                                                 desc_index,
-                                                 &desc, sizeof(desc));
-         } else {
-            result = nvk_descriptor_table_add(dev, &dev->images,
-                                              &desc, sizeof(desc),
-                                              &desc_index);
-         }
-         if (result != VK_SUCCESS) {
-            nvk_image_view_finish(dev, view);
-            return result;
-         }
-
-         view->planes[view_plane].sampled_desc_index = desc_index;
       }
 
       if (view->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) {
@@ -242,38 +215,97 @@ nvk_image_view_init(struct nvk_device *dev,
          }
 
          if (pdev->info.cls_eng3d >= MAXWELL_A) {
-            const struct nil_descriptor desc =
+            view->planes[view_plane].storage.desc.desc =
                nil_image_view_descriptor(&pdev->info, &nil_image,
                                          &nil_view, base_addr);
-
-            uint32_t desc_index = 0;
-            if (cap_info != NULL) {
-               assert(view->plane_count == 1);
-               desc_index = cap.single_plane.storage_desc_index;
-               result = nvk_descriptor_table_insert(dev, &dev->images,
-                                                    desc_index, &desc,
-                                                    sizeof(desc));
-            } else {
-               result = nvk_descriptor_table_add(dev, &dev->images,
-                                                 &desc, sizeof(desc),
-                                                 &desc_index);
-            }
-            if (result != VK_SUCCESS) {
-               nvk_image_view_finish(dev, view);
-               return result;
-            }
-
-            view->planes[view_plane].storage_desc_index = desc_index;
          } else {
             assert(view_plane == 0);
-            view->su_info = nil_fill_su_info(&pdev->info,
-                                             &nil_image, &nil_view,
-                                             base_addr);
+            view->planes[view_plane].storage.desc.su_info =
+               nil_fill_su_info(&pdev->info, &nil_image, &nil_view, base_addr);
          }
+      }
+   }
+}
+
+VkResult
+nvk_image_view_init(struct nvk_device *dev,
+                    struct nvk_image_view *view,
+                    const VkImageViewCreateInfo *pCreateInfo)
+{
+   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
+   VkResult result;
+
+   nvk_image_view_init_no_alloc(dev, view, pCreateInfo);
+
+   const VkOpaqueCaptureDescriptorDataCreateInfoEXT *cap_info =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT);
+   struct nvk_image_view_capture cap = {};
+   if (cap_info != NULL)
+      memcpy(&cap, cap_info->opaqueCaptureDescriptorData, sizeof(cap));
+
+   for (unsigned view_plane = 0; view_plane < view->plane_count; view_plane++) {
+      if (view->vk.usage & (VK_IMAGE_USAGE_SAMPLED_BIT |
+                           VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) {
+         const struct nil_descriptor desc =
+            view->planes[view_plane].sampled.desc.desc;
+
+         uint32_t desc_index = 0;
+         if (cap_info != NULL) {
+            desc_index = view->plane_count == 1
+               ? cap.single_plane.sampled_desc_index
+               : cap.ycbcr.planes[view_plane].desc_index;
+            result = nvk_descriptor_table_insert(dev, &dev->images,
+                                                 desc_index,
+                                                 &desc, sizeof(desc));
+         } else {
+            result = nvk_descriptor_table_add(dev, &dev->images,
+                                              &desc, sizeof(desc),
+                                              &desc_index);
+         }
+         if (result != VK_SUCCESS) {
+            nvk_image_view_finish(dev, view);
+            return result;
+         }
+
+         view->planes[view_plane].sampled.desc_index = desc_index;
+      }
+
+      if (pdev->info.cls_eng3d >= MAXWELL_A &&
+          (view->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT)) {
+         const struct nil_descriptor desc =
+            view->planes[view_plane].storage.desc.desc;
+
+         uint32_t desc_index = 0;
+         if (cap_info != NULL) {
+            assert(view->plane_count == 1);
+            desc_index = cap.single_plane.storage_desc_index;
+            result = nvk_descriptor_table_insert(dev, &dev->images,
+                                                 desc_index, &desc,
+                                                 sizeof(desc));
+         } else {
+            result = nvk_descriptor_table_add(dev, &dev->images,
+                                              &desc, sizeof(desc),
+                                              &desc_index);
+         }
+         if (result != VK_SUCCESS) {
+            nvk_image_view_finish(dev, view);
+            return result;
+         }
+
+         view->planes[view_plane].storage.desc_index = desc_index;
       }
    }
 
    return VK_SUCCESS;
+}
+
+static void
+nvk_image_view_descriptor_finish(struct nvk_device *dev,
+                                 struct nvk_image_view_descriptor *desc)
+{
+   if (desc->desc_index != 0)
+      nvk_descriptor_table_remove(dev, &dev->images, desc->desc_index);
 }
 
 void
@@ -281,15 +313,8 @@ nvk_image_view_finish(struct nvk_device *dev,
                       struct nvk_image_view *view)
 {
    for (uint8_t plane = 0; plane < view->plane_count; plane++) {
-      if (view->planes[plane].sampled_desc_index) {
-      nvk_descriptor_table_remove(dev, &dev->images,
-                                  view->planes[plane].sampled_desc_index);
-      }
-
-      if (view->planes[plane].storage_desc_index) {
-         nvk_descriptor_table_remove(dev, &dev->images,
-                                    view->planes[plane].storage_desc_index);
-      }
+      nvk_image_view_descriptor_finish(dev, &view->planes[plane].sampled);
+      nvk_image_view_descriptor_finish(dev, &view->planes[plane].storage);
    }
 
    vk_image_view_finish(&view->vk);
@@ -347,12 +372,12 @@ nvk_GetImageViewOpaqueCaptureDescriptorDataEXT(
 
    struct nvk_image_view_capture cap = {};
    if (view->plane_count == 1) {
-      cap.single_plane.sampled_desc_index = view->planes[0].sampled_desc_index;
-      cap.single_plane.storage_desc_index = view->planes[0].storage_desc_index;
+      cap.single_plane.sampled_desc_index = view->planes[0].sampled.desc_index;
+      cap.single_plane.storage_desc_index = view->planes[0].storage.desc_index;
    } else {
       for (uint8_t p = 0; p < view->plane_count; p++) {
-         cap.ycbcr.planes[p].desc_index = view->planes[p].sampled_desc_index;
-         assert(view->planes[p].storage_desc_index == 0);
+         cap.ycbcr.planes[p].desc_index = view->planes[p].sampled.desc_index;
+         assert(view->planes[p].storage.desc_index == 0);
       }
    }
 
@@ -375,13 +400,13 @@ nvk_GetImageViewHandleNVX(VkDevice _device,
       struct nvk_storage_image_descriptor desc;
       STATIC_ASSERT(sizeof(desc) == sizeof(handle));
 
-      desc.image_index = view->planes[0].storage_desc_index;
+      desc.image_index = view->planes[0].storage.desc_index;
       memcpy(&handle, &desc, sizeof(uint32_t));
    } else {
       struct nvk_sampled_image_descriptor desc;
       STATIC_ASSERT(sizeof(desc) == sizeof(handle));
 
-      desc.image_index = view->planes[0].sampled_desc_index;
+      desc.image_index = view->planes[0].sampled.desc_index;
       if (pInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
          assert(sampler->plane_count == 1);
          desc.sampler_index = sampler->planes[0].desc_index;

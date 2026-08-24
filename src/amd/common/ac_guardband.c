@@ -83,10 +83,14 @@ ac_compute_guardband(const struct radeon_info *info, int minx, int miny,
    top = (-max_range - 1 - translate[1]) / scale[1];
    bottom = (max_range - translate[1]) / scale[1];
 
-   assert(left <= -1 && top <= -1 && right >= 1 && bottom >= 1);
-
    guardband_x = MIN2(-left, right);
    guardband_y = MIN2(-top, bottom);
+
+   /* A viewport too large or off-center to fit the coord range should just
+    * clamp to 1.0 to clip at the viewport edge.
+    */
+   guardband_x = MAX2(guardband_x, 1.0);
+   guardband_y = MAX2(guardband_y, 1.0);
 
    float discard_x = 1.0;
    float discard_y = 1.0;

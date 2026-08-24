@@ -1674,6 +1674,9 @@ fd6_program_create(void *data, const struct ir3_shader_variant *bs,
       /* On a6xx all shader stages use driver params pushed in cmdstream: */
       num_dp += num_ubo_dp;
       num_ubo_dp = 0;
+   } else {
+      /* On later gens, VS dp's are split into push const + ubo: */
+      num_ubo_dp += num_dp;
    }
 
    state->num_driver_params = num_dp;

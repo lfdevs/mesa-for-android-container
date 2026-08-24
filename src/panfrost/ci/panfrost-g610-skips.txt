@@ -5,6 +5,7 @@
 # tests leak on separate render+display devices:
 #   https://gerrit.khronos.org/c/vk-gl-cts/+/19625
 asan-dEQP-VK.image.swapchain_mutable.direct_drm.*
+asan-dEQP-VK.synchronization2.internally_synchronized_queues.direct*
 asan-dEQP-VK.wsi.acquire_drm_display.*
 asan-dEQP-VK.wsi.direct_drm.*
 
@@ -12,3 +13,7 @@ asan-dEQP-VK.wsi.direct_drm.*
 dEQP-VK.wsi.xlib.maintenance1.present_modes.*
 dEQP-VK.wsi.xlib.maintenance1.deferred_alloc.fifo.*
 dEQP-VK.wsi.xlib.maintenance1.present_fence.fifo.*
+
+# OpenCL-CTS OpenCL-GL sharing needs explicit Rusticl/Panfrost interop
+# enablement before this is a valid CTS target for the G610 job
+OpenCL-GL Sharing

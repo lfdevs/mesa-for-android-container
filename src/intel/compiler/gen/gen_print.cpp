@@ -8,6 +8,7 @@
 #include <cstdarg>
 #include <cstring>
 #include <inttypes.h>
+#include <optional>
 #include <vector>
 
 #include "util/half_float.h"
@@ -26,7 +27,7 @@ emit_swsb(const intel_device_info *devinfo, FILE *fp, gen_swsb swsb,
 
    if (swsb.regdist) {
       const char *pipe = "";
-      if (devinfo && devinfo->verx10 >= 125) {
+      if (!devinfo || devinfo->verx10 >= 125) {
          pipe = gen_pipe_to_string(swsb.pipe);
          if (!pipe)
             pipe = "?";
@@ -91,6 +92,7 @@ struct gen_printer {
     * the raw send opcode. Otherwise the translated form appears in a comment.
     */
    bool translated_send_as_opcode = false;
+   std::optional<gen_lsc_desc> lsc_desc;
 
    gen_printer(const gen_print_params *print_params)
       : params(print_params), devinfo(print_params->devinfo), fp(print_params->fp),
@@ -166,6 +168,13 @@ struct gen_printer {
       idx = idx_;
       inst_format = gen_inst_format(inst->opcode);
       translated_send_as_opcode = false;
+
+      if (gen_inst_is_send(inst) && is_lsc_translated_sfid(inst->send.sfid) &&
+          !inst->send.desc_is_reg) {
+         lsc_desc = gen_lsc_desc_decode(devinfo, inst->send.desc_imm);
+      } else {
+         lsc_desc.reset();
+      }
 
       print_offset_prefix();
       print_hex_prefix();
@@ -368,7 +377,7 @@ private:
       switch (inst->opcode) {
       case GEN_OP_MATH: {
          text(".");
-         text(gen_math_function_to_string(inst->math.func));
+         text(gen_math_function_to_string(devinfo, inst->math.func));
          break;
       }
 
@@ -449,9 +458,13 @@ private:
       }
 
       case GEN_FORMAT_SEND: {
+         const bool has_dst = translated_send_has_dst();
+
          field_sep(DST_COLUMN);
-         print_send_reg(inst->dst, false,
-                        translated_send_as_opcode ? gen_inst_send_dst_len(inst) : -1);
+         if (has_dst) {
+            print_send_reg(inst->dst, false,
+                           translated_send_as_opcode ? gen_inst_send_dst_len(inst) : -1);
+         }
 
          field_sep(SEND_SRC0_COLUMN);
          print_send_reg(inst->src[0], true,
@@ -557,6 +570,14 @@ private:
    void
    print_send_reg(const gen_operand &op, bool allow_scalar_arf, int length = -1)
    {
+      const bool block2d_addr =
+         translated_send_as_opcode && lsc_desc &&
+         lsc_opcode_is_2d_block(lsc_desc->op) &&
+         &op == &inst->src[0];
+
+      if (block2d_addr)
+         text("[");
+
       if (op.file == GEN_GRF && !op.indirect) {
          text("r");
          uint(op.nr);
@@ -578,6 +599,18 @@ private:
       if (length >= 0) {
          text(":");
          uint(length);
+      }
+
+      if (block2d_addr) {
+         const gen_lsc_ex_desc ex_desc =
+            gen_lsc_ex_desc_decode(devinfo, lsc_desc->op, LSC_ADDR_SURFTYPE_FLAT,
+                                   lsc_ex_desc_surface_bits(),
+                                   inst->send.ex_desc_imm_extra);
+         if (ex_desc.block2d.x_off != 0 || ex_desc.block2d.y_off != 0) {
+            format(" + (%d, %d)",
+                   ex_desc.block2d.x_off, ex_desc.block2d.y_off);
+         }
+         text("]");
       }
    }
 
@@ -799,6 +832,8 @@ private:
          subnr = op.subnr / 2;
       } else if (arf == GEN_ARF_NOTIFICATION_COUNT) {
          subnr = op.subnr / MAX2(gen_type_size_bytes(op.type), 1u);
+      } else if (arf == GEN_ARF_STATE) {
+         subnr = op.subnr / 4;
       }
 
       if (show_default_zero || subnr) {
@@ -1009,6 +1044,18 @@ private:
    }
 
    bool
+   translated_send_has_dst() const
+   {
+      if (!translated_send_as_opcode)
+         return true;
+
+      if (lsc_desc)
+         return !lsc_opcode_is_store(lsc_desc->op);
+
+      return true;
+   }
+
+   bool
    is_lsc_translated_sfid(gen_sfid sfid) const
    {
       switch (sfid) {
@@ -1033,11 +1080,12 @@ private:
    }
 
    bool
-   print_lsc_symbolic_surface_name(enum lsc_addr_surface_type addr_type)
+   print_lsc_symbolic_surface_name(enum lsc_opcode op,
+                                   enum lsc_addr_surface_type addr_type)
    {
       const uint32_t surface_bits = lsc_ex_desc_surface_bits();
       const gen_lsc_ex_desc ex_desc =
-         gen_lsc_ex_desc_decode(devinfo, addr_type, surface_bits,
+         gen_lsc_ex_desc_decode(devinfo, op, addr_type, surface_bits,
                                 inst->send.ex_desc_imm_extra);
 
       switch (inst->send.sfid) {
@@ -1133,6 +1181,21 @@ private:
    }
 
    bool
+   print_lsc_cache_ctrl(enum lsc_opcode op, unsigned cache_ctrl)
+   {
+      const char *cache = gen_lsc_cache_ctrl_to_string(devinfo, op, cache_ctrl);
+      if (!cache) {
+         text(".?");
+         return false;
+      }
+      if (cache[0]) {
+         text(".");
+         text(cache);
+      }
+      return true;
+   }
+
+   bool
    print_lsc_translated_send()
    {
       if (!gen_inst_is_send(inst) || !is_lsc_translated_sfid(inst->send.sfid) ||
@@ -1145,7 +1208,8 @@ private:
          return true;
       }
 
-      const gen_lsc_desc desc = gen_lsc_desc_decode(devinfo, inst->send.desc_imm);
+      assert(lsc_desc);
+      const gen_lsc_desc &desc = *lsc_desc;
 
       const enum lsc_opcode op = desc.op;
       const char *op_name = gen_lsc_opcode_to_string(op);
@@ -1181,6 +1245,27 @@ private:
          return true;
       }
 
+      if (lsc_opcode_is_2d_block(op)) {
+         if (inst->send.sfid != GEN_SFID_UGM ||
+             desc.addr_type != LSC_ADDR_SURFTYPE_FLAT ||
+             inst->send.ex_desc_is_reg || inst->send.ex_desc_imm_extra) {
+            unknown();
+            return true;
+         }
+
+         format("%s.%s.%s", op_name, sfid_name, data_name);
+         if (desc.transpose)
+            text("t");
+         if (desc.vnni)
+            text("v");
+         text(".a64");
+
+         if (!print_lsc_cache_ctrl(op, desc.cache_ctrl))
+            return true;
+
+         return true;
+      }
+
       format("%s.%s.%s", op_name, sfid_name, data_name);
 
       if (lsc_opcode_has_cmask(op)) {
@@ -1213,17 +1298,10 @@ private:
       text(".");
       text(addr_name);
 
-      const char *cache = gen_lsc_cache_ctrl_to_string(devinfo, op, desc.cache_ctrl);
-      if (!cache) {
-         text(".?");
+      if (!print_lsc_cache_ctrl(op, desc.cache_ctrl))
          return true;
-      }
-      if (cache[0]) {
-         text(".");
-         text(cache);
-      }
 
-      if (!print_lsc_symbolic_surface_name(desc.addr_type)) {
+      if (!print_lsc_symbolic_surface_name(op, desc.addr_type)) {
          text(".?");
          return true;
       }

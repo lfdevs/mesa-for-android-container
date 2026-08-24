@@ -684,7 +684,7 @@ radv_get_modifier_flags(struct radv_physical_device *pdev, VkFormat format, uint
        * do not support DCC image stores or when explicitly disabled.
        */
       if (!ac_modifier_supports_dcc_image_stores(pdev->info.gfx_level, modifier) ||
-          radv_is_atomic_format_supported(format) || radv_are_dcc_stores_disabled(pdev))
+          radv_is_atomic_format_supported(format) || pdev->drirc.debug.disable_dcc_stores)
          features &= ~VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT;
 
       if (radv_is_dcc_disabled(pdev) || instance->debug_flags & RADV_DEBUG_NO_DISPLAY_DCC)
@@ -1268,10 +1268,10 @@ radv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
    const VkImageUsageFlags2KHR image_usage = vk_image_format_info_2_usage(base_info);
 
    /* Extract input structs */
-   vk_foreach_struct_const (s, base_info->pNext) {
-      switch (s->sType) {
+   vk_foreach_struct_const (sType, s, base_info->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
-         external_info = (const void *)s;
+         external_info = s;
          break;
       default:
          break;
@@ -1279,25 +1279,25 @@ radv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
    }
 
    /* Extract output structs */
-   vk_foreach_struct (s, base_props->pNext) {
-      switch (s->sType) {
+   vk_foreach_struct (sType, s, base_props->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES:
-         external_props = (void *)s;
+         external_props = s;
          break;
       case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES:
-         ycbcr_props = (void *)s;
+         ycbcr_props = s;
          break;
       case VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_USAGE_ANDROID:
-         android_usage = (void *)s;
+         android_usage = s;
          break;
       case VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD:
-         texture_lod_props = (void *)s;
+         texture_lod_props = s;
          break;
       case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT:
-         image_compression_props = (void *)s;
+         image_compression_props = s;
          break;
       case VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY_EXT:
-         host_perf_props = (void *)s;
+         host_perf_props = s;
          break;
       default:
          break;

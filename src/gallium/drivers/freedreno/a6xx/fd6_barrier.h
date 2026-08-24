@@ -41,6 +41,7 @@ fd6_barrier_flush(fd_cs &cs, struct fd_batch *batch)
    batch->barrier = 0;
 }
 
+template <chip CHIP>
 void fd6_barrier_init(struct pipe_context *pctx);
 
 #endif /* FD6_BARRIER_H_ */

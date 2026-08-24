@@ -1,8 +1,8 @@
 [[fluster]]
 bin = "/fluster/fluster.py"
 decoders = [
-  # "GStreamer-AV1-Vulkan-Gst1.0", # uncomment when updating to gstreamer >= 1.28
-  # "GStreamer-VP9-Vulkan-Gst1.0", # uncomment when updating to gstreamer >= 1.28
-  "GStreamer-H.264-Vulkan-Gst1.0",
-  "GStreamer-H.265-Vulkan-Gst1.0",
+  # "GStreamer-AV1-Vulkan", # uncomment when this is fixed: https://github.com/fluendo/fluster/issues/309
+  "GStreamer-VP9-Vulkan",
+  "GStreamer-H.264-Vulkan",
+  "GStreamer-H.265-Vulkan",
 ]

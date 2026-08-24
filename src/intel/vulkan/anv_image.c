@@ -305,11 +305,6 @@ anv_image_choose_isl_surf_usage(struct anv_physical_device *device,
    switch (aspect) {
    case VK_IMAGE_ASPECT_DEPTH_BIT:
       isl_usage |= ISL_SURF_USAGE_DEPTH_BIT;
-      if (device->instance->drirc.debug.disable_hiz) {
-         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
-                       "Disabling aux: HiZ disabled via drirc");
-         isl_usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
-      }
       break;
    case VK_IMAGE_ASPECT_STENCIL_BIT:
       isl_usage |= ISL_SURF_USAGE_STENCIL_BIT;
@@ -485,6 +480,24 @@ formats_ccs_e_compatible(const struct anv_physical_device *physical_device,
    if (!(create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT))
       return true;
 
+   /* On gfx12+, we specify the compression format independently from the
+    * surface format. So, even if the surface format changes, hardware is
+    * still able to determine how to access the CCS. However, it's not until
+    * gfx20+ that we support compression with the following formats:
+    *  - ISL_FORMAT_L8_UNORM_SRGB
+    *  - ISL_FORMAT_L8A8_UNORM_SRGB
+    *  - ISL_FORMAT_R9G9B9E5_SHAREDEXP
+    */
+   if (devinfo->ver >= 20)
+      return true;
+
+   if (devinfo->ver == 12 && isl_format_get_layout(format)->bpb >= 64)
+      return true;
+
+   /* The three RGBA32 formats are CCS_E-compatible on gfx9-11. */
+   if (isl_format_get_layout(format)->bpb == 128)
+      return true;
+
    if (!fmt_list || fmt_list->viewFormatCount == 0)
       return false;
 
@@ -643,18 +656,12 @@ add_aux_state_tracking_buffer(struct anv_device *device,
     * The indirect clear color BO requires 64B-alignment on gfx11+. If we're
     * using a modifier with clear color, then some kernels might require a 4k
     * alignment.
-    *
-    * If it's an aliased image, we can't use private bindings either since
-    * aliased images with the same parameters should be consistent (e.g., they
-    * can't have separate clear colors).
     */
    enum anv_image_memory_binding binding = ANV_IMAGE_MEMORY_BINDING_PRIVATE;
    uint32_t clear_color_alignment = 64;
    if (mod_info && mod_info->supports_clear_color) {
       binding = ANV_IMAGE_MEMORY_BINDING_PLANE_0 + plane;
       clear_color_alignment = 4096;
-   } else if (image->vk.create_flags & VK_IMAGE_CREATE_ALIAS_BIT) {
-      binding = ANV_IMAGE_MEMORY_BINDING_PLANE_0 + plane;
    }
 
    return image_binding_grow(device, image, binding,
@@ -682,19 +689,20 @@ static bool
 want_hiz_wt_for_image(const struct intel_device_info *devinfo,
                       const struct anv_image *image)
 {
-   /* Gen12 only supports single-sampled while Gen20+ supports
-    * multi-sampled images.
+   /* Gfx12 only supports single-sampled write-through. In addition, most
+    * platforms afterwards show disabling MSAA HiZ write-through produces a
+    * performance uplift in some titles without regressing others.
+    * BMG G31 is an exception (see HSD 18044248478).
     */
-   if (devinfo->ver < 20 && image->vk.samples > 1)
+   if (image->vk.samples > 1 && !intel_device_info_is_bmg_g31(devinfo))
       return false;
 
    if ((image->vk.usage & (VK_IMAGE_USAGE_SAMPLED_BIT |
                            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) == 0)
       return false;
 
-   /* If this image has the maximum number of samples supported by
-    * running platform and will be used as a texture, put the HiZ surface
-    * in write-through mode so that we can sample from it.
+   /* If this image is single-sampled and will be used as a texture, put
+    * the HiZ surface in write-through mode so that we can sample from it.
     *
     * TODO: This is a heuristic trade-off; we haven't tuned it at all.
     */
@@ -751,14 +759,19 @@ add_aux_surface_if_supported(struct anv_device *device,
 
       ok = isl_surf_get_hiz_surf(&device->isl_dev, main_surf,
                                  &image->planes[plane].aux_surface.isl);
-      if (!ok) {
+
+      if (!ok && !isl_surf_supports_ccs(&device->isl_dev, main_surf)) {
          anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
                        "Skipping aux surface creation: "
-                       "isl_surf_get_hiz_surf failed");
+                       "isl_surf_get_hiz_surf failed and CCS unsupported");
          return VK_SUCCESS;
-      }
-
-      if (!isl_surf_supports_ccs(&device->isl_dev, main_surf)) {
+      } else if (!ok) {
+         assert(device->info->verx10 >= 125);
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Depth surface does not support HiZ, "
+                       "falling back to compression without HiZ");
+         image->planes[plane].aux_usage = ISL_AUX_USAGE_ZCS;
+      } else if (!isl_surf_supports_ccs(&device->isl_dev, main_surf)) {
          if (device->info->ver >= 12) {
             anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
                           "Depth surface does not support CCS, "
@@ -773,10 +786,13 @@ add_aux_surface_if_supported(struct anv_device *device,
          image->planes[plane].aux_usage = ISL_AUX_USAGE_HIZ_CCS;
       }
 
-      result = add_surface(device, image, &image->planes[plane].aux_surface,
-                           binding, ANV_OFFSET_IMPLICIT);
-      if (result != VK_SUCCESS)
-         return result;
+      if (ok) {
+         result = add_surface(device, image,
+                              &image->planes[plane].aux_surface, binding,
+                              ANV_OFFSET_IMPLICIT);
+         if (result != VK_SUCCESS)
+            return result;
+      }
 
       if (anv_image_plane_uses_aux_map(device, image, plane)) {
          result = add_compression_control_buffer(device, image, plane,
@@ -830,19 +846,7 @@ add_aux_surface_if_supported(struct anv_device *device,
       }
 
       /* Choose aux usage. */
-      if (device->info->verx10 == 125 && !device->physical->disable_fcv) {
-         /* FCV is enabled via 3DSTATE_3D_MODE. We'd expect plain CCS_E to
-          * perform better because it allows for non-zero fast clear colors,
-          * but we've run into regressions in several benchmarks (F1 22 and
-          * RDR2) when trying to enable it. When non-zero clear colors are
-          * enabled, we've observed many partial resolves. We haven't yet
-          * root-caused what layout transitions are causing these resolves,
-          * so in the meantime, we choose to reduce our clear color support.
-          * With only zero clear colors being supported, we might as well
-          * turn on FCV.
-          */
-         image->planes[plane].aux_usage = ISL_AUX_USAGE_FCV_CCS_E;
-      } else if (intel_needs_workaround(device->info, 1607794140)) {
+      if (intel_needs_workaround(device->info, 1607794140)) {
          /* FCV is permanently enabled on this hardware. */
          assert(device->info->verx10 == 120);
          image->planes[plane].aux_usage = ISL_AUX_USAGE_FCV_CCS_E;
@@ -969,7 +973,8 @@ add_video_buffers(struct anv_device *device,
    /* Doesn't work for av1 without provided profiles */
    if (!independent_profile) {
       for (unsigned i = 0; i < profile_list->profileCount; i++) {
-         if (profile_list->pProfiles[i].videoCodecOperation == VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR) {
+         if (profile_list->pProfiles[i].videoCodecOperation == VK_VIDEO_CODEC_OPERATION_DECODE_AV1_BIT_KHR ||
+             profile_list->pProfiles[i].videoCodecOperation == VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR) {
             ok = image_binding_grow(device, image, ANV_IMAGE_MEMORY_BINDING_PRIVATE,
                                     ANV_OFFSET_IMPLICIT, size, 4096, &image->av1_cdf_table);
          }
@@ -1047,6 +1052,7 @@ memory_range_is_aligned(struct anv_image_memory_range memory_range)
 {
    return util_is_aligned(memory_range.offset, memory_range.alignment);
 }
+#endif
 
 static bool MUST_CHECK
 memory_ranges_equal(struct anv_image_memory_range a,
@@ -1057,7 +1063,6 @@ memory_ranges_equal(struct anv_image_memory_range a,
           a.size == b.size &&
           a.offset == b.offset;
 }
-#endif
 
 struct check_memory_range_params {
    struct anv_image_memory_range *accum_ranges;
@@ -1123,16 +1128,6 @@ check_memory_bindings(const struct anv_device *device,
          ? ANV_IMAGE_MEMORY_BINDING_PLANE_0 + p
          : ANV_IMAGE_MEMORY_BINDING_MAIN;
 
-      /* Aliasing is incompatible with the private binding because it does not
-       * live in a VkDeviceMemory.  The exception is either swapchain images or
-       * that the private binding is for a video motion vector buffer or a
-       * video CDF table.
-       */
-      assert(!(image->vk.create_flags & VK_IMAGE_CREATE_ALIAS_BIT) ||
-             image->from_wsi ||
-             (plane->primary_surface.isl.usage & ISL_SURF_USAGE_VIDEO_DECODE_BIT) ||
-             image->bindings[ANV_IMAGE_MEMORY_BINDING_PRIVATE].memory_range.size == 0);
-
       /* Check primary surface */
       check_memory_range(accum_ranges,
                          .test_surface = &plane->primary_surface,
@@ -1172,14 +1167,11 @@ check_memory_bindings(const struct anv_device *device,
             isl_drm_modifier_get_info(image->vk.drm_format_mod);
 
          /* If the image is created with a drm modifier that supports clear
-          * color it will be exported along with main surface. If the image is
-          * aliased, it cannot be private since it must be consistent among
-          * all aliases. Otherwise, place the aux-tracking state in a
-          * separate, suballocated buffer to achieve better memory
-          * utilization.
+          * color it will be exported along with main surface. Otherwise,
+          * place the aux-tracking state in a separate, suballocated buffer to
+          * achieve better memory utilization.
           */
-         if (!(mod_info && mod_info->supports_clear_color) &&
-             !(image->vk.create_flags & VK_IMAGE_CREATE_ALIAS_BIT))
+         if (!(mod_info && mod_info->supports_clear_color))
             binding = ANV_IMAGE_MEMORY_BINDING_PRIVATE;
 
          /* The indirect clear color BO requires 64B-alignment on gfx11+. */
@@ -1987,30 +1979,17 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
    if ((image->vk.aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) &&
        !vk_format_is_block_compressed(image->vk.format) &&
        image->vk.samples == 1) {
-      if (image->n_planes != 1) {
+      if (image->n_planes != 1 ||
+          (image->vk.create_flags & VK_IMAGE_CREATE_DISJOINT_BIT)) {
          /* Multiplanar images seem to hit a sampler bug with CCS and R16G16
           * format. (Putting the clear state a page/4096bytes further fixes
-          * the issue).
+          * the issue). Since we're banning CCS on these images, we must also
+          * ban it on any image which may alias a plane of a multiplanar
+          * image.
           */
          anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
                        "Disabling aux: "
                        "multiplanar color workaround");
-         isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
-      }
-
-      if ((image->vk.create_flags & VK_IMAGE_CREATE_ALIAS_BIT) &&
-          !image->from_wsi) {
-         /* The image may alias a plane of a multiplanar image. Above we ban
-          * CCS on multiplanar images.
-          *
-          * We must also reject aliasing of any image that uses
-          * ANV_IMAGE_MEMORY_BINDING_PRIVATE. Since we're already rejecting
-          * all aliasing here, there's no need to further analyze if the image
-          * needs a private binding.
-          */
-         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
-                       "Disabling aux: "
-                       "aliased image not from WSI");
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
       }
 
@@ -2076,7 +2055,7 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
       /* Workaround to disable XE2 CCS modifiers from drirc. */
       if (device->info->ver >= 20 &&
           image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
-          device->physical->instance->drirc.debug.disable_xe2_ccs_modifiers) {
+          device->physical->drirc.debug.disable_xe2_ccs_modifiers) {
          anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
                        "Disabling aux: "
                        "drirc disable_xe2_drm_ccs_modifiers");
@@ -2113,7 +2092,8 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
    if (image->vk.create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) {
       if (!fmt_list || fmt_list->viewFormatCount == 0) {
          /* Without a format list provided, we must assume all compatible
-          * formats. Instead of adding them all, mark our list as incomplete.
+          * formats. Instead of adding them all with
+          * vk_image_create_get_format_list(), mark our list as incomplete.
           */
          mark_image_view_formats_incomplete(image);
       } else {
@@ -2716,10 +2696,10 @@ anv_image_get_memory_requirements(struct anv_device *device,
       }
    }
 
-   vk_foreach_struct(ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct(sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
-         VkMemoryDedicatedRequirements *requirements = (void *)ext;
+         VkMemoryDedicatedRequirements *requirements = ext;
          if (image->vk.wsi_legacy_scanout ||
              image->from_ahb ||
              (isl_drm_modifier_has_aux(image->vk.drm_format_mod) &&
@@ -2744,7 +2724,7 @@ anv_image_get_memory_requirements(struct anv_device *device,
       }
 
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -2786,8 +2766,8 @@ void anv_GetImageMemoryRequirements2(
 
    VkImageAspectFlags aspects = image->vk.aspects;
 
-   vk_foreach_struct_const(ext, pInfo->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pInfo->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO: {
          assert(image->disjoint);
          const VkImagePlaneMemoryRequirementsInfo *plane_reqs =
@@ -2797,7 +2777,7 @@ void anv_GetImageMemoryRequirements2(
       }
 
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -3134,8 +3114,8 @@ anv_bind_image_memory(struct anv_device *device,
    if (mem && mem->vk.ahardware_buffer)
       resolve_ahb_image(device, image, mem);
 
-   vk_foreach_struct_const(s, bind_info->pNext) {
-      switch (s->sType) {
+   vk_foreach_struct_const(sType, s, bind_info->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO: {
          const VkBindImagePlaneMemoryInfo *plane_info =
             (const VkBindImagePlaneMemoryInfo *) s;
@@ -3232,7 +3212,7 @@ anv_bind_image_memory(struct anv_device *device,
          break;
       }
       default:
-         vk_debug_ignored_stype(s->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }
@@ -3294,6 +3274,7 @@ anv_bind_image_memory(struct anv_device *device,
       } else {
          assert(image->planes[p].aux_usage == ISL_AUX_USAGE_CCS_E ||
                 image->planes[p].aux_usage == ISL_AUX_USAGE_FCV_CCS_E ||
+                image->planes[p].aux_usage == ISL_AUX_USAGE_ZCS ||
                 image->planes[p].aux_usage == ISL_AUX_USAGE_STC_CCS);
          image->planes[p].aux_usage = ISL_AUX_USAGE_NONE;
       }
@@ -3302,6 +3283,43 @@ anv_bind_image_memory(struct anv_device *device,
    if (image->bindings[ANV_IMAGE_MEMORY_BINDING_PRIVATE].address.bo != NULL &&
        !image->device_registered) {
       pthread_mutex_lock(&device->mutex);
+
+      /* For the purpose of enabling compression with
+       * VK_IMAGE_CREATE_ALIAS_BIT, try to replace the image's private BO with
+       * one from a device-registered image. If the app intends the two images
+       * to alias each other, the attempt will succeed.
+       */
+      list_for_each_entry(struct anv_image, list_image,
+                          &device->image_private_objects, link) {
+         assert(!image->disjoint);
+         const struct anv_image_binding *img_main_binding =
+            &image->bindings[ANV_IMAGE_MEMORY_BINDING_MAIN];
+         const struct anv_image_binding *list_img_main_binding =
+            &list_image->bindings[ANV_IMAGE_MEMORY_BINDING_MAIN];
+         const bool main_binding_aliased =
+            img_main_binding->address64 ==
+            list_img_main_binding->address64 &&
+            img_main_binding->memory_range.size ==
+            list_img_main_binding->memory_range.size;
+
+         struct anv_image_binding *img_priv_binding =
+            &image->bindings[ANV_IMAGE_MEMORY_BINDING_PRIVATE];
+         struct anv_image_binding *list_img_priv_binding =
+            &list_image->bindings[ANV_IMAGE_MEMORY_BINDING_PRIVATE];
+         const bool priv_binding_aliased =
+            img_priv_binding->address.bo == list_img_priv_binding->address.bo;
+
+         if (main_binding_aliased && !priv_binding_aliased &&
+             memory_ranges_equal(img_priv_binding->memory_range,
+                                 list_img_priv_binding->memory_range)) {
+            ANV_DMR_BO_FREE(&image->vk.base, img_priv_binding->address.bo);
+            anv_device_release_bo(device, img_priv_binding->address.bo);
+            img_priv_binding->address.bo =
+               anv_bo_ref(list_img_priv_binding->address.bo);
+            break;
+         }
+      }
+
       list_addtail(&image->link, &device->image_private_objects);
       pthread_mutex_unlock(&device->mutex);
       image->device_registered = true;
@@ -3751,6 +3769,7 @@ anv_layout_to_aux_state(const struct intel_device_info * const devinfo,
 
       case ISL_AUX_USAGE_CCS_E:
       case ISL_AUX_USAGE_FCV_CCS_E:
+      case ISL_AUX_USAGE_ZCS:
       case ISL_AUX_USAGE_STC_CCS:
          break;
 
@@ -3798,6 +3817,7 @@ anv_layout_to_aux_state(const struct intel_device_info * const devinfo,
          return ISL_AUX_STATE_COMPRESSED_NO_CLEAR;
       }
 
+   case ISL_AUX_USAGE_ZCS:
    case ISL_AUX_USAGE_STC_CCS:
       assert(aux_supported);
       assert(!clear_supported);

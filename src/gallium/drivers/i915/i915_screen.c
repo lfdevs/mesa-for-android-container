@@ -353,6 +353,7 @@ i915_init_screen_caps(struct i915_screen *is)
    /* Fragment coordinate conventions. */
    caps->fs_coord_origin_upper_left =
    caps->fs_coord_pixel_center_half_integer = true;
+   caps->device_type = PIPE_DEVICE_TYPE_INTEGRATED_GPU;
    caps->endianness = PIPE_ENDIAN_LITTLE;
    caps->max_varyings = 10;
 

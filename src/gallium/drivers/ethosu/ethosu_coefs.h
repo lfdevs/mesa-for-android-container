@@ -8,6 +8,9 @@
 
 #include "ethosu_ml.h"
 
+unsigned
+ethosu_allocate_coefs(struct ethosu_subgraph *subgraph, unsigned size);
+
 void
 fill_coefs(struct ethosu_subgraph *subgraph,
            struct ethosu_operation *operation,

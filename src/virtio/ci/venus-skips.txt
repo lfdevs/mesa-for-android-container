@@ -52,6 +52,7 @@ dEQP-VK.ray_tracing_pipeline.build.gpu.level_instances.triangles_65536_1_1
 dEQP-VK.ray_tracing_pipeline.misc.cullmask_AABB_extrabits
 dEQP-VK.ray_tracing_pipeline.misc.cullmask_tri
 dEQP-VK.ray_tracing_pipeline.misc.recursiveTraces_tri_15
+dEQP-VK.ray_tracing_pipeline.trace_rays_cmds.indirect_gpu.11_13_5
 dEQP-VK.ray_tracing_pipeline.trace_rays_cmds_maintenance_1.indirect2_cpu.11_13_5
 dEQP-VK.ray_tracing_pipeline.watertightness.closedFan2.1024
 
@@ -79,3 +80,12 @@ dEQP-VK.api.external.semaphore.sync_fd.export_multiple_times_temporary
 # Skip flaky memory pressure related tests
 dEQP-VK.memory.allocation.basic.percent_1.*
 dEQP-VK.memory.allocation.random.*
+
+# Can timeout for multiple formats
+dEQP-VK.pipeline.fast_linked_library.blend.dual_source.multi_attachments.*
+dEQP-VK.pipeline.pipeline_library.blend.dual_source.multi_attachments.*
+dEQP-VK.pipeline.monolithic.blend.dual_source.multi_attachments.*
+
+# New timeouts with VKCTS 1.4.5.3 -> 1.4.6.1 uprev
+dEQP-VK.api.descriptor_pool.repeated_reset_long
+dEQP-VK.texture.explicit_lod.2d.sizes.128x128_linear_linear_mipmap_linear_repeat

@@ -54,8 +54,8 @@ panvk_GetDeviceBufferMemoryRequirements(VkDevice _device,
    pMemoryRequirements->memoryRequirements.alignment = align;
    pMemoryRequirements->memoryRequirements.size = size;
 
-   vk_foreach_struct_const(ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct_const(sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
          VkMemoryDedicatedRequirements *dedicated = (void *)ext;
          dedicated->requiresDedicatedAllocation = false;
@@ -63,7 +63,7 @@ panvk_GetDeviceBufferMemoryRequirements(VkDevice _device,
          break;
       }
       default:
-         vk_debug_ignored_stype(ext->sType);
+         vk_debug_ignored_stype(sType);
          break;
       }
    }

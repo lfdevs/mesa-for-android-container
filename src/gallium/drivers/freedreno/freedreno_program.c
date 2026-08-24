@@ -7,8 +7,9 @@
  */
 
 #include "tgsi/tgsi_text.h"
-#include "tgsi/tgsi_ureg.h"
 
+#include "nir_builder.h"
+#include "nir/pipe_nir.h"
 #include "util/u_simple_shaders.h"
 
 #include "freedreno_context.h"
@@ -142,69 +143,136 @@ assemble_tgsi(struct pipe_context *pctx, const char *src, bool frag)
       return pctx->create_vs_state(pctx, &cso);
 }
 
-/* the correct semantic to use for the texcoord varying depends on pipe-cap: */
-static enum tgsi_semantic
-texcoord_semantic(struct pipe_context *pctx)
+/* the correct slot to use for the texcoord varying depends on pipe-cap: */
+static gl_varying_slot
+texcoord_slot(struct pipe_context *pctx)
 {
    struct pipe_screen *pscreen = pctx->screen;
 
    if (pscreen->caps.tgsi_texcoord) {
-      return TGSI_SEMANTIC_TEXCOORD;
+      return VARYING_SLOT_TEX0;
    } else {
-      return TGSI_SEMANTIC_GENERIC;
+      return VARYING_SLOT_VAR0;
    }
+}
+
+static void *
+create_blit_shader(struct pipe_context *pctx, nir_shader *nir)
+{
+   struct pipe_screen *pscreen = pctx->screen;
+
+   if (pscreen->finalize_nir)
+      pscreen->finalize_nir(pscreen, nir, true);
+
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
+   return pipe_shader_from_nir(pctx, nir);
 }
 
 static void *
 fd_prog_blit_vs(struct pipe_context *pctx)
 {
-   struct ureg_program *ureg;
+   const nir_shader_compiler_options *options =
+      pctx->screen->nir_options[MESA_SHADER_VERTEX];
 
-   ureg = ureg_create(MESA_SHADER_VERTEX);
-   if (!ureg)
-      return NULL;
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, options,
+                                                  "blit_vs");
 
-   struct ureg_src in0 = ureg_DECL_vs_input(ureg, 0);
-   struct ureg_src in1 = ureg_DECL_vs_input(ureg, 1);
+   const struct glsl_type *vec4 = glsl_vec4_type();
 
-   struct ureg_dst out0 = ureg_DECL_output(ureg, texcoord_semantic(pctx), 0);
-   struct ureg_dst out1 = ureg_DECL_output(ureg, TGSI_SEMANTIC_POSITION, 1);
+   nir_variable *in_tc =
+      nir_variable_create(b.shader, nir_var_shader_in, vec4, "in_tc");
+   in_tc->data.location = VERT_ATTRIB_GENERIC0;
+   in_tc->data.driver_location = 0;
 
-   ureg_MOV(ureg, out0, in0);
-   ureg_MOV(ureg, out1, in1);
+   nir_variable *in_pos =
+      nir_variable_create(b.shader, nir_var_shader_in, vec4, "in_pos");
+   in_pos->data.location = VERT_ATTRIB_GENERIC1;
+   in_pos->data.driver_location = 1;
 
-   ureg_END(ureg);
+   nir_variable *out_tc =
+      nir_variable_create(b.shader, nir_var_shader_out, vec4, "tc");
+   out_tc->data.location = texcoord_slot(pctx);
+   out_tc->data.driver_location = 0;
 
-   return ureg_create_shader_and_destroy(ureg, pctx);
+   nir_variable *out_pos =
+      nir_variable_create(b.shader, nir_var_shader_out, vec4, "gl_Position");
+   out_pos->data.location = VARYING_SLOT_POS;
+   out_pos->data.driver_location = 1;
+
+   nir_store_var(&b, out_tc, nir_load_var(&b, in_tc), 0xf);
+   nir_store_var(&b, out_pos, nir_load_var(&b, in_pos), 0xf);
+
+   b.shader->num_inputs = 2;
+   b.shader->num_outputs = 2;
+
+   return create_blit_shader(pctx, b.shader);
 }
 
 static void *
 fd_prog_blit_fs(struct pipe_context *pctx, int rts, bool depth)
 {
+   const nir_shader_compiler_options *options =
+      pctx->screen->nir_options[MESA_SHADER_FRAGMENT];
    int i;
-   struct ureg_src tc;
-   struct ureg_program *ureg;
 
    assert(rts <= MAX_RENDER_TARGETS);
 
-   ureg = ureg_create(MESA_SHADER_FRAGMENT);
-   if (!ureg)
-      return NULL;
+   nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT, options,
+                                                  "blit_fs");
 
-   tc = ureg_DECL_fs_input(ureg, texcoord_semantic(pctx), 0,
-                           TGSI_INTERPOLATE_PERSPECTIVE);
-   for (i = 0; i < rts; i++)
-      ureg_TEX(ureg, ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, i),
-               TGSI_TEXTURE_2D, tc, ureg_DECL_sampler(ureg, i));
-   if (depth)
-      ureg_TEX(ureg,
-               ureg_writemask(ureg_DECL_output(ureg, TGSI_SEMANTIC_POSITION, 0),
-                              TGSI_WRITEMASK_Z),
-               TGSI_TEXTURE_2D, tc, ureg_DECL_sampler(ureg, rts));
+   const struct glsl_type *vec4 = glsl_vec4_type();
+   const struct glsl_type *sampler2D =
+      glsl_sampler_type(GLSL_SAMPLER_DIM_2D, false, false, GLSL_TYPE_FLOAT);
 
-   ureg_END(ureg);
+   nir_variable *in_tc =
+      nir_variable_create(b.shader, nir_var_shader_in, vec4, "tc");
+   in_tc->data.location = texcoord_slot(pctx);
+   in_tc->data.driver_location = 0;
+   in_tc->data.interpolation = INTERP_MODE_SMOOTH;
 
-   return ureg_create_shader_and_destroy(ureg, pctx);
+   nir_def *tc = nir_trim_vector(&b, nir_load_var(&b, in_tc), 2);
+
+   for (i = 0; i < rts; i++) {
+      nir_variable *sampler =
+         nir_variable_create(b.shader, nir_var_uniform, sampler2D, "sampler");
+      sampler->data.binding = i;
+
+      nir_variable *out_color =
+         nir_variable_create(b.shader, nir_var_shader_out, vec4, "color");
+      out_color->data.location = FRAG_RESULT_DATA0 + i;
+      out_color->data.driver_location = i;
+
+      nir_def *color = nir_tex(&b, tc, .texture_index = i, .sampler_index = i,
+                               .dim = GLSL_SAMPLER_DIM_2D,
+                               .dest_type = nir_type_float32);
+
+      nir_store_var(&b, out_color, color, 0xf);
+   }
+
+   if (depth) {
+      nir_variable *sampler =
+         nir_variable_create(b.shader, nir_var_uniform, sampler2D, "sampler");
+      sampler->data.binding = rts;
+
+      nir_variable *out_depth =
+         nir_variable_create(b.shader, nir_var_shader_out, glsl_float_type(),
+                             "gl_FragDepth");
+      out_depth->data.location = FRAG_RESULT_DEPTH;
+      out_depth->data.driver_location = rts;
+
+      nir_def *color = nir_tex(&b, tc, .texture_index = rts,
+                               .sampler_index = rts,
+                               .dim = GLSL_SAMPLER_DIM_2D,
+                               .dest_type = nir_type_float32);
+
+      nir_store_var(&b, out_depth, nir_channel(&b, color, 2), 0x1);
+   }
+
+   b.shader->num_inputs = 1;
+   b.shader->num_outputs = rts + (depth ? 1 : 0);
+
+   return create_blit_shader(pctx, b.shader);
 }
 
 void

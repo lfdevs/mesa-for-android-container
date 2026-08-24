@@ -854,15 +854,33 @@ nir-stress=dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.formats.r8g8
 nir-stress=dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.formats.r8g8_unorm.input.load.dont_care.draw,Fail
 nir-stress=dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.unused_attachment.loadopdontcare.storeopdontcare.stencilloadopdontcare.stencilstoreopdontcare,Fail
 
-dEQP-VK.sparse_resources.image_block_shapes.2d.g8b8g8r8_422_unorm.samples_1,Fail
-dEQP-VK.sparse_resources.image_block_shapes.2d_array.g8b8g8r8_422_unorm.samples_1,Fail
-
 # New fails in 1.4.3.3
 dEQP-VK.dynamic_rendering.primary_cmd_buff.suballocation.formats.b8g8r8a8_unorm.input.load.store.self_dep_clear_draw,Fail
 
 # New failures with VKCTS 1.4.4.0
 dEQP-VK.sparse_resources.image_block_shapes.2d.b8g8r8g8_422_unorm.samples_1,Fail
-dEQP-VK.sparse_resources.image_block_shapes.2d_array.b8g8r8g8_422_unorm.samples_1,Fail
 
-# VKCTS 1.4.4.2 -> 1.4.5.3 uprev
-dEQP-VK.dgc.ext.graphics.misc.mix_normal_dgc_preprocess_with_vbo_token,Fail
+# VKCTS 1.4.5.3 -> 1.4.6.1 uprev
+dEQP-VK.multiview.multisample_resolve.no_queries.15,Crash
+dEQP-VK.multiview.multisample_resolve.no_queries.15_15_15_15,Crash
+dEQP-VK.multiview.multisample_resolve.no_queries.1_2_4_8,Crash
+dEQP-VK.multiview.multisample_resolve.no_queries.1_2_4_8_16_32,Crash
+dEQP-VK.multiview.multisample_resolve.no_queries.8,Crash
+dEQP-VK.multiview.multisample_resolve.no_queries.8_1_1_8,Crash
+dEQP-VK.multiview.multisample_resolve.no_queries.max_multi_view_view_count,Crash
+dEQP-VK.multiview.renderpass2.multisample_resolve.no_queries.1_2_4_8_16_32,Crash
+dEQP-VK.multiview.renderpass2.multisample_resolve.no_queries.15,Crash
+dEQP-VK.multiview.renderpass2.multisample_resolve.no_queries.15_15_15_15,Crash
+dEQP-VK.multiview.renderpass2.multisample_resolve.no_queries.5_10_5_10,Crash
+dEQP-VK.multiview.renderpass2.multisample_resolve.no_queries.8,Crash
+dEQP-VK.multiview.renderpass2.multisample_resolve.no_queries.max_multi_view_view_count,Crash
+dEQP-VK.shader_object.tessellation.hlsl.spacing_fractional_odd_rebind,Fail
+
+# Nightly run expectations update
+dEQP-VK.pipeline.fast_linked_library.extended_dynamic_state.two_draws_dynamic.stride_with_offset_and_padding,Fail
+dEQP-VK.pipeline.monolithic.extended_dynamic_state.after_pipelines.tess_domain_origin_lower_left,Fail
+dEQP-VK.pipeline.monolithic.extended_dynamic_state.two_draws_dynamic.stride_with_offset_and_padding,Fail
+dEQP-VK.pipeline.pipeline_library.extended_dynamic_state.two_draws_dynamic.large_stride_with_offset_and_padding,Fail
+dEQP-VK.pipeline.shader_object_linked_spirv.bind_buffers_2.maintenance5.robustness2.triangle_strip.buffers5.stride_offset_rnd543.true_size.beyond_size,Fail
+dEQP-VK.shader_object.misc.state.pipeline.vert_tess_geom_frag.alphaToOne.enabled,Fail
+dEQP-VK.shader_object.misc.state.pipeline.vert_tess_geom_frag.depth.clip_control,Fail

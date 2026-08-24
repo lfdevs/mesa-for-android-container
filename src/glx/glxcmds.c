@@ -2276,10 +2276,21 @@ static const struct name_address_pair GLX_functions[] = {
    /*** GLX 1.4 ***/
    GLX_FUNCTION2(glXGetProcAddress, glXGetProcAddressARB),
 
-#ifndef GLX_USE_APPLEGL
+   /* Both the DRI and AppleGL back ends implement swap control, so these
+    * are unconditional; the AppleGL versions sit in
+    * apple/apple_glx_swap_interval.c.
+    */
    /*** GLX_SGI_swap_control ***/
    GLX_FUNCTION(glXSwapIntervalSGI),
 
+   /*** GLX_MESA_swap_control ***/
+   GLX_FUNCTION(glXSwapIntervalMESA),
+   GLX_FUNCTION(glXGetSwapIntervalMESA),
+
+   /*** GLX_EXT_swap_control ***/
+   GLX_FUNCTION(glXSwapIntervalEXT),
+
+#ifndef GLX_USE_APPLEGL
    /*** GLX_SGI_video_sync ***/
    GLX_FUNCTION(glXGetVideoSyncSGI),
    GLX_FUNCTION(glXWaitVideoSyncSGI),
@@ -2305,10 +2316,6 @@ static const struct name_address_pair GLX_functions[] = {
    /*** GLX_MESA_copy_sub_buffer ***/
    GLX_FUNCTION(glXCopySubBufferMESA),
 
-   /*** GLX_MESA_swap_control ***/
-   GLX_FUNCTION(glXSwapIntervalMESA),
-   GLX_FUNCTION(glXGetSwapIntervalMESA),
-
    /*** GLX_OML_sync_control ***/
    GLX_FUNCTION(glXWaitForSbcOML),
    GLX_FUNCTION(glXWaitForMscOML),
@@ -2319,9 +2326,6 @@ static const struct name_address_pair GLX_functions[] = {
    /*** GLX_EXT_texture_from_pixmap ***/
    GLX_FUNCTION(glXBindTexImageEXT),
    GLX_FUNCTION(glXReleaseTexImageEXT),
-
-   /*** GLX_EXT_swap_control ***/
-   GLX_FUNCTION(glXSwapIntervalEXT),
 #endif
 
 #if defined(GLX_DIRECT_RENDERING) && defined(GLX_USE_DRM)

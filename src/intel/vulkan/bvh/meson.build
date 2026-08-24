@@ -8,6 +8,7 @@ bvh_shaders = [
   'header.comp',
   'copy.comp',
   'update.comp',
+  'pair_triangles.comp',
 ]
 
 # A mapping: [filename version, GFX_VERx10 define version]
@@ -34,7 +35,7 @@ foreach shader : bvh_shaders
       prog_glslang, '-V', '-I' + vk_bvh_include_dir, '-I' + anv_bvh_include_dir,
       '--target-env', 'spirv1.5', '-x', '-o', '@OUTPUT@', '@INPUT@',
       '-DGFX_VERx10=' + define_ver # so that we can use this macro inside shaders
-    ]
+    ] + (with_mesa_debug ? ['-g'] : [])
     command += glslang_quiet
     command += vk_glsl_shader_preamble
 

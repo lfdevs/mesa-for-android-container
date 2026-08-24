@@ -24,6 +24,23 @@ TEST(Slice, Cut)
    ASSERT_SLICE_EMPTY(result2.after);
 }
 
+TEST(Slice, CutAny)
+{
+   slice s = slice_from_cstr("a\tb c");
+
+   slice_cut_result result = slice_cut_any(s, " \t");
+   ASSERT_TRUE(result.found);
+   ASSERT_SLICE_EQ(result.before, "a");
+   ASSERT_SLICE_EQ(result.after, "b c");
+
+   const char data[] = {'a', '\0', 'b'};
+   slice binary = { .data = data, .len = 3 };
+   slice_cut_result not_found = slice_cut_any(binary, " \t");
+   ASSERT_FALSE(not_found.found);
+   ASSERT_SLICE_EQ(not_found.before, binary);
+   ASSERT_SLICE_EMPTY(not_found.after);
+}
+
 TEST(Slice, CutN)
 {
    slice s = slice_from_cstr("a:b:c:d");

@@ -46,6 +46,9 @@ struct ir2_shader_info {
    struct ir2_fetch_info fetch_info[64];
 };
 
+/* marks an inputs[] entry that no varying was assigned to */
+#define IR2_INPUT_SLOT_UNUSED 0xff
+
 struct ir2_frag_linkage {
    unsigned inputs_count;
    struct {

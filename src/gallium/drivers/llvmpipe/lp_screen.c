@@ -41,6 +41,7 @@
 #include "gallivm/lp_bld_init.h"
 #include "util/disk_cache.h"
 #include "util/hex.h"
+#include "util/log.h"
 #include "util/os_misc.h"
 #include "util/os_time.h"
 #include "util/u_helpers.h"
@@ -390,6 +391,9 @@ llvmpipe_init_screen_caps(struct pipe_screen *screen)
 
    caps->shader_subgroup_supported_stages = BITFIELD_MASK(MESA_SHADER_MESH_STAGES);
    caps->shader_subgroup_supported_features = PIPE_SHADER_SUBGROUP_FEATURE_MASK;
+
+   /* We just pretend that every size is accelerated */
+   caps->hw_clear_buffer_sizes = ~0;
 
    caps->mesh_shader = true;
 
@@ -1011,6 +1015,17 @@ struct pipe_screen *
 llvmpipe_create_screen(struct sw_winsys *winsys)
 {
    struct llvmpipe_screen *screen;
+
+   /* llvmpipe cannot do anything without a JIT.  On macOS a process with
+    * library validation enabled but without the com.apple.security.cs.allow-jit
+    * entitlement is denied executable mappings, and LLVM would abort the
+    * process the first time it tries to emit code.  Fail here instead so
+    * callers can fall back to softpipe.
+    */
+   if (!os_jit_allowed()) {
+      mesa_logi("llvmpipe: JIT is not permitted in this process\n");
+      return NULL;
+   }
 
    glsl_type_singleton_init_or_ref();
 

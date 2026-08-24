@@ -217,13 +217,11 @@ unsigned si_calculate_needed_lds_size(enum amd_gfx_level gfx_level, struct si_sh
 unsigned si_shader_encode_vgprs(struct si_shader *shader)
 {
    struct radeon_info *info = &shader->selector->screen->info;
-   unsigned encode_granularity = !info->has_graphics && info->family >= CHIP_MI200 ? 8 : 4;
-
    assert(info->gfx_level >= GFX10 || shader->wave_size == 64);
-   if (shader->wave_size == 32)
-      encode_granularity *= 2;
 
-   return shader->config.num_vgprs / encode_granularity - 1;
+   return DIV_ROUND_UP(shader->config.num_vgprs,
+                       (info->compiler_info.wave64_vgpr_encode_granularity *
+                        (shader->wave_size == 32 ? 2 : 1))) - 1;
 }
 
 unsigned si_shader_encode_sgprs(struct si_shader *shader)
@@ -871,10 +869,11 @@ static void si_preprocess_nir(struct si_nir_shader_ctx *ctx)
                                    !(sel->screen->debug_flags & DBG(NO_FMASK)),
 
             .clamp_color = key->ps.part.epilog.clamp_color,
-            .alpha_test_alpha_to_one = key->ps.part.epilog.alpha_to_one,
+            .alpha_to_one = key->ps.part.epilog.alpha_to_one,
             .alpha_func = key->ps.part.epilog.alpha_func,
             .keep_alpha_for_mrtz = key->ps.part.epilog.alpha_to_coverage_via_mrtz,
-            .spi_shader_col_format_hint = key->ps.part.epilog.spi_shader_col_format,
+            .color_mask = ac_get_cb_shader_mask(key->ps.part.epilog.spi_shader_col_format),
+            .color_no_signed_zero = ~0,
             .kill_z = key->ps.part.epilog.kill_z,
             .kill_stencil = key->ps.part.epilog.kill_stencil,
             .kill_samplemask = key->ps.part.epilog.kill_samplemask,
@@ -908,7 +907,8 @@ static void si_preprocess_nir(struct si_nir_shader_ctx *ctx)
             .sample_shading = nir->info.fs.uses_sample_shading,
             .lower_color_inputs_to_load_color01 = true,
             .alpha_func = COMPARE_FUNC_ALWAYS,
-            .spi_shader_col_format_hint = ~0,
+            .color_mask = ~0,
+            .color_no_signed_zero = ~0,
          };
          NIR_PASS(progress, nir, ac_nir_lower_ps_early, &early_options);
       }
@@ -1288,6 +1288,8 @@ static void si_postprocess_nir(struct si_nir_shader_ctx *ctx)
 
    /* This must be done after si_nir_late_opts() because it may generate vec const. */
    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
+   NIR_PASS(_, nir, nir_opt_copy_prop);
+   NIR_PASS(_, nir, nir_opt_dce);
 
    /* This helps LLVM form VMEM clauses and thus get more GPU cache hits.
     * 200 is tuned for Viewperf. It should be done last.
@@ -1427,6 +1429,9 @@ si_nir_generate_gs_copy_shader(struct si_screen *sscreen,
    si_nir_opts(gs_selector->screen, nir, false);
 
    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
+   NIR_PASS(_, nir, nir_opt_copy_prop);
+   NIR_PASS(_, nir, nir_opt_dce);
+
    /* This pass must be last. */
    si_get_late_shader_variant_info(shader, &linked.consumer.args, nir);
 
@@ -1756,6 +1761,8 @@ static void si_get_ps_prolog_key(struct si_shader *shader, union si_shader_part_
        key->ps_prolog.states.force_samplemask_to_helper_invocation);
    key->ps_prolog.uses_persp_centroid =
       G_0286CC_PERSP_CENTROID_ENA(shader->config.spi_ps_input_addr); /* addr because the PS prolog may use it */
+   key->ps_prolog.uses_persp_pull_model =
+      G_0286CC_PERSP_PULL_MODEL_ENA(shader->config.spi_ps_input_ena);
    /* The PS prolog can change one to the other, so we need both or neither to be set. */
    assert(G_0286CC_LINEAR_SAMPLE_ENA(shader->config.spi_ps_input_addr) ==
           G_0286CC_LINEAR_CENTER_ENA(shader->config.spi_ps_input_addr));

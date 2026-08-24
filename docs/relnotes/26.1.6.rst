@@ -1,0 +1,280 @@
+Mesa 26.1.6 Release Notes / 2026-07-29
+======================================
+
+Mesa 26.1.6 is a bug fix release which fixes bugs found since the 26.1.5 release.
+
+Mesa 26.1.6 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 26.1.6 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 5296b88a0f1e012e2cb9ada150a2bbadf728ca81e5a4fb2ab43c83a4d2158606  mesa-26.1.6.tar.xz
+    SHA512: 6746b73f5b87e8ff3723eee586b4b5f033dbe6d13cd0309d743b7fa484c350268859ec8ff21aadcbca7a04070cdaa7828146dd28dde4b1935bb879891d687f0b  mesa-26.1.6.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- Ambient occlusion is broken in The Chronicles of Riddick - Assault on Dark Athena
+- Blockland crashes when shader quality turned up
+- Doom Eternal - Page Fault - somewhat reproducable. (RX9070)
+- Horizon Forbidden West misrendred lighting effects on BMG
+- Regression. VTK polydata. gl_PrimitiveID requires explicit geometry shader with versions 25.3.6 and later.
+- [ANV][PTL] - Horizon: Forbidden West regression in shader quirk
+- [VAOn12] Thread safety issues
+- [amdgpu] Little Inferno rendering issues starting with Mesa 21.1
+- [radeonsi] eglinfo 'libEGL warning: failed to get driver name for fd -1'
+- anv: bottom-of-pipe timestamp latched before vkCmdDispatch completes (Arc B390 / Panther Lake, Mesa 26.1.4), breaking wgpu compute-pass timings
+- anv: cooperative matrix loads from shared memory return the wrong tile on Arc B390 (Xe3/PTL), matmul results are wrong
+- radeonsi/VCN: AV1/HEVC encode reports a coded size larger than the coded buffer, client segfaults reading the mapped buffer
+- radv: acceleration structure update (refit) of AABB geometry loses intersection candidates (NAVI32, Mesa 26.1.4)
+- segfault v3d raspberry Pi5 h265 hw decoding / regression mesa 26.1.3/26.1.4
+- vulkan/runtime: GetPipelineBinaryDataKHR incorrectly assumes \`pPipelineBinaryDataSize` must be 0 initialized
+
+
+Changes
+-------
+
+Adam Stylinski (1):
+
+- nv30: fix an issue when this push buffer is NULL
+
+Benjamin Cheng (1):
+
+- ac/vcn_enc: Disable var slice for preencode with VCN4
+
+Caio Oliveira (2):
+
+- nir: Account for cmat memory accesses in copy_prop_vars
+- anv: Include build and device identity in shader binary UUID
+
+Connor Abbott (2):
+
+- tu: Fix resetting command streams with writeable BOs
+- tu: Fix condition for skipping emitting aprons
+
+Danylo Piliaiev (6):
+
+- tu: Custom resolve should always use AVOID_CCU layout
+- tu: Fix subsampled metadata and blit emission for separate stencil
+- tu: Fix gfx_write_access checking for TRANSFORM_FEEDBACK_COUNTER_READ_BIT
+- tu: Fix blit_cache_cleaned never being set to true
+- nir: Include scalarized component offsets in UBO ranges
+- tu: Dirty LRZ after changing attachment locations disable LRZ writes
+
+David Rosca (6):
+
+- vulkan/video: Fix coding AV1 decoder/encoder_buffer_delay
+- vulkan/video: Don't code AV1 decoder model info when not present
+- vulkan/video: Fix coding AV1 operating points
+- d3d12/video: Don't reset batches in fence_wait
+- vulkan/video: Fix coding H265 ref pic list modification lists
+- vulkan/video: Fix coding H265 SPS pcm block sizes, inter ref pic set and lt refs
+
+Dmitry Baryshkov (1):
+
+- tu: limit VALVE_fragment_density_map_layered to Vulkan 1.1 devices
+
+Emma Anholt (1):
+
+- freedreno: Don't force image component A=1 substitution on R/RG textures.
+
+Eric Engestrom (9):
+
+- docs: add sha sum for 26.1.5
+- .pick_status.json: Update to 112793b456b492bf2a6e925210c16229f3643a8a
+- .pick_status.json: Mark cb52837735756ddcac12b3c6b9b32ed6cfb6347e as denominated
+- .pick_status.json: Mark 7999060992e9cee91d1962faf65dc4e5c6fe4f69 as denominated
+- .pick_status.json: Mark 2515024a5919ed14fe05471e3f1f89c54a454610 as denominated
+- .pick_status.json: Mark 4fd93a0039a07ec2027f2a6d1d252c73ed033e0a as denominated
+- .pick_status.json: Mark adca1f255fd5cb9702db1e0a2bc25d13a521ae5f as denominated
+- pick-ui: turn commit.date into a (cached) property
+- pick-ui: show MR number for additional context
+
+Erico Nunes (1):
+
+- ci: lima farm maintenance
+
+Filip Gawin (2):
+
+- nv30: fix 1 << 31 issues
+- nv30: fix another left shift cannot be represented in type 'int'
+
+Frank Binns (2):
+
+- pvr: rearrange some functions in pvr_arch_border.c
+- pvr: setup all format fields for custom border color entries
+
+Frank Bouwer (1):
+
+- pvr: Fix for depth stencil 2d array writes.
+
+Georg Lehmann (3):
+
+- nir/opt_dead_write_vars: handle atomics as reads
+- nir: fix divergence for deref_cast
+- aco/live_var_analysis: make sure shared vgprs are within the encodable vgprs
+
+Ian Romanick (1):
+
+- brw: Handle empty top block in brw_nir_move_interpolation_to_top
+
+Iván Briano (1):
+
+- anv: fix 2d-array to 3d blits
+
+Jaakko Jokinen (1):
+
+- nir: Add cases to nir_get_io_offset_src_number()
+
+JaeHoon Lee (7):
+
+- v3dv: make room in the descriptor map for the no-sampler entries
+- v3dv: use the binning VS variant for the binning VPM config
+- v3dv: record the multiview geometry shader with its Vulkan stage bit
+- v3dv: record the no-op fragment shader with its Vulkan stage bit
+- nvk: free copy_memory_indirect_temps on command buffer destroy
+- v3dv: avoid restoring stale descriptor state after a meta op
+- nvk: report fills from memory correctly
+
+Jan Meisel (2):
+
+- nir/range_analysis: handle msad_4x8 in unsigned upper bound
+- radeonsi/vcn: fail feedback for truncated encodes
+
+Jiyu Yang (1):
+
+- panfrost: cleanup precomp_cache on screen destroy
+
+Jose Maria Casanova Crespo (1):
+
+- broadcom/compiler: don't leak the compile on assembly allocation failure
+
+Juan A. Suarez Romero (1):
+
+- v3d: save fragment constants on sand8/sand30 blit
+
+Karol Herbst (3):
+
+- rusticl/memory: return 0 for CL_IMAGE_SLICE_PITCH also for 2d images
+- rusticl/kernel: add libclc source hash to kernel shader keys
+- vtn/opencl: fix libclc needing fp16 lowering to fp32
+
+Konstantin Seurer (1):
+
+- radv/bvh: Fix updating acceleration structures containing AABBs
+
+Lionel Landwerlin (6):
+
+- anv: flush accumulated barriers for top of TOP_OF_PIPE
+- anv: fix Wa_18040903259
+- vulkan/runtime: fixup vk_shader leak on RT group recompile
+- anv: add workaround for atomics on R11G11B10 images
+- brw: fix wa_18019110168 lowering
+- anv: fix leak in RT binding point
+
+Loïc Molinari (1):
+
+- u_blitter: Fix out-dated draw_rectangle handler doc
+
+Marek Olšák (5):
+
+- radv: fix determining the raster prim for guardband
+- radv: fix determining the raster prim for line mode
+- radv: fix determining the dynamic raster prim for FS barycentrics
+- radv: fix determining the static raster prim for FS barycentrics and front_face
+- radv: don't expose memory types from AMD_device_coherent_memory without the ext
+
+Natalie Vock (3):
+
+- nir/opt_loop: Don't peel header blocks that jump
+- radv/nir: Clean up descriptor index lowering
+- radv: Expose mutable acceleration structure descriptors
+
+Olivia Lee (1):
+
+- panvk/csf: flush primitives generated query writes from CSF
+
+Pavel Ondračka (1):
+
+- nv50_ir_ra: align B96 spill slots to vec4
+
+Peng_Lx (1):
+
+- turnip/kgsl: close the dma-buf fd of our own allocations
+
+Pohsiang (John) Hsu (1):
+
+- d3d12: fix msvc build warning C4819
+
+Rhys Perry (5):
+
+- vulkan/bvh: fix to_emulated_float(-0.0)
+- vulkan/bvh: don't update min/max_bounds with inactive nodes
+- vulkan/bvh: enable SignedZeroInfNanPreserve in leaf.h
+- vulkan/bvh: limit valid 32-bit node keys to 0xfffffe00
+- ac/nir/ngg: don't shrink device-scope memory barriers
+
+Ryan Mckeever (1):
+
+- docs: advertise VK_KHR_multiview support for Bifrost
+
+Sushma Venkatesh Reddy (1):
+
+- intel/dev: Clamp PTL+ CS workgroup threads to 32
+
+Tacodiva (1):
+
+- vulkan/runtime: Fix bad assumption in GetPipelineBinaryDataKHR
+
+Timothy Arceri (6):
+
+- zink: fix swap interval changes being dropped
+- util: add Blockland workaround for crash
+- nir/opt_dead_write_vars: handle memcpy_deref as reads
+- util/mesa: add workaround to zero invalidated buffers
+- util: add workaround for Riddick using round() in glsl 1.20
+- llvmpipe: emit FS input vertex attributes in driver location order
+
+Toshinari Morikawa (1):
+
+- egl: avoid calling loader_get_driver_for_fd with fd = -1
+
+Valentine Burley (5):
+
+- ir3: Fix ballot_components for subgroups smaller than 32
+- ir3: Derive max_variable_workgroup_size from device limits
+- ir3: Compute subgroup_size from threadsize_base
+- tu: Use computed subgroup size
+- tu: Report correct maxFragmentInputComponents limits
+
+Vinson Lee (1):
+
+- util/tests: silence unused iterator warning in sparse_bitset_test
+
+Yiwei Zhang (3):
+
+- venus: properly check sync2 enablement
+- venus: host image copy to scrub present_src layout if needed
+- venus: ensure cached vn_ring_submit batches are bounded
+
+utzcoz (1):
+
+- virtio: magma-gpu-rs: accept a null device in virtgpu_kumquat_finish

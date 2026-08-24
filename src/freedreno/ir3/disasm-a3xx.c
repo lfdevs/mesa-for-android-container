@@ -514,6 +514,7 @@ disasm_field_cb(void *d, const char *field_name, struct isa_decode_value *val)
       ctx->reg.r = true;
 
       if (ctx->last.alias && ctx->last.alias_scope == ALIAS_TEX) {
+         ir3_assert(val->num < GPR_REG_SIZE); /* alias.tex isn't valid on non-GPRs */
          if (ctx->last.alias_full) {
             BITSET_SET(ctx->full_aliases, val->num);
          } else {

@@ -154,7 +154,7 @@ nv50_hw_sm_destroy_query(struct nv50_context *nv50, struct nv50_hw_query *hq)
 {
    struct nv50_query *q = &hq->base;
    nv50_hw_query_allocate(nv50, q, 0);
-   nouveau_fence_ref(NULL, &hq->fence);
+   nouveau_fence_ref(NULL, &hq->fence, nv50->base.screen);
    FREE(hq);
 }
 

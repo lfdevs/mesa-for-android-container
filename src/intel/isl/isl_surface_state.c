@@ -89,6 +89,7 @@ static const uint32_t isl_encode_aux_mode[] = {
    [ISL_AUX_USAGE_MCS_CCS] = AUX_MCS,
    [ISL_AUX_USAGE_STC_CCS] = AUX_NONE,
    [ISL_AUX_USAGE_HIZ_CCS_WT] = AUX_NONE,
+   [ISL_AUX_USAGE_ZCS] = AUX_NONE,
 };
 #elif GFX_VER >= 12
 static const uint32_t isl_encode_aux_mode[] = {
@@ -98,6 +99,7 @@ static const uint32_t isl_encode_aux_mode[] = {
    [ISL_AUX_USAGE_FCV_CCS_E] = AUX_CCS_E,
    [ISL_AUX_USAGE_CCS_E] = AUX_CCS_E,
    [ISL_AUX_USAGE_HIZ_CCS_WT] = AUX_CCS_E,
+   [ISL_AUX_USAGE_ZCS] = AUX_CCS_E,
    [ISL_AUX_USAGE_MCS_CCS] = AUX_MCS_LCE,
    [ISL_AUX_USAGE_STC_CCS] = AUX_CCS_E,
 };
@@ -327,11 +329,12 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
     *     are already covered by other bits.
     *
     * Under these assumptions, it makes sense for ISL to model this bit as
-    * being an extension of AuxiliarySurfaceMode where STC_CCS and HIZ_CCS_WT
-    * are indicated by AuxiliarySurfaceMode == CCS_E and DepthStencilResource
-    * == true.
+    * being an extension of AuxiliarySurfaceMode where STC_CCS, ZCS, and
+    * HIZ_CCS_WT are indicated by AuxiliarySurfaceMode == CCS_E and
+    * DepthStencilResource == true.
     */
    s.DepthStencilResource = info->aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT ||
+                            info->aux_usage == ISL_AUX_USAGE_ZCS ||
                             info->aux_usage == ISL_AUX_USAGE_STC_CCS;
 #endif
 
@@ -717,7 +720,15 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #if GFX_VER >= 7
    if (info->aux_usage != ISL_AUX_USAGE_NONE) {
       /* Check valid aux usages per-gen */
-      if (GFX_VER >= 12) {
+      if (GFX_VERx10 >= 125) {
+         assert(info->aux_usage == ISL_AUX_USAGE_MCS ||
+                info->aux_usage == ISL_AUX_USAGE_CCS_E ||
+                info->aux_usage == ISL_AUX_USAGE_MC ||
+                info->aux_usage == ISL_AUX_USAGE_ZCS ||
+                info->aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT ||
+                info->aux_usage == ISL_AUX_USAGE_MCS_CCS ||
+                info->aux_usage == ISL_AUX_USAGE_STC_CCS);
+      } else if (GFX_VERx10 >= 120) {
          assert(info->aux_usage == ISL_AUX_USAGE_MCS ||
                 info->aux_usage == ISL_AUX_USAGE_CCS_E ||
                 info->aux_usage == ISL_AUX_USAGE_FCV_CCS_E ||
@@ -748,13 +759,15 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
       if (GFX_VER < 12)
          assert(!(info->view->usage & ISL_SURF_USAGE_STORAGE_BIT));
 
-      if (isl_surf_usage_is_depth(info->surf->usage))
-         assert(isl_aux_usage_has_hiz(info->aux_usage));
+      if (isl_surf_usage_is_depth(info->surf->usage)) {
+         assert(isl_aux_usage_has_hiz(info->aux_usage) ||
+                info->aux_usage == ISL_AUX_USAGE_ZCS);
+      }
 
       if (isl_surf_usage_is_stencil(info->surf->usage))
          assert(info->aux_usage == ISL_AUX_USAGE_STC_CCS);
 
-      if (isl_aux_usage_has_hiz(info->aux_usage)) {
+      if (isl_surf_usage_is_depth(info->surf->usage)) {
          /* For Gfx8-11, there are some restrictions around sampling from HiZ.
           * The Skylake PRM docs for RENDER_SURFACE_STATE::AuxiliarySurfaceMode
           * say:

@@ -101,15 +101,12 @@ si_res_print_flags(enum radeon_bo_flag flags) {
       fprintf(stderr, "GFX12_ALLOW_DCC ");
 }
 
-enum radeon_map_flags
-{
-   /* Indicates that the caller will unmap the buffer.
-    *
-    * Not unmapping buffers is an important performance optimization for
-    * OpenGL (avoids kernel overhead for frequently mapped buffers).
-    */
-   RADEON_MAP_TEMPORARY = (PIPE_MAP_DRV_PRV << 0),
-};
+/* Indicates that the caller will unmap the buffer.
+ *
+ * Not unmapping buffers is an important performance optimization for
+ * OpenGL (avoids kernel overhead for frequently mapped buffers).
+ */
+#define RADEON_MAP_TEMPORARY (PIPE_MAP_DRV_PRV << 0)
 
 #define RADEON_SPARSE_PAGE_SIZE (64 * 1024)
 
@@ -1013,14 +1010,28 @@ static inline int radeon_get_heap_index(enum radeon_bo_domain domain, enum radeo
 }
 
 typedef struct pipe_screen *(*radeon_screen_create_t)(struct radeon_winsys *,
-                                                      const struct pipe_screen_config *);
+                                                      const struct pipe_screen_config *,
+                                                      uint64_t);
+
+struct amdgpu_winsys_options {
+   bool is_virtio;
+   bool zero_vram;
+   bool check_vm;
+   bool reserve_vmid;
+   bool userq_job_log;
+   bool noop_cs;
+   bool ib_caches_flush;
+};
 
 /* These functions create the radeon_winsys instance for the corresponding kernel driver. */
 struct radeon_winsys *
 amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
-		     radeon_screen_create_t screen_create, bool is_virtio);
+                     radeon_screen_create_t screen_create,
+                     uint64_t debug_flags,
+                     const struct amdgpu_winsys_options *options);
 struct radeon_winsys *
 radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
-			 radeon_screen_create_t screen_create);
+                         radeon_screen_create_t screen_create,
+                         uint64_t debug_flags);
 
 #endif

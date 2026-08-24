@@ -199,7 +199,7 @@ replace_with_load_global(nir_builder *b, struct ir3_compiler *compiler,
    /* Our offsets are in units of 4B. */
    nir_io_offset global_offset =
       ir3_nir_get_global_offset(b, compiler, offset, 2);
-   nir_def *load = nir_load_global_ir3(
+   nir_def *load = nir_load_global_offset(
       b, intr->def.num_components, intr->def.bit_size, addr, global_offset.def,
       .align_mul = 4, .align_offset = 0, .offset_shift = global_offset.shift);
    nir_def_replace(&intr->def, load);
@@ -213,8 +213,10 @@ replace_with_store_global(nir_builder *b, struct ir3_compiler *compiler,
    /* Our offsets are in units of 4B. */
    nir_io_offset global_offset =
       ir3_nir_get_global_offset(b, compiler, offset, 2);
-   nir_store_global_ir3(b, val, addr, global_offset.def, .align_mul = 4,
-                        .align_offset = 0, .offset_shift = global_offset.shift);
+   nir_store_global_offset(b, val, addr, global_offset.def, .align_mul = 4,
+                           .align_offset = 0,
+                           .offset_shift = global_offset.shift,
+                           .write_mask = MASK(intr->num_components));
    nir_instr_remove(&intr->instr);
 }
 
@@ -490,7 +492,7 @@ build_per_vertex_offset(nir_builder *b, struct state *state,
       offset = nir_imm_int(b, 0);
    } else {
       /* Offset is in vec4's, but we need it in unit of components for the
-       * load/store_global_ir3 offset.
+       * load/store_global_offset offset.
        */
       offset = nir_ishl_imm(b, offset, 2);
    }

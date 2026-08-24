@@ -169,9 +169,9 @@ struct gen_encoder_pre_xe : public gen_encoding_pre_xe {
             assert(devinfo->ver == 11);
 
             set(THREE_A1_EXECUTION_TYPE, gen_type_is_float_or_bfloat(inst->dst.type));
-            set(THREE_A1_DST_FILE,       inst->dst.file    == GEN_IMM ? 1 : 0);
+            set(THREE_A1_DST_FILE,       inst->dst.file    == GEN_ARF ? 1 : 0);
             set(THREE_A1_SRC0_FILE,      inst->src[0].file == GEN_IMM ? 1 : 0);
-            set(THREE_A1_SRC1_FILE,      inst->src[1].file == GEN_IMM ? 1 : 0);
+            set(THREE_A1_SRC1_FILE,      inst->src[1].file == GEN_ARF ? 1 : 0);
             set(THREE_A1_SRC2_FILE,      inst->src[2].file == GEN_IMM ? 1 : 0);
 
             set(THREE_DST_TYPE,       encode_type_3src(inst->dst.type));

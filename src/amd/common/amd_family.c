@@ -61,6 +61,7 @@ const char *ac_get_family_name(enum radeon_family family)
    CASE(KRACKAN1);
    CASE(GFX1153);
    CASE(GFX1170);
+   CASE(GFX1171);
    CASE(GFX1200);
    CASE(GFX1201);
    CASE(GFX1210);
@@ -192,6 +193,8 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
       return "gfx1153";
    case CHIP_GFX1170:
       return "gfx1170";
+   case CHIP_GFX1171:
+      return "gfx1171";
    case CHIP_GFX1200:
       return "gfx1200";
    case CHIP_GFX1201:

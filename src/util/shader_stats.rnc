@@ -20,7 +20,7 @@ isa = element isa {
     attribute hash { xsd:boolean }?,
     attribute hidden { xsd:boolean }?,
     [ a:defaultValue = "u32" ] attribute type
-      { "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64" | "float" | "bool" | "str" }?,
+      { "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64" | "float" | "bool" }?,
 
     text
   }+

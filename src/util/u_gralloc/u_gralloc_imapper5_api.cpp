@@ -1,6 +1,7 @@
 /*
  * Mesa 3-D graphics library
  *
+ * Copyright (C) 2026 NXP
  * Copyright (C) 2021 GlobalLogic Ukraine
  * Copyright (C) 2021-2022 Roman Stratiienko (r.stratiienko@gmail.com)
  * SPDX-License-Identifier: MIT
@@ -65,9 +66,20 @@ mapper5_get_buffer_basic_info(struct u_gralloc *gralloc,
    if (error != OK)
       return  -EINVAL;
 
+   uint64_t alloc_size;
+   error = GraphicBufferMapper::get().getAllocationSize(hnd->handle, &alloc_size);
+   if (error != OK)
+      return -EINVAL;
+
+   uint64_t layer_count;
+   error = GraphicBufferMapper::get().getLayerCount(hnd->handle, &layer_count);
+   if (error != OK)
+      return -EINVAL;
 
    out->drm_fourcc = drm_fourcc;
    out->modifier = modifier;
+   out->alloc_size = alloc_size;
+   out->layer_count = layer_count;
 
    auto layouts_opt = GetPlaneLayouts(hnd->handle);
 

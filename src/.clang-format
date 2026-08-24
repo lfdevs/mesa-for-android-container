@@ -340,9 +340,9 @@ ForEachMacros:
   - jay_foreach_phi_src_in_block
   - jay_foreach_phi_dst_in_block
   - jay_foreach_preload
-  - jay_foreach_killed
   - jay_foreach_ra_src
   - jay_foreach_ra_file
+  - jay_dag_foreach_edge
   - jay_foreach_pipe
   - jay_foreach_sbid_dep_type
 

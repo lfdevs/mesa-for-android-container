@@ -101,7 +101,7 @@ extern YYSTYPE yylval;
 "call"                            return TOKEN(T_OP_CALL);
 "jump"                            return TOKEN(T_OP_JUMP);
 "jumpa"                           return TOKEN(T_OP_JUMPA);
-"sret"                            return TOKEN(T_OP_SRET);
+"jumpd"                           return TOKEN(T_OP_JUMPD);
 "waitin"                          return TOKEN(T_OP_WAITIN);
 "bl"                              return TOKEN(T_OP_BL);
 "setsecure"			  return TOKEN(T_OP_SETSECURE);

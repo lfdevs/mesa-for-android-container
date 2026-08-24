@@ -59,11 +59,11 @@ struct geometry_constant {
    float clip_planes[MAX_CLIP_PLANES][4];
 };
 
-#define set_uniform_location(var, field, packed)                 \
-   do {                                                          \
-      unsigned offset = offsetof(struct geometry_constant, field); \
-      var->data.driver_location = offset >> (packed ? 2 : 4);    \
-      var->data.location_frac = (offset >> 2) & 0x3;             \
+#define set_uniform_location(var, field, packed)                    \
+   do {                                                             \
+      unsigned _offset = offsetof(struct geometry_constant, field); \
+      var->data.driver_location = _offset >> (packed ? 2 : 4);      \
+      var->data.location_frac = (_offset >> 2) & 0x3;               \
    } while (0)
 
 static nir_def *
@@ -821,3 +821,4 @@ st_draw_hw_select_prepare_mode(struct gl_context *ctx, struct pipe_draw_info *in
 
    return true;
 }
+

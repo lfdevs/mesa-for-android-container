@@ -46,6 +46,13 @@ enum virgl_debug_flags {
 extern const struct debug_named_value virgl_debug_options[];
 extern int virgl_debug;
 
+struct virgl_screen_gbm_format_modifier {
+   struct virgl_gbm_format_modifier list;
+   struct virgl_resource *res;
+   struct pipe_context *ctx;
+   simple_mtx_t lock;
+};
+
 struct virgl_screen {
    struct pipe_screen base;
 
@@ -71,6 +78,8 @@ struct virgl_screen {
    nir_shader_compiler_options compiler_options;
 
    struct disk_cache *disk_cache;
+
+   struct virgl_screen_gbm_format_modifier gbm;
 };
 
 
@@ -116,5 +125,8 @@ virgl_shader_stage_convert(mesa_shader_stage type)
  * maps that don't have a 16 byte alignment.
  */
 #define VIRGL_MAP_BUFFER_ALIGNMENT 64
+
+void
+virgl_screen_sync_format_modifier(struct virgl_screen *vscreen);
 
 #endif

@@ -39,6 +39,10 @@ struct kk_root_descriptor_table {
 
          float blend_constant[4];
          float clip_z_coeff;
+
+         float viewport_z_range[KK_MAX_VIEWPORTS * 2];
+         bool emulate_depth_clamp;
+         bool emulate_viewport_z;
       } draw;
       struct {
          uint32_t base_group[3];
@@ -114,9 +118,14 @@ struct kk_rendering_state {
    struct kk_attachment fsr_att;
 
    bool ms_bresenham_lines;
+   /* Barrier tracking to understand if we need to split render passes. */
+   bool write_available;
+   bool ds_write_available;
+   bool storage_write_available;
    bool sample_locations_enable;
    uint32_t sample_locations_count;
    VkSampleLocationEXT sample_locations[KK_MAX_SAMPLES];
+   bool force_attachment_store;
 };
 
 /* Dirty tracking bits for state not tracked by vk_dynamic_graphics_state or
@@ -197,22 +206,32 @@ struct kk_uploader {
    uint32_t offset;
 };
 
-struct kk_cs {
-   mtl_command_allocator *allocator_pre_gfx;
-   mtl_command_buffer *cmd_buf_pre_gfx;
-   mtl_compute_encoder *pre_gfx;
-   mtl_command_allocator *allocator_gfx;
-   mtl_command_buffer *cmd_buf_gfx;
-   mtl_render_encoder *gfx;
-   mtl_command_allocator *allocator_post_gfx;
-   mtl_command_buffer *cmd_buf_post_gfx;
-   mtl_compute_encoder *post_gfx;
+/* A pending resolve of one timestamp counter-heap entry into a query pool BO.
+ * Recorded by vkCmdWriteTimestamp2 and flushed on the GPU timeline at cs_end. */
+struct kk_ts_resolve {
+   mtl_counter_heap *heap;
+   uint32_t index;
+   uint64_t dst_addr;
+};
+
+struct kk_encoder_state {
+   /* either a mtl_compute_encoder or a mtl_render_encoder */
+   mtl_command_encoder *encoder;
+   mtl_command_allocator *allocator;
+   mtl_command_buffer *cmd_buf;
+   /* Pending timestamp resolves (struct kk_ts_resolve), flushed at cs_end. */
+   struct util_dynarray ts_resolves;
 };
 
 struct kk_cmd_buffer {
    struct vk_command_buffer vk;
 
-   struct kk_cs cs;
+   struct kk_encoder_state gfx;
+   /* pre and post gfx encoder states swap after every gfx encoder is committed */
+   struct kk_encoder_state cmp[2];
+   struct kk_encoder_state *pre_gfx;
+   struct kk_encoder_state *post_gfx;
+
    void *drawable;
    mtl_argument_table *argument_table;
 
@@ -320,6 +339,8 @@ uint64_t kk_upload_descriptor_root(struct kk_cmd_buffer *cmd,
 
 void kk_cmd_buffer_flush_push_descriptors(struct kk_cmd_buffer *cmd,
                                           struct kk_descriptor_state *desc);
+
+void kk_apply_attachment_store_ops(struct kk_cmd_buffer *cmd, bool force_store);
 
 enum kk_grid_mode {
    KK_GRID_DIRECT = 0u,

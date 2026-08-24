@@ -154,8 +154,10 @@ static const struct {
 
    /* GFX register numbers. */
    { "mov (4) r127 r127",        VALID,                                                      { .lt = 200 } },
-   { "mov (4) r128 r1",          "Destination GRF register number 128 exceeds maximum 127.", { .lt = 200 } },
-   { "mov (4) r0 r128",          "Source 0 GRF register number 128 exceeds maximum 127.",    { .lt = 200 } },
+   { "mov (4) r128 r1",          "Destination GRF register number 128 exceeds maximum 127.", { .lt = 125 } },
+   { "mov (4) r0 r128",          "Source 0 GRF register number 128 exceeds maximum 127.",    { .lt = 125 } },
+   { "mov (4) r256 r1",          "Destination GRF register number 256 exceeds maximum 255.", { .ge = 125 } },
+   { "mov (4) r0 r256",          "Source 0 GRF register number 256 exceeds maximum 255.",    { .ge = 125 } },
    { "mov (4) r[a0.0 + 128] r1", VALID,                                                      { .lt = 200 } },
    { "mov (4) r0 r[a0.0 + 128]", VALID,                                                      { .lt = 200 } },
 
@@ -196,7 +198,7 @@ static const struct {
    { "mad (8) r0:d r1:d r2:d r3:d",
      "Gfx9 3-source instructions must use Align16 mode.", { .eq = 90 }
    },
-   { "mad (8) r0:d r1:d r2:d r3:d", VALID, { .gt = 90 } },
+   { "mad (8) r0:d r1:d r2:d r3:d", VALID, { .gt = 90, .lt = 120 } },
 
    { "mad (8) r0.:d r1:d r2:d r3:d {Align16}", VALID,                                   { .eq = 90 } },
    { "mad (8) r0.:d r1:d r2:d r3:d {Align16}", "Align16 mode doesn't exist on Gfx11+.", { .ge = 110 } },
@@ -1498,15 +1500,16 @@ static const struct {
    },
    { "math.fdiv (8) r0:f r1:f r2<16;8,2>:hf", VALID, { .lt = 125 } },
    { "math.fdiv (8) r0:f r1:f r2<16;8,2>:hf",
-     "MATH POW and FDIV are not supported on Gfx12.5+.", { .ge = 125 }
+     "MATH POW and FDIV are not supported on Gfx12.5+.", { .ge = 125, .lt = 350 }
    },
    { "math.fdiv (8) r0:f r1:f r2",
      "Before Gfx12.5, 2-source MATH src1 type must be F or HF.", { .lt = 125 }
    },
    { "math.fdiv (8) r0:f r1:f r2",
-     "MATH POW and FDIV are not supported on Gfx12.5+.", { .ge = 125 }
+     "MATH POW and FDIV are not supported on Gfx12.5+.", { .ge = 125, .lt = 350 }
    },
 
+   { "math.tanh (8) r0:f r1:f null", VALID, { .ge = 350 } },
 
    { "math.sqt (8) r0:f r1:f null",         VALID },
    { "math.sqt (8) r0<2>:hf r1<2>:hf null", VALID },
@@ -1943,6 +1946,22 @@ static const struct {
      "Transposed LSC vectors are restricted to exec_size=1.", { .ge = 200, .has_lsc = true }
    },
    { "send.ugm (8) null r1 null:0 a0.0 a0.0", VALID, { .ge = 200, .has_lsc = true } },
+
+
+   { "send.ugm (1) r10 r80 null:0 0x0 0x02400403",
+     "LSC 2D block messages require Xe2+.", { .lt = 200, .has_lsc = true }
+   },
+   { "send.ugm (1) r10 r80 null:0 0x0 0x02400403", VALID, { .ge = 200, .has_lsc = true } },
+   { "send.tgm (1) r10 r80 null:0 0x0 0x02400403", VALID, { .ge = 200, .has_lsc = true } },
+   { "send.slm (1) r10 r80 null:0 0x0 0x02400403",
+     "LSC 2D block messages must use UGM or TGM.", { .ge = 200, .has_lsc = true }
+   },
+   { "send.ugm (1) r10 r80 null:0 0x0 0x22400403",
+     "UGM 2D block messages require flat A64 addressing.", { .ge = 200, .has_lsc = true }
+   },
+   { "send.ugm (1) r10 r80 null:0 0x0 0x02400803",
+     "UGM 2D block messages require d8, d16, d32, or d64 data size.", { .ge = 200, .has_lsc = true }
+   },
 
 
    /* ARF scalar register restrictions. */

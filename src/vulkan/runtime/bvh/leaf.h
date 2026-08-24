@@ -23,6 +23,12 @@
 
 #include "vk_bvh_helpers.h"
 
+#define SpvCapabilitySignedZeroInfNanPreserve 4466
+#define SpvExecutionModeSignedZeroInfNanPreserve 4461
+spirv_execution_mode(extensions = ["SPV_KHR_float_controls"],
+                     capabilities = [SpvCapabilitySignedZeroInfNanPreserve],
+                     SpvExecutionModeSignedZeroInfNanPreserve, 32);
+
 layout(local_size_x_id = SUBGROUP_SIZE_ID, local_size_y = 1, local_size_z = 1) in;
 
 layout(push_constant) uniform CONSTS {
@@ -78,6 +84,11 @@ build_triangle(inout vk_aabb bounds, VOID_REF dst_ptr, vk_bvh_geometry_data geom
    DEREF(node).base.aabb = bounds;
    DEREF(node).triangle_id = global_id;
    DEREF(node).geometry_id_and_flags = geom_data.geometry_id;
+
+   if (VK_TEST_BUILD_FLAG_HAS_QUADS) {
+      REF(vk_ir_triangle_node_quad) quad = vk_ir_triangle_node_get_quad_ref(node);
+      DEREF(quad).triangle_id = VK_QUAD_TRIANGLE_ID_UNUSED;
+   }
 
    return is_valid;
 }
@@ -197,7 +208,7 @@ build_instance(inout vk_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint32_
       root_flags = VK_BVH_BOX_FLAG_NO_OPAQUE;
    else
       root_flags = DEREF(REF(uint32_t)(instance.accelerationStructureReference + ROOT_FLAGS_OFFSET));
-   DEREF(node).root_flags = root_flags;
+   DEREF(node).root_flags = root_flags | ((~(instance.custom_instance_and_mask >> 24)) << VK_BVH_BOX_FLAGS_INV_CULL_MASK_SHIFT);
 
    return true;
 }
@@ -210,18 +221,14 @@ main(void)
 
    uint32_t src_offset = global_id * args.geom_data.stride;
 
-   uint32_t dst_stride;
+   uint32_t dst_stride = vk_ir_node_size(args.geom_data.geometry_type);
    uint32_t node_type;
-   if (args.geom_data.geometry_type == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
-      dst_stride = SIZEOF(vk_ir_triangle_node);
+   if (args.geom_data.geometry_type == VK_GEOMETRY_TYPE_TRIANGLES_KHR)
       node_type = vk_ir_node_triangle;
-   } else if (args.geom_data.geometry_type == VK_GEOMETRY_TYPE_AABBS_KHR) {
-      dst_stride = SIZEOF(vk_ir_aabb_node);
+   else if (args.geom_data.geometry_type == VK_GEOMETRY_TYPE_AABBS_KHR)
       node_type = vk_ir_node_aabb;
-   } else {
-      dst_stride = SIZEOF(vk_ir_instance_node);
+   else
       node_type = vk_ir_node_instance;
-   }
 
    uint32_t dst_offset = primitive_id * dst_stride;
    VOID_REF dst_ptr = OFFSET(args.bvh, dst_offset);
@@ -247,19 +254,18 @@ main(void)
       is_active = true;
 
    uint32_t id = is_active ? pack_ir_node_id(dst_offset, node_type) : VK_BVH_INVALID_NODE;
-   if (VK_TEST_BUILD_FLAG_64BIT_KEYS)
-      DEREF(INDEX(key64_id_pair, args.ids, primitive_id)).id = id;
-   else
-      DEREF(INDEX(key32_id_pair, args.ids, primitive_id)).id = id;
+   DEREF(INDEX(uint32_t, args.ids, primitive_id)) = id;
 
    uvec4 ballot = subgroupBallot(is_active);
    if (subgroupElect())
       atomicAdd(DEREF(args.header).active_leaf_count, subgroupBallotBitCount(ballot));
 
-   atomicMin(DEREF(args.header).min_bounds[0], to_emulated_float(bounds.min.x));
-   atomicMin(DEREF(args.header).min_bounds[1], to_emulated_float(bounds.min.y));
-   atomicMin(DEREF(args.header).min_bounds[2], to_emulated_float(bounds.min.z));
-   atomicMax(DEREF(args.header).max_bounds[0], to_emulated_float(bounds.max.x));
-   atomicMax(DEREF(args.header).max_bounds[1], to_emulated_float(bounds.max.y));
-   atomicMax(DEREF(args.header).max_bounds[2], to_emulated_float(bounds.max.z));
+   if (is_active) {
+      atomicMin(DEREF(args.header).min_bounds[0], to_emulated_float(bounds.min.x));
+      atomicMin(DEREF(args.header).min_bounds[1], to_emulated_float(bounds.min.y));
+      atomicMin(DEREF(args.header).min_bounds[2], to_emulated_float(bounds.min.z));
+      atomicMax(DEREF(args.header).max_bounds[0], to_emulated_float(bounds.max.x));
+      atomicMax(DEREF(args.header).max_bounds[1], to_emulated_float(bounds.max.y));
+      atomicMax(DEREF(args.header).max_bounds[2], to_emulated_float(bounds.max.z));
+   }
 }

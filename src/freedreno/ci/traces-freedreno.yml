@@ -141,7 +141,7 @@ traces:
     freedreno-a530:
       label: [skip, flakes]
     freedreno-a618:
-      checksum: 1b9a79f0088a3ddb5723f217d37cee74
+      checksum: c8608d54cc6298476a2b60686d152dbc
     zink-a618:
       checksum: e4e5415f7a81a6bd14b7ff8f67083cbf
 

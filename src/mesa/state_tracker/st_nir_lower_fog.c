@@ -10,7 +10,7 @@
 
 static nir_def *
 fog_result(nir_builder *b, nir_def *color, enum gl_fog_mode fog_mode,
-           struct gl_program_parameter_list *paramList,
+           bool fog_coord_abs, struct gl_program_parameter_list *paramList,
            bool packed_driver_uniform_storage)
 {
    nir_shader *s = b->shader;
@@ -18,6 +18,18 @@ fog_result(nir_builder *b, nir_def *color, enum gl_fog_mode fog_mode,
                                                .interp_mode = INTERP_MODE_SMOOTH);
    nir_def *fogc = nir_load_interpolated_input(b, 1, 32, baryc, nir_imm_int(b, 0),
                                                .io_semantics.location = VARYING_SLOT_FOGC);
+
+   /* For the GL_EYE_PLANE_ABSOLUTE_NV distance mode the fog coordinate is
+    * abs(Ze).  The fixed-function vertex program emits the *signed* eye-space
+    * Z into VARYING_SLOT_FOGC and we take the absolute value here, per
+    * fragment.  Applying abs() per vertex would break primitives straddling
+    * the eye plane (e.g. a ground quad the camera stands on): the pre-abs'd
+    * endpoint values are all large, so interpolation over-estimates the
+    * distance for the fragments in between and fogs them completely.  See
+    * mesa issue #15407.
+    */
+   if (fog_coord_abs)
+      fogc = nir_fabs(b, fogc);
 
    static const gl_state_index16 fog_params_tokens[STATE_LENGTH] = {STATE_FOG_PARAMS_OPTIMIZED};
    static const gl_state_index16 fog_color_tokens[STATE_LENGTH] = {STATE_FOG_COLOR};
@@ -79,6 +91,7 @@ fog_result(nir_builder *b, nir_def *color, enum gl_fog_mode fog_mode,
 
 struct lower_fog_state {
    enum gl_fog_mode fog_mode;
+   bool fog_coord_abs;
    struct gl_program_parameter_list *paramList;
    bool packed_driver_uniform_storage;
 };
@@ -103,7 +116,8 @@ st_nir_lower_fog_instr(nir_builder *b, nir_instr *instr, void *_state)
    nir_def *color = intr->src[0].ssa;
    color = nir_resize_vector(b, color, 4);
 
-   nir_def *fog = fog_result(b, color, state->fog_mode, state->paramList,
+   nir_def *fog = fog_result(b, color, state->fog_mode, state->fog_coord_abs,
+                             state->paramList,
                              state->packed_driver_uniform_storage);
 
    /* retain the non-fog-blended alpha value for color */
@@ -116,7 +130,7 @@ st_nir_lower_fog_instr(nir_builder *b, nir_instr *instr, void *_state)
 }
 
 bool
-st_nir_lower_fog(nir_shader *s, enum gl_fog_mode fog_mode,
+st_nir_lower_fog(nir_shader *s, enum gl_fog_mode fog_mode, bool fog_coord_abs,
                  struct gl_program_parameter_list *paramList,
                  bool packed_driver_uniform_storage)
 {
@@ -124,6 +138,7 @@ st_nir_lower_fog(nir_shader *s, enum gl_fog_mode fog_mode,
 
    struct lower_fog_state state = {
       .fog_mode = fog_mode,
+      .fog_coord_abs = fog_coord_abs,
       .paramList = paramList,
       .packed_driver_uniform_storage = packed_driver_uniform_storage,
    };

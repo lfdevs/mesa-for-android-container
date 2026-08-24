@@ -3,13 +3,3 @@ dEQP-VK.pipeline.timestamp.calibrated.calibration_test,Fail
 
 # VKCTS test bug (invalid behavior)
 dEQP-VK.api.copy_and_blit.core.use_after_copy.d16_unorm.general.32x32x2_cq_regions_img2img_msaa,Fail
-
-# CTS is missing -frounding-math: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6580
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.scalar.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.scalar.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec2.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec2.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec3.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec3.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec4.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec4.rte.denorm_flush.float_controls,Fail

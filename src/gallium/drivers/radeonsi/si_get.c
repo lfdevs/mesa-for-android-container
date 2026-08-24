@@ -42,9 +42,9 @@ static const char *si_get_name(struct pipe_screen *pscreen)
 static uint64_t si_get_timestamp(struct pipe_screen *screen)
 {
    struct si_screen *sscreen = (struct si_screen *)screen;
+   uint64_t timestamp = sscreen->ws->query_value(sscreen->ws, RADEON_TIMESTAMP);
 
-   return 1000000 * sscreen->ws->query_value(sscreen->ws, RADEON_TIMESTAMP) /
-          sscreen->info.clock_crystal_freq;
+   return timestamp * 1000000.0 / sscreen->info.clock_crystal_freq;
 }
 
 static void si_query_memory_info(struct pipe_screen *screen, struct pipe_memory_info *info)
@@ -161,6 +161,9 @@ void si_init_screen_caps(struct si_screen *sscreen)
 
    caps->native_fence_fd = sscreen->info.has_fence_to_handle;
 
+   caps->device_type = sscreen->info.has_dedicated_vram
+      ? PIPE_DEVICE_TYPE_DISCRETE_GPU
+      : PIPE_DEVICE_TYPE_INTEGRATED_GPU;
    caps->endianness = PIPE_ENDIAN_LITTLE;
    caps->vendor_id = ATI_VENDOR_ID;
    caps->device_id = sscreen->info.pci_id;
@@ -176,7 +179,9 @@ void si_init_screen_caps(struct si_screen *sscreen)
    if (sscreen->ws->va_range)
       sscreen->ws->va_range(sscreen->ws, &caps->min_vma, &caps->max_vma);
 
-   if (sscreen->info.has_timeline_syncobj &&
-       !(sscreen->info.userq_ip_mask & BITFIELD_BIT(AMD_IP_GFX)))
+   if (sscreen->info.has_timeline_syncobj)
       caps->max_timeline_semaphore_difference = UINT64_MAX;
+
+      /* Up to 16 bytes are accelerated */
+   caps->hw_clear_buffer_sizes = 1 | 2 | 4 | 8 | 16;
 }

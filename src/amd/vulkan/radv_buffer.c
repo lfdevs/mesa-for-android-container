@@ -56,13 +56,11 @@ radv_create_buffer(struct radv_device *device, const VkBufferCreateInfo *pCreate
       return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 #endif
 
-   buffer = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*buffer), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   buffer = vk_zalloc2(&device->vk.alloc, pAllocator, sizeof(*buffer), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (buffer == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    vk_buffer_init(&device->vk, &buffer->vk, pCreateInfo);
-   buffer->bo = NULL;
-   buffer->range = 0;
 
    if (buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
       enum radeon_bo_flag flags = RADEON_FLAG_VIRTUAL;
@@ -219,8 +217,8 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
 
    pMemoryRequirements->memoryRequirements.size = align64(size, pMemoryRequirements->memoryRequirements.alignment);
 
-   vk_foreach_struct (ext, pMemoryRequirements->pNext) {
-      switch (ext->sType) {
+   vk_foreach_struct (sType, ext, pMemoryRequirements->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
          VkMemoryDedicatedRequirements *req = (VkMemoryDedicatedRequirements *)ext;
          req->requiresDedicatedAllocation = false;

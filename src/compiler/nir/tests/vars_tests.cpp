@@ -202,6 +202,37 @@ nir_store_var_volatile(nir_builder *b, nir_variable *var,
                                value, writemask, ACCESS_VOLATILE);
 }
 
+static nir_def *
+nir_deref_atomic_add(nir_builder *b, nir_deref_instr *deref, nir_def *value)
+{
+   nir_intrinsic_instr *atomic =
+      nir_intrinsic_instr_create(b->shader, nir_intrinsic_deref_atomic);
+   atomic->num_components = 1;
+   atomic->src[0] = nir_src_for_ssa(&deref->def);
+   atomic->src[1] = nir_src_for_ssa(value);
+   nir_intrinsic_set_atomic_op(atomic, nir_atomic_op_iadd);
+   nir_def_init(&atomic->instr, &atomic->def, 1, value->bit_size);
+   nir_builder_instr_insert(b, &atomic->instr);
+   return &atomic->def;
+}
+
+static nir_def *
+nir_deref_atomic_comp_swap_var(nir_builder *b, nir_variable *var,
+                               nir_def *compare, nir_def *value)
+{
+   nir_deref_instr *deref = nir_build_deref_var(b, var);
+   nir_intrinsic_instr *atomic =
+      nir_intrinsic_instr_create(b->shader, nir_intrinsic_deref_atomic_swap);
+   atomic->num_components = 1;
+   atomic->src[0] = nir_src_for_ssa(&deref->def);
+   atomic->src[1] = nir_src_for_ssa(compare);
+   atomic->src[2] = nir_src_for_ssa(value);
+   nir_intrinsic_set_atomic_op(atomic, nir_atomic_op_cmpxchg);
+   nir_def_init(&atomic->instr, &atomic->def, 1, value->bit_size);
+   nir_builder_instr_insert(b, &atomic->instr);
+   return &atomic->def;
+}
+
 TEST_F(nir_redundant_load_vars_test, duplicated_load)
 {
    /* Load a variable twice in the same block.  One should be removed. */
@@ -1646,6 +1677,139 @@ TEST_F(nir_dead_write_vars_test, dead_write_components_in_block)
 
    nir_intrinsic_instr *store = get_intrinsic(nir_intrinsic_store_deref, 0);
    EXPECT_EQ(store->src[1].ssa, load_v2);
+}
+
+/* An atomic reads the memory it operates on, so a store feeding it must not be
+ * eliminated by a later store to the same deref.
+ */
+TEST_F(nir_dead_write_vars_test, atomic_reads_prevent_dead_write)
+{
+   nir_variable *v = create_int(nir_var_mem_global, "v");
+
+   nir_store_var(b, v, nir_imm_int(b, 1), 0x1);
+   nir_deref_atomic_add(b, nir_build_deref_var(b, v), nir_imm_int(b, 2));
+   nir_store_var(b, v, nir_imm_int(b, 3), 0x1);
+
+   bool progress = nir_opt_dead_write_vars(b->shader);
+   ASSERT_FALSE(progress);
+   EXPECT_EQ(2, count_intrinsics(nir_intrinsic_store_deref));
+}
+
+TEST_F(nir_dead_write_vars_test, atomic_swap_reads_prevent_dead_write)
+{
+   nir_variable *v = create_int(nir_var_mem_global, "v");
+
+   nir_store_var(b, v, nir_imm_int(b, 1), 0x1);
+   nir_deref_atomic_comp_swap_var(b, v, nir_imm_int(b, 0), nir_imm_int(b, 2));
+   nir_store_var(b, v, nir_imm_int(b, 3), 0x1);
+
+   bool progress = nir_opt_dead_write_vars(b->shader);
+   ASSERT_FALSE(progress);
+   EXPECT_EQ(2, count_intrinsics(nir_intrinsic_store_deref));
+}
+
+/* memcpy reads its source (and writes its destination), so a store feeding its
+ * source must not be eliminated by a later store to the same deref.
+ */
+TEST_F(nir_dead_write_vars_test, memcpy_reads_prevent_dead_write)
+{
+   nir_variable **v = create_many_int(nir_var_mem_global, "v", 2);
+
+   nir_store_var(b, v[0], nir_imm_int(b, 1), 0x1);
+   nir_memcpy_deref(b, nir_build_deref_var(b, v[1]),
+                    nir_build_deref_var(b, v[0]), nir_imm_int(b, 4));
+   nir_store_var(b, v[0], nir_imm_int(b, 3), 0x1);
+
+   bool progress = nir_opt_dead_write_vars(b->shader);
+   ASSERT_FALSE(progress);
+   EXPECT_EQ(2, count_intrinsics(nir_intrinsic_store_deref));
+}
+
+/* memcpy is a sized copy: copying 16 bytes starting at arr[0] also reads
+ * arr[1], even though the source deref is only arr[0].  A deref comparison
+ * against arr[0] would miss the store to arr[1], so the writes have to be
+ * cleared by mode.
+ */
+TEST_F(nir_dead_write_vars_test, memcpy_reads_beyond_deref_prevent_dead_write)
+{
+   nir_variable *arr = create_var(nir_var_mem_global,
+                                  glsl_array_type(glsl_int_type(), 4, 0), "arr");
+   nir_variable *out = create_var(nir_var_mem_global,
+                                  glsl_array_type(glsl_int_type(), 4, 0), "out");
+
+   nir_deref_instr *arr0 =
+      nir_build_deref_array_imm(b, nir_build_deref_var(b, arr), 0);
+
+   nir_store_deref(b, nir_build_deref_array_imm(b, nir_build_deref_var(b, arr), 1),
+                   nir_imm_int(b, 1), 0x1);
+   nir_memcpy_deref(b, nir_build_deref_var(b, out), arr0, nir_imm_int(b, 16));
+   nir_store_deref(b, nir_build_deref_array_imm(b, nir_build_deref_var(b, arr), 1),
+                   nir_imm_int(b, 3), 0x1);
+
+   bool progress = nir_opt_dead_write_vars(b->shader);
+   ASSERT_FALSE(progress);
+   EXPECT_EQ(2, count_intrinsics(nir_intrinsic_store_deref));
+}
+
+/* A neighbouring invocation reads arr[idx] between the two barriers, so the
+ * first store cannot be removed even though the second store has an equal deref.
+ */
+TEST_F(nir_dead_write_vars_test, shared_barrier_cross_invocation_read_prevents_removal)
+{
+   const unsigned array_size = 64;
+   nir_variable *arr = create_var(nir_var_mem_shared,
+                                  glsl_array_type(glsl_int_type(), array_size, 0), "arr");
+   nir_def *idx = nir_load_local_invocation_index(b);
+   /* Wrap so the last invocation doesn't read past the array. */
+   nir_def *neighbor = nir_umod_imm(b, nir_iadd_imm(b, idx, 1), array_size);
+
+   nir_store_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, arr), idx),
+                   nir_imm_int(b, 1), 0x1);
+   nir_scoped_memory_barrier(b, SCOPE_WORKGROUP, NIR_MEMORY_RELEASE,
+                             nir_var_mem_shared);
+   nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, arr),
+                                           neighbor));
+   nir_scoped_memory_barrier(b, SCOPE_WORKGROUP, NIR_MEMORY_RELEASE,
+                             nir_var_mem_shared);
+   nir_store_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, arr), idx),
+                   nir_imm_int(b, 2), 0x1);
+   /* Keep the second store live so it isn't removed as a trailing shared write
+    * at the end of the program. */
+   nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, arr), idx));
+
+   bool progress = nir_opt_dead_write_vars(b->shader);
+   ASSERT_FALSE(progress);
+   EXPECT_EQ(2, count_intrinsics(nir_intrinsic_store_deref));
+}
+
+/* After the barrier a neighbouring invocation performs an atomic on arr[idx].
+ * The atomic reads (and writes) shared memory, so the first store cannot be
+ * removed even though the second store has an equal deref.
+ */
+TEST_F(nir_dead_write_vars_test, shared_barrier_cross_invocation_atomic_prevents_removal)
+{
+   const unsigned array_size = 64;
+   nir_variable *arr = create_var(nir_var_mem_shared,
+                                  glsl_array_type(glsl_int_type(), array_size, 0), "arr");
+   nir_def *idx = nir_load_local_invocation_index(b);
+   /* Wrap so the last invocation doesn't atomic past the array. */
+   nir_def *neighbor = nir_umod_imm(b, nir_iadd_imm(b, idx, 1), array_size);
+
+   nir_store_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, arr), idx),
+                   nir_imm_int(b, 1), 0x1);
+   nir_scoped_memory_barrier(b, SCOPE_WORKGROUP, NIR_MEMORY_RELEASE,
+                             nir_var_mem_shared);
+   nir_deref_atomic_add(b, nir_build_deref_array(b, nir_build_deref_var(b, arr), neighbor),
+                        nir_imm_int(b, 1));
+   nir_store_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, arr), idx),
+                   nir_imm_int(b, 2), 0x1);
+   /* Keep the second store live so it isn't removed as a trailing shared write
+    * at the end of the program. */
+   nir_load_deref(b, nir_build_deref_array(b, nir_build_deref_var(b, arr), idx));
+
+   bool progress = nir_opt_dead_write_vars(b->shader);
+   ASSERT_FALSE(progress);
+   EXPECT_EQ(2, count_intrinsics(nir_intrinsic_store_deref));
 }
 
 

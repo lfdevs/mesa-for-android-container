@@ -14,12 +14,39 @@ export LD_LIBRARY_PATH=$LIBDIR
 
 cd /usr/local/shader-db
 
-for driver in freedreno lima v3d vc4; do
+for driver in freedreno lima vc4; do
     section_start shader-db-${driver} "Running shader-db for $driver"
     env LD_PRELOAD="$LIBDIR/lib${driver}_noop_drm_shim.so" \
         ./run -j"${FDO_CI_CONCURRENT:-4}" ./shaders \
             > "$ARTIFACTSDIR/${driver}-shader-db.txt"
     section_end shader-db-${driver}
+done
+
+# Run shader-db over a number of supported versions for v3d
+for gpu in 7.1 4.2; do
+    section_start "shader-db-v3d-${gpu//.}" "Running shader-db for v3d - ${gpu}"
+    env LD_PRELOAD="$LIBDIR/libv3d_noop_drm_shim.so" \
+        V3D_GPU_ID="${gpu//.}" \
+        ./run -j"${FDO_CI_CONCURRENT:-4}" ./shaders \
+            > "$ARTIFACTSDIR/v3d-${gpu//.}-shader-db.txt"
+    section_end "shader-db-v3d-${gpu//.}"
+done
+
+# Run shader-db over a number of supported GPUs for etnaviv. The shim takes an
+# identity of the form model:revision[:product:customer:eco], see
+# src/etnaviv/drm-shim/README.md.
+for gpu in 2000:5108 \
+           3000:5450 \
+           7000:6204:70003:11 \
+           7000:6214:70002:30; do
+    IFS=: read -r model revision _ <<< "$gpu"
+    model_revision="gc$model-r$revision"
+    section_start shader-db-etnaviv-"$model_revision" "Running shader-db for etnaviv - $model_revision"
+    env LD_PRELOAD="$LIBDIR/libetnaviv_noop_drm_shim.so" \
+        ETNA_SHIM_GPU="$gpu" \
+        ./run -j"${FDO_CI_CONCURRENT:-4}" -o etnaviv ./shaders \
+            > "$ARTIFACTSDIR/etnaviv-$model_revision-shader-db.txt"
+    section_end shader-db-etnaviv-"$model_revision"
 done
 
 # Run shader-db over a number of supported platforms for crocus/iris

@@ -207,7 +207,6 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
       mem->import_handle_type = host_ptr_info->handleType;
    } else {
       const struct radv_physical_device *pdev = radv_device_physical(device);
-      const struct radv_instance *instance = radv_physical_device_instance(pdev);
       uint64_t alloc_size = align64(pAllocateInfo->allocationSize, 4096);
       uint32_t heap_index;
 
@@ -237,7 +236,7 @@ radv_alloc_memory(struct radv_device *device, const VkMemoryAllocateInfo *pAlloc
          flags |= RADEON_FLAG_ZERO_VRAM;
 
       /* Only apply the workaround for BOs created by the application, not by the driver. */
-      if (instance->drirc.debug.wait_for_vm_map_updates)
+      if (pdev->drirc.debug.wait_for_vm_map_updates)
          flags |= RADEON_FLAG_VM_UPDATE_WAIT;
 
       /* On GFX12, DCC is transparent to the userspace driver and PTE.DCC is

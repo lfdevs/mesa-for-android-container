@@ -26,3 +26,10 @@ amdgpu_dump = executable(
   dependencies: [dep_libdrm],
   install: false,
 )
+
+executable(
+  'amdgpu_list_devices',
+  ['amdgpu_list_devices.c', '../common/amdgpu_devices.c'],
+  include_directories: [inc_include, inc_src, inc_amd],
+  install: true,
+)

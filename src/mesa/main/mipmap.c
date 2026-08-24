@@ -807,7 +807,7 @@ generate_mipmap_uncompressed(struct gl_context *ctx, GLenum target,
 
    for (level = texObj->Attrib.BaseLevel; level < maxLevel; level++) {
       /* generate image[level+1] from image[level] */
-      struct gl_texture_image *srcImage, *dstImage;
+      struct gl_texture_image *srcLvlImage, *dstImage;
       GLint srcRowStride, dstRowStride;
       GLint srcWidth, srcHeight, srcDepth;
       GLint dstWidth, dstHeight, dstDepth;
@@ -817,12 +817,12 @@ generate_mipmap_uncompressed(struct gl_context *ctx, GLenum target,
       GLboolean success = GL_TRUE;
 
       /* get src image parameters */
-      srcImage = _mesa_select_tex_image(texObj, target, level);
-      assert(srcImage);
-      srcWidth = srcImage->Width;
-      srcHeight = srcImage->Height;
-      srcDepth = srcImage->Depth;
-      border = srcImage->Border;
+      srcLvlImage = _mesa_select_tex_image(texObj, target, level);
+      assert(srcLvlImage);
+      srcWidth = srcLvlImage->Width;
+      srcHeight = srcLvlImage->Height;
+      srcDepth = srcLvlImage->Depth;
+      border = srcLvlImage->Border;
 
       /* get dest gl_texture_image */
       dstImage = _mesa_select_tex_image(texObj, target, level + 1);
@@ -844,7 +844,7 @@ generate_mipmap_uncompressed(struct gl_context *ctx, GLenum target,
       srcMaps = calloc(srcDepth, sizeof(GLubyte *));
       if (srcMaps) {
          for (slice = 0; slice < srcDepth; slice++) {
-            st_MapTextureImage(ctx, srcImage, slice,
+            st_MapTextureImage(ctx, srcLvlImage, slice,
                                0, 0, srcWidth, srcHeight,
                                GL_MAP_READ_BIT,
                                &srcMaps[slice], &srcRowStride);
@@ -889,7 +889,7 @@ generate_mipmap_uncompressed(struct gl_context *ctx, GLenum target,
       if (srcMaps) {
          for (slice = 0; slice < srcDepth; slice++) {
             if (srcMaps[slice]) {
-               st_UnmapTextureImage(ctx, srcImage, slice);
+               st_UnmapTextureImage(ctx, srcLvlImage, slice);
             }
          }
          free(srcMaps);
@@ -992,7 +992,7 @@ generate_mipmap_compressed(struct gl_context *ctx, GLenum target,
 
    for (level = texObj->Attrib.BaseLevel; level < maxLevel; level++) {
       /* generate image[level+1] from image[level] */
-      const struct gl_texture_image *srcImage;
+      const struct gl_texture_image *srcLvlImage;
       struct gl_texture_image *dstImage;
       GLint srcWidth, srcHeight, srcDepth;
       GLint dstWidth, dstHeight, dstDepth;
@@ -1002,12 +1002,12 @@ generate_mipmap_compressed(struct gl_context *ctx, GLenum target,
       GLint i;
 
       /* get src image parameters */
-      srcImage = _mesa_select_tex_image(texObj, target, level);
-      assert(srcImage);
-      srcWidth = srcImage->Width;
-      srcHeight = srcImage->Height;
-      srcDepth = srcImage->Depth;
-      border = srcImage->Border;
+      srcLvlImage = _mesa_select_tex_image(texObj, target, level);
+      assert(srcLvlImage);
+      srcWidth = srcLvlImage->Width;
+      srcHeight = srcLvlImage->Height;
+      srcDepth = srcLvlImage->Depth;
+      border = srcLvlImage->Border;
 
       /* get dest gl_texture_image */
       dstImage = _mesa_select_tex_image(texObj, target, level + 1);

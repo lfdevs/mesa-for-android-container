@@ -50,6 +50,7 @@ struct ethosu_ml_device {
    struct ethosu_block ofm_ublock;
    unsigned max_concurrent_blocks;
    uint32_t sram_size;
+   void *weight_cache;
 };
 
 struct ethosu_screen {

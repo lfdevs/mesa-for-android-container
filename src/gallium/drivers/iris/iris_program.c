@@ -45,17 +45,13 @@ vue_layout(bool separate_shader)
 }
 
 #define KEY_INIT(prefix)                                   \
-   .prefix.program_string_id = ish->program_id,            \
-   .prefix.limit_trig_input_range =                        \
-      screen->driconf.limit_trig_input_range
+   .prefix.program_string_id = ish->program_id
 #define BRW_KEY_INIT(base_key, _vue_layout) \
-   .base.limit_trig_input_range = (base_key).limit_trig_input_range, \
    .base.vue_layout = _vue_layout
 
 #ifdef INTEL_USE_ELK
-#define ELK_KEY_INIT(gen, prog_id, limit_trig_input)       \
-   .base.program_string_id = prog_id,                      \
-   .base.limit_trig_input_range = limit_trig_input
+#define ELK_KEY_INIT(gen, prog_id)                         \
+   .base.program_string_id = prog_id
 #endif
 
 struct iris_threaded_compile_job {
@@ -82,12 +78,15 @@ iris_backend_compile(const struct iris_screen *screen,
    const struct intel_device_info *devinfo = screen->devinfo;
    nir_shader *nir = params->nir;
 
+   params->prog_data->source_hash = *(uint64_t *)nir->info.source_blake3;
+
    if (intel_use_jay(devinfo, nir->info.stage)) {
       struct jay_shader_bin *bin =
          jay_compile(devinfo, mem_ctx, nir,
                      (union brw_any_prog_data *)params->prog_data,
                      (union brw_any_prog_key *)params->key,
-                     params->archiver);
+                     params->archiver,
+                     NULL);
 
       return bin->kernel;
    } else {
@@ -534,6 +533,7 @@ iris_to_brw_vs_key(const struct iris_screen *screen,
 {
    return (struct brw_vs_prog_key) {
       BRW_KEY_INIT(key->vue.base, key->vue.layout),
+      .max_payload_percent = 90,
    };
 }
 
@@ -601,8 +601,7 @@ iris_to_elk_vs_key(const struct iris_screen *screen,
                    const struct iris_vs_prog_key *key)
 {
    return (struct elk_vs_prog_key) {
-      ELK_KEY_INIT(screen->devinfo->ver, key->vue.base.program_string_id,
-                   key->vue.base.limit_trig_input_range),
+      ELK_KEY_INIT(screen->devinfo->ver, key->vue.base.program_string_id),
 
       /* Don't tell the backend about our clip plane constants, we've
        * already lowered them in NIR and don't want it doing it again.
@@ -616,8 +615,7 @@ iris_to_elk_tcs_key(const struct iris_screen *screen,
                     const struct iris_tcs_prog_key *key)
 {
    return (struct elk_tcs_prog_key) {
-      ELK_KEY_INIT(screen->devinfo->ver, key->vue.base.program_string_id,
-                   key->vue.base.limit_trig_input_range),
+      ELK_KEY_INIT(screen->devinfo->ver, key->vue.base.program_string_id),
       ._tes_primitive_mode = key->_tes_primitive_mode,
       .input_vertices = key->input_vertices,
       .patch_outputs_written = key->patch_outputs_written,
@@ -631,8 +629,7 @@ iris_to_elk_tes_key(const struct iris_screen *screen,
                     const struct iris_tes_prog_key *key)
 {
    return (struct elk_tes_prog_key) {
-      ELK_KEY_INIT(screen->devinfo->ver, key->vue.base.program_string_id,
-                   key->vue.base.limit_trig_input_range),
+      ELK_KEY_INIT(screen->devinfo->ver, key->vue.base.program_string_id),
       .patch_inputs_read = key->patch_inputs_read,
       .inputs_read = key->inputs_read,
    };
@@ -643,8 +640,7 @@ iris_to_elk_gs_key(const struct iris_screen *screen,
                    const struct iris_gs_prog_key *key)
 {
    return (struct elk_gs_prog_key) {
-      ELK_KEY_INIT(screen->devinfo->ver, key->vue.base.program_string_id,
-                   key->vue.base.limit_trig_input_range),
+      ELK_KEY_INIT(screen->devinfo->ver, key->vue.base.program_string_id),
    };
 }
 
@@ -653,8 +649,7 @@ iris_to_elk_fs_key(const struct iris_screen *screen,
                    const struct iris_fs_prog_key *key)
 {
    return (struct elk_fs_prog_key) {
-      ELK_KEY_INIT(screen->devinfo->ver, key->base.program_string_id,
-                   key->base.limit_trig_input_range),
+      ELK_KEY_INIT(screen->devinfo->ver, key->base.program_string_id),
       .nr_color_regions = key->nr_color_regions,
       .alpha_test_replicate_alpha = key->alpha_test_replicate_alpha,
       .alpha_to_coverage = key->alpha_to_coverage ? ELK_ALWAYS : ELK_NEVER,
@@ -672,8 +667,7 @@ iris_to_elk_cs_key(const struct iris_screen *screen,
                    const struct iris_cs_prog_key *key)
 {
    return (struct elk_cs_prog_key) {
-      ELK_KEY_INIT(screen->devinfo->ver, key->base.program_string_id,
-                   key->base.limit_trig_input_range),
+      ELK_KEY_INIT(screen->devinfo->ver, key->base.program_string_id),
    };
 }
 
@@ -1654,7 +1648,6 @@ iris_debug_recompile(struct util_debug_callback *dbg,
       list_first_entry(&ish->variants, struct iris_compiled_shader, link);
 
    check(base, program_string_id);
-   check(base, limit_trig_input_range);
 
    if (info->stage <= MESA_SHADER_GEOMETRY) {
       check(vue, nr_userclip_plane_consts);
@@ -1944,7 +1937,6 @@ iris_compile_vs(struct iris_screen *screen,
             .key = &brw_key.base,
             .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
-            .source_hash = ish->source_hash,
             .archiver = debug_archiver,
          },
       };
@@ -1977,7 +1969,6 @@ iris_compile_vs(struct iris_screen *screen,
             .mem_ctx = mem_ctx,
             .nir = nir,
             .log_data = dbg,
-            .source_hash = ish->source_hash,
          },
          .key = &elk_key,
          .prog_data = elk_prog_data,
@@ -2178,15 +2169,8 @@ iris_compile_tcs(struct iris_screen *screen,
       options = screen->elk->nir_options[MESA_SHADER_TESS_CTRL];
    struct elk_tcs_prog_key elk_key = iris_to_elk_tcs_key(screen, key);
 #endif
-   uint64_t source_hash;
 
-   if (ish) {
-      nir = nir_shader_clone(mem_ctx, ish->nir);
-      source_hash = ish->source_hash;
-   } else {
-      nir = iris_create_passthrough_tcs(mem_ctx, options, key);
-      source_hash = *(uint64_t*)nir->info.source_blake3;
-   }
+   nir = ish ? nir_shader_clone(mem_ctx, ish->nir) : iris_create_passthrough_tcs(mem_ctx, options, key);
 
    debug_archiver *debug_archiver =
       iris_debug_archiver_open(mem_ctx, screen, nir, key, sizeof(*key));
@@ -2212,7 +2196,6 @@ iris_compile_tcs(struct iris_screen *screen,
             .key = &brw_key.base,
             .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
-            .source_hash = source_hash,
             .archiver = debug_archiver,
          },
       };
@@ -2236,7 +2219,6 @@ iris_compile_tcs(struct iris_screen *screen,
             .mem_ctx = mem_ctx,
             .nir = nir,
             .log_data = dbg,
-            .source_hash = source_hash,
          },
          .key = &elk_key,
          .prog_data = elk_prog_data,
@@ -2422,7 +2404,6 @@ iris_compile_tes(struct iris_screen *screen,
             .key = &brw_key.base,
             .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
-            .source_hash = ish->source_hash,
             .archiver = debug_archiver,
          },
          .input_vue_map = &input_vue_map,
@@ -2453,7 +2434,6 @@ iris_compile_tes(struct iris_screen *screen,
             .mem_ctx = mem_ctx,
             .nir = nir,
             .log_data = dbg,
-            .source_hash = ish->source_hash,
          },
          .key = &elk_key,
          .prog_data = elk_prog_data,
@@ -2617,7 +2597,6 @@ iris_compile_gs(struct iris_screen *screen,
             .key = &brw_key.base,
             .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
-            .source_hash = ish->source_hash,
             .archiver = debug_archiver,
          },
       };
@@ -2648,7 +2627,6 @@ iris_compile_gs(struct iris_screen *screen,
             .mem_ctx = mem_ctx,
             .nir = nir,
             .log_data = dbg,
-            .source_hash = ish->source_hash,
          },
          .key = &elk_key,
          .prog_data = elk_prog_data,
@@ -2821,11 +2799,9 @@ iris_compile_fs(struct iris_screen *screen,
             .key = &brw_key.base,
             .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
-            .source_hash = ish->source_hash,
             .archiver = debug_archiver,
          },
 
-         .allow_spilling = true,
          .max_polygons = UCHAR_MAX,
          .vue_map = vue_map,
       };
@@ -2852,7 +2828,6 @@ iris_compile_fs(struct iris_screen *screen,
             .mem_ctx = mem_ctx,
             .nir = nir,
             .log_data = dbg,
-            .source_hash = ish->source_hash,
          },
          .key = &elk_key,
          .prog_data = elk_prog_data,
@@ -3175,7 +3150,6 @@ iris_compile_cs(struct iris_screen *screen,
             .key = &brw_key.base,
             .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
-            .source_hash = ish->source_hash,
             .archiver = debug_archiver,
          },
       };
@@ -3198,7 +3172,6 @@ iris_compile_cs(struct iris_screen *screen,
             .mem_ctx = mem_ctx,
             .nir = nir,
             .log_data = dbg,
-            .source_hash = ish->source_hash,
          },
          .key = &elk_key,
          .prog_data = elk_prog_data,
@@ -3407,8 +3380,8 @@ iris_create_uncompiled_shader(struct iris_screen *screen,
       update_so_info(&ish->stream_output, nir->info.outputs_written);
    }
 
-   /* Use lowest dword of source shader blake3 for shader hash. */
-   ish->source_hash = *(uint32_t*)nir->info.source_blake3;
+   /* Use lowest qword of source shader blake3 for shader hash. */
+   ish->source_hash = *(uint64_t*)nir->info.source_blake3;
 
    if (screen->disk_cache) {
       /* Serialize the NIR to a binary blob that we can hash for the disk
@@ -4142,6 +4115,8 @@ iris_compiler_init(struct iris_screen *screen)
       screen->brw = brw_compiler_create(screen, screen->devinfo);
       screen->brw->shader_debug_log = iris_shader_debug_log;
       screen->brw->shader_perf_log = iris_shader_perf_log;
+      screen->brw->limit_trig_input_range =
+         screen->driconf.limit_trig_input_range;
    } else {
 #ifdef INTEL_USE_ELK
       STATIC_ASSERT(IRIS_MAX_DRAW_BUFFERS == ELK_MAX_DRAW_BUFFERS);
@@ -4151,6 +4126,8 @@ iris_compiler_init(struct iris_screen *screen)
       screen->elk->shader_debug_log = iris_shader_debug_log;
       screen->elk->shader_perf_log = iris_shader_perf_log;
       screen->elk->supports_shader_constants = true;
+      screen->elk->limit_trig_input_range =
+         screen->driconf.limit_trig_input_range;
 #else
       UNREACHABLE("no elk support");
 #endif

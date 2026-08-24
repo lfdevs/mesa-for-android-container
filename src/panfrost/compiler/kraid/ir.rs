@@ -1,18 +1,21 @@
 // Copyright © 2026 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
+use crate::bitview::BitViewable;
 pub use crate::data_type::DataType;
 use crate::data_type::PartialDataType;
 use crate::debug::{DEBUG, DebugFlags};
 pub use crate::flow::FlowCtrl;
 pub use crate::model::Model;
 pub use crate::ops::Op;
+use crate::ops::{OpPhiDst, OpPhiSrc};
+pub use crate::phi::Phi;
+use crate::phi::PhiAllocator;
 use crate::ssa_value::SSAValueAllocator;
 pub use crate::ssa_value::{SSARef, SSAValue};
 pub use crate::swizzle::Swizzle;
 use crate::swizzle::*;
 use compiler::as_slice::*;
-use compiler::bitset::IntoBitIndex;
 use compiler::cfg::CFG;
 use compiler::enum_as_u8::*;
 use compiler::smallvec::*;
@@ -121,7 +124,20 @@ pub enum FAUPage {
     SmallConst,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+impl FAUPage {
+    pub fn is_small_const(&self) -> bool {
+        *self == FAUPage::SmallConst
+    }
+
+    pub fn is_special(&self) -> bool {
+        matches!(
+            self,
+            FAUPage::Special0 | FAUPage::Special1 | FAUPage::Special3
+        )
+    }
+}
+
+#[derive(Clone, Copy)]
 pub struct FAURef {
     pub page: FAUPage,
 
@@ -139,6 +155,15 @@ pub struct FAURef {
 
     /// Load 64 bytes
     pub load64: bool,
+}
+
+impl PartialEq for FAURef {
+    fn eq(&self, other: &FAURef) -> bool {
+        // special is intentionally missing
+        self.page.eq(&other.page)
+            && self.idx.eq(&other.idx)
+            && self.load64.eq(&other.load64)
+    }
 }
 
 impl FAURef {
@@ -281,6 +306,53 @@ impl fmt::Display for PreloadReg {
     }
 }
 
+/// Handle referencing an external resource (e.g. sampler, texture, attribute,
+/// uniform buffer...).  It is just a pair of indices, one selecting a "table",
+/// the other selecting a descriptor within the table.  Tables are either lists
+/// of descriptors stored in memory or a "virtual" table for hardware-controlled
+/// resources
+pub struct ResHandle {
+    /// The resource table index or special table enumerant specifying
+    /// which table is being referenced
+    pub table: u32,
+    /// The index into the table at which to find the descriptor
+    pub index: u32,
+}
+
+impl ResHandle {
+    pub fn from_bits(imm: u32) -> Self {
+        ResHandle {
+            table: imm.get_bit_range_u64(24..32) as u32,
+            index: imm.get_bit_range_u64(0..24) as u32,
+        }
+    }
+
+    /// Returns true if the handle can be encoded in an immediate
+    pub fn fits_imm_op(&self, index_bits: u8) -> bool {
+        let table = self.table;
+        let table_valid = table <= 11 || (table >= 60 && table <= 63);
+        let index_valid = self.index < (1 << index_bits);
+
+        table_valid && index_valid
+    }
+}
+
+impl TryFrom<&Src> for ResHandle {
+    type Error = &'static str;
+
+    fn try_from(value: &Src) -> Result<Self, Self::Error> {
+        u32::try_from(&value.src_ref)
+            .map(ResHandle::from_bits)
+            .map_err(|_| "Not an immediate")
+    }
+}
+
+impl fmt::Display for ResHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.table, self.index)
+    }
+}
+
 /// This struct describes the range of registers read or written by a RegRef.
 /// The range provided here acts as a mask on the destination but is purely
 /// informational for sources.  In all cases, the instruction operates relative
@@ -358,12 +430,19 @@ impl From<RegRange> for Swizzle {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct RegRef {
     pub idx: u8,
     pub range: RegRange,
     /// Optional preload origin for pretty printing
     pub preload: Option<PreloadReg>,
+}
+
+impl PartialEq for RegRef {
+    fn eq(&self, other: &RegRef) -> bool {
+        // preload is intentionally missing
+        self.idx.eq(&other.idx) && self.range.eq(&other.range)
+    }
 }
 
 impl fmt::Display for RegRef {
@@ -431,6 +510,52 @@ impl RegRef {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub struct MemRef {
+    pub offset: u16,
+    pub range: u8,
+}
+
+impl fmt::Display for MemRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "m{}..{}",
+            self.offset,
+            self.offset + u16::from(self.range)
+        )
+    }
+}
+
+impl MemRef {
+    pub fn bytes(&self) -> u8 {
+        self.range
+    }
+
+    pub fn byte_range(&self) -> Range<u16> {
+        self.offset..(self.offset + u16::from(self.range))
+    }
+
+    pub fn from_byte_range(range: Range<u16>) -> Result<MemRef, &'static str> {
+        Ok(MemRef {
+            offset: range.start,
+            range: range
+                .len()
+                .try_into()
+                .map_err(|_| "Memory range too large")?,
+        })
+    }
+
+    pub fn word(self, word: u8) -> MemRef {
+        let offset = u16::from(word) * 4;
+        assert!(offset + 4 <= u16::from(self.range));
+        MemRef {
+            offset: self.offset + offset,
+            range: 4,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub enum SrcRef {
     /// A zero value
@@ -440,6 +565,7 @@ pub enum SrcRef {
     FAU(FAURef),
     SSA(SSARef),
     Reg(RegRef),
+    Mem(MemRef),
 }
 
 impl fmt::Display for SrcRef {
@@ -450,6 +576,7 @@ impl fmt::Display for SrcRef {
             SrcRef::FAU(fau) => fau.fmt(f),
             SrcRef::SSA(ssa) => ssa.fmt(f),
             SrcRef::Reg(reg) => reg.fmt(f),
+            SrcRef::Mem(mem) => mem.fmt(f),
         }
     }
 }
@@ -490,6 +617,7 @@ impl SrcRef {
             }
             SrcRef::SSA(vec) => vec.bytes(),
             SrcRef::Reg(reg) => reg.bytes(),
+            SrcRef::Mem(mem) => mem.bytes(),
         }
     }
 
@@ -513,6 +641,7 @@ impl SrcRef {
             SrcRef::FAU(fau) => fau.word(word).into(),
             SrcRef::SSA(ssa) => ssa[usize::from(word)].into(),
             SrcRef::Reg(reg) => reg.word(word).into(),
+            SrcRef::Mem(mem) => mem.word(word).into(),
         }
     }
 }
@@ -524,6 +653,12 @@ impl From<u32> for SrcRef {
         } else {
             SrcRef::Zero
         }
+    }
+}
+
+impl From<f32> for SrcRef {
+    fn from(u: f32) -> SrcRef {
+        SrcRef::from(u.to_bits())
     }
 }
 
@@ -554,6 +689,12 @@ impl<T: Into<SSARef>> From<T> for SrcRef {
 impl From<RegRef> for SrcRef {
     fn from(reg: RegRef) -> SrcRef {
         SrcRef::Reg(reg)
+    }
+}
+
+impl From<MemRef> for SrcRef {
+    fn from(mem: MemRef) -> SrcRef {
+        SrcRef::Mem(mem)
     }
 }
 
@@ -693,8 +834,24 @@ impl fmt::Display for FmtSrc<'_> {
 }
 
 impl Src {
+    /// Swizzles a `Src` by the given `swizzle`.  This helper is intended to be
+    /// used in cases where you know what you're doing, such as when building
+    /// some IR.  It's up to the caller to guarantee that the resulting swizzle
+    /// is valid and non-zero.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the composed swizzle is invalid or zero.
     pub fn swizzle(mut self, swizzle: Swizzle) -> Src {
         self.swizzle = self.swizzle.swizzle(swizzle).unwrap();
+        assert!(!self.swizzle.is_zero());
+
+        // If the new swizzle only reads the first word, make sure we only
+        // reference the first word.
+        if self.swizzle.bytes_read(8) <= 0xf {
+            self.src_ref = self.src_ref.word(0);
+        }
+
         self
     }
 
@@ -712,7 +869,7 @@ impl Src {
         if let Some(swizzle_word) = self.swizzle.word(word) {
             use SwizzleWord::*;
             match swizzle_word {
-                Zero => 0.into(),
+                Zero => 0_u32.into(),
                 Word0 => Src::from(self.src_ref.word(0)),
                 Word1 => Src::from(self.src_ref.word(1)),
                 Sign0 => Src::from(self.src_ref.word(0)).swizzle(Swizzle::S3),
@@ -720,20 +877,32 @@ impl Src {
             }
         } else {
             // In this case, it's a byte swizzle that we sign-extend
+            debug_assert!(self.swizzle.is_byte_swizzle());
+            debug_assert!(self.src_ref.bytes_read() <= 4);
             if word == 0 {
                 self
             } else {
-                self.swizzle(Swizzle::S3)
+                let swizzle = self.swizzle.swizzle(Swizzle::S3).unwrap();
+                if swizzle.is_zero() {
+                    0_u32.into()
+                } else {
+                    Src { swizzle, ..self }
+                }
             }
         }
     }
 
-    pub fn imm_u8(u: u8) -> Src {
-        Src::from(u32::from(u)).byte(0)
+    pub fn zero(bits: u8) -> Src {
+        match bits {
+            8 => Src::from(0_u8),
+            16 => Src::from(0_u16),
+            32 => Src::from(0_u32),
+            _ => panic!("Invalid float bit size"),
+        }
     }
 
-    pub fn imm_u16(u: u16) -> Src {
-        Src::from(u32::from(u)).half(0)
+    pub fn fneg_zero(bits: u8) -> Src {
+        Src::zero(bits).fneg()
     }
 
     pub fn modify(mut self, src_mod: SrcMod) -> Src {
@@ -822,6 +991,11 @@ impl<T: Into<SrcRef>> From<T> for Src {
                 _ => Swizzle::NONE,
             },
             SrcRef::Reg(reg) => reg.range.into(),
+            SrcRef::Mem(mem) => match mem.range {
+                1 => Swizzle::B0000,
+                2 => Swizzle::H00,
+                _ => Swizzle::NONE,
+            },
         };
         Src {
             src_ref,
@@ -832,11 +1006,24 @@ impl<T: Into<SrcRef>> From<T> for Src {
     }
 }
 
+impl From<u16> for Src {
+    fn from(u: u16) -> Src {
+        Src::from(u32::from(u)).half(0)
+    }
+}
+
+impl From<u8> for Src {
+    fn from(u: u8) -> Src {
+        Src::from(u32::from(u)).byte(0)
+    }
+}
+
 #[derive(Clone)]
 pub enum DstRef {
     None,
     SSA(SSARef),
     Reg(RegRef),
+    Mem(MemRef),
 }
 
 impl fmt::Display for DstRef {
@@ -845,6 +1032,7 @@ impl fmt::Display for DstRef {
             DstRef::None => write!(f, "null"),
             DstRef::SSA(ssa) => ssa.fmt(f),
             DstRef::Reg(reg) => reg.fmt(f),
+            DstRef::Mem(mem) => mem.fmt(f),
         }
     }
 }
@@ -871,6 +1059,13 @@ impl DstRef {
         }
     }
 
+    pub fn as_mem(&self) -> Option<&MemRef> {
+        match self {
+            DstRef::Mem(mem) => Some(mem),
+            _ => None,
+        }
+    }
+
     pub fn is_none(&self) -> bool {
         matches!(self, DstRef::None)
     }
@@ -880,6 +1075,7 @@ impl DstRef {
             DstRef::None => 0,
             DstRef::SSA(vec) => vec.bytes(),
             DstRef::Reg(reg) => reg.bytes(),
+            DstRef::Mem(mem) => mem.bytes(),
         }
     }
 
@@ -888,6 +1084,7 @@ impl DstRef {
             DstRef::None => DstRef::None,
             DstRef::SSA(ssa) => ssa[usize::from(word)].into(),
             DstRef::Reg(reg) => reg.word(word).into(),
+            DstRef::Mem(mem) => mem.word(word).into(),
         }
     }
 }
@@ -901,6 +1098,12 @@ impl<T: Into<SSARef>> From<T> for DstRef {
 impl From<RegRef> for DstRef {
     fn from(reg: RegRef) -> DstRef {
         DstRef::Reg(reg)
+    }
+}
+
+impl From<MemRef> for DstRef {
+    fn from(mem: MemRef) -> DstRef {
+        DstRef::Mem(mem)
     }
 }
 
@@ -923,6 +1126,9 @@ pub enum DstLanes {
     /// register assignment.
     AnyH,
 
+    /// Narrow to F16, using either half.
+    AnyHF,
+
     // Bytes
     B0,
     B1,
@@ -932,6 +1138,10 @@ pub enum DstLanes {
     // Halves
     H0,
     H1,
+
+    // Narrow to F16, choosing H0 or H1
+    HF0,
+    HF1,
 }
 
 pub type DstLanesSet = U8EnumSet<DstLanes, 1>;
@@ -943,12 +1153,15 @@ impl fmt::Display for DstLanes {
             DstLanes::All => Ok(()),
             DstLanes::AnyB => write!(f, ".any_b"),
             DstLanes::AnyH => write!(f, ".any_h"),
+            DstLanes::AnyHF => write!(f, ".any_hf"),
             DstLanes::B0 => write!(f, ".b0"),
             DstLanes::B1 => write!(f, ".b1"),
             DstLanes::B2 => write!(f, ".b2"),
             DstLanes::B3 => write!(f, ".b3"),
             DstLanes::H0 => write!(f, ".h0"),
             DstLanes::H1 => write!(f, ".h1"),
+            DstLanes::HF0 => write!(f, ".hf0"),
+            DstLanes::HF1 => write!(f, ".hf1"),
         }
     }
 }
@@ -986,6 +1199,14 @@ impl DstLanes {
         ])
     };
 
+    pub const ALL_HF: DstLanesSet = unsafe {
+        DstLanesSet::from_u8_array([
+            DstLanes::AnyHF as u8,
+            DstLanes::HF0 as u8,
+            DstLanes::HF1 as u8,
+        ])
+    };
+
     pub fn byte(byte: u8) -> DstLanes {
         match byte {
             0 => DstLanes::B0,
@@ -1009,7 +1230,7 @@ impl DstLanes {
         match self {
             None => 0,
             All => dst_bytes,
-            AnyH | H0 | H1 => 2,
+            AnyH | AnyHF | H0 | H1 | HF0 | HF1 => 2,
             AnyB | B0 | B1 | B2 | B3 => 1,
         }
     }
@@ -1019,13 +1240,13 @@ impl DstLanes {
             DstLanes::None => (0, 0),
             DstLanes::All => (4, 0),
             DstLanes::AnyB => (1, 0),
-            DstLanes::AnyH => (2, 0),
+            DstLanes::AnyH | DstLanes::AnyHF => (2, 0),
             DstLanes::B0 => (4, 0),
             DstLanes::B1 => (4, 1),
             DstLanes::B2 => (4, 2),
             DstLanes::B3 => (4, 3),
-            DstLanes::H0 => (4, 0),
-            DstLanes::H1 => (4, 2),
+            DstLanes::H0 | DstLanes::HF0 => (4, 0),
+            DstLanes::H1 | DstLanes::HF1 => (4, 2),
         }
     }
 
@@ -1037,18 +1258,22 @@ impl DstLanes {
         DstLanes::ALL_H.contains(*self)
     }
 
+    pub fn is_f16_narrow(&self) -> bool {
+        DstLanes::ALL_HF.contains(*self)
+    }
+
     pub fn u32_mask(&self) -> Option<u32> {
         match self {
             DstLanes::None => Some(0),
             DstLanes::All => Some(!0_u32),
             DstLanes::AnyB => None,
-            DstLanes::AnyH => None,
+            DstLanes::AnyH | DstLanes::AnyHF => None,
             DstLanes::B0 => Some(0x000000ff),
             DstLanes::B1 => Some(0x0000ff00),
             DstLanes::B2 => Some(0x00ff0000),
             DstLanes::B3 => Some(0xff000000),
-            DstLanes::H0 => Some(0x0000ffff),
-            DstLanes::H1 => Some(0xffff0000),
+            DstLanes::H0 | DstLanes::HF0 => Some(0x0000ffff),
+            DstLanes::H1 | DstLanes::HF1 => Some(0xffff0000),
         }
     }
 
@@ -1057,13 +1282,13 @@ impl DstLanes {
             DstLanes::None => Some(0..0),
             DstLanes::All => Some(0..4),
             DstLanes::AnyB => None,
-            DstLanes::AnyH => None,
+            DstLanes::AnyH | DstLanes::AnyHF => None,
             DstLanes::B0 => Some(0..1),
             DstLanes::B1 => Some(1..2),
             DstLanes::B2 => Some(2..3),
             DstLanes::B3 => Some(3..4),
-            DstLanes::H0 => Some(0..2),
-            DstLanes::H1 => Some(2..4),
+            DstLanes::H0 | DstLanes::HF0 => Some(0..2),
+            DstLanes::H1 | DstLanes::HF1 => Some(2..4),
         }
     }
 }
@@ -1111,67 +1336,13 @@ impl<T: Into<DstRef>> From<T> for Dst {
                 }
             }
             DstRef::Reg(reg) => reg.range.into(),
+            DstRef::Mem(mem) => match mem.range {
+                1 => DstLanes::AnyB,
+                2 => DstLanes::AnyH,
+                _ => DstLanes::All,
+            },
         };
         Dst { dst_ref, lanes }
-    }
-}
-
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
-pub struct Phi(u32);
-
-impl Phi {
-    fn new(idx: u32, bits: u8) -> Phi {
-        assert!(idx < (1 << 30));
-        let mut packed = idx;
-        assert!(8 <= bits && bits <= 64 && bits.is_power_of_two());
-        packed |= (bits.ilog2() - 3) << 30;
-        Phi(packed)
-    }
-
-    pub fn idx(&self) -> u32 {
-        self.0 & 0x3fffffff
-    }
-
-    pub fn bits(&self) -> u8 {
-        self.bytes() * 8
-    }
-
-    pub fn bytes(&self) -> u8 {
-        1 << (self.0 >> 30)
-    }
-}
-
-impl fmt::Display for Phi {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let m = match self.bits() {
-            8 => ":b",
-            16 => ":h",
-            32 => ":w",
-            64 => ":q",
-            _ => panic!("Invalid SSA value bits"),
-        };
-        write!(f, "φ{}{m}", self.idx())
-    }
-}
-
-impl IntoBitIndex for Phi {
-    fn into_bit_index(self) -> usize {
-        // Indices are guaranteed unique by the allocator
-        self.idx().try_into().unwrap()
-    }
-}
-
-#[derive(Default)]
-pub struct PhiAllocator {
-    count: u32,
-}
-
-impl PhiAllocator {
-    /// Allocates an phi.
-    pub fn alloc(&mut self, bits: u8) -> Phi {
-        let idx = self.count;
-        self.count += 1;
-        Phi::new(idx, bits)
     }
 }
 
@@ -1206,8 +1377,38 @@ impl Iterator for DataTypeIter {
     }
 }
 
+pub trait DisplayOp: AsSlice<Dst, Attr = PartialDataType> {
+    fn fmt_dsts(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let dsts = self.as_slice();
+
+        for (i, dst) in dsts.iter().enumerate() {
+            if i != 0 {
+                write!(f, " ")?;
+            }
+            write!(f, "{}", &dst)?;
+        }
+        Ok(())
+    }
+
+    fn fmt_name(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result;
+
+    fn fmt_body(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result;
+
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let dst = format!("{}", Fmt(|f| self.fmt_dsts(f)));
+        if !dst.is_empty() {
+            write!(f, "{dst} = ")?;
+        }
+        self.fmt_name(f)?;
+        self.fmt_body(f)?;
+        Ok(())
+    }
+}
+
 pub trait Opcode:
-    AsSlice<Src, Attr = PartialDataType> + AsSlice<Dst, Attr = PartialDataType>
+    AsSlice<Src, Attr = PartialDataType>
+    + AsSlice<Dst, Attr = PartialDataType>
+    + DisplayOp
 {
     fn variant(&self) -> Option<DataType>;
     fn set_variant(&mut self, data_type: DataType);
@@ -1263,7 +1464,7 @@ pub trait Opcode:
         }
     }
 
-    fn iter_ssa_uses(&self) -> impl Iterator<Item = &SSAValue> {
+    fn iter_ssa_uses(&self) -> impl DoubleEndedIterator<Item = &SSAValue> {
         self.srcs().iter().flat_map(|src| {
             if let SrcRef::SSA(vec) = &src.src_ref {
                 vec.iter()
@@ -1273,7 +1474,19 @@ pub trait Opcode:
         })
     }
 
-    fn iter_ssa_defs(&self) -> impl Iterator<Item = &SSAValue> {
+    fn iter_ssa_uses_mut(
+        &mut self,
+    ) -> impl DoubleEndedIterator<Item = &mut SSAValue> {
+        self.srcs_mut().iter_mut().flat_map(|src| {
+            if let SrcRef::SSA(vec) = &mut src.src_ref {
+                vec.iter_mut()
+            } else {
+                (&mut []).iter_mut()
+            }
+        })
+    }
+
+    fn iter_ssa_defs(&self) -> impl DoubleEndedIterator<Item = &SSAValue> {
         self.dsts().iter().flat_map(|dst| {
             if let DstRef::SSA(vec) = &dst.dst_ref {
                 vec.iter()
@@ -1283,10 +1496,30 @@ pub trait Opcode:
         })
     }
 
+    fn iter_ssa_defs_mut(
+        &mut self,
+    ) -> impl DoubleEndedIterator<Item = &mut SSAValue> {
+        self.dsts_mut().iter_mut().flat_map(|dst| {
+            if let DstRef::SSA(vec) = &mut dst.dst_ref {
+                vec.iter_mut()
+            } else {
+                (&mut []).iter_mut()
+            }
+        })
+    }
+
     fn fmt_src<'a>(&self, src: &'a Src) -> FmtSrc<'a> {
         FmtSrc {
             src,
             src_type: self.src_type(src),
+        }
+    }
+
+    fn fmt_handle_src(&self, src: &Src) -> String {
+        if let Ok(descr) = ResHandle::try_from(src) {
+            descr.to_string()
+        } else {
+            self.fmt_src(src).to_string()
         }
     }
 
@@ -1353,6 +1586,10 @@ pub trait VirtualOpcode {
         false
     }
 
+    fn src_is_64bit(&self, _src: &Src) -> bool {
+        false
+    }
+
     fn src_supports_imm32(&self, _src: &Src, _imm: u32) -> bool {
         false
     }
@@ -1371,6 +1608,21 @@ pub trait VirtualOpcode {
 
     fn dst_supported_lanes(&self) -> DstLanesSet {
         DstLanesSet::from_array([DstLanes::All])
+    }
+}
+
+// Hack struct so we can re-use Formatters.  Shamelessly stolen from
+// https://users.rust-lang.org/t/reusing-an-fmt-formatter/8531/4
+pub struct Fmt<F>(pub F)
+where
+    F: Fn(&mut fmt::Formatter) -> fmt::Result;
+
+impl<F> fmt::Display for Fmt<F>
+where
+    F: Fn(&mut fmt::Formatter) -> fmt::Result,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        (self.0)(f)
     }
 }
 
@@ -1409,7 +1661,14 @@ impl<T: Into<Op>> From<T> for Instr {
 
 impl fmt::Display for Instr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.op.fmt(f)
+        let dst = format!("{}", Fmt(|f| self.op.fmt_dsts(f)));
+        if !dst.is_empty() {
+            write!(f, "{dst} = ")?;
+        }
+        self.op.fmt_name(f)?;
+        write!(f, "{}", self.flow)?;
+        self.op.fmt_body(f)?;
+        Ok(())
     }
 }
 
@@ -1449,6 +1708,113 @@ impl BasicBlock {
         let instrs = std::mem::take(&mut self.instrs);
         self.instrs = instrs.into_iter().flat_map(map).collect();
     }
+
+    pub fn is_prelude_instr(instr: &Instr) -> bool {
+        matches!(&instr.op, Op::PhiDst(_) | Op::RegIn(_))
+    }
+
+    pub fn is_postlude_instr(instr: &Instr) -> bool {
+        matches!(&instr.op, Op::Branch(_) | Op::PhiSrc(_) | Op::RegOut(_))
+    }
+
+    pub fn is_branch_instr(instr: &Instr) -> bool {
+        matches!(&instr.op, Op::Branch(_))
+    }
+
+    /// Returns the IP which marks the end of the prelude and the start of the
+    /// body section.  This will be the IP of the first body instruction.
+    fn prelude_end_ip(&self) -> usize {
+        for (ip, instr) in self.instrs.iter().enumerate() {
+            if !BasicBlock::is_prelude_instr(instr) {
+                return ip;
+            }
+        }
+        self.instrs.len()
+    }
+
+    /// Returns the IP which marks the end of the body section and the start of
+    /// the postlude.  This will be the IP of the first postlude instruction.
+    fn postlude_start_ip(&self) -> usize {
+        for (ip, instr) in self.instrs.iter().enumerate().rev() {
+            if !BasicBlock::is_postlude_instr(instr) {
+                return ip + 1;
+            }
+        }
+        0
+    }
+
+    /// Returns the ip of the OpBranch or the end of the block.
+    fn branch_ip_or_end(&self) -> usize {
+        if self.instrs.last().is_some_and(BasicBlock::is_branch_instr) {
+            self.instrs.len() - 1
+        } else {
+            self.instrs.len()
+        }
+    }
+
+    pub fn iter_prelude(&self) -> impl Iterator<Item = &Instr> {
+        self.instrs
+            .iter()
+            .take_while(|instr| BasicBlock::is_prelude_instr(*instr))
+    }
+
+    pub fn iter_postlude_mut(&mut self) -> impl Iterator<Item = &mut Instr> {
+        let start = self.postlude_start_ip();
+        self.instrs[start..].iter_mut()
+    }
+
+    pub fn iter_phi_dsts(&self) -> impl Iterator<Item = &OpPhiDst> {
+        self.iter_prelude().filter_map(|instr| {
+            if let Op::PhiDst(op) = &instr.op {
+                Some(op.as_ref())
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn iter_phi_srcs_mut(&mut self) -> impl Iterator<Item = &mut OpPhiSrc> {
+        self.iter_postlude_mut().filter_map(|instr| {
+            if let Op::PhiSrc(op) = &mut instr.op {
+                Some(op.as_mut())
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn insert_after_prelude(
+        &mut self,
+        iter: impl IntoIterator<Item = Instr>,
+    ) {
+        let ip = self.prelude_end_ip();
+        self.instrs.splice(ip..ip, iter);
+    }
+
+    pub fn insert_before_postlude(
+        &mut self,
+        iter: impl IntoIterator<Item = Instr>,
+    ) {
+        let ip = self.postlude_start_ip();
+        self.instrs.splice(ip..ip, iter);
+    }
+
+    pub fn insert_phi_dsts(
+        &mut self,
+        iter: impl IntoIterator<Item = OpPhiDst>,
+    ) {
+        let iter = iter.into_iter().map(Instr::from);
+        self.instrs.splice(0..0, iter);
+    }
+
+    pub fn insert_phi_srcs(
+        &mut self,
+        iter: impl IntoIterator<Item = OpPhiSrc>,
+    ) {
+        let iter = iter.into_iter().map(Instr::from);
+        let ip = self.branch_ip_or_end();
+        self.instrs.splice(ip..ip, iter);
+    }
 }
 
 impl fmt::Display for BasicBlock {
@@ -1469,6 +1835,8 @@ pub struct ShaderInfo {
     pub tls_size: u32,
     /// Bitset of preloaded registers
     pub register_preload: u64,
+    /// True if we have OpLdGclk
+    pub has_ld_gclk: bool,
 }
 
 pub struct Shader<'a> {
@@ -1490,12 +1858,23 @@ impl Shader<'_> {
         }
     }
 
-    pub fn run_pass(&mut self, name: &str, pass: impl FnOnce(&mut Self)) {
-        pass(self);
+    pub fn run_pass<R>(
+        &mut self,
+        name: &str,
+        pass: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let res = pass(self);
         if DEBUG.contains(DebugFlags::PRINT) {
             eprintln!("Kraid shader after {name}:\n{self}");
         }
         self.validate();
+        res
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.blocks.len() == 1
+            && self.blocks[0].instrs.len() == 1
+            && matches!(self.blocks[0].instrs[0].op, Op::Nop(_))
     }
 }
 

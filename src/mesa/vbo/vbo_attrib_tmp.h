@@ -980,8 +980,8 @@ TAG(VertexAttribs1hvNV)(GLuint index, GLsizei n, const GLhalfNV *v)
 {
    GET_CURRENT_CONTEXT(ctx);
    n = MIN2(n, VBO_ATTRIB_MAX - index);
-   for (GLint i = n - 1; i >= 0; i--)
-      ATTR1H(index + i, v[i]);
+   for (GLint attr_index = n - 1; attr_index >= 0; attr_index--)
+      ATTR1H(index + attr_index, v[attr_index]);
 }
 
 static void GLAPIENTRY

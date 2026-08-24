@@ -28,94 +28,14 @@ layout(local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
 #include "vk_bvh_defines.h"
 #define VK_USED_BUILD_FLAGS VK_PLOC_BUILD_FLAGS
 #define USE_GLOBAL_SYNC
+#define VK_USE_PREFIX_SCAN
+#define VK_WORKGROUP_SIZE PLOC_WORKGROUP_SIZE
 #include "vk_bvh_helpers.h"
-
-TYPE(ploc_prefix_scan_partition, 4);
 
 layout(push_constant) uniform CONSTS
 {
    ploc_args args;
 };
-
-shared uint32_t exclusive_prefix_sum;
-shared uint32_t aggregate_sums[PLOC_SUBGROUPS_PER_WORKGROUP];
-shared uint32_t aggregate_sums2[PLOC_SUBGROUPS_PER_WORKGROUP];
-
-/*
- * Global prefix scan over all workgroups to find out the index of the collapsed node to write.
- * See https://research.nvidia.com/sites/default/files/publications/nvr-2016-002.pdf
- * One partition = one workgroup in this case.
- */
-uint32_t
-prefix_scan(uvec4 ballot, REF(ploc_prefix_scan_partition) partitions, uint32_t task_index)
-{
-   if (gl_LocalInvocationIndex == 0) {
-      exclusive_prefix_sum = 0;
-      if (task_index >= gl_WorkGroupSize.x) {
-         REF(ploc_prefix_scan_partition) current_partition =
-            REF(ploc_prefix_scan_partition)(INDEX(ploc_prefix_scan_partition, partitions, task_index / gl_WorkGroupSize.x));
-
-         REF(ploc_prefix_scan_partition) previous_partition = current_partition - 1;
-
-         while (true) {
-            /* See if this previous workgroup already set their inclusive sum */
-            if (atomicLoad(DEREF(previous_partition).inclusive_sum, gl_ScopeDevice,
-                           gl_StorageSemanticsBuffer,
-                           gl_SemanticsAcquire | gl_SemanticsMakeVisible) != 0xFFFFFFFF) {
-               atomicAdd(exclusive_prefix_sum, DEREF(previous_partition).inclusive_sum);
-               break;
-            } else {
-               atomicAdd(exclusive_prefix_sum, DEREF(previous_partition).aggregate);
-               previous_partition -= 1;
-            }
-         }
-         /* Set the inclusive sum for the next workgroups */
-         atomicStore(DEREF(current_partition).inclusive_sum,
-                     DEREF(current_partition).aggregate + exclusive_prefix_sum, gl_ScopeDevice,
-                     gl_StorageSemanticsBuffer, gl_SemanticsRelease | gl_SemanticsMakeAvailable);
-      }
-   }
-
-   if (subgroupElect())
-      aggregate_sums[gl_SubgroupID] = subgroupBallotBitCount(ballot);
-   barrier();
-
-   if (PLOC_SUBGROUPS_PER_WORKGROUP <= SUBGROUP_SIZE) {
-      if (gl_LocalInvocationID.x < PLOC_SUBGROUPS_PER_WORKGROUP) {
-         aggregate_sums[gl_LocalInvocationID.x] =
-            exclusive_prefix_sum + subgroupExclusiveAdd(aggregate_sums[gl_LocalInvocationID.x]);
-      }
-   } else {
-      /* If the length of aggregate_sums[] is larger than SUBGROUP_SIZE,
-       * the prefix scan can't be done simply by subgroupExclusiveAdd.
-       */
-      if (gl_LocalInvocationID.x < PLOC_SUBGROUPS_PER_WORKGROUP)
-         aggregate_sums2[gl_LocalInvocationID.x] = aggregate_sums[gl_LocalInvocationID.x];
-      barrier();
-
-      /* Hillis Steele inclusive scan on aggregate_sums2 */
-      for (uint32_t stride = 1; stride < PLOC_SUBGROUPS_PER_WORKGROUP; stride *= 2) {
-         uint32_t value = 0;
-         if (gl_LocalInvocationID.x >= stride && gl_LocalInvocationID.x < PLOC_SUBGROUPS_PER_WORKGROUP)
-            value = aggregate_sums2[gl_LocalInvocationID.x - stride];
-         barrier();
-         if (gl_LocalInvocationID.x < PLOC_SUBGROUPS_PER_WORKGROUP)
-            aggregate_sums2[gl_LocalInvocationID.x] += value;
-         barrier();
-      }
-
-      /* Adapt to exclusive and add the prefix_sum from previous workgroups */
-      if (gl_LocalInvocationID.x < PLOC_SUBGROUPS_PER_WORKGROUP) {
-         if (gl_LocalInvocationID.x == 0)
-            aggregate_sums[gl_LocalInvocationID.x] = exclusive_prefix_sum;
-         else
-            aggregate_sums[gl_LocalInvocationID.x] = exclusive_prefix_sum + aggregate_sums2[gl_LocalInvocationID.x - 1];
-      }
-   }
-   barrier();
-
-   return aggregate_sums[gl_SubgroupID] + subgroupBallotExclusiveBitCount(ballot);
-}
 
 /* Relative cost of increasing the BVH depth. Deep BVHs will require more backtracking. */
 #define BVH_LEVEL_COST 0.2
@@ -132,7 +52,7 @@ push_node(uint32_t children[2], vk_aabb bounds[2])
    total_bounds.min = vec3(INFINITY);
    total_bounds.max = vec3(-INFINITY);
 
-   uint32_t dst_flags = VK_BVH_BOX_FLAG_ONLY_OPAQUE | VK_BVH_BOX_FLAG_NO_OPAQUE;
+   uint32_t dst_flags = 0xffffffff;
 
    for (uint i = 0; i < 2; ++i) {
       total_bounds.min = min(total_bounds.min, bounds[i].min);
@@ -273,8 +193,8 @@ main(void)
                      DIV_ROUND_UP(DEREF(args.header).active_leaf_count, gl_WorkGroupSize.x));
    }
 
-   REF(ploc_prefix_scan_partition)
-   partitions = REF(ploc_prefix_scan_partition)(args.prefix_scan_partitions);
+   REF(vk_prefix_scan_partition)
+   partitions = REF(vk_prefix_scan_partition)(args.prefix_scan_partitions);
 
    uint32_t task_index = fetch_task(args.header, false);
 
@@ -405,9 +325,9 @@ main(void)
           * partitions.
           */
          if (gl_LocalInvocationIndex == 0) {
-            REF(ploc_prefix_scan_partition)
-            current_partition = REF(ploc_prefix_scan_partition)(
-               INDEX(ploc_prefix_scan_partition, partitions, task_index / gl_WorkGroupSize.x));
+            REF(vk_prefix_scan_partition)
+            current_partition = REF(vk_prefix_scan_partition)(
+               INDEX(vk_prefix_scan_partition, partitions, task_index / gl_WorkGroupSize.x));
             DEREF(current_partition).aggregate = shared_aggregate_sum;
             if (task_index < gl_WorkGroupSize.x) {
                DEREF(current_partition).inclusive_sum = shared_aggregate_sum;
@@ -429,7 +349,7 @@ main(void)
                           : VK_BVH_INVALID_NODE;
          uvec4 ballot = subgroupBallot(id != VK_BVH_INVALID_NODE);
 
-         uint32_t new_offset = prefix_scan(ballot, partitions, task_index);
+         uint32_t new_offset = vk_prefix_scan(ballot, partitions, task_index);
          if (task_index >= current_task_count)
             continue;
 

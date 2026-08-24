@@ -486,7 +486,7 @@ static nir_def *
 lower_boolean_shuffle(nir_builder *b, nir_intrinsic_instr *intrin,
                       const nir_lower_subgroups_options *options)
 {
-   assert(options->ballot_components == 1 && options->subgroup_size);
+   assert(options->ballot_components == 1);
    nir_def *ballot = nir_ballot_relaxed(b, 1, options->ballot_bit_size, intrin->src[0].ssa);
 
    nir_def *index = NULL;
@@ -512,6 +512,7 @@ lower_boolean_shuffle(nir_builder *b, nir_intrinsic_instr *intrin,
       index = nir_ixor(b, nir_load_subgroup_invocation(b), intrin->src[1].ssa);
       break;
    case nir_intrinsic_rotate: {
+      assert(options->subgroup_size);
       nir_def *delta = nir_as_uniform(b, intrin->src[1].ssa);
       uint32_t cluster_size = nir_intrinsic_cluster_size(intrin);
       cluster_size = cluster_size ? cluster_size : options->subgroup_size;

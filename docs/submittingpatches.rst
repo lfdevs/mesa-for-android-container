@@ -212,6 +212,12 @@ You can produce those fixes lines by running this command once::
 
 After that, using ``git fixes <sha1>`` will print the full line for you.
 
+.. warning::
+   Reverted commits are *not* automatically backported! You need to include the
+   ``Fixes:`` tag for the commit it reverts if you want to backport the revert
+   everywhere, or the ``Backport-to: YY.N`` tag if you want to backport it only
+   in a specific release branch.
+
 The stable tag
 --------------
 

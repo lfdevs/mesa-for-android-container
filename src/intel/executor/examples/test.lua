@@ -1,20 +1,22 @@
 local data = {}
-for i = 0, 8-1 do
+for i = 0, 15 do
   data[i] = i * 4
 end
 
-local r = execute {
-  data = data,
-  src = [[
-    @id    r1
-    @read  r3 r1
+local buf = alloc(data)
 
-    add (8) r3 r3 0x100
+execute [[
+    @param autoswsb
 
-    @write r1 r3
+    @id    r2
+    @addr  r3 buf0 r2
+    @load  r4 r3
+
+    add (8) r4 r4 0x100
+
+    @store r3 r4
 
     @eot
-  ]],
-}
+]]
 
-dump(r, 8)
+dump(buf, 8)

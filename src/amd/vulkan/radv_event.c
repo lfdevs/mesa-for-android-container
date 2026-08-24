@@ -37,7 +37,7 @@ radv_create_event(struct radv_device *device, const VkEventCreateInfo *pCreateIn
    struct radv_event *event;
    VkResult result;
 
-   event = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*event), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   event = vk_zalloc2(&device->vk.alloc, pAllocator, sizeof(*event), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!event)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 

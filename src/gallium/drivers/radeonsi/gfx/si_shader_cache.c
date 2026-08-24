@@ -279,7 +279,7 @@ void si_shader_cache_insert_shader(struct si_screen *sscreen, unsigned char ir_b
 
    if (!memory_cache_full) {
       if (_mesa_hash_table_insert(sscreen->shader_cache,
-                                  mem_dup(ir_blake3_cache_key, 20),
+                                  mem_dup(ir_blake3_cache_key, BLAKE3_KEY_LEN),
                                   hw_binary) == NULL) {
           FREE(hw_binary);
           return;
@@ -289,7 +289,7 @@ void si_shader_cache_insert_shader(struct si_screen *sscreen, unsigned char ir_b
    }
 
    if (sscreen->disk_shader_cache && insert_into_disk_cache) {
-      disk_cache_compute_key(sscreen->disk_shader_cache, ir_blake3_cache_key, 20, key);
+      disk_cache_compute_key(sscreen->disk_shader_cache, ir_blake3_cache_key, BLAKE3_KEY_LEN, key);
       disk_cache_put(sscreen->disk_shader_cache, key, hw_binary, size, NULL);
    }
 
@@ -314,7 +314,7 @@ bool si_shader_cache_load_shader(struct si_screen *sscreen, unsigned char ir_bla
       return false;
 
    unsigned char blake3[CACHE_KEY_SIZE];
-   disk_cache_compute_key(sscreen->disk_shader_cache, ir_blake3_cache_key, 20, blake3);
+   disk_cache_compute_key(sscreen->disk_shader_cache, ir_blake3_cache_key, BLAKE3_KEY_LEN, blake3);
 
    size_t total_size;
    uint32_t *buffer = (uint32_t*)disk_cache_get(sscreen->disk_shader_cache, blake3, &total_size);
@@ -356,7 +356,7 @@ static uint32_t si_shader_cache_key_hash(const void *key)
 static bool si_shader_cache_key_equals(const void *a, const void *b)
 {
    /* Compare BLAKE3s. */
-   return memcmp(a, b, 20) == 0;
+   return memcmp(a, b, BLAKE3_KEY_LEN) == 0;
 }
 
 static void si_destroy_shader_cache_entry(struct hash_entry *entry)
