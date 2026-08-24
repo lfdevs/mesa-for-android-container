@@ -36,6 +36,9 @@ struct tu_queue
    unsigned render_pass_idx;
 
    int fence;           /* timestamp/fence of the last queue submission */
+
+   uint32_t kgsl_queue_timeline_id;
+   uint64_t kgsl_queue_timeline_seqno;
 };
 VK_DEFINE_HANDLE_CASTS(tu_queue, vk.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
 

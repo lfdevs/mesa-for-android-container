@@ -47,7 +47,7 @@ vk_sync_semaphore_import_types(const struct vk_sync_type *type,
    if (type->import_opaque_fd)
       handle_types |= VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
 
-   if (type->export_sync_file && semaphore_type == VK_SEMAPHORE_TYPE_BINARY)
+   if (type->import_sync_file && semaphore_type == VK_SEMAPHORE_TYPE_BINARY)
       handle_types |= VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
 
    if (type->import_win32_handle) {

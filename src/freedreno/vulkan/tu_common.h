@@ -66,6 +66,7 @@
 #include "vk_pipeline_cache.h"
 #include "vk_queue.h"
 #include "vk_sync.h"
+#include "vk_sync_binary.h"
 #include "vk_sync_timeline.h"
 #include "wsi_common.h"
 
