@@ -1,12 +1,18 @@
-freedreno/common: enable Adreno 825
+From 7c919c3123f236c3c0b4b0296bd3c307f5e71e2a Mon Sep 17 00:00:00 2001
+From: whitebelyash <whbexiumwork@gmail.com>
+Date: Tue, 25 Aug 2026 17:22:21 +0800
+Subject: [PATCH] freedreno/common: enable Adreno 825
 
-These patches are from whitebelyash: https://github.com/whitebelyash/mesa-tu8/commit/e010ccc559f680b89a0867ab34025fcf0a438b82
+These patches are from whitebelyash: https://github.com/whitebelyash/mesa-unified/commit/efb4500439dca28f50bc6c874e271708dca2f821
+---
+ src/freedreno/common/freedreno_devices.py | 25 +++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
 
 diff --git a/src/freedreno/common/freedreno_devices.py b/src/freedreno/common/freedreno_devices.py
-index 51b2bdc79a3..f097eff368d 100644
+index 049201343cf..6cea146689a 100644
 --- a/src/freedreno/common/freedreno_devices.py
 +++ b/src/freedreno/common/freedreno_devices.py
-@@ -1394,6 +1394,31 @@ add_gpus([
+@@ -1486,6 +1486,31 @@ add_gpus([
          raw_magic_regs = a8xx_base_raw_magic_regs,
      ))
  
@@ -36,5 +42,8 @@ index 51b2bdc79a3..f097eff368d 100644
 +    ))
 +
  add_gpus([
-         GPUId(chip_id=0xffff44050000, name="Adreno (TM) 830"),
-         GPUId(chip_id=0x44050001, name="Adreno (TM) 830"), # KGSL
+         GPUId(chip_id=0xffff44050A31, name="Adreno (TM) 840"),
+     ], A6xxGPUInfo(
+-- 
+2.47.3
+
