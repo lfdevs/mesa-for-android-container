@@ -1,0 +1,25 @@
+From 4e6dd86296f0c62eda6dcbd3308894ec7a9feb80 Mon Sep 17 00:00:00 2001
+From: Anmol Singh <162159622+Anmol6002@users.noreply.github.com>
+Date: Sat, 4 Jul 2026 21:58:04 +0530
+Subject: freedreno/common: add unofficial support for Adreno 613
+
+---
+ src/freedreno/common/freedreno_devices.py | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/freedreno/common/freedreno_devices.py b/src/freedreno/common/freedreno_devices.py
+index c5a453595ed..e0e796aebb2 100644
+--- a/src/freedreno/common/freedreno_devices.py
++++ b/src/freedreno/common/freedreno_devices.py
+@@ -288,6 +288,8 @@ a6xx_gen1_low_raw_magic_regs = [
+ add_gpus([
+         GPUId(605), # TODO: Test it, based only on libwrapfake dumps
+         GPUId(610),
++        GPUId(612),
++        GPUId(613),
+     ], A6xxGPUInfo(
+         CHIP.A6XX,
+         [a6xx_base, a6xx_gen1_low],
+-- 
+2.47.3
+
