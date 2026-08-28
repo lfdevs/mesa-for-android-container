@@ -311,19 +311,6 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
       if (!tile_size.height)
          continue;
 
-      /* When using FDM, we need approximately square tiles to maintain
-       * proper density distribution across the framebuffer.
-       * Way to wide or tall tiles would distort the density mapping, causing
-       * areas intended for low density to receive higher density and vice
-       * versa.
-       */
-      uint32_t fdm_penalty = 0;
-      if (pass->has_fdm &&
-          (tile_size.width > tile_size.height * 2 ||
-           tile_size.height > tile_size.width * 2)) {
-         fdm_penalty = 1000;
-      }
-
       tile_count.width = DIV_ROUND_UP(fb->width, tile_size.width);
       tile_count.height = DIV_ROUND_UP(fb->height, tile_size.height);
 
@@ -332,6 +319,23 @@ tu_tiling_config_update_tile_layout(struct tu_framebuffer *fb,
        */
       tile_size.height =
          align(DIV_ROUND_UP(fb->height, tile_count.height), tile_align_h);
+
+      /* When using FDM, we need approximately square tiles to maintain
+       * proper density distribution across the framebuffer.
+       * Way to wide or tall tiles would distort the density mapping, causing
+       * areas intended for low density to receive higher density and vice
+       * versa.
+       *
+       * Checked against the height above, which only ever shrinks, so a
+       * candidate inside 2:1 at the budget height can leave it by the time it
+       * is chosen -- 576x512 becoming 576x256 is a real case.
+       */
+      uint32_t fdm_penalty = 0;
+      if (pass->has_fdm &&
+          (tile_size.width > tile_size.height * 2 ||
+           tile_size.height > tile_size.width * 2)) {
+         fdm_penalty = 1000;
+      }
 
       /* Pick the layout with the minimum number of bins (lowest CP overhead
        * and amount of cache flushing), but the most square tiles in the case
