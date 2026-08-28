@@ -3857,8 +3857,12 @@ tu6_render_tile(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
 
    tu_cs_emit_call(cs, &cmd->tile_store_cs);
 
-   tu_clone_trace_range<CHIP>(cmd, cs, &cmd->trace, cmd->trace_renderpass_start, u_trace_end_iterator(&cmd->rp_trace));
    tu_cs_emit_wfi(cs);
+
+   /* Clone after the WFI, so the copies are not themselves part of the tile
+    * being timed.
+    */
+   tu_clone_trace_range<CHIP>(cmd, cs, &cmd->trace, cmd->trace_renderpass_start, u_trace_end_iterator(&cmd->rp_trace));
 
    tu_set_render_mode<CHIP>(cs, {RM6_BIN_RENDER_END});
 
