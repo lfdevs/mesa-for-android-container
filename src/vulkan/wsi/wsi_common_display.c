@@ -2271,6 +2271,10 @@ wsi_display_start_wait_thread(struct wsi_display *wsi)
    if (ret)
       goto out;
 
+   ret = pthread_setname_np(wsi->wait_thread, "MESA_wsi_displa");
+   if (ret)
+      goto out;
+
 out:
    pthread_attr_destroy(&attr);
 
