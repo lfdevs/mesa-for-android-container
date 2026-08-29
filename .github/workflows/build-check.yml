@@ -64,7 +64,9 @@ jobs:
             --prefix=/usr \
             -Dplatforms=x11,wayland \
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
-            -Dgallium-va=disabled \
+            -Dgallium-va=enabled \
+            -Dtermux-va-bridge=enabled \
+            -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
             -Dvulkan-layers= \
@@ -165,7 +167,9 @@ jobs:
             --prefix=/usr \
             -Dplatforms=x11,wayland \
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
-            -Dgallium-va=disabled \
+            -Dgallium-va=enabled \
+            -Dtermux-va-bridge=enabled \
+            -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
             -Dvulkan-layers= \
@@ -271,7 +275,9 @@ jobs:
             --prefix=/usr \
             -Dplatforms=x11,wayland \
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
-            -Dgallium-va=disabled \
+            -Dgallium-va=enabled \
+            -Dtermux-va-bridge=enabled \
+            -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
             -Dvulkan-layers= \
@@ -375,7 +381,9 @@ jobs:
             --prefix=/usr \
             -Dplatforms=x11,wayland \
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
-            -Dgallium-va=disabled \
+            -Dgallium-va=enabled \
+            -Dtermux-va-bridge=enabled \
+            -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
             -Dvulkan-layers= \
@@ -494,7 +502,9 @@ jobs:
             --prefix=/usr \
             -Dplatforms=x11,wayland \
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
-            -Dgallium-va=disabled \
+            -Dgallium-va=enabled \
+            -Dtermux-va-bridge=enabled \
+            -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
             -Dvulkan-layers= \
@@ -598,7 +608,9 @@ jobs:
             --prefix=/usr \
             -Dplatforms=x11,wayland \
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
-            -Dgallium-va=disabled \
+            -Dgallium-va=enabled \
+            -Dtermux-va-bridge=enabled \
+            -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
             -Dvulkan-layers= \
@@ -702,7 +714,9 @@ jobs:
             --prefix=/usr \
             -Dplatforms=x11,wayland \
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
-            -Dgallium-va=disabled \
+            -Dgallium-va=enabled \
+            -Dtermux-va-bridge=enabled \
+            -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
             -Dvulkan-layers= \
@@ -775,6 +789,7 @@ jobs:
             python3-Mako python3-packaging python3-yaml python3-ply \
             libffi-devel \
             libzstd-devel \
+            libva-devel \
             glslang
 
       - name: Cache ccache
@@ -818,7 +833,9 @@ jobs:
             --prefix=/usr \
             -Dplatforms=x11,wayland \
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
-            -Dgallium-va=disabled \
+            -Dgallium-va=enabled \
+            -Dtermux-va-bridge=enabled \
+            -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
             -Dvulkan-layers= \
@@ -923,7 +940,9 @@ jobs:
                 --prefix=/usr \
                 -Dplatforms=x11,wayland \
                 -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
-                -Dgallium-va=disabled \
+                -Dgallium-va=enabled \
+                -Dtermux-va-bridge=enabled \
+                -Dvideo-codecs=all \
                 -Dgallium-mediafoundation=disabled \
                 -Dvulkan-drivers=freedreno \
                 -Dvulkan-layers= \

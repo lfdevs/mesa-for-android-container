@@ -1404,6 +1404,50 @@ VA-API environment variables
 
    enable MPEG4 for VA-API, disabled by default.
 
+termux-va bridge environment variables
+--------------------------------------
+
+The termux-va bridge forwards VA-API video decoding over a Unix socket to
+the termux-va daemon running in Termux (Android MediaCodec hardware
+decode).  See :doc:`termux-va`.
+
+.. envvar:: TERMUX_VA_BRIDGE
+
+   ``1``/``true`` forces the bridge on, ``0``/``false`` forces it off.
+   When unset, the bridge activates automatically if ``TERMUX_VA_SOCKET``
+   or ``TERMUX_VA_SOCKET_DIR`` is set, or if the default endpoint exists
+   as a socket.
+
+.. envvar:: TERMUX_VA_SOCKET
+
+   Full path of the daemon's Unix socket file, overriding the default
+   ``/tmp/termux-va/termux-va.sock`` (the container-side view of the
+   Termux ``$TMPDIR/termux-va/`` shared-tmp directory).
+
+.. envvar:: TERMUX_VA_SOCKET_DIR
+
+   Directory containing the socket; ``termux-va.sock`` is appended.
+   Takes effect when ``TERMUX_VA_SOCKET`` is unset.  The same two
+   variables are understood by the daemon itself, so one setting covers
+   both ends.
+
+.. envvar:: DMD_WANT_SHM
+
+   set to ``0`` to disable the memfd shared-memory frame transport
+   (zero-copy) and always receive frames inline on the socket.  The
+   ``DMD_`` prefix is kept for compatibility with the upstream protocol
+   tooling.
+
+.. envvar:: DMD_VA_LOG
+
+   set to ``1`` to enable the bridge's daemon-client logging on stderr.
+
+.. envvar:: LIBVA_DRIVER_NAME
+
+   set to ``termuxva`` to make libva load the bridge through the
+   ``termuxva_drv_video.so`` megadriver symlink (recommended; automatic
+   driver discovery does not know the bridge).
+
 VC4 driver environment variables
 --------------------------------
 
