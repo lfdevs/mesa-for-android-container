@@ -51,6 +51,23 @@ socket path) and ``TERMUX_VA_SOCKET_DIR`` (directory), so one setting
 covers the daemon and the bridge; Android system properties are accepted
 as a fallback through Mesa's ``os_get_option``.
 
+Underlying screen
+-----------------
+
+The decode surfaces live on a screen created by the bridge before the
+frontend asks for one.  ``TERMUX_VA_GPU_BACKEND`` selects how:
+
+``auto`` (default) tries the stock loader first (correct on normal GPU
+render nodes), then the fork's ``kgsl`` freedreno alias, then llvmpipe.
+On the kgsl stack the display controller's DRM node reports a kernel
+driver name such as ``msm_drm`` that the stock loader cannot map (it
+falls back to zink, which has no Vulkan device there), so the kgsl alias
+is what actually works: GPU submission goes to ``/dev/kgsl-3d0`` while
+the handed fd stays the control/identity fd, exactly like the EGL path
+(``MESA_LOADER_DRIVER_OVERRIDE=kgsl`` + ``FD_FORCE_KGSL=1``).  ``sw``
+forces llvmpipe for setups without GPU access; the VA decode paths used
+by vainfo and ffmpeg work without a GPU.
+
 Data path
 ---------
 

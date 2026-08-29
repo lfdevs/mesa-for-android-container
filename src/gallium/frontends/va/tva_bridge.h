@@ -47,6 +47,22 @@ bool tva_bridge_active(void);
  */
 void tva_bridge_wrap_driver(struct vl_screen *vscreen, struct pipe_context **pipe);
 
+/*
+ * Create the underlying screen for the VA frontend's vscreen, with backend
+ * selection (see TERMUX_VA_GPU_BACKEND in docs/envvars.rst):
+ *
+ *   auto (default) stock loader selection, then the fork's "kgsl"
+ *                  freedreno alias, then llvmpipe
+ *   kgsl           force the "kgsl" freedreno alias (GPU submission via
+ *                  /dev/kgsl-3d0, handed fd as control/identity fd)
+ *   drm            stock loader selection only
+ *   sw             llvmpipe only
+ *
+ * Does not take ownership of `fd` (pipe_loader dups it internally).
+ * Returns NULL when every selected backend failed.
+ */
+struct vl_screen *tva_bridge_vscreen_create(int fd, bool honor_dri_prime);
+
 #ifdef __cplusplus
 }
 #endif
