@@ -190,7 +190,10 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
           * so don't try to override them.
           */
          bool honor_dri_prime = ctx->display_type == VA_DISPLAY_WAYLAND;
-         drv->vscreen = vl_drm_screen_create(drm_info->fd, honor_dri_prime);
+         if (tva_bridge_active())
+            drv->vscreen = tva_bridge_vscreen_create(drm_info->fd, honor_dri_prime);
+         else
+            drv->vscreen = vl_drm_screen_create(drm_info->fd, honor_dri_prime);
       }
       break;
    }

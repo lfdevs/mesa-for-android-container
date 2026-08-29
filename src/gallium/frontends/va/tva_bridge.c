@@ -60,6 +60,8 @@
 #include "pipe/p_video_enums.h"
 #include "pipe/p_state.h"
 
+#include "pipe-loader/pipe_loader.h"
+
 #include "util/os_misc.h"
 #include "util/os_time.h"
 #include "util/u_debug.h"
@@ -855,6 +857,128 @@ tva_wrap_pipe(struct pipe_context *real, struct pipe_screen *wrapped_screen,
     tp->base.create_video_buffer_with_modifiers =
         tva_pipe_create_video_buffer_with_modifiers;
     *out_pipe = &tp->base;
+}
+
+/* ------------------------------------------------- vscreen creation */
+/*
+ * The stock loader path breaks on the kgsl stack in two ways:
+ *
+ *  1. Xiaomi/DroidSpaces kernels report the display controller's DRM node
+ *     as "msm_drm" - no pipe_loader descriptor matches that name, so the
+ *     kmsro/zink fallbacks engage and fail (the kgsl stack has no usable
+ *     Vulkan device for zink, hence "ZINK: failed to choose pdev").
+ *  2. Even on kernels reporting "msm", the msm kmd drives no GPU there -
+ *     the Adreno GPU is only reachable through /dev/kgsl-3d0.
+ *
+ * The fork registers a "kgsl" alias of the freedreno descriptor whose
+ * device layer redirects GPU submission to /dev/kgsl-3d0 while keeping the
+ * handed fd as the control/identity fd (freedreno_device.c); EGL uses
+ * exactly that override via MESA_LOADER_DRIVER_OVERRIDE=kgsl.  The bridge
+ * does the same for VA-API by re-pointing the probed device's driver_name.
+ */
+
+static void
+tva_vscreen_destroy(struct vl_screen *vscreen)
+{
+    vscreen->pscreen->destroy(vscreen->pscreen);
+    pipe_loader_release(&vscreen->dev, 1);
+    FREE(vscreen);
+}
+
+static struct vl_screen *
+tva_vscreen_from_pscreen(struct pipe_screen *pscreen,
+                         struct pipe_loader_device *dev)
+{
+    struct vl_screen *vscreen = CALLOC_STRUCT(vl_screen);
+    if (!vscreen) {
+        pscreen->destroy(pscreen);
+        pipe_loader_release(&dev, 1);
+        return NULL;
+    }
+
+    vscreen->pscreen = pscreen;
+    vscreen->dev = dev;
+    vscreen->destroy = tva_vscreen_destroy;
+    vscreen->texture_from_drawable = NULL;
+    vscreen->get_dirty_area = NULL;
+    vscreen->get_timestamp = NULL;
+    vscreen->set_next_timestamp = NULL;
+    vscreen->get_private = NULL;
+    vscreen->set_back_texture_from_output = NULL;
+    return vscreen;
+}
+
+/* The fork's "kgsl" freedreno alias: control/identity fd = the handed DRM
+ * node, GPU submission = /dev/kgsl-3d0. */
+static struct vl_screen *
+tva_vscreen_kgsl(int fd)
+{
+    struct pipe_loader_device *dev = NULL;
+    if (!pipe_loader_drm_probe_fd(&dev, fd, false))
+        return NULL;
+
+    free(dev->driver_name);
+    dev->driver_name = strdup("kgsl");
+
+    /* Match the fork's kgsl environment so freedreno always redirects GPU
+     * submission instead of taking the half-initialised msm path. */
+    setenv("FD_FORCE_KGSL", "1", 0);
+
+    struct pipe_screen *pscreen = pipe_loader_create_screen(dev, false);
+    if (!pscreen) {
+        debug_printf("tva: kgsl screen creation failed\n");
+        pipe_loader_release(&dev, 1);
+        return NULL;
+    }
+    debug_printf("tva: using the kgsl freedreno backend\n");
+    return tva_vscreen_from_pscreen(pscreen, dev);
+}
+
+/* llvmpipe over the null sw winsys: no GPU needed, enough for the CPU
+ * frame-copy paths (vainfo, ffmpeg vaMapBuffer). */
+static struct vl_screen *
+tva_vscreen_sw(void)
+{
+    struct pipe_loader_device *dev = NULL;
+    if (!pipe_loader_sw_probe_null(&dev))
+        return NULL;
+
+    struct pipe_screen *pscreen = pipe_loader_create_screen(dev, false);
+    if (!pscreen) {
+        debug_printf("tva: llvmpipe screen creation failed\n");
+        pipe_loader_release(&dev, 1);
+        return NULL;
+    }
+    debug_printf("tva: using the llvmpipe software backend\n");
+    return tva_vscreen_from_pscreen(pscreen, dev);
+}
+
+struct vl_screen *
+tva_bridge_vscreen_create(int fd, bool honor_dri_prime)
+{
+    const char *backend = os_get_option("TERMUX_VA_GPU_BACKEND");
+    if (!backend || !*backend || !strcmp(backend, "auto")) {
+        /* 1. stock selection (correct on normal GPU render nodes) */
+        struct vl_screen *vscreen = vl_drm_screen_create(fd, honor_dri_prime);
+        if (vscreen)
+            return vscreen;
+        debug_printf("tva: stock drm screen creation failed, trying kgsl\n");
+        /* 2. the kgsl stack */
+        vscreen = tva_vscreen_kgsl(fd);
+        if (vscreen)
+            return vscreen;
+        /* 3. software fallback */
+        return tva_vscreen_sw();
+    }
+    if (!strcmp(backend, "kgsl"))
+        return tva_vscreen_kgsl(fd);
+    if (!strcmp(backend, "sw"))
+        return tva_vscreen_sw();
+    if (!strcmp(backend, "drm"))
+        return vl_drm_screen_create(fd, honor_dri_prime);
+
+    debug_printf("tva: unknown TERMUX_VA_GPU_BACKEND '%s', using auto\n", backend);
+    return tva_bridge_vscreen_create(fd, honor_dri_prime);
 }
 
 void
