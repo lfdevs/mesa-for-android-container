@@ -41,6 +41,8 @@
 #include "loader/loader.h"
 #endif
 
+#include "tva_bridge.h"
+
 #include <va/va_drmcommon.h>
 
 static struct VADriverVTable vtable =
@@ -210,6 +212,12 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv->pipe)
       goto error_pipe;
 
+   /* termux-va bridge: wrap the multimedia context so codec creation is
+    * delegated to the Termux daemon, and answer capability queries for the
+    * bridge's codec set.  Runtime-gated by the TERMUX_VA_* variables. */
+   if (tva_bridge_active())
+      tva_bridge_wrap_driver(drv->vscreen, &drv->pipe);
+
    drv->htab = handle_table_create();
    if (!drv->htab)
       goto error_htab;
@@ -235,6 +243,11 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    snprintf(drv->vendor_string, sizeof(drv->vendor_string),
             "Mesa Gallium driver " PACKAGE_VERSION " for %s",
             drv->vscreen->pscreen->get_name(drv->vscreen->pscreen));
+   if (tva_bridge_active()) {
+      size_t len = strlen(drv->vendor_string);
+      snprintf(drv->vendor_string + len, sizeof(drv->vendor_string) - len,
+               " (termux-va bridge)");
+   }
    ctx->str_vendor = drv->vendor_string;
 
    return VA_STATUS_SUCCESS;

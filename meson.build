@@ -859,9 +859,10 @@ _va_drivers = [
 ]
 
 allow_fallback_for_libva = get_option('allow-fallback-for').contains('libva')
+_termux_va_bridge = get_option('termux-va-bridge')
 _va = get_option('gallium-va') \
-  .require(_va_drivers.contains(true),
-           error_message : 'VA state tracker requires at least one of the following gallium drivers: r600, radeonsi, nouveau, d3d12 (with option gallium-d3d12-video), virgl.')
+  .require(_va_drivers.contains(true) or not _termux_va_bridge.disabled(),
+           error_message : 'VA state tracker requires at least one of the following gallium drivers: r600, radeonsi, nouveau, d3d12 (with option gallium-d3d12-video), virgl, or -Dtermux-va-bridge for the termux-va bridge.')
 _dep_va_name = host_machine.system() == 'windows' ? 'libva-win32' : 'libva'
 dep_va = dependency(
   _dep_va_name, version : '>= 1.8.0',
@@ -884,6 +885,10 @@ if dep_va.found()
                                 dependencies: dep_va_headers).split('.')
 endif
 with_gallium_va = dep_va.found()
+# The termux-va bridge is compiled into the VA frontend whenever it is not
+# explicitly disabled; activation is decided at runtime by the TERMUX_VA_*
+# environment variables (see src/gallium/frontends/va/tva_bridge.c).
+with_termux_va_bridge = with_gallium_va and not _termux_va_bridge.disabled()
 
 va_drivers_path = get_option('va-libs-path')
 if va_drivers_path == ''

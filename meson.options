@@ -109,6 +109,13 @@ option(
 )
 
 option(
+  'termux-va-bridge',
+  type : 'feature',
+  value : 'auto',
+  description : 'build the termux-va bridge into the VA frontend (VA decode forwarded over a Unix socket to the Termux termux-va daemon; runtime-gated by the TERMUX_VA_* environment variables)',
+)
+
+option(
   'gallium-mediafoundation',
   type : 'feature',
   deprecated: {'true': 'enabled', 'false': 'disabled'},
