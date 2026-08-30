@@ -21,6 +21,7 @@
 
 struct vl_screen;
 struct pipe_context;
+struct pipe_screen;
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,13 +40,22 @@ extern "C" {
 bool tva_bridge_active(void);
 
 /*
- * Wrap the driver's pipe_context so that video codec creation is delegated
- * to the termux-va bridge, and repoint vscreen->pscreen at the wrapped
- * screen so capability queries describe the bridge's codec set.  Must be
- * called after the real multimedia context was created (context.c) and
- * before any VA entry point runs.  No-op when the bridge is inactive.
+ * Fill the underlying screen's NULL video capability hooks
+ * (get_video_param / is_video_format_supported) with the bridge's codec
+ * table.  Drivers without a video path (freedreno, llvmpipe) leave them
+ * NULL, which would fail the VA frontend's init check.  Hooks that are
+ * already present are left untouched.
  */
-void tva_bridge_wrap_driver(struct vl_screen *vscreen, struct pipe_context **pipe);
+void tva_bridge_screen_set_video_hooks(struct pipe_screen *screen);
+
+/*
+ * Fill the multimedia context's create_video_codec /
+ * create_video_buffer(_with_modifiers) hooks with the bridge
+ * implementations.  `pipe` must be the REAL context created from the raw
+ * screen (the implementations receive it as-is; no wrapper object is
+ * involved).
+ */
+void tva_bridge_pipe_set_codec_hooks(struct pipe_context *pipe);
 
 /*
  * Create the underlying screen for the VA frontend's vscreen, with backend
