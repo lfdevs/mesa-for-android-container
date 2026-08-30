@@ -62,6 +62,7 @@
 
 #include "pipe-loader/pipe_loader.h"
 
+#include "c11/threads.h"
 #include "util/os_misc.h"
 #include "util/os_time.h"
 #include "util/u_debug.h"
@@ -73,10 +74,13 @@
 #include "tva_client.h"
 #include "tva_protocol.h"
 
-/* Bridge-side pipeline depth.  MUST stay <= SHM_SLOTS (8, tva_protocol.h):
- * the daemon's slot pool would otherwise stall.  Same coupling as the
- * upstream driver's DMD_PIPELINE_DEPTH. */
-#define DMD_PIPELINE_DEPTH 6
+/* Bridge-side pipeline depth.  In SHM mode it MUST stay <= SHM_SLOTS (8,
+ * tva_protocol.h) or the daemon's slot pool stalls; inline delivery has no
+ * such limit, so a deeper ring can be used to ride out decoder reordering
+ * (TERMUX_VA_PIPELINE_DEPTH).  Same coupling as the upstream driver's
+ * DMD_PIPELINE_DEPTH. */
+#define DMD_PIPELINE_DEPTH_MAX 32
+static unsigned tva_pipeline_depth = 6;
 
 /* Deadline for end_frame waiting for a free pending slot.  Matches the
  * daemon's slot wait (SHM_SLOT_WAIT_MS). */
@@ -105,16 +109,39 @@ bool tva_bridge_active(void)
     return def && stat(def, &st) == 0 && S_ISSOCK(st.st_mode);
 }
 
-/* --------------------------------------------------- capability helpers */
+static bool
+tva_dbg(void)
+{
+    const char *e = getenv("DMD_VA_LOG");
+    return e && e[0] == '1';
+}
+
+static int tva_dbg_seq;
+#define TVA_TRACE(fmt, ...) \
+    do { if (tva_dbg()) \
+        fprintf(stderr, "tva#%d %s: " fmt "\n", tva_dbg_seq, __func__, ##__VA_ARGS__); \
+    } while (0)
+
+/* ------------------------------------------------- screen video hooks */
+/*
+ * Drivers without a video path (freedreno, llvmpipe) leave
+ * get_video_param / is_video_format_supported NULL, which fails the VA
+ * frontend's init check.  When the bridge is active we fill those hooks in
+ * directly on the underlying screen; they answer the bridge's capability
+ * table and refuse everything else.  Only NULL hooks are filled - an
+ * underlying screen with real video support is left untouched.
+ */
+
 static bool
 tva_profile_supported(enum pipe_video_profile profile)
 {
     switch (profile) {
-    case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
-    case PIPE_VIDEO_PROFILE_HEVC_MAIN:
     case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
+        /* HEVC Main is parsed by the frontend but its CSD (VPS/SPS/PPS) is
+         * not synthesized yet, so it is not advertised. */
         return true;
     default:
         return false;
@@ -136,26 +163,12 @@ tva_codec_id(enum pipe_video_profile profile)
     }
 }
 
-/* --------------------------------------------------------- wrapped screen */
-struct tva_screen {
-    struct pipe_screen base;      /* memcpy of the real screen, overridden */
-    struct pipe_screen *real;
-};
-
-static struct tva_screen *
-tva_screen(struct pipe_screen *screen)
-{
-    return (struct tva_screen *)screen;
-}
-
 static int
 tva_screen_get_video_param(struct pipe_screen *screen,
                            enum pipe_video_profile profile,
                            enum pipe_video_entrypoint entrypoint,
                            enum pipe_video_cap param)
 {
-    struct tva_screen *s = tva_screen(screen);
-
     if (entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM &&
         tva_profile_supported(profile)) {
         switch (param) {
@@ -183,7 +196,7 @@ tva_screen_get_video_param(struct pipe_screen *screen,
         }
     }
 
-    return s->real->get_video_param(s->real, profile, entrypoint, param);
+    return 0;
 }
 
 static bool
@@ -192,53 +205,24 @@ tva_screen_is_video_format_supported(struct pipe_screen *screen,
                                      enum pipe_video_profile profile,
                                      enum pipe_video_entrypoint entrypoint)
 {
-    struct tva_screen *s = tva_screen(screen);
-
-    if (entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM &&
-        tva_profile_supported(profile)) {
-        if (format != PIPE_FORMAT_NV12)
-            return false;
-        return vl_video_buffer_is_format_supported(screen, format, profile,
-                                                   entrypoint);
-    }
-
-    return s->real->is_video_format_supported(s->real, format, profile,
-                                              entrypoint);
+    if (entrypoint != PIPE_VIDEO_ENTRYPOINT_BITSTREAM ||
+        !tva_profile_supported(profile))
+        return false;
+    if (format != PIPE_FORMAT_NV12)
+        return false;
+    return vl_video_buffer_is_format_supported(screen, format, profile,
+                                               entrypoint);
 }
 
-static void
-tva_screen_destroy(struct pipe_screen *screen)
+void
+tva_bridge_screen_set_video_hooks(struct pipe_screen *screen)
 {
-    struct tva_screen *s = tva_screen(screen);
-    s->real->destroy(s->real);
-    FREE(s);
-}
-
-static struct pipe_screen *
-tva_wrap_screen(struct pipe_screen *real)
-{
-    struct tva_screen *s = CALLOC_STRUCT(tva_screen);
-    if (!s)
-        return real;   /* degrade: run unwrapped rather than fail init */
-
-    memcpy(&s->base, real, sizeof(s->base));
-    s->real = real;
-    s->base.destroy = tva_screen_destroy;
-    s->base.get_video_param = tva_screen_get_video_param;
-    s->base.is_video_format_supported = tva_screen_is_video_format_supported;
-    return &s->base;
-}
-
-/* ----------------------------------------------------------- wrapped pipe */
-struct tva_pipe {
-    struct pipe_context base;     /* memcpy of the real context, overridden */
-    struct pipe_context *real;
-};
-
-static struct tva_pipe *
-tva_pipe(struct pipe_context *context)
-{
-    return (struct tva_pipe *)context;
+    if (!screen)
+        return;
+    if (!screen->get_video_param)
+        screen->get_video_param = tva_screen_get_video_param;
+    if (!screen->is_video_format_supported)
+        screen->is_video_format_supported = tva_screen_is_video_format_supported;
 }
 
 /* ------------------------------------------------------- bridge codec */
@@ -259,6 +243,7 @@ struct tva_pending {
 struct tva_fence {
     struct tva_codec *codec;
     struct tva_pending *slot;
+    bool drained;          /* reversible drain already sent for this wait */
 };
 
 struct tva_codec {
@@ -276,13 +261,25 @@ struct tva_codec {
     size_t acc_cap;
 
     /* Pending ring, FIFO order */
-    struct tva_pending pend[DMD_PIPELINE_DEPTH];
+    struct tva_pending pend[DMD_PIPELINE_DEPTH_MAX];
     unsigned pend_head;           /* oldest entry */
     unsigned pend_count;
 
     uint64_t next_unit;           /* index to assign to the next VCL unit (1-based) */
+    uint64_t frames_done;         /* staged frames counter (diagnostics) */
+
+    /* synthesized CSD cache: re-sent to the daemon only when it changes */
+    uint8_t *csd;
+    size_t csd_len;
 
     bool broken;                  /* session error, further decodes fail */
+
+    /* reader thread machinery */
+    mtx_t pend_mutex;
+    cnd_t pend_cond;
+    bool quitting;
+    thrd_t reader;
+    bool reader_started;
 };
 
 static struct tva_codec *
@@ -355,97 +352,39 @@ static void
 tva_pend_pop(struct tva_codec *c)
 {
     struct tva_pending *p = &c->pend[c->pend_head];
+    if (p->fence)
+        p->fence->slot = NULL;
     free(p->staging);
     memset(p, 0, sizeof(*p));
-    c->pend_head = (c->pend_head + 1) % DMD_PIPELINE_DEPTH;
+    c->pend_head = (c->pend_head + 1) % tva_pipeline_depth;
     c->pend_count--;
 }
 
-/* Frames with a unit index nobody waits for (e.g. the completing-input
- * heuristic guessed wrong) are matched FIFO to the oldest pending picture. */
 static struct tva_pending *
 tva_pend_find(struct tva_codec *c, uint32_t unit_seq)
 {
     for (unsigned i = 0; i < c->pend_count; i++) {
         struct tva_pending *p =
-            &c->pend[(c->pend_head + i) % DMD_PIPELINE_DEPTH];
-        if (p->in_use && !p->ready && unit_seq != 0 && p->unit_seq == unit_seq)
+            &c->pend[(c->pend_head + i) % tva_pipeline_depth];
+        if (p->in_use && !p->ready && unit_seq && p->unit_seq == unit_seq)
             return p;
     }
     return tva_pend_oldest(c);
 }
 
-/* ---------------------------- frame pump */
-/*
- * Read frames from the daemon into the pending ring's staging buffers.
- * With block_ms > 0, waits up to that long for the first byte of each
- * frame; with 0, only drains what is already available.  Returns the
- * number of frames staged, or -1 on a session error.
- */
-static int
-tva_pump(struct tva_codec *c, int block_ms)
+static void
+tva_fail_pending_locked(struct tva_codec *c)
 {
-    if (!c->sess || c->broken)
-        return -1;
-
-    int staged = 0;
-    for (;;) {
-        struct tva_frame f;
-        int r = tva_session_next_frame(c->sess, &f, block_ms);
-        if (r == TVA_ERR_TIMEOUT)
-            return staged;
-        if (r == TVA_EOS) {
-            /* the daemon closed; no more frames will come.  Flag all
-             * waiters so fence_wait cannot hang. */
-            for (unsigned i = 0; i < c->pend_count; i++) {
-                struct tva_pending *p =
-                    &c->pend[(c->pend_head + i) % DMD_PIPELINE_DEPTH];
-                if (!p->ready) {
-                    p->ready = true;
-                    p->failed = true;
-                }
-            }
-            return staged;
+    for (unsigned i = 0; i < c->pend_count; i++) {
+        struct tva_pending *p =
+            &c->pend[(c->pend_head + i) % tva_pipeline_depth];
+        if (!p->ready) {
+            p->ready = true;
+            p->failed = true;
         }
-        if (r < 0) {
-            c->broken = true;
-            for (unsigned i = 0; i < c->pend_count; i++) {
-                struct tva_pending *p =
-                    &c->pend[(c->pend_head + i) % DMD_PIPELINE_DEPTH];
-                if (!p->ready) {
-                    p->ready = true;
-                    p->failed = true;
-                }
-            }
-            return -1;
-        }
-
-        struct tva_pending *p = tva_pend_find(c, f.unit_seq);
-        if (!p || p->ready) {
-            /* frame nobody waits for (stale) - drop it */
-            tva_session_release_frame(c->sess, &f);
-            continue;
-        }
-
-        p->staging = malloc(f.size ? f.size : 1);
-        if (!p->staging) {
-            tva_session_release_frame(c->sess, &f);
-            c->broken = true;
-            return -1;
-        }
-        memcpy(p->staging, f.data, f.size);
-        p->staging_size = f.size;
-        p->ready = true;
-        tva_session_release_frame(c->sess, &f);   /* return the slot promptly */
-        staged++;
     }
 }
 
-/*
- * Copy one plane of a staged frame into a surface resource, honoring the
- * decoder's row stride.  Uses texture_subdata when the driver provides it,
- * otherwise falls back to a mapped transfer.
- */
 static void
 tva_copy_plane(struct pipe_context *pipe, struct pipe_resource *res,
                const uint8_t *data, unsigned w, unsigned h, unsigned stride)
@@ -459,7 +398,8 @@ tva_copy_plane(struct pipe_context *pipe, struct pipe_resource *res,
     }
 
     struct pipe_transfer *transfer = NULL;
-    void *map = pipe->texture_map(pipe, res, 0, PIPE_MAP_WRITE, &box, &transfer);
+    void *map = pipe->texture_map(pipe, res, 0, PIPE_MAP_WRITE, &box,
+                                  &transfer);
     if (!map)
         return;
     for (unsigned row = 0; row < h; row++)
@@ -468,48 +408,289 @@ tva_copy_plane(struct pipe_context *pipe, struct pipe_resource *res,
     pipe->texture_unmap(pipe, transfer);
 }
 
-/*
- * Copy a staged decoder frame into the target surface's plane resources.
- * Runs on the caller's (application) thread under the frontend's context
- * mutex.  The decoder buffer is the padded geometry (stride, slice_height,
- * closed-interval crop); the surface holds the visible w x h area.
- */
 static void
 tva_copy_frame(struct tva_codec *c, struct tva_pending *p)
 {
     const struct tva_format *fmt = tva_session_format(c->sess);
     struct pipe_resource *res[4] = {0};
 
-    if (!fmt || !fmt->valid) {
-        debug_printf("tva: no format block received, cannot copy frame\n");
+    if (!fmt || !fmt->valid || !p->target || !p->staging)
         return;
-    }
 
     p->target->get_resources(p->target, res);
     if (!res[0] || !res[1])
         return;
 
-    int disp_w = tva_format_display_width(fmt);
-    int disp_h = tva_format_display_height(fmt);
+    int display_w = tva_format_display_width(fmt);
+    int display_h = tva_format_display_height(fmt);
     unsigned w = res[0]->width0;
     unsigned h = res[0]->height0;
-    /* the surface holds the visible area; clamp against the crop rect */
-    if (disp_w > 0 && (unsigned)disp_w < w)
-        w = (unsigned)disp_w;
-    if (disp_h > 0 && (unsigned)disp_h < h)
-        h = (unsigned)disp_h;
+    if (display_w > 0 && (unsigned)display_w < w)
+        w = (unsigned)display_w;
+    if (display_h > 0 && (unsigned)display_h < h)
+        h = (unsigned)display_h;
 
-    /* Y plane: crop_top*stride + crop_left is the first visible byte */
-    const uint8_t *y = p->staging + (size_t)fmt->crop_top * fmt->stride
-                     + fmt->crop_left;
-    tva_copy_plane(c->pipe, res[0], y, w, h, (unsigned)fmt->stride);
+    size_t y_offset = (size_t)fmt->crop_top * fmt->stride + fmt->crop_left;
+    size_t uv_offset = (size_t)fmt->stride * fmt->slice_height
+                     + (size_t)(fmt->crop_top / 2) * fmt->stride
+                     + (fmt->crop_left & ~1);
+    size_t y_end = y_offset + (size_t)(h - 1) * fmt->stride + w;
+    size_t uv_end = uv_offset + (size_t)((h + 1) / 2 - 1) * fmt->stride + w;
+    if (y_end > p->staging_size || uv_end > p->staging_size)
+        return;
 
-    /* UV plane starts at stride*slice_height; half the crop offsets */
-    const uint8_t *uv = p->staging + (size_t)fmt->stride * fmt->slice_height
-                      + (size_t)(fmt->crop_top / 2) * fmt->stride
-                      + (fmt->crop_left & ~1);
-    tva_copy_plane(c->pipe, res[1], uv, (w + 1) / 2, (h + 1) / 2,
+    tva_copy_plane(c->pipe, res[0], p->staging + y_offset, w, h,
                    (unsigned)fmt->stride);
+    tva_copy_plane(c->pipe, res[1], p->staging + uv_offset,
+                   (w + 1) / 2, (h + 1) / 2, (unsigned)fmt->stride);
+    p->copied = true;
+}
+
+/* ---------------------------- reader thread */
+/*
+ * The reader thread moves frames from the session into pending staging
+ * buffers.  It exists because the two socket directions must always flow:
+ * the application thread sends AUs inside EndPicture while MediaCodec's
+ * input buffers are throttled by output consumption - with a single
+ * thread, a blocking send would stall reads and the C2 decoder's input
+ * queue would deadlock the pipeline.
+ *
+ * The reader only touches the session socket, the pending ring (under
+ * pend_mutex) and its own staging buffers.  pipe_context stays on the
+ * application thread: the surface copy happens in fence_wait.
+ */
+static int
+tva_reader_thread(void *param)
+{
+    struct tva_codec *c = param;
+
+    while (!c->quitting) {
+        struct tva_frame f;
+        int r = tva_session_next_frame(c->sess, &f, 200);
+        if (r == TVA_ERR_TIMEOUT)
+            continue;
+        if (r == TVA_EOS) {
+            mtx_lock(&c->pend_mutex);
+            tva_fail_pending_locked(c);
+            cnd_broadcast(&c->pend_cond);
+            mtx_unlock(&c->pend_mutex);
+            break;
+        }
+        if (r < 0) {
+            mtx_lock(&c->pend_mutex);
+            c->broken = true;
+            tva_fail_pending_locked(c);
+            cnd_broadcast(&c->pend_cond);
+            mtx_unlock(&c->pend_mutex);
+            break;
+        }
+
+        /* match the frame to a pending picture by unit index; unknown
+         * indices fall back to the oldest waiting entry */
+        mtx_lock(&c->pend_mutex);
+        struct tva_pending *p = tva_pend_find(c, f.unit_seq);
+        if (!p || p->ready) {
+            mtx_unlock(&c->pend_mutex);
+            tva_session_release_frame(c->sess, &f);
+            continue;
+        }
+        p->staging = malloc(f.size ? f.size : 1);
+        if (!p->staging) {
+            mtx_unlock(&c->pend_mutex);
+            tva_session_release_frame(c->sess, &f);
+            c->broken = true;
+            break;
+        }
+        memcpy(p->staging, f.data, f.size);
+        p->staging_size = f.size;
+        p->ready = true;
+        c->frames_done++;
+        cnd_broadcast(&c->pend_cond);
+        mtx_unlock(&c->pend_mutex);
+        tva_session_release_frame(c->sess, &f);   /* return the slot promptly */
+    }
+    return 0;
+}
+
+/* ---------------------------------- H.264 CSD synthesis (SPS/PPS) */
+/*
+ * ffmpeg's vaapi h264 does not deliver SPS/PPS as slice data buffers, and
+ * the frontend has no H264 header synthesizer (unlike HEVC/VP9).  The
+ * daemon's MediaCodec needs the parameter sets as CSD, so the bridge
+ * regenerates them from the parsed pipe_h264_sps/pps structures the
+ * frontend fills in.  (Same role as upstream vaapi-driver's
+ * h264_bitstream.c, ported to the gallium-side data model.)
+ */
+
+struct tva_bw {
+    uint8_t *buf;
+    size_t cap;
+    size_t len;          /* bytes flushed to buf (EBSP) */
+    uint32_t acc;
+    unsigned nbits;
+    unsigned zeros;      /* running zero count for emulation prevention */
+};
+
+static void
+tva_bw_put(struct tva_bw *w, unsigned n, uint32_t v)
+{
+    for (int i = n - 1; i >= 0; i--) {
+        unsigned bit = (v >> i) & 1;
+        w->acc = (w->acc << 1) | bit;
+        if (++w->nbits == 8) {
+            uint8_t byte = (uint8_t)(w->acc & 0xff);
+            if (w->len + 4 > w->cap) {
+                w->cap = w->cap ? w->cap * 2 : 64;
+                w->buf = realloc(w->buf, w->cap);
+            }
+            /* emulation prevention: 00 00 {0,1,2,3} -> 00 00 03 xx */
+            if (w->zeros >= 2 && byte <= 3) {
+                w->buf[w->len++] = 3;
+                w->zeros = 0;
+            }
+            w->buf[w->len++] = byte;
+            w->zeros = byte == 0 ? w->zeros + 1 : 0;
+            w->nbits = 0;
+            w->acc = 0;
+        }
+    }
+}
+
+static void
+tva_bw_ue(struct tva_bw *w, uint32_t v)
+{
+    uint32_t val = v + 1;
+    unsigned n = 0;
+    while ((val >> n) != 1)
+        n++;
+    tva_bw_put(w, n, 0);
+    tva_bw_put(w, n + 1, val);
+}
+
+static void
+tva_bw_se(struct tva_bw *w, int32_t v)
+{
+    uint32_t k = v <= 0 ? (uint32_t)(-2 * v) : (uint32_t)(2 * v - 1);
+    tva_bw_ue(w, k);
+}
+
+static void
+tva_bw_rbsp_trailing(struct tva_bw *w)
+{
+    tva_bw_put(w, 1, 1);
+    while (w->nbits)
+        tva_bw_put(w, 1, 0);
+}
+
+/*
+ * Build the SPS NALU (with NAL header + emulation prevention) from the
+ * frontend-parsed struct.  Returns the RBSP size; the NAL header byte is
+ * written first (nal_ref_idc=3, type=7).
+ */
+static size_t
+tva_build_h264_sps(const struct pipe_h264_sps *sps, unsigned max_refs,
+                   uint8_t **out)
+{
+    struct tva_bw w = {0};
+
+    /* profile_idc does not exist in VA-API; derive it exactly like the
+     * upstream driver's derive_profile_idc(): the fields written below are
+     * only self-consistent for the profile chosen here. */
+    uint8_t profile_idc;
+    if (sps->bit_depth_luma_minus8 || sps->bit_depth_chroma_minus8 ||
+        sps->chroma_format_idc > 1)
+        profile_idc = 100;   /* high: carries chroma/depth fields */
+    else
+        profile_idc = 77;    /* main: baseline has no CABAC */
+
+    tva_bw_put(&w, 8, 0x67);             /* nal_ref_idc=3, type=7 */
+    tva_bw_put(&w, 8, profile_idc);
+    tva_bw_put(&w, 8, 0);                /* constraint flags + reserved */
+    tva_bw_put(&w, 8, sps->level_idc ? sps->level_idc : 40);
+    tva_bw_ue(&w, 0);                    /* seq_parameter_set_id */
+    if (profile_idc == 100) {
+        tva_bw_ue(&w, sps->chroma_format_idc);
+        if (sps->chroma_format_idc == 3)
+            tva_bw_put(&w, 1, sps->separate_colour_plane_flag);
+        tva_bw_ue(&w, sps->bit_depth_luma_minus8);
+        tva_bw_ue(&w, sps->bit_depth_chroma_minus8);
+        tva_bw_put(&w, 1, 0);            /* qpprime_y_zero_transform_bypass */
+        tva_bw_put(&w, 1, 0);            /* seq_scaling_matrix_present */
+    }
+    tva_bw_ue(&w, sps->log2_max_frame_num_minus4);
+    tva_bw_ue(&w, sps->pic_order_cnt_type);
+    if (sps->pic_order_cnt_type == 0)
+        tva_bw_ue(&w, sps->log2_max_pic_order_cnt_lsb_minus4);
+    else if (sps->pic_order_cnt_type == 1) {
+        tva_bw_put(&w, 1, sps->delta_pic_order_always_zero_flag);
+        tva_bw_se(&w, sps->offset_for_non_ref_pic);
+        tva_bw_se(&w, sps->offset_for_top_to_bottom_field);
+        tva_bw_ue(&w, sps->num_ref_frames_in_pic_order_cnt_cycle);
+        for (unsigned i = 0; i < sps->num_ref_frames_in_pic_order_cnt_cycle; i++)
+            tva_bw_se(&w, sps->offset_for_ref_frame[i]);
+    }
+    /* the VA picture param carries the real DPB size; sps->max_num_ref_frames
+     * itself is never filled by the frontend */
+    tva_bw_ue(&w, max_refs ? max_refs : 1);
+    tva_bw_put(&w, 1, sps->gaps_in_frame_num_value_allowed_flag);
+    tva_bw_ue(&w, sps->pic_width_in_mbs_minus1);
+    tva_bw_ue(&w, sps->pic_height_in_mbs_minus1);
+    tva_bw_put(&w, 1, sps->frame_mbs_only_flag);
+    if (!sps->frame_mbs_only_flag)
+        tva_bw_put(&w, 1, sps->mb_adaptive_frame_field_flag);
+    tva_bw_put(&w, 1, sps->direct_8x8_inference_flag);
+    tva_bw_put(&w, 1, 0);                /* frame_cropping: unavailable */
+    /* VUI with a bitstream restriction of zero reorder depth: without it a
+     * C2 decoder buffers every frame until EOS (its reorder window defaults
+     * to large when the VUI is absent), which deadlocks the pipeline - the
+     * consumer stops submitting while frames are held. */
+    tva_bw_put(&w, 1, 1);                /* vui_parameters_present */
+    tva_bw_put(&w, 1, 0);                /* aspect_ratio_info_present */
+    tva_bw_put(&w, 1, 0);                /* overscan_info_present */
+    tva_bw_put(&w, 1, 0);                /* video_signal_type_present */
+    tva_bw_put(&w, 1, 0);                /* chroma_loc_info_present */
+    tva_bw_put(&w, 1, 0);                /* timing_info_present */
+    tva_bw_put(&w, 1, 0);                /* nal_hrd_parameters_present */
+    tva_bw_put(&w, 1, 0);                /* vcl_hrd_parameters_present */
+    tva_bw_put(&w, 1, 0);                /* pic_struct_present */
+    tva_bw_put(&w, 1, 1);                /* bitstream_restriction_flag */
+    tva_bw_put(&w, 1, 1);                /* motion_vectors_over_pic_boundaries */
+    tva_bw_ue(&w, 0);                    /* max_bytes_per_pic_denom */
+    tva_bw_ue(&w, 0);                    /* max_bits_per_mb_denom */
+    tva_bw_ue(&w, 0);                    /* log2_max_mv_length_horizontal */
+    tva_bw_ue(&w, 0);                    /* log2_max_mv_length_vertical */
+    tva_bw_ue(&w, 0);                    /* max_num_reorder_frames */
+    tva_bw_ue(&w, max_refs);             /* max_dec_frame_buffering */
+    tva_bw_rbsp_trailing(&w);
+    *out = w.buf;
+    return w.len;
+}
+
+/* PPS NALU: nal_ref_idc=3, type=8 */
+static size_t
+tva_build_h264_pps(const struct pipe_h264_pps *pps, uint8_t **out)
+{
+    struct tva_bw w = {0};
+
+    tva_bw_put(&w, 8, 0x68);
+    tva_bw_ue(&w, 0);                    /* pic_parameter_set_id */
+    tva_bw_ue(&w, 0);                    /* seq_parameter_set_id */
+    tva_bw_put(&w, 1, pps->entropy_coding_mode_flag);
+    tva_bw_put(&w, 1, pps->bottom_field_pic_order_in_frame_present_flag);
+    tva_bw_ue(&w, pps->num_slice_groups_minus1);
+    tva_bw_ue(&w, pps->num_ref_idx_l0_default_active_minus1);
+    tva_bw_ue(&w, pps->num_ref_idx_l1_default_active_minus1);
+    tva_bw_put(&w, 1, pps->weighted_pred_flag);
+    tva_bw_put(&w, 2, pps->weighted_bipred_idc);
+    tva_bw_se(&w, pps->pic_init_qp_minus26);
+    tva_bw_se(&w, pps->pic_init_qs_minus26);
+    tva_bw_se(&w, pps->chroma_qp_index_offset);
+    tva_bw_put(&w, 1, pps->deblocking_filter_control_present_flag);
+    tva_bw_put(&w, 1, pps->constrained_intra_pred_flag);
+    tva_bw_put(&w, 1, pps->redundant_pic_cnt_present_flag);
+    tva_bw_rbsp_trailing(&w);
+    *out = w.buf;
+    return w.len;
 }
 
 /* ---------------------------- codec vfuncs */
@@ -570,32 +751,114 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
     struct tva_codec *c = tva_codec(codec);
     (void)picture;
 
-    if (c->broken)
+    if (c->broken) {
+        TVA_TRACE("end_frame on broken session");
         return -1;
+    }
+    if (!c->sess)
+        return 0;   /* TVA_NO_SESSION dry run */
 
-    /* Wait for room in the pending ring (backpressure, matching the
-     * upstream driver's pipeline depth).  Bounded by the daemon's own slot
-     * wait so a stuck daemon fails the picture instead of hanging the app. */
-    int64_t deadline_ns = (int64_t)os_time_get_nano()
-                        + (int64_t)TVA_PENDING_WAIT_MS * 1000000;
-    while (c->pend_count >= DMD_PIPELINE_DEPTH) {
-        int64_t left_ns = deadline_ns - (int64_t)os_time_get_nano();
-        if (left_ns <= 0) {
-            debug_printf("tva: pending ring stayed full for %d ms\n",
-                         (int)TVA_PENDING_WAIT_MS);
-            return -1;
+    /* Room in the pending ring: ffmpeg (and other sync-less consumers)
+     * never call vaSyncSurface, so pending entries whose surfaces were
+     * recycled can never complete - drain the oldest entries instead of
+     * blocking.  Syncing consumers sync before the surface is recycled, so
+     * their entries complete via fence_wait first. */
+    while (c->pend_count >= tva_pipeline_depth) {
+        struct tva_pending *oldest = tva_pend_oldest(c);
+        if (oldest && oldest->fence) {
+            /* the fence was handed out but its wait never completed: mark
+             * it ready (failed) so a late fence_wait sees a sane state */
+            oldest->ready = true;
+            oldest->failed = true;
+            if (oldest->fence)
+                oldest->fence->slot = NULL;
         }
-        tva_pump(c, (int)(left_ns / 1000000) + 1);
-        if (tva_pend_oldest(c) && tva_pend_oldest(c)->ready)
-            tva_pend_pop(c);
+        tva_pend_pop(c);
     }
 
     int codec_id = tva_codec_id(c->base.profile);
     enum pipe_video_format format = u_reduce_video_profile(c->base.profile);
+    TVA_TRACE("end_frame enter acc=%zu profile=%d format=%d", c->acc_len,
+              (int)c->base.profile, (int)format);
     uint32_t last_vcl = 0;
 
     if (format == PIPE_VIDEO_FORMAT_MPEG4_AVC ||
         format == PIPE_VIDEO_FORMAT_HEVC) {
+        /* ffmpeg does not deliver SPS/PPS as slice data; regenerate them
+         * from the frontend-parsed structures and send them as CSD units
+         * whenever they change.  The daemon excludes parameter sets from
+         * the unit index. */
+        if (format == PIPE_VIDEO_FORMAT_MPEG4_AVC) {
+            struct pipe_h264_picture_desc *h264 =
+                (struct pipe_h264_picture_desc *)picture;
+            if (h264 && h264->pps && h264->pps->sps) {
+                uint8_t *sps_rbsp = NULL, *pps_rbsp = NULL;
+                static const uint8_t sc[4] = { 0, 0, 0, 1 };
+                size_t sps_rbsp_len = tva_build_h264_sps(h264->pps->sps,
+                                                         c->base.max_references,
+                                                         &sps_rbsp);
+                size_t pps_rbsp_len = tva_build_h264_pps(h264->pps, &pps_rbsp);
+                if (!sps_rbsp_len || !pps_rbsp_len) {
+                    debug_printf("tva: CSD synthesis failed\n");
+                    free(sps_rbsp);
+                    free(pps_rbsp);
+                    c->broken = true;
+                    return -1;
+                }
+                size_t sps_len = sps_rbsp_len + 4;
+                size_t pps_len = pps_rbsp_len + 4;
+                uint8_t *sps_buf = malloc(sps_len);
+                uint8_t *pps_buf = malloc(pps_len);
+                if (!sps_buf || !pps_buf) {
+                    free(sps_buf); free(pps_buf); free(sps_rbsp); free(pps_rbsp);
+                    c->broken = true;
+                    return -1;
+                }
+                memcpy(sps_buf, sc, 4);
+                memcpy(sps_buf + 4, sps_rbsp, sps_rbsp_len);
+                memcpy(pps_buf, sc, 4);
+                memcpy(pps_buf + 4, pps_rbsp, pps_rbsp_len);
+                free(sps_rbsp);
+                free(pps_rbsp);
+
+                size_t nlen = sps_len + pps_len;
+                uint8_t *csd = malloc(nlen);
+                if (!csd) {
+                    free(sps_buf);
+                    free(pps_buf);
+                    c->broken = true;
+                    return -1;
+                }
+                memcpy(csd, sps_buf, sps_len);
+                memcpy(csd + sps_len, pps_buf, pps_len);
+
+                if (!c->csd || c->csd_len != nlen ||
+                    memcmp(c->csd, csd, nlen)) {
+                    free(c->csd);
+                    c->csd = csd;
+                    c->csd_len = nlen;
+                    csd = NULL;
+                    int rc1 = tva_session_send_unit(c->sess, sps_buf, sps_len);
+                    int rc2 = rc1 == TVA_OK
+                              ? tva_session_send_unit(c->sess, pps_buf, pps_len)
+                              : rc1;
+                    if (rc2 != TVA_OK) {
+                        debug_printf("tva: CSD send failed: %s\n",
+                                     tva_session_last_error(c->sess));
+                        c->broken = true;
+                    } else {
+                        TVA_TRACE("CSD sent: sps=%zu pps=%zu maxrefs=%u",
+                                  sps_len, pps_len, c->base.max_references);
+                    }
+                }
+                free(csd);
+                free(sps_buf);
+                free(pps_buf);
+            }
+            if (c->broken)
+                return -1;
+        }
+
         /* Split the accumulation into Annex B units: exactly one NALU per
          * daemon length prefix, each KEEPING its start code.  Zeros before
          * a following start code (4-byte-code padding) are stripped; the
@@ -616,6 +879,9 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
             }
 
             bool param = tva_is_param_set(codec_id, c->acc + sc, end - sc);
+            TVA_TRACE("unit off=%zu len=%zu nal=%d param=%d",
+                      sc, end - sc,
+                      tva_nalu_type(c->acc + sc, end - sc), param);
             int r = tva_session_send_unit(c->sess, c->acc + sc, end - sc);
             if (r != TVA_OK) {
                 debug_printf("tva: send_unit failed: %s\n",
@@ -631,6 +897,7 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
         }
     } else {
         /* VP9 (and any future no-start-code codec): one whole frame */
+        TVA_TRACE("sending whole frame, len=%zu", c->acc_len);
         int r = tva_session_send_unit(c->sess, c->acc, c->acc_len);
         if (r != TVA_OK) {
             debug_printf("tva: send_unit failed: %s\n",
@@ -654,8 +921,9 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
         return -1;
     }
 
+    mtx_lock(&c->pend_mutex);
     struct tva_pending *p =
-        &c->pend[(c->pend_head + c->pend_count) % DMD_PIPELINE_DEPTH];
+        &c->pend[(c->pend_head + c->pend_count) % tva_pipeline_depth];
     memset(p, 0, sizeof(*p));
     p->in_use = true;
     p->unit_seq = last_vcl;
@@ -664,11 +932,10 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
     fence->slot = p;
     p->fence = fence;
     c->pend_count++;
+    mtx_unlock(&c->pend_mutex);
 
     c->acc_len = 0;
-
-    /* Opportunistically collect whatever already came back */
-    tva_pump(c, 0);
+    TVA_TRACE("end_frame ok: pic unit=%u pending=%u", last_vcl, c->pend_count);
     return 0;
 }
 
@@ -697,24 +964,37 @@ tva_codec_fence_wait(struct pipe_video_codec *codec,
 
     struct tva_pending *p = fence->slot;
 
-    int64_t deadline_ns = (int64_t)os_time_get_nano() + (int64_t)timeout;
+    /* timeout comes in ns from the frontend; VA_TIMEOUT_INFINITE arrives as
+     * (uint64_t)-1 and MUST be treated as unbounded - casting it to int64
+     * yields -1, which would make the deadline expire immediately and fail
+     * every vaSyncSurface.  The reader thread stages frames; this thread
+     * only waits on the condition variable and copies the staged frame into
+     * the surface (pipe_context stays on the application thread). */
+    int64_t timeout_ns = (int64_t)timeout;
+    bool finite = timeout_ns > 0;
+    int64_t deadline_ns = finite ? (int64_t)os_time_get_nano() + timeout_ns
+                                 : INT64_MAX;
+    int ret = 1;
 
+    mtx_lock(&c->pend_mutex);
     while (!p->ready) {
         int64_t left_ns = deadline_ns - (int64_t)os_time_get_nano();
-        if (left_ns <= 0)
-            return 0;
-        int block_ms = (int)(left_ns / 1000000);
-        if (block_ms > 1000)
-            block_ms = 1000;   /* keep draining in bounded steps */
-        if (tva_pump(c, block_ms) < 0)
+        if (left_ns <= 0) {
+            ret = 0;
             break;
+        }
+        struct timespec ts;
+        int64_t wake_ns = (int64_t)os_time_get_nano()
+                        + (left_ns > 200000000 ? 200000000 : left_ns);
+        ts.tv_sec = (time_t)(wake_ns / 1000000000);
+        ts.tv_nsec = (long)(wake_ns % 1000000000);
+        cnd_timedwait(&c->pend_cond, &c->pend_mutex, &ts);
     }
 
-    if (p->ready && !p->failed && !p->copied && p->staging) {
+    if (p->ready && !p->failed && !p->copied && p->staging)
         tva_copy_frame(c, p);
-        p->copied = true;
-    }
-    return 1;
+    mtx_unlock(&c->pend_mutex);
+    return ret;
 }
 
 static void
@@ -740,19 +1020,20 @@ tva_codec_destroy(struct pipe_video_codec *codec)
     /* Reap the ring; unreaped fences keep dangling slot pointers, which is
      * fine because destroy_fence only clears them and the slots here are
      * being freed anyway. */
+    c->quitting = true;
+    if (c->reader_started)
+        thrd_join(c->reader, NULL);
+    mtx_lock(&c->pend_mutex);
     while (c->pend_count)
         tva_pend_pop(c);
+    mtx_unlock(&c->pend_mutex);
+    mtx_destroy(&c->pend_mutex);
+    cnd_destroy(&c->pend_cond);
+    TVA_TRACE("codec destroy: %llu units, %llu frames", (unsigned long long)c->next_unit, (unsigned long long)c->frames_done);
     tva_session_destroy(c->sess);
+    free(c->csd);
     free(c->acc);
     FREE(c);
-}
-
-static void
-tva_pipe_destroy(struct pipe_context *context)
-{
-    struct tva_pipe *tp = tva_pipe(context);
-    tp->real->destroy(tp->real);
-    FREE(tp);
 }
 
 static struct pipe_video_buffer *
@@ -762,7 +1043,7 @@ tva_pipe_create_video_buffer(struct pipe_context *context,
     /* The underlying drivers have no video path; the generic vl helper
      * allocates linear planar NV12 resources, which is all the bridge
      * needs (CPU copies + sampling). */
-    return vl_video_buffer_create(tva_pipe(context)->real, templat);
+    return vl_video_buffer_create(context, templat);
 }
 
 static struct pipe_video_buffer *
@@ -775,15 +1056,13 @@ tva_pipe_create_video_buffer_with_modifiers(
      * surfaces is wired up.) */
     (void)modifiers;
     (void)modifiers_count;
-    return vl_video_buffer_create(tva_pipe(context)->real, templat);
+    return vl_video_buffer_create(context, templat);
 }
 
 static struct pipe_video_codec *
 tva_pipe_create_video_codec(struct pipe_context *context,
                             const struct pipe_video_codec *templat)
 {
-    struct tva_pipe *tp = tva_pipe(context);
-
     if (templat->entrypoint != PIPE_VIDEO_ENTRYPOINT_BITSTREAM ||
         !tva_profile_supported(templat->profile))
         return NULL;   /* no encode / unsupported profiles through the bridge */
@@ -791,6 +1070,15 @@ tva_pipe_create_video_codec(struct pipe_context *context,
     int codec_id = tva_codec_id(templat->profile);
     if (codec_id < 0)
         return NULL;
+
+    {
+        const char *d = getenv("TERMUX_VA_PIPELINE_DEPTH");
+        if (d && *d) {
+            long v = atol(d);
+            if (v >= 2 && v <= DMD_PIPELINE_DEPTH_MAX)
+                tva_pipeline_depth = (unsigned)v;
+        }
+    }
 
     struct tva_codec *c = CALLOC_STRUCT(tva_codec);
     if (!c)
@@ -809,6 +1097,8 @@ tva_pipe_create_video_codec(struct pipe_context *context,
     struct tva_error err;
     memset(&err, 0, sizeof(err));
 
+    tva_dbg_seq++;
+    TVA_TRACE("session create codec=%d %dx%d", codec_id, templat->width, templat->height);
     c->sess = tva_session_create(&cfg, &err);
     if (!c->sess) {
         debug_printf("tva: session create failed: %s\n",
@@ -817,8 +1107,13 @@ tva_pipe_create_video_codec(struct pipe_context *context,
         return NULL;
     }
 
-    c->pipe = tp->real;
+    c->pipe = context;
     c->next_unit = 0;
+
+    mtx_init(&c->pend_mutex, mtx_plain);
+    cnd_init(&c->pend_cond);
+    if (thrd_create(&c->reader, tva_reader_thread, c) == thrd_success)
+        c->reader_started = true;
 
     c->base.context = context;
     c->base.profile = templat->profile;
@@ -837,26 +1132,26 @@ tva_pipe_create_video_codec(struct pipe_context *context,
     c->base.fence_wait = tva_codec_fence_wait;
     c->base.destroy_fence = tva_codec_destroy_fence;
 
+    TVA_TRACE("codec ready");
     return &c->base;
 }
 
-static void
-tva_wrap_pipe(struct pipe_context *real, struct pipe_screen *wrapped_screen,
-              struct pipe_context **out_pipe)
+/* ------------------------------------------------------ pipe codec hooks */
+/*
+ * The multimedia context's create_video_codec / create_video_buffer hooks
+ * are filled in directly on the real context: drivers without a video path
+ * leave them NULL, and the bridge implementations above receive the real
+ * context pointer, so no wrapper object is involved anywhere.
+ */
+void
+tva_bridge_pipe_set_codec_hooks(struct pipe_context *pipe)
 {
-    struct tva_pipe *tp = CALLOC_STRUCT(tva_pipe);
-    if (!tp)
-        return;   /* degrade: run unwrapped rather than fail init */
-
-    memcpy(&tp->base, real, sizeof(tp->base));
-    tp->real = real;
-    tp->base.screen = wrapped_screen;
-    tp->base.destroy = tva_pipe_destroy;
-    tp->base.create_video_codec = tva_pipe_create_video_codec;
-    tp->base.create_video_buffer = tva_pipe_create_video_buffer;
-    tp->base.create_video_buffer_with_modifiers =
+    if (!pipe)
+        return;
+    pipe->create_video_codec = tva_pipe_create_video_codec;
+    pipe->create_video_buffer = tva_pipe_create_video_buffer;
+    pipe->create_video_buffer_with_modifiers =
         tva_pipe_create_video_buffer_with_modifiers;
-    *out_pipe = &tp->base;
 }
 
 /* ------------------------------------------------- vscreen creation */
@@ -908,32 +1203,6 @@ tva_vscreen_from_pscreen(struct pipe_screen *pscreen,
     return vscreen;
 }
 
-/* The fork's "kgsl" freedreno alias: control/identity fd = the handed DRM
- * node, GPU submission = /dev/kgsl-3d0. */
-static struct vl_screen *
-tva_vscreen_kgsl(int fd)
-{
-    struct pipe_loader_device *dev = NULL;
-    if (!pipe_loader_drm_probe_fd(&dev, fd, false))
-        return NULL;
-
-    free(dev->driver_name);
-    dev->driver_name = strdup("kgsl");
-
-    /* Match the fork's kgsl environment so freedreno always redirects GPU
-     * submission instead of taking the half-initialised msm path. */
-    setenv("FD_FORCE_KGSL", "1", 0);
-
-    struct pipe_screen *pscreen = pipe_loader_create_screen(dev, false);
-    if (!pscreen) {
-        debug_printf("tva: kgsl screen creation failed\n");
-        pipe_loader_release(&dev, 1);
-        return NULL;
-    }
-    debug_printf("tva: using the kgsl freedreno backend\n");
-    return tva_vscreen_from_pscreen(pscreen, dev);
-}
-
 /* llvmpipe over the null sw winsys: no GPU needed, enough for the CPU
  * frame-copy paths (vainfo, ffmpeg vaMapBuffer). */
 static struct vl_screen *
@@ -945,11 +1214,11 @@ tva_vscreen_sw(void)
 
     struct pipe_screen *pscreen = pipe_loader_create_screen(dev, false);
     if (!pscreen) {
-        debug_printf("tva: llvmpipe screen creation failed\n");
+        fprintf(stderr, "tva: llvmpipe screen creation failed\n");
         pipe_loader_release(&dev, 1);
         return NULL;
     }
-    debug_printf("tva: using the llvmpipe software backend\n");
+    fprintf(stderr, "tva: using the llvmpipe software backend\n");
     return tva_vscreen_from_pscreen(pscreen, dev);
 }
 
@@ -957,45 +1226,58 @@ struct vl_screen *
 tva_bridge_vscreen_create(int fd, bool honor_dri_prime)
 {
     const char *backend = os_get_option("TERMUX_VA_GPU_BACKEND");
-    if (!backend || !*backend || !strcmp(backend, "auto")) {
-        /* 1. stock selection (correct on normal GPU render nodes) */
+    if (!backend || !*backend || !strcmp(backend, "auto"))
+        backend = "auto";
+    if (getenv("DMD_VA_LOG"))
+        fprintf(stderr, "tva: creating the bridge vscreen, backend='%s'\n", backend);
+
+    if (!strcmp(backend, "auto") || !strcmp(backend, "kgsl")) {
+        /* On the kgsl stack the display controller's DRM node drives no GPU;
+         * without this the freedreno device layer builds a half-initialised
+         * device that fails at the first pipe query.  On a real msm GPU
+         * render node an absent /dev/kgsl-3d0 simply falls through to the
+         * regular msm path. */
+        setenv("FD_FORCE_KGSL", "1", 0);
+    }
+
+    if (!strcmp(backend, "auto")) {
+        /* 1. stock selection (correct on normal GPU render nodes).  The kgsl
+         * stack fails here by construction: the display node's kernel name
+         * matches no descriptor and zink has no Vulkan device. */
         struct vl_screen *vscreen = vl_drm_screen_create(fd, honor_dri_prime);
         if (vscreen)
             return vscreen;
-        debug_printf("tva: stock drm screen creation failed, trying kgsl\n");
-        /* 2. the kgsl stack */
-        vscreen = tva_vscreen_kgsl(fd);
-        if (vscreen)
-            return vscreen;
-        /* 3. software fallback */
+        /* 2. software fallback.  NOTE: the kgsl freedreno alias is NOT tried
+         * in auto mode - screen creation succeeds but context creation
+         * crashes inside the ir3 shader compiler on some devices (observed
+         * on FD725).  Debug it with TERMUX_VA_GPU_BACKEND=kgsl. */
+        fprintf(stderr, "tva: stock drm screen creation failed, using llvmpipe\n");
         return tva_vscreen_sw();
     }
-    if (!strcmp(backend, "kgsl"))
-        return tva_vscreen_kgsl(fd);
+    if (!strcmp(backend, "kgsl")) {
+        /* Probe with the loader override so the device resolves to the
+         * fork's kgsl freedreno alias, then restore the env. */
+        const char *old = getenv("MESA_LOADER_DRIVER_OVERRIDE");
+        char *saved = old && *old ? strdup(old) : NULL;
+        setenv("MESA_LOADER_DRIVER_OVERRIDE", "kgsl", 1);
+        setenv("FD_FORCE_KGSL", "1", 0);
+        struct vl_screen *vscreen = vl_drm_screen_create(fd, honor_dri_prime);
+        if (saved) {
+            setenv("MESA_LOADER_DRIVER_OVERRIDE", saved, 1);
+            free(saved);
+        } else {
+            unsetenv("MESA_LOADER_DRIVER_OVERRIDE");
+        }
+        if (vscreen)
+            return vscreen;
+        fprintf(stderr, "tva: kgsl screen creation failed, trying llvmpipe\n");
+        return tva_vscreen_sw();
+    }
     if (!strcmp(backend, "sw"))
         return tva_vscreen_sw();
     if (!strcmp(backend, "drm"))
         return vl_drm_screen_create(fd, honor_dri_prime);
 
-    debug_printf("tva: unknown TERMUX_VA_GPU_BACKEND '%s', using auto\n", backend);
+    fprintf(stderr, "tva: unknown TERMUX_VA_GPU_BACKEND '%s', using auto\n", backend);
     return tva_bridge_vscreen_create(fd, honor_dri_prime);
-}
-
-void
-tva_bridge_wrap_driver(struct vl_screen *vscreen, struct pipe_context **pipe)
-{
-    if (!vscreen || !pipe || !*pipe)
-        return;
-
-    struct pipe_screen *wrapped = tva_wrap_screen((*pipe)->screen);
-    if (wrapped == (*pipe)->screen)
-        return;   /* allocation failed: stay unwrapped */
-
-    struct pipe_context *wrapped_pipe = NULL;
-    tva_wrap_pipe(*pipe, wrapped, &wrapped_pipe);
-    if (!wrapped_pipe)
-        return;
-
-    *pipe = wrapped_pipe;
-    vscreen->pscreen = wrapped;
 }

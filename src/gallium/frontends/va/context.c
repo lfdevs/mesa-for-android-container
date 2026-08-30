@@ -206,20 +206,32 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv->vscreen)
       goto error_screen;
 
+   struct pipe_screen *raw_pscreen = drv->vscreen->pscreen;
+
+   /* termux-va bridge: the underlying screen may lack the video capability
+    * hooks entirely (freedreno, llvmpipe); fill them in directly on the
+    * screen so the init check below passes and capability queries answer
+    * for the bridge's codec set. */
+   if (tva_bridge_active())
+      tva_bridge_screen_set_video_hooks(raw_pscreen);
+
    /* video cannot work if these are not supported */
-   if (!drv->vscreen->pscreen->get_video_param || !drv->vscreen->pscreen->is_video_format_supported)
+   if (!drv->vscreen->pscreen->get_video_param || !drv->vscreen->pscreen->is_video_format_supported) {
+      if (tva_bridge_active())
+         fprintf(stderr, "tva: video capability hooks missing on the underlying screen\n");
       goto error_pipe;
+   }
 
    bool compute_only = drv->vscreen->pscreen->caps.prefer_compute_for_multimedia;
-   drv->pipe = pipe_create_multimedia_context(drv->vscreen->pscreen, compute_only);
-   if (!drv->pipe)
+   drv->pipe = pipe_create_multimedia_context(raw_pscreen, compute_only);
+   if (!drv->pipe) {
+      if (tva_bridge_active())
+         fprintf(stderr, "tva: multimedia context creation failed on the underlying screen\n");
       goto error_pipe;
+   }
 
-   /* termux-va bridge: wrap the multimedia context so codec creation is
-    * delegated to the Termux daemon, and answer capability queries for the
-    * bridge's codec set.  Runtime-gated by the TERMUX_VA_* variables. */
    if (tva_bridge_active())
-      tva_bridge_wrap_driver(drv->vscreen, &drv->pipe);
+      tva_bridge_pipe_set_codec_hooks(drv->pipe);
 
    drv->htab = handle_table_create();
    if (!drv->htab)

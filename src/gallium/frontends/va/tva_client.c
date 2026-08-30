@@ -1028,6 +1028,27 @@ int tva_session_next_frame(struct tva_session *s, struct tva_frame *out,
     }
 }
 
+int tva_session_drain(struct tva_session *s)
+{
+    if (!s)
+        return TVA_ERR_INVAL;
+    if (s->fd < 0)
+        return sess_err(s, TVA_ERR_STATE, "session has no live connection", 0);
+    if (s->tx_broken)
+        return sess_err(s, TVA_ERR_STATE,
+                        "uplink corrupted (earlier send interrupted); rebuild the session", 0);
+
+    /* length 0 = reversible drain: the daemon queues EOS, flushes the
+     * decoder, re-sends the CSD and the session stays alive. */
+    uint32_t be = htonl(0);
+    int r = send_exact(s, &be, 4, s->io_timeout_ms);
+    if (r != TVA_OK) {
+        s->tx_broken = 1;
+        return r;
+    }
+    return TVA_OK;
+}
+
 int tva_session_release_frame(struct tva_session *s, struct tva_frame *f)
 {
     if (!s)

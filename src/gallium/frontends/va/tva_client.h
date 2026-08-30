@@ -220,6 +220,18 @@ int tva_session_send_unit(struct tva_session *s, const void *data, size_t len);
  * receive buffer.  Unconditional calls are safe (NULL or released is a
  * no-op).
  */
+/*
+ * Reversible drain: send a zero-length unit so the daemon flushes the
+ * decoder and emits whatever it holds; the session stays usable.  The
+ * reference chain is destroyed by the flush, so frames after a drain
+ * decode against broken references until the next IDR - send it only when
+ * waiting is provably futile.
+ */
+int tva_session_drain(struct tva_session *s);
+
+/* Take back a frame.  SHM mode returns the slot; inline mode releases the
+ * receive buffer.  Unconditional calls are safe (NULL or released is a
+ * no-op). */
 int tva_session_release_frame(struct tva_session *s, struct tva_frame *f);
 
 /*
