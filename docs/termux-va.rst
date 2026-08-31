@@ -13,10 +13,7 @@ placed in the shared tmp directory, and a bridge on the container side.
 The daemon lives in the `termux-va` repository; the wire protocol is
 byte-compatible with droidspaces-media-decode protocol v3.
 
-Supported codecs: H.264 (Constrained Baseline / Main / High), HEVC Main
-and VP9 Profile 0, outputting NV12 progressive frames.  Profiles are
-advertised to libva through the wrapped screen; encode and other codecs
-are not provided.
+Supported codecs: H.264 (Constrained Baseline / Main / High) and VP9 Profile 0, outputting NV12 progressive frames. HEVC parsing is present in the frontend, but VPS/SPS/PPS synthesis is not complete, so HEVC is not advertised yet. Profiles are advertised to libva through the underlying screen; encode and other codecs are not provided.
 
 Building
 --------
@@ -57,16 +54,7 @@ Underlying screen
 The decode surfaces live on a screen created by the bridge before the
 frontend asks for one.  ``TERMUX_VA_GPU_BACKEND`` selects how:
 
-``auto`` (default) tries the stock loader first (correct on normal GPU
-render nodes), then the fork's ``kgsl`` freedreno alias, then llvmpipe.
-On the kgsl stack the display controller's DRM node reports a kernel
-driver name such as ``msm_drm`` that the stock loader cannot map (it
-falls back to zink, which has no Vulkan device there), so the kgsl alias
-is what actually works: GPU submission goes to ``/dev/kgsl-3d0`` while
-the handed fd stays the control/identity fd, exactly like the EGL path
-(``MESA_LOADER_DRIVER_OVERRIDE=kgsl`` + ``FD_FORCE_KGSL=1``).  ``sw``
-forces llvmpipe for setups without GPU access; the VA decode paths used
-by vainfo and ffmpeg work without a GPU.
+``auto`` (default) tries the stock loader first and falls back to llvmpipe. It does not try the KGSL alias automatically because environments that expose a display DRM node may not have a usable Vulkan or stock DRM path. ``kgsl`` explicitly selects the fork's KGSL Freedreno alias: GPU submission goes to ``/dev/kgsl-3d0`` while the handed fd stays the control/identity fd, matching the EGL path (``MESA_LOADER_DRIVER_OVERRIDE=kgsl`` + ``FD_FORCE_KGSL=1``). ``sw`` forces llvmpipe for setups without GPU access; the VA decode paths used by vainfo and ffmpeg work without a GPU. ``drm`` selects the stock loader only.
 
 Data path
 ---------

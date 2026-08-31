@@ -1436,16 +1436,11 @@ decode).  See :doc:`termux-va`.
    selects how the bridge creates the underlying screen that hosts the
    decode surfaces:
 
-   - ``auto`` (default): stock loader selection, then the fork's ``kgsl``
-     freedreno alias (GPU submission via ``/dev/kgsl-3d0``, handed fd as
-     control/identity fd), then llvmpipe.
-   - ``kgsl``: force the kgsl freedreno alias.  This is what the kgsl
-     stack needs - the display controller's DRM node reports a kernel
-     driver name (e.g. ``msm_drm``) that no pipe_loader descriptor
-     matches, and the msm kmd drives no GPU there, so the stock selection
-     fails and falls back to zink which has no Vulkan device either.
-   - ``drm``: stock loader selection only.
-   - ``sw``: llvmpipe only (no GPU needed for the CPU frame-copy paths).
+   - ``auto`` (default): try the stock loader and fall back to llvmpipe.  The KGSL alias is not attempted automatically.
+   - ``kgsl``: force the KGSL Freedreno alias.  GPU submission uses
+     ``/dev/kgsl-3d0`` while the handed fd remains the control/identity fd.
+   - ``drm``: use stock loader selection only.
+   - ``sw``: use llvmpipe only; no GPU is needed for the CPU frame-copy paths.
 
 .. envvar:: DMD_WANT_SHM
 

@@ -1247,10 +1247,9 @@ tva_bridge_vscreen_create(int fd, bool honor_dri_prime)
         struct vl_screen *vscreen = vl_drm_screen_create(fd, honor_dri_prime);
         if (vscreen)
             return vscreen;
-        /* 2. software fallback.  NOTE: the kgsl freedreno alias is NOT tried
-         * in auto mode - screen creation succeeds but context creation
-         * crashes inside the ir3 shader compiler on some devices (observed
-         * on FD725).  Debug it with TERMUX_VA_GPU_BACKEND=kgsl. */
+        /* 2. software fallback.  The KGSL alias is intentionally explicit:
+         * applications must opt into GPU submission through /dev/kgsl-3d0
+         * with TERMUX_VA_GPU_BACKEND=kgsl. */
         fprintf(stderr, "tva: stock drm screen creation failed, using llvmpipe\n");
         return tva_vscreen_sw();
     }
