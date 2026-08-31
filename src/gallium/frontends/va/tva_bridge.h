@@ -61,8 +61,7 @@ void tva_bridge_pipe_set_codec_hooks(struct pipe_context *pipe);
  * Create the underlying screen for the VA frontend's vscreen, with backend
  * selection (see TERMUX_VA_GPU_BACKEND in docs/envvars.rst):
  *
- *   auto (default) stock loader selection, then the fork's "kgsl"
- *                  freedreno alias, then llvmpipe
+ *   auto (default) stock loader selection, then llvmpipe
  *   kgsl           force the "kgsl" freedreno alias (GPU submission via
  *                  /dev/kgsl-3d0, handed fd as control/identity fd)
  *   drm            stock loader selection only
