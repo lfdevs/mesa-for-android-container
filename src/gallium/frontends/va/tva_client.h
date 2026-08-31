@@ -71,7 +71,8 @@ enum {
     TVA_ERR_PROTOCOL  = -7,   /* bytes not conforming to the protocol */
     TVA_ERR_STATE     = -8,   /* session state does not allow the operation */
     TVA_ERR_TOOBIG    = -9,   /* unit/frame beyond the protocol cap */
-    TVA_ERR_ENDPOINT_MISMATCH = -10
+    TVA_ERR_ENDPOINT_MISMATCH = -10,
+    TVA_ERR_CANCELLED  = -11  /* tva_session_cancel() interrupted the session */
     /* The (dev,ino) the client stat'ed differs from what the daemon
      * reported.  Typical cause: a single socket FILE (not a directory) was
      * bind-mounted and the daemon restarted, changing the inode.  Not
@@ -200,6 +201,13 @@ struct tva_session;
  */
 struct tva_session *tva_session_create(const struct tva_session_config *cfg,
                                        struct tva_error *err);
+
+/*
+ * Interrupt a session's blocking receive/send operations without freeing it.
+ * The session remains owned by the caller and must still be destroyed after
+ * any worker using it has joined.
+ */
+void tva_session_cancel(struct tva_session *s);
 
 /* Destroy the session: close, unmap, free.  NULL is a no-op. */
 void tva_session_destroy(struct tva_session *s);

@@ -806,6 +806,7 @@ fd_screen_bo_get_handle(struct pipe_screen *pscreen, struct fd_bo *bo,
    struct fd_screen *screen = fd_screen(pscreen);
 
    whandle->stride = stride;
+   whandle->size = fd_bo_size(bo);
 
    if (whandle->type == WINSYS_HANDLE_TYPE_SHARED) {
       return fd_bo_get_name(bo, &whandle->handle) == 0;

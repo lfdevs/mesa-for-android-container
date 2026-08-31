@@ -103,20 +103,35 @@ vlVaRemoveDpbSurface(vlVaSurface *surf, VASurfaceID id)
 void
 vlVaDestroySurface(vlVaDriver *drv, vlVaSurface *surf)
 {
+   vlVaContext *context;
+
+   if (!surf)
+      return;
+
+   context = surf->ctx;
+   if (context)
+      mtx_lock(&context->mutex);
+
+   if (surf->fence && context && context->decoder &&
+       context->decoder->destroy_fence) {
+      context->decoder->destroy_fence(context->decoder, surf->fence);
+      surf->fence = NULL;
+   }
+   if (surf->fence && drv->proc && drv->proc->destroy_fence) {
+      drv->proc->destroy_fence(drv->proc, surf->fence);
+      surf->fence = NULL;
+   }
+   if (surf->pipe_fence)
+      drv->pipe->screen->fence_reference(drv->pipe->screen,
+                                          &surf->pipe_fence, NULL);
    if (surf->buffer)
       surf->buffer->destroy(surf->buffer);
-   if (surf->pipe_fence)
-      drv->pipe->screen->fence_reference(drv->pipe->screen, &surf->pipe_fence, NULL);
-   if (surf->ctx) {
-      assert(_mesa_set_search(surf->ctx->surfaces, surf));
-      _mesa_set_remove_key(surf->ctx->surfaces, surf);
-      if (surf->fence && surf->ctx->decoder && surf->ctx->decoder->destroy_fence) {
-         surf->ctx->decoder->destroy_fence(surf->ctx->decoder, surf->fence);
-         surf->fence = NULL;
-      }
+
+   if (context) {
+      assert(_mesa_set_search(context->surfaces, surf));
+      _mesa_set_remove_key(context->surfaces, surf);
+      mtx_unlock(&context->mutex);
    }
-   if (surf->fence && drv->proc && drv->proc->destroy_fence)
-      drv->proc->destroy_fence(drv->proc, surf->fence);
    if (surf->coded_buf)
       surf->coded_buf->coded_surf = NULL;
    util_dynarray_fini(&surf->subpics);
@@ -140,8 +155,11 @@ vlVaDestroySurfaces(VADriverContextP ctx, VASurfaceID *surface_list, int num_sur
          mtx_unlock(&drv->mutex);
          return VA_STATUS_ERROR_INVALID_SURFACE;
       }
-      if (surf->ctx && surf->is_dpb)
+      if (surf->ctx && surf->is_dpb) {
+         mtx_lock(&surf->ctx->mutex);
          vlVaRemoveDpbSurface(surf, surface_list[i]);
+         mtx_unlock(&surf->ctx->mutex);
+      }
       vlVaDestroySurface(drv, surf);
       handle_table_remove(drv->htab, surface_list[i]);
    }
@@ -1209,8 +1227,12 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
    mtx_lock(&drv->mutex);
 
    surf = handle_table_get(drv->htab, surface_id);
+   if (!surf) {
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_INVALID_SURFACE;
+   }
    vlVaGetSurfaceBuffer(drv, surf);
-   if (!surf || !surf->buffer) {
+   if (!surf->buffer) {
       mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_SURFACE;
    }

@@ -82,6 +82,7 @@ struct tva_session {
     int xfer;               /* effective transport (TVA_XFER_*) */
     int eos;                /* peer close observed */
     int tx_broken;          /* uplink corrupted (send timed out mid-unit) */
+    volatile int cancelled; /* abortive cancel requested by the owner */
 
     struct tva_format fmt;
     struct tva_error  err;
@@ -199,10 +200,14 @@ static int recv_exact(struct tva_session *s, void *buf, size_t len,
     size_t got = 0;
 
     while (got < len) {
+        if (__atomic_load_n(&s->cancelled, __ATOMIC_ACQUIRE))
+            return TVA_ERR_CANCELLED;
         int to = (got == 0) ? first_timeout_ms : rest_timeout_ms;
         int r = wait_fd(s->fd, POLLIN, to);
         if (r < 0)
             return sess_err(s, TVA_ERR_IO, "poll for readability failed", 1);
+        if (__atomic_load_n(&s->cancelled, __ATOMIC_ACQUIRE))
+            return TVA_ERR_CANCELLED;
         if (r == 0) {
             if (got == 0)
                 return TVA_ERR_TIMEOUT;   /* clean "nothing yet" */
@@ -237,12 +242,16 @@ static int send_exact(struct tva_session *s, const void *buf, size_t len,
     size_t sent = 0;
 
     while (sent < len) {
+        if (__atomic_load_n(&s->cancelled, __ATOMIC_ACQUIRE))
+            return TVA_ERR_CANCELLED;
         ssize_t n = send(s->fd, p + sent, len - sent, MSG_NOSIGNAL);
         if (n < 0) {
             if (errno == EINTR)
                 continue;
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 int r = wait_fd(s->fd, POLLOUT, timeout_ms);
+                if (__atomic_load_n(&s->cancelled, __ATOMIC_ACQUIRE))
+                    return TVA_ERR_CANCELLED;
                 if (r < 0)
                     return sess_err(s, TVA_ERR_IO, "poll for writability failed", 1);
                 if (r == 0)
@@ -774,6 +783,15 @@ struct tva_session *tva_session_create(const struct tva_session_config *cfg,
     return s;
 }
 
+void tva_session_cancel(struct tva_session *s)
+{
+    if (!s)
+        return;
+    __atomic_store_n(&s->cancelled, 1, __ATOMIC_RELEASE);
+    if (s->fd >= 0)
+        shutdown(s->fd, SHUT_RDWR);
+}
+
 void tva_session_destroy(struct tva_session *s)
 {
     if (!s)
@@ -877,6 +895,8 @@ int tva_session_next_frame(struct tva_session *s, struct tva_frame *out,
 {
     if (!s)
         return TVA_ERR_INVAL;
+    if (__atomic_load_n(&s->cancelled, __ATOMIC_ACQUIRE))
+        return TVA_ERR_CANCELLED;
     if (!out)
         return sess_err(s, TVA_ERR_INVAL, "out is NULL", 0);
     if (s->fd < 0)

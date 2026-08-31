@@ -252,7 +252,11 @@ get_device_extensions(const struct tu_physical_device *device,
       .KHR_external_memory = true,
       .KHR_external_memory_fd = true,
       .KHR_external_semaphore = true,
-      .KHR_external_semaphore_fd = true,
+      /* KGSL exposes binary SYNC_FD fences only.  OPAQUE_FD timeline
+       * semaphores are unsupported, yet FFmpeg treats this extension as
+       * evidence that they are available and cannot import dma-heap frames.
+       */
+      .KHR_external_semaphore_fd = !is_kgsl(device->instance),
       .KHR_format_feature_flags2 = true,
       .KHR_fragment_shading_rate = device->info->props.has_attachment_shading_rate,
       .KHR_get_memory_requirements2 = true,
