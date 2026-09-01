@@ -424,6 +424,7 @@ struct fd_bo_funcs {
    uint64_t (*iova)(struct fd_bo *bo);
    void (*set_name)(struct fd_bo *bo, const char *fmt, va_list ap);
    int (*dmabuf)(struct fd_bo *bo);
+   uint32_t (*kms_handle)(struct fd_bo *bo);
 
    /**
     * Optional hook that is called before ->destroy().  In the case of

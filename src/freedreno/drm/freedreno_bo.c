@@ -544,6 +544,8 @@ fd_bo_handle(struct fd_bo *bo)
    bo->bo_reuse = NO_CACHE;
    bo->alloc_flags |= FD_BO_SHARED;
    bo_flush(bo);
+   if (bo->funcs->kms_handle)
+      return bo->funcs->kms_handle(bo);
    return bo->handle;
 }
 
@@ -844,4 +846,3 @@ fd_bo_state(struct fd_bo *bo)
 
    return FD_BO_STATE_BUSY;
 }
-

@@ -25,11 +25,13 @@
 #define LOADER_DRI3_HEADER_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <xcb/xcb.h>
 #include <xcb/dri3.h>
 #include <xcb/present.h>
+#include <xcb/shm.h>
 
 #include <GL/gl.h>
 #include "mesa_interface.h"
@@ -80,6 +82,14 @@ struct loader_dri3_buffer {
    uint32_t     flags;
    uint32_t     width, height;
    uint64_t     last_swap;
+
+   /* Optional KGSL/X11 fallback.  The render GPU is still used, but the
+    * completed image is copied through one persistent MIT-SHM allocation
+    * when the X server cannot consume KGSL dma-bufs correctly. */
+   xcb_shm_seg_t shm_bridge_seg;
+   void        *shm_bridge_map;
+   size_t       shm_bridge_size;
+   uint32_t     shm_bridge_stride;
 };
 
 
@@ -174,6 +184,7 @@ struct loader_dri3_drawable {
    bool block_on_depleted_buffers;
    bool queries_buffer_age;
    bool present_sync_checked;
+   bool shm_bridge;
    int swap_interval;
 
    struct loader_dri3_present_sync *present_sync;
