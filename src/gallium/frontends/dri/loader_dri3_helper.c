@@ -75,6 +75,70 @@ static struct loader_dri3_blit_context blit_context = {
 static xcb_gcontext_t
 dri3_drawable_gc(struct loader_dri3_drawable *draw);
 
+/*
+ * Keep this marker in the private DRI target so the HDMI launcher can reject
+ * an older bridge implementation before it starts Xorg.  Bump the value when
+ * the launcher-visible bridge contract changes.
+ */
+static const char dri3_shm_bridge_abi[] = LOADER_DRI3_SHM_BRIDGE_ABI;
+
+/* Keep the large asynchronous state out of loader_dri3_drawable.  The smaller
+ * bridge fields in that structure still make the DRI target, libGLX and
+ * libEGL a matched ABI set; the HDMI launcher verifies the marker above in
+ * all three libraries before enabling the bridge. */
+struct dri3_shm_bridge_state {
+   xcb_special_event_t *present_event;
+   uint32_t present_stamp;
+   xcb_pixmap_t pixmaps[LOADER_DRI3_SHM_BRIDGE_SLOTS];
+   uint32_t slot_serials[LOADER_DRI3_SHM_BRIDGE_SLOTS];
+   uint64_t slot_sequences[LOADER_DRI3_SHM_BRIDGE_SLOTS];
+   bool slot_completed[LOADER_DRI3_SHM_BRIDGE_SLOTS];
+   bool slot_idle[LOADER_DRI3_SHM_BRIDGE_SLOTS];
+   mtx_t mtx;
+   cnd_t cnd;
+   thrd_t thread;
+   int wake_fd;
+   bool mtx_initialized;
+   bool cnd_initialized;
+   bool thread_started;
+   bool capture_available;
+   bool capture_in_progress;
+   bool ready;
+   bool present_primed;
+   int stop;
+   int capture_slot;
+   int ready_slot;
+   int ready_swap_interval;
+   int capture_fence_fd;
+   struct loader_dri3_buffer *capture_buffer;
+   uint64_t produced_frames;
+   uint64_t presented_frames;
+   uint64_t dropped_frames;
+   uint64_t server_skipped_frames;
+   uint64_t submitted_frames;
+   uint64_t pending_sequence;
+   uint64_t presented_sequence;
+   uint64_t next_target_msc;
+   uint64_t bytes;
+   uint64_t waits;
+   int64_t stats_started_ns;
+};
+
+static struct dri3_shm_bridge_state *
+dri3_shm_bridge_state(struct loader_dri3_drawable *draw)
+{
+   return (void *) draw->shm_bridge_present_event;
+}
+
+static int
+dri3_shm_bridge_present_thread(void *data);
+
+static struct dri_context *
+loader_dri3_blit_context_get(struct loader_dri3_drawable *draw);
+
+static void
+loader_dri3_blit_context_put(void);
+
 static int64_t
 dri3_shm_bridge_now_ns(void)
 {
@@ -84,29 +148,84 @@ dri3_shm_bridge_now_ns(void)
 }
 
 static void
-dri3_shm_bridge_fini(struct loader_dri3_drawable *draw)
+dri3_shm_bridge_wake(struct dri3_shm_bridge_state *state)
 {
-   if (!draw->shm_bridge_conn)
+   uint64_t value = 1;
+
+   if (state && state->wake_fd >= 0 &&
+       write(state->wake_fd, &value, sizeof(value)) < 0 && errno != EAGAIN)
+      mesa_logw("DRI3: KGSL bridge wake failed: %s", strerror(errno));
+}
+
+/* Called with state->mtx held. */
+static void
+dri3_shm_bridge_report_stats(struct loader_dri3_drawable *draw,
+                             struct dri3_shm_bridge_state *state)
+{
+   if (!draw->shm_bridge_stats || state->produced_frames % 300 != 0)
       return;
 
-   if (draw->shm_bridge_present_event) {
+   double seconds =
+      (dri3_shm_bridge_now_ns() - state->stats_started_ns) / 1e9;
+   mesa_logi("DRI3: KGSL bridge produced=%" PRIu64
+             " presented=%" PRIu64 " dropped=%" PRIu64
+             " server_skipped=%" PRIu64
+             " copied=%.1f MiB rate=%.1f fps waits=%" PRIu64,
+             state->produced_frames, state->presented_frames,
+             state->dropped_frames, state->server_skipped_frames,
+             state->bytes / (1024.0 * 1024.0),
+             seconds > 0.0 ? state->produced_frames / seconds : 0.0,
+             state->waits);
+}
+
+static void
+dri3_shm_bridge_fini(struct loader_dri3_drawable *draw)
+{
+   struct dri3_shm_bridge_state *state = dri3_shm_bridge_state(draw);
+
+   if (state && state->thread_started) {
+      p_atomic_set(&state->stop, true);
+      dri3_shm_bridge_wake(state);
+      mtx_lock(&state->mtx);
+      cnd_broadcast(&state->cnd);
+      mtx_unlock(&state->mtx);
+      thrd_join(state->thread, NULL);
+      state->thread_started = false;
+   }
+
+   if (state && state->present_event && draw->shm_bridge_conn) {
       xcb_present_select_input(draw->shm_bridge_conn,
                                draw->shm_bridge_present_eid, draw->drawable,
                                XCB_PRESENT_EVENT_MASK_NO_EVENT);
       xcb_unregister_for_special_event(draw->shm_bridge_conn,
-                                       draw->shm_bridge_present_event);
+                                       state->present_event);
    }
    for (unsigned i = 0; i < LOADER_DRI3_SHM_BRIDGE_SLOTS; i++) {
       struct loader_dri3_shm_bridge_slot *slot = &draw->shm_bridge_slots[i];
+      if (state && state->pixmaps[i] && draw->shm_bridge_conn)
+         xcb_free_pixmap(draw->shm_bridge_conn, state->pixmaps[i]);
       if (slot->map) {
-         xcb_shm_detach(draw->shm_bridge_conn, slot->seg);
+         if (draw->shm_bridge_conn)
+            xcb_shm_detach(draw->shm_bridge_conn, slot->seg);
          munmap(slot->map, slot->size);
       }
       memset(slot, 0, sizeof(*slot));
    }
-   if (draw->shm_bridge_gc)
+   if (draw->shm_bridge_gc && draw->shm_bridge_conn)
       xcb_free_gc(draw->shm_bridge_conn, draw->shm_bridge_gc);
-   xcb_disconnect(draw->shm_bridge_conn);
+   if (draw->shm_bridge_conn)
+      xcb_disconnect(draw->shm_bridge_conn);
+   if (state) {
+      if (state->capture_fence_fd >= 0)
+         close(state->capture_fence_fd);
+      if (state->wake_fd >= 0)
+         close(state->wake_fd);
+      if (state->cnd_initialized)
+         cnd_destroy(&state->cnd);
+      if (state->mtx_initialized)
+         mtx_destroy(&state->mtx);
+      free(state);
+   }
    draw->shm_bridge_conn = NULL;
    draw->shm_bridge_gc = 0;
    draw->shm_bridge_present_event = NULL;
@@ -118,9 +237,11 @@ dri3_shm_bridge_init(struct loader_dri3_drawable *draw,
 {
    const uint32_t stride = (buffer->width * buffer->cpp + 3u) & ~3u;
    const size_t size = (size_t) stride * buffer->height;
+   struct dri3_shm_bridge_state *state = dri3_shm_bridge_state(draw);
    xcb_generic_error_t *error = NULL;
 
-   if (draw->shm_bridge_conn && draw->shm_bridge_slots[0].size == size &&
+   if (draw->shm_bridge_conn && state && !p_atomic_read(&state->stop) &&
+       draw->shm_bridge_slots[0].size == size &&
        draw->shm_bridge_slots[0].stride == stride)
       return true;
    dri3_shm_bridge_fini(draw);
@@ -131,13 +252,44 @@ dri3_shm_bridge_init(struct loader_dri3_drawable *draw,
       dri3_shm_bridge_fini(draw);
       return false;
    }
-   draw->shm_bridge_gc = xcb_generate_id(draw->shm_bridge_conn);
-   error = xcb_request_check(draw->shm_bridge_conn,
-      xcb_create_gc_checked(draw->shm_bridge_conn, draw->shm_bridge_gc,
-                            draw->drawable, 0, NULL));
-   if (error) {
-      mesa_loge("DRI3: KGSL MIT-SHM bridge GC failed: X error %u", error->error_code);
+
+   xcb_shm_query_version_reply_t *shm = xcb_shm_query_version_reply(
+      draw->shm_bridge_conn,
+      xcb_shm_query_version(draw->shm_bridge_conn), &error);
+   if (!shm || error || !shm->shared_pixmaps) {
+      mesa_loge("DRI3: KGSL bridge requires MIT-SHM shared pixmaps%s",
+                error ? " (query failed)" : "");
       free(error);
+      free(shm);
+      dri3_shm_bridge_fini(draw);
+      return false;
+   }
+   free(shm);
+
+   state = calloc(1, sizeof(*state));
+   if (!state) {
+      dri3_shm_bridge_fini(draw);
+      return false;
+   }
+   state->wake_fd = -1;
+   state->capture_fence_fd = -1;
+   state->capture_slot = -1;
+   state->ready_slot = -1;
+   draw->shm_bridge_present_event = (void *) state;
+   if (mtx_init(&state->mtx, mtx_plain) != thrd_success) {
+      dri3_shm_bridge_fini(draw);
+      return false;
+   }
+   state->mtx_initialized = true;
+   if (cnd_init(&state->cnd) != thrd_success) {
+      dri3_shm_bridge_fini(draw);
+      return false;
+   }
+   state->cnd_initialized = true;
+   state->wake_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+   if (state->wake_fd < 0) {
+      mesa_loge("DRI3: KGSL bridge cannot create worker eventfd: %s",
+                strerror(errno));
       dri3_shm_bridge_fini(draw);
       return false;
    }
@@ -156,6 +308,8 @@ dri3_shm_bridge_init(struct loader_dri3_drawable *draw,
          dri3_shm_bridge_fini(draw);
          return false;
       }
+      slot->size = size;
+      slot->stride = stride;
       slot->seg = xcb_generate_id(draw->shm_bridge_conn);
       error = xcb_request_check(draw->shm_bridge_conn,
          xcb_shm_attach_fd_checked(draw->shm_bridge_conn, slot->seg, fd, false));
@@ -164,27 +318,61 @@ dri3_shm_bridge_init(struct loader_dri3_drawable *draw,
          mesa_loge("DRI3: KGSL MIT-SHM bridge attach failed: X error %u",
                    error->error_code);
          free(error);
-         slot->size = size;
          dri3_shm_bridge_fini(draw);
          return false;
       }
-      slot->size = size;
-      slot->stride = stride;
+      state->pixmaps[i] = xcb_generate_id(draw->shm_bridge_conn);
+      error = xcb_request_check(draw->shm_bridge_conn,
+         xcb_shm_create_pixmap_checked(draw->shm_bridge_conn,
+                                       state->pixmaps[i], draw->drawable,
+                                       buffer->width, buffer->height,
+                                       draw->depth, slot->seg, 0));
+      if (error) {
+         mesa_loge("DRI3: KGSL MIT-SHM pixmap creation failed: X error %u",
+                   error->error_code);
+         free(error);
+         dri3_shm_bridge_fini(draw);
+         return false;
+      }
    }
 
    draw->shm_bridge_present_eid = xcb_generate_id(draw->shm_bridge_conn);
-   uint32_t stamp = 0;
-   draw->shm_bridge_present_event = xcb_register_for_special_xge(
-      draw->shm_bridge_conn, &xcb_present_id, draw->shm_bridge_present_eid, &stamp);
-   if (draw->shm_bridge_present_event) {
-      xcb_present_select_input(draw->shm_bridge_conn,
-                               draw->shm_bridge_present_eid, draw->drawable,
-                               XCB_PRESENT_EVENT_MASK_COMPLETE_NOTIFY);
+   error = xcb_request_check(draw->shm_bridge_conn,
+      xcb_present_select_input_checked(
+         draw->shm_bridge_conn, draw->shm_bridge_present_eid, draw->drawable,
+         XCB_PRESENT_EVENT_MASK_COMPLETE_NOTIFY |
+         XCB_PRESENT_EVENT_MASK_IDLE_NOTIFY));
+   if (error) {
+      mesa_loge("DRI3: KGSL bridge PresentSelectInput failed: X error %u",
+                error->error_code);
+      free(error);
+      dri3_shm_bridge_fini(draw);
+      return false;
    }
+   state->present_event = xcb_register_for_special_xge(
+      draw->shm_bridge_conn, &xcb_present_id, draw->shm_bridge_present_eid,
+      &state->present_stamp);
+   if (!state->present_event) {
+      mesa_loge("DRI3: KGSL bridge cannot register its Present event queue");
+      dri3_shm_bridge_fini(draw);
+      return false;
+   }
+
+   p_atomic_set(&state->stop, false);
    draw->shm_bridge_next_slot = 0;
    draw->shm_bridge_msc = 0;
-   draw->shm_bridge_stats_started_ns = dri3_shm_bridge_now_ns();
+   state->stats_started_ns = dri3_shm_bridge_now_ns();
+   if (draw->shm_bridge_stats)
+      mesa_logi("DRI3: %s", dri3_shm_bridge_abi);
    xcb_flush(draw->shm_bridge_conn);
+
+   if (thrd_create(&state->thread,
+                   dri3_shm_bridge_present_thread, draw) != thrd_success) {
+      mesa_loge("DRI3: KGSL MIT-SHM bridge cannot start presentation thread");
+      dri3_shm_bridge_fini(draw);
+      return false;
+   }
+   state->thread_started = true;
    return true;
 }
 
@@ -192,16 +380,8 @@ static void
 dri3_shm_bridge_handle_event(struct loader_dri3_drawable *draw,
                              xcb_generic_event_t *event)
 {
-   const xcb_query_extension_reply_t *extension =
-      xcb_get_extension_data(draw->shm_bridge_conn, &xcb_shm_id);
    uint8_t type = event->response_type & 0x7f;
-   if (extension && type == extension->first_event + XCB_SHM_COMPLETION) {
-      xcb_shm_completion_event_t *completion = (void *) event;
-      for (unsigned i = 0; i < LOADER_DRI3_SHM_BRIDGE_SLOTS; i++) {
-         if (draw->shm_bridge_slots[i].seg == completion->shmseg)
-            draw->shm_bridge_slots[i].busy = false;
-      }
-   } else if (type == 0) {
+   if (type == 0) {
       xcb_generic_error_t *error = (void *) event;
       mesa_loge("DRI3: KGSL MIT-SHM bridge asynchronous X error %u",
                 error->error_code);
@@ -209,131 +389,365 @@ dri3_shm_bridge_handle_event(struct loader_dri3_drawable *draw,
    free(event);
 }
 
-static struct loader_dri3_shm_bridge_slot *
-dri3_shm_bridge_acquire_slot(struct loader_dri3_drawable *draw)
+/* Called with state->mtx held.  PresentOptionCopy makes completion and idle
+ * close together, but the protocol exposes them independently; require both
+ * before handing a shared pixmap back to the render thread. */
+static void
+dri3_shm_bridge_maybe_release_slot(struct loader_dri3_drawable *draw,
+                                   struct dri3_shm_bridge_state *state,
+                                   unsigned index)
 {
-   xcb_generic_event_t *event;
-   while ((event = xcb_poll_for_event(draw->shm_bridge_conn)))
-      dri3_shm_bridge_handle_event(draw, event);
+   if (state->slot_completed[index] && state->slot_idle[index])
+      draw->shm_bridge_slots[index].busy = false;
+}
 
-   for (;;) {
-      for (unsigned offset = 0; offset < LOADER_DRI3_SHM_BRIDGE_SLOTS; offset++) {
-         unsigned index = (draw->shm_bridge_next_slot + offset) %
-                          LOADER_DRI3_SHM_BRIDGE_SLOTS;
-         if (!draw->shm_bridge_slots[index].busy) {
-            draw->shm_bridge_next_slot = (index + 1) % LOADER_DRI3_SHM_BRIDGE_SLOTS;
-            return &draw->shm_bridge_slots[index];
+static void
+dri3_shm_bridge_handle_present_event(struct loader_dri3_drawable *draw,
+                                     xcb_present_generic_event_t *generic)
+{
+   struct dri3_shm_bridge_state *state = dri3_shm_bridge_state(draw);
+
+   if (generic->evtype == XCB_PRESENT_EVENT_COMPLETE_NOTIFY) {
+      xcb_present_complete_notify_event_t *complete = (void *) generic;
+      if (complete->kind == XCB_PRESENT_COMPLETE_KIND_PIXMAP) {
+         mtx_lock(&state->mtx);
+         draw->shm_bridge_msc = complete->msc;
+         if (!state->present_primed) {
+            state->present_primed = true;
+            state->next_target_msc = complete->msc + 1;
+         } else if (state->next_target_msc <= complete->msc) {
+            state->next_target_msc = complete->msc + 1;
          }
+
+         for (unsigned i = 0; i < LOADER_DRI3_SHM_BRIDGE_SLOTS; i++) {
+            if (state->slot_serials[i] != complete->serial)
+               continue;
+            state->slot_completed[i] = true;
+            if (complete->mode == XCB_PRESENT_COMPLETE_MODE_SKIP)
+               state->server_skipped_frames++;
+            else
+               state->presented_frames++;
+            state->presented_sequence =
+               MAX2(state->presented_sequence, state->slot_sequences[i]);
+            dri3_shm_bridge_maybe_release_slot(draw, state, i);
+            break;
+         }
+         cnd_broadcast(&state->cnd);
+         mtx_unlock(&state->mtx);
       }
-      draw->shm_bridge_waits++;
-      event = xcb_wait_for_event(draw->shm_bridge_conn);
-      if (!event)
-         return NULL;
-      dri3_shm_bridge_handle_event(draw, event);
+   } else if (generic->evtype == XCB_PRESENT_EVENT_IDLE_NOTIFY) {
+      xcb_present_idle_notify_event_t *idle = (void *) generic;
+      mtx_lock(&state->mtx);
+      for (unsigned i = 0; i < LOADER_DRI3_SHM_BRIDGE_SLOTS; i++) {
+         if (state->pixmaps[i] != idle->pixmap ||
+             state->slot_serials[i] != idle->serial)
+            continue;
+         state->slot_idle[i] = true;
+         dri3_shm_bridge_maybe_release_slot(draw, state, i);
+         break;
+      }
+      cnd_broadcast(&state->cnd);
+      mtx_unlock(&state->mtx);
    }
+   free(generic);
 }
 
 static bool
-dri3_shm_bridge_wait_vblank(struct loader_dri3_drawable *draw)
+dri3_shm_bridge_drain_events(struct loader_dri3_drawable *draw)
 {
-   if (draw->swap_interval == 0 || !draw->shm_bridge_present_event)
-      return true;
-   uint32_t serial = ++draw->shm_bridge_present_serial;
-   uint64_t target = draw->shm_bridge_msc ?
-      draw->shm_bridge_msc + abs(draw->swap_interval) : 0;
-   xcb_present_notify_msc(draw->shm_bridge_conn, draw->drawable, serial,
-                          target, 0, 0);
-   xcb_flush(draw->shm_bridge_conn);
+   struct dri3_shm_bridge_state *state = dri3_shm_bridge_state(draw);
+   xcb_generic_event_t *event;
+
+   while ((event = xcb_poll_for_special_event(draw->shm_bridge_conn,
+                                               state->present_event)))
+      dri3_shm_bridge_handle_present_event(draw, (void *) event);
+   while ((event = xcb_poll_for_event(draw->shm_bridge_conn)))
+      dri3_shm_bridge_handle_event(draw, event);
+   return !xcb_connection_has_error(draw->shm_bridge_conn);
+}
+
+static bool
+dri3_shm_bridge_wait_io(struct loader_dri3_drawable *draw)
+{
+   struct dri3_shm_bridge_state *state = dri3_shm_bridge_state(draw);
+   struct pollfd fds[2] = {
+      { .fd = xcb_get_file_descriptor(draw->shm_bridge_conn),
+        .events = POLLIN },
+      { .fd = state->wake_fd, .events = POLLIN },
+   };
+   int ret;
+
+   do {
+      ret = poll(fds, ARRAY_SIZE(fds), 100);
+   } while (ret < 0 && errno == EINTR);
+   if (ret < 0)
+      return false;
+
+   if (fds[1].revents & POLLIN) {
+      uint64_t value;
+      while (read(state->wake_fd, &value, sizeof(value)) == sizeof(value)) {}
+   }
+   return dri3_shm_bridge_drain_events(draw);
+}
+
+static int
+dri3_shm_bridge_acquire_slot(struct loader_dri3_drawable *draw)
+{
+   struct dri3_shm_bridge_state *state = dri3_shm_bridge_state(draw);
+   bool counted_wait = false;
+
    for (;;) {
-      xcb_generic_event_t *event = xcb_wait_for_special_event(
-         draw->shm_bridge_conn, draw->shm_bridge_present_event);
-      if (!event)
-         return false;
-      xcb_present_generic_event_t *generic = (void *) event;
-      if (generic->evtype == XCB_PRESENT_EVENT_COMPLETE_NOTIFY) {
-         xcb_present_complete_notify_event_t *complete = (void *) event;
-         if (complete->kind == XCB_PRESENT_COMPLETE_KIND_NOTIFY_MSC &&
-             complete->serial == serial) {
-            draw->shm_bridge_msc = complete->msc;
-            free(event);
-            return true;
+      if (!dri3_shm_bridge_drain_events(draw))
+         return -1;
+
+      mtx_lock(&state->mtx);
+      bool stopping = p_atomic_read(&state->stop);
+      bool waiting_for_prime =
+         !state->present_primed && state->submitted_frames > 0;
+      if (!stopping && !waiting_for_prime) {
+         for (unsigned offset = 0; offset < LOADER_DRI3_SHM_BRIDGE_SLOTS;
+              offset++) {
+            unsigned index = (draw->shm_bridge_next_slot + offset) %
+                             LOADER_DRI3_SHM_BRIDGE_SLOTS;
+            if (!draw->shm_bridge_slots[index].busy) {
+               draw->shm_bridge_slots[index].busy = true;
+               state->slot_completed[index] = false;
+               state->slot_idle[index] = false;
+               draw->shm_bridge_next_slot =
+                  (index + 1) % LOADER_DRI3_SHM_BRIDGE_SLOTS;
+               mtx_unlock(&state->mtx);
+               return index;
+            }
          }
       }
-      free(event);
+      if (!stopping && !counted_wait) {
+         state->waits++;
+         counted_wait = true;
+      }
+      mtx_unlock(&state->mtx);
+      if (stopping || !dri3_shm_bridge_wait_io(draw))
+         return -1;
    }
+}
+
+static int
+dri3_shm_bridge_present_thread(void *data)
+{
+   struct loader_dri3_drawable *draw = data;
+   struct dri3_shm_bridge_state *state = dri3_shm_bridge_state(draw);
+
+   for (;;) {
+      int slot_index = dri3_shm_bridge_acquire_slot(draw);
+      if (slot_index < 0)
+         break;
+
+      mtx_lock(&state->mtx);
+      state->capture_slot = slot_index;
+      state->capture_available = true;
+      cnd_broadcast(&state->cnd);
+      mtx_unlock(&state->mtx);
+
+      /* The render thread wakes us through eventfd after queueing a selected
+       * KGSL buffer and its native render fence.  Continue draining Present
+       * events while waiting so synchronized producers cannot deadlock behind
+       * completions. */
+      for (;;) {
+         mtx_lock(&state->mtx);
+         bool stopping = p_atomic_read(&state->stop);
+         bool ready = state->ready && state->ready_slot == slot_index;
+         mtx_unlock(&state->mtx);
+         if (stopping || ready)
+            break;
+         if (!dri3_shm_bridge_wait_io(draw)) {
+            p_atomic_set(&state->stop, true);
+            break;
+         }
+      }
+
+      mtx_lock(&state->mtx);
+      if (p_atomic_read(&state->stop)) {
+         struct loader_dri3_buffer *buffer = state->capture_buffer;
+         int fence_fd = state->capture_fence_fd;
+         draw->shm_bridge_slots[slot_index].busy = false;
+         state->capture_available = false;
+         state->capture_in_progress = false;
+         state->capture_slot = -1;
+         state->capture_buffer = NULL;
+         state->capture_fence_fd = -1;
+         mtx_unlock(&state->mtx);
+         if (fence_fd >= 0)
+            close(fence_fd);
+         if (buffer) {
+            mtx_lock(&draw->mtx);
+            buffer->busy = false;
+            mtx_unlock(&draw->mtx);
+         }
+         break;
+      }
+
+      struct loader_dri3_buffer *buffer = state->capture_buffer;
+      int fence_fd = state->capture_fence_fd;
+      int interval = state->ready_swap_interval;
+      state->ready = false;
+      state->ready_slot = -1;
+      state->capture_fence_fd = -1;
+      mtx_unlock(&state->mtx);
+
+      struct dri_context *ctx = loader_dri3_blit_context_get(draw);
+      void *transfer = NULL;
+      int source_stride = 0;
+      uint8_t *source = NULL;
+      bool fence_ready = fence_fd < 0 || sync_wait(fence_fd, -1) == 0;
+      if (fence_fd >= 0)
+         close(fence_fd);
+      if (ctx && buffer && fence_ready) {
+         source = dri2_map_image(ctx, buffer->image, 0, 0,
+                                 buffer->width, buffer->height,
+                                 __DRI_IMAGE_TRANSFER_READ,
+                                 &source_stride, &transfer);
+      }
+      if (source) {
+         struct loader_dri3_shm_bridge_slot *slot =
+            &draw->shm_bridge_slots[slot_index];
+         for (int y = 0; y < buffer->height; y++) {
+            memcpy((uint8_t *) slot->map + (size_t) y * slot->stride,
+                   source + (size_t) y * source_stride,
+                   (size_t) buffer->width * buffer->cpp);
+         }
+         dri2_unmap_image(ctx, buffer->image, transfer);
+      }
+      if (ctx)
+         loader_dri3_blit_context_put();
+
+      if (buffer) {
+         mtx_lock(&draw->mtx);
+         buffer->busy = false;
+         mtx_unlock(&draw->mtx);
+      }
+
+      mtx_lock(&state->mtx);
+      state->capture_in_progress = false;
+      state->capture_buffer = NULL;
+      cnd_broadcast(&state->cnd);
+      if (!source || p_atomic_read(&state->stop)) {
+         draw->shm_bridge_slots[slot_index].busy = false;
+         mtx_unlock(&state->mtx);
+         if (!fence_ready)
+            mesa_loge("DRI3: KGSL bridge worker could not wait for its render fence");
+         else if (!source)
+            mesa_loge("DRI3: KGSL bridge worker could not map its selected frame");
+         p_atomic_set(&state->stop, true);
+         break;
+      }
+
+      uint32_t serial = ++draw->shm_bridge_present_serial;
+      uint64_t target_msc = 0;
+      if (state->present_primed) {
+         target_msc = state->next_target_msc;
+         state->next_target_msc += MAX2(abs(interval), 1);
+      }
+      state->slot_serials[slot_index] = serial;
+      state->slot_completed[slot_index] = false;
+      state->slot_idle[slot_index] = false;
+      state->submitted_frames++;
+      state->bytes +=
+         (uint64_t) buffer->width * buffer->height * buffer->cpp;
+      mtx_unlock(&state->mtx);
+
+      xcb_present_pixmap(draw->shm_bridge_conn, draw->drawable,
+                         state->pixmaps[slot_index], serial,
+                         0, 0, 0, 0, XCB_NONE, XCB_NONE, XCB_NONE,
+                         XCB_PRESENT_OPTION_COPY, target_msc,
+                         0, 0, 0, NULL);
+      if (xcb_flush(draw->shm_bridge_conn) <= 0)
+         break;
+   }
+
+   p_atomic_set(&state->stop, true);
+   mtx_lock(&state->mtx);
+   state->capture_available = false;
+   state->capture_slot = -1;
+   cnd_broadcast(&state->cnd);
+   mtx_unlock(&state->mtx);
+   dri3_shm_bridge_wake(state);
+   return -1;
 }
 
 static bool
 dri3_shm_bridge_present(struct loader_dri3_drawable *draw,
                         struct loader_dri3_buffer *buffer,
-                        const int *rects, int n_rects)
+                        const int *rects, int n_rects,
+                        int render_fence_fd)
 {
-   struct dri_context *ctx = draw->vtable->get_dri_context(draw);
-   struct loader_dri3_shm_bridge_slot *slot;
-   void *transfer = NULL;
-   int source_stride = 0;
-   uint8_t *source;
-   int x0 = 0, y0 = 0, x1 = buffer->width, y1 = buffer->height;
+   struct dri3_shm_bridge_state *state;
+   int slot_index;
+   int interval = draw->swap_interval;
+   uint64_t sequence;
+   bool ok;
 
-   if (!ctx || !dri3_shm_bridge_init(draw, buffer) ||
-       !dri3_shm_bridge_wait_vblank(draw))
+   if (!draw->vtable->get_dri_context(draw) || buffer->cpp != 4 ||
+       !dri3_shm_bridge_init(draw, buffer)) {
+      if (render_fence_fd >= 0)
+         close(render_fence_fd);
       return false;
-   slot = dri3_shm_bridge_acquire_slot(draw);
-   if (!slot)
-      return false;
+   }
+   state = dri3_shm_bridge_state(draw);
+   (void) rects;
+   (void) n_rects;
 
-   /* EGL damage is bottom-left based. Coalesce it into one conservative X11
-    * rectangle; GLX supplies no damage and therefore keeps a full copy. */
-   if (rects && n_rects > 0) {
-      x0 = buffer->width;
-      y0 = buffer->height;
-      x1 = y1 = 0;
-      for (int i = 0; i < n_rects; i++) {
-         int rx0 = CLAMP(rects[i * 4], 0, (int) buffer->width);
-         int rw = CLAMP(rects[i * 4 + 2], 0, (int) buffer->width - rx0);
-         int rh = CLAMP(rects[i * 4 + 3], 0, (int) buffer->height);
-         int ry0 = CLAMP((int) buffer->height - rects[i * 4 + 1] - rh,
-                         0, (int) buffer->height);
-         x0 = MIN2(x0, rx0);
-         y0 = MIN2(y0, ry0);
-         x1 = MAX2(x1, rx0 + rw);
-         y1 = MAX2(y1, ry0 + rh);
-      }
-      if (x1 <= x0 || y1 <= y0)
-         return true;
+   mtx_lock(&state->mtx);
+   state->produced_frames++;
+   bool first_frame = state->produced_frames == 1;
+   while ((interval != 0 || first_frame) &&
+          (!state->capture_available || state->capture_in_progress) &&
+          !p_atomic_read(&state->stop))
+      cnd_wait(&state->cnd, &state->mtx);
+   if (p_atomic_read(&state->stop)) {
+      mtx_unlock(&state->mtx);
+      if (render_fence_fd >= 0)
+         close(render_fence_fd);
+      return false;
    }
 
-   source = dri2_map_image(ctx, buffer->image, 0, 0,
-                           buffer->width, buffer->height,
-                           __DRI_IMAGE_TRANSFER_READ,
-                           &source_stride, &transfer);
-   if (!source)
-      return false;
-   for (int y = y0; y < y1; y++) {
-      memcpy((uint8_t *) slot->map + (size_t) y * slot->stride +
-                (size_t) x0 * buffer->cpp,
-             source + (size_t) y * source_stride + (size_t) x0 * buffer->cpp,
-             (size_t) (x1 - x0) * buffer->cpp);
+   /* Present completion opens exactly one capture slot.  An uncapped client
+    * skips all other swaps before mapping the KGSL image, so rendering remains
+    * uncapped without flooding Xorg or doing invisible readbacks. */
+   if (!state->capture_available || state->capture_in_progress) {
+      state->dropped_frames++;
+      dri3_shm_bridge_report_stats(draw, state);
+      mtx_unlock(&state->mtx);
+      if (render_fence_fd >= 0)
+         close(render_fence_fd);
+      return true;
    }
-   dri2_unmap_image(ctx, buffer->image, transfer);
 
-   xcb_shm_put_image(draw->shm_bridge_conn, draw->drawable,
-                     draw->shm_bridge_gc, buffer->width, buffer->height,
-                     x0, y0, x1 - x0, y1 - y0, x0, y0, draw->depth,
-                     XCB_IMAGE_FORMAT_Z_PIXMAP, true, slot->seg, 0);
-   slot->busy = true;
-   xcb_flush(draw->shm_bridge_conn);
+   slot_index = state->capture_slot;
+   state->capture_available = false;
+   state->capture_slot = -1;
+   state->capture_in_progress = true;
+   sequence = ++state->pending_sequence;
+   state->slot_sequences[slot_index] = sequence;
+   state->capture_buffer = buffer;
+   state->capture_fence_fd = render_fence_fd;
+   state->ready_slot = slot_index;
+   state->ready_swap_interval = interval;
+   state->ready = true;
+   mtx_lock(&draw->mtx);
+   buffer->busy = true;
+   mtx_unlock(&draw->mtx);
+   dri3_shm_bridge_report_stats(draw, state);
+   cnd_broadcast(&state->cnd);
+   mtx_unlock(&state->mtx);
+   dri3_shm_bridge_wake(state);
 
-   draw->shm_bridge_frames++;
-   draw->shm_bridge_bytes += (uint64_t) (x1 - x0) * (y1 - y0) * buffer->cpp;
-   if (draw->shm_bridge_stats && draw->shm_bridge_frames % 300 == 0) {
-      double seconds = (dri3_shm_bridge_now_ns() - draw->shm_bridge_stats_started_ns) / 1e9;
-      mesa_logi("DRI3: KGSL bridge frames=%" PRIu64 " copied=%.1f MiB rate=%.1f fps waits=%" PRIu64,
-                draw->shm_bridge_frames, draw->shm_bridge_bytes / (1024.0 * 1024.0),
-                seconds > 0.0 ? draw->shm_bridge_frames / seconds : 0.0,
-                draw->shm_bridge_waits);
-   }
-   return true;
+   mtx_lock(&state->mtx);
+   while (interval != 0 &&
+          state->presented_sequence < sequence &&
+          !p_atomic_read(&state->stop))
+      cnd_wait(&state->cnd, &state->mtx);
+   ok = !p_atomic_read(&state->stop);
+   mtx_unlock(&state->mtx);
+   return ok;
 }
 
 struct loader_dri3_present_sync {
@@ -749,6 +1163,20 @@ dri3_fence_await(xcb_connection_t *c, struct loader_dri3_drawable *draw,
 static void
 dri3_update_max_num_back(struct loader_dri3_drawable *draw)
 {
+   /*
+    * Normal DRI3 Present keeps submitted pixmaps busy until IdleNotify, which
+    * naturally rotates an interval-zero producer through four render buffers.
+    * The SHM bridge presents a separate server-owned pixmap, so its KGSL back
+    * buffers are never owned by Xorg.  Retain the same amount of producer
+    * buffering explicitly; otherwise every swap renders into the same BO and
+    * serializes behind the preceding KGSL work.
+    */
+   if (draw->shm_bridge) {
+      draw->max_num_back = draw->swap_interval == 0 ? 4 : 3;
+      assert(draw->max_num_back <= LOADER_DRI3_MAX_BACK);
+      return;
+   }
+
    switch (draw->last_present_mode) {
    case XCB_PRESENT_COMPLETE_MODE_FLIP: {
       if (draw->swap_interval == 0)
@@ -835,13 +1263,12 @@ loader_dri3_drawable_fini(struct loader_dri3_drawable *draw)
 {
    int i;
 
+   dri3_shm_bridge_fini(draw);
    dri3_present_sync_fini(draw);
    driDestroyDrawable(draw->dri_drawable);
 
    for (i = 0; i < ARRAY_SIZE(draw->buffers); i++)
       dri3_free_render_buffer(draw, i);
-
-   dri3_shm_bridge_fini(draw);
 
    if (draw->special_event) {
       xcb_void_cookie_t cookie =
@@ -1546,9 +1973,8 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
    if (!draw->have_back || draw->type == LOADER_DRI3_DRAWABLE_PIXMAP)
       return ret;
 
-   if (!draw->shm_bridge &&
-       draw->type == LOADER_DRI3_DRAWABLE_WINDOW &&
-       draw->present_sync &&
+   if (draw->type == LOADER_DRI3_DRAWABLE_WINDOW &&
+       (draw->shm_bridge || draw->present_sync) &&
        draw->vtable->flush_drawable_with_fence_fd) {
       render_fence_fd =
          draw->vtable->flush_drawable_with_fence_fd(draw, flush_flags);
@@ -1564,17 +1990,29 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
       return ret;
    }
 
-   if (draw->shm_bridge &&
-       draw->type == LOADER_DRI3_DRAWABLE_WINDOW &&
-       dri3_shm_bridge_present(draw, back, rects, n_rects)) {
-      if (render_fence_fd >= 0)
-         close(render_fence_fd);
+   bool bridge_presented = false;
+   if (draw->shm_bridge && draw->type == LOADER_DRI3_DRAWABLE_WINDOW) {
+      bridge_presented =
+         dri3_shm_bridge_present(draw, back, rects, n_rects,
+                                 render_fence_fd);
+      /* The bridge consumes the fence whether it presents or drops this
+       * producer frame.  Xorg never sees the native fence: the worker waits
+       * for it before reading the selected KGSL buffer. */
+      render_fence_fd = -1;
+
+   }
+   if (bridge_presented) {
       mtx_lock(&draw->mtx);
       draw->send_sbc++;
       draw->recv_sbc = draw->send_sbc;
       back->last_swap = draw->send_sbc;
       if (draw->stamp)
          ++(*draw->stamp);
+      /* Xorg never owns this KGSL pixmap: the bridge copied the selected
+       * frame into an independent MIT-SHM pixmap before returning.  Advance
+       * the producer ring just as normal asynchronous DRI3 Present would do,
+       * without inventing a time-based release policy. */
+      draw->cur_back = (draw->cur_back + 1) % draw->max_num_back;
       mtx_unlock(&draw->mtx);
       dri_invalidate_drawable(draw->dri_drawable);
       return (int64_t) draw->send_sbc;

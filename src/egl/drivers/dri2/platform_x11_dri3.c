@@ -43,6 +43,10 @@
 #include "x11_dri3.h"
 #include "loader_dri3_helper.h"
 
+/* Keep the private EGL frontend tied to the DRI bridge structure ABI. */
+const char hdmi_los_mesa_egl_bridge_abi[]
+   __attribute__((used, retain)) = LOADER_DRI3_SHM_BRIDGE_ABI;
+
 static struct dri3_egl_surface *
 loader_drawable_to_egl_surface(struct loader_dri3_drawable *draw)
 {

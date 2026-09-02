@@ -103,6 +103,7 @@ struct loader_dri3_drawable;
 struct loader_dri3_present_sync;
 
 #define LOADER_DRI3_SHM_BRIDGE_SLOTS 3
+#define LOADER_DRI3_SHM_BRIDGE_ABI "HDMI_LOS_MESA_BRIDGE_ABI=3"
 
 struct loader_dri3_shm_bridge_slot {
    xcb_shm_seg_t seg;
