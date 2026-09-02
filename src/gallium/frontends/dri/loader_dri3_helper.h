@@ -83,13 +83,6 @@ struct loader_dri3_buffer {
    uint32_t     width, height;
    uint64_t     last_swap;
 
-   /* Optional KGSL/X11 fallback.  The render GPU is still used, but the
-    * completed image is copied through one persistent MIT-SHM allocation
-    * when the X server cannot consume KGSL dma-bufs correctly. */
-   xcb_shm_seg_t shm_bridge_seg;
-   void        *shm_bridge_map;
-   size_t       shm_bridge_size;
-   uint32_t     shm_bridge_stride;
 };
 
 
@@ -108,6 +101,16 @@ loader_dri3_pixmap_buf_id(enum loader_dri3_buffer_type buffer_type)
 
 struct loader_dri3_drawable;
 struct loader_dri3_present_sync;
+
+#define LOADER_DRI3_SHM_BRIDGE_SLOTS 3
+
+struct loader_dri3_shm_bridge_slot {
+   xcb_shm_seg_t seg;
+   void *map;
+   size_t size;
+   uint32_t stride;
+   bool busy;
+};
 
 struct loader_dri3_vtable {
    void (*set_drawable_size)(struct loader_dri3_drawable *, int, int);
@@ -185,6 +188,20 @@ struct loader_dri3_drawable {
    bool queries_buffer_age;
    bool present_sync_checked;
    bool shm_bridge;
+   bool shm_bridge_stats;
+   xcb_connection_t *shm_bridge_conn;
+   xcb_gcontext_t shm_bridge_gc;
+   xcb_present_event_t shm_bridge_present_eid;
+   xcb_special_event_t *shm_bridge_present_event;
+   struct loader_dri3_shm_bridge_slot
+      shm_bridge_slots[LOADER_DRI3_SHM_BRIDGE_SLOTS];
+   uint32_t shm_bridge_next_slot;
+   uint32_t shm_bridge_present_serial;
+   uint64_t shm_bridge_msc;
+   uint64_t shm_bridge_frames;
+   uint64_t shm_bridge_bytes;
+   uint64_t shm_bridge_waits;
+   int64_t shm_bridge_stats_started_ns;
    int swap_interval;
 
    struct loader_dri3_present_sync *present_sync;
