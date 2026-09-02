@@ -478,7 +478,7 @@ dri3_shm_bridge_wait_io(struct loader_dri3_drawable *draw)
    int ret;
 
    do {
-      ret = poll(fds, ARRAY_SIZE(fds), 100);
+      ret = poll(fds, ARRAY_SIZE(fds), -1);
    } while (ret < 0 && errno == EINTR);
    if (ret < 0)
       return false;
