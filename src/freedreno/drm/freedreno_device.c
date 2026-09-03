@@ -53,12 +53,11 @@ fd_device_new(int fd)
     * on the first capability query.  When kgsl is forced (the whole kgsl stack
     * exports FD_FORCE_KGSL=1), ignore the fd we were handed and open the kgsl
     * GPU node directly for rendering.  The fd we were handed is kept as the
-    * device control/identity fd (dev->control_fd, returned by fd_device_fd):
+    * device control/identity fd (dev->control_fd):
     * it still identifies the screen for u_pipe_screen_lookup_or_create()'s
-    * fd-keyed cache (which compares file descriptions, so dev->fd MUST stay a
-    * dup of the cache key - a freshly opened kgsl fd is a different file
-    * description and would break cache eviction -> use-after-free) and is the
-    * fd handed to DRI3 clients.  Only GPU submission uses the kgsl fd. */
+    * fd-keyed cache (which compares file descriptions, so the screen's
+    * get_screen_fd callback must return this control fd) and is the fd handed
+    * to DRI3 clients. */
    if (debug_get_bool_option("FD_FORCE_KGSL", false)) {
       int kgsl_fd = open("/dev/kgsl-3d0", O_RDWR | O_CLOEXEC);
       if (kgsl_fd >= 0) {
@@ -296,9 +295,14 @@ fd_device_del(struct fd_device *dev)
 int
 fd_device_fd(struct fd_device *dev)
 {
-   /* Return the control/identity fd, not the GPU submission fd. On the kgsl
-    * stack these differ: the screen cache and DRI3 must see the fd we were
-    * handed (a dup of the cache key), while GPU submission uses dev->fd. */
+   return dev->fd;
+}
+
+int
+fd_device_control_fd(struct fd_device *dev)
+{
+   /* The KGSL backend submits through dev->fd while the DRI/KMS winsys and
+    * fd-keyed screen cache must retain the DRM fd supplied by the loader. */
    return dev->control_fd;
 }
 

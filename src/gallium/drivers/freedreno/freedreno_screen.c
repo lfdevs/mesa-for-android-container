@@ -134,7 +134,7 @@ fd_kgsl_renderonly_create(int kms_fd)
 static bool
 fd_kgsl_has_kms_control_fd(struct fd_device *dev)
 {
-   drmVersionPtr version = drmGetVersion(fd_device_fd(dev));
+   drmVersionPtr version = drmGetVersion(fd_device_control_fd(dev));
    /*
     * Mainline names this DRM driver "msm".  Qualcomm's downstream display
     * stack, including the Sony pdx234 kernel, reports "msm_drm" instead.
@@ -1000,7 +1000,7 @@ static int
 fd_screen_get_fd(struct pipe_screen *pscreen)
 {
    struct fd_screen *screen = fd_screen(pscreen);
-   return fd_device_fd(screen->dev);
+   return fd_device_control_fd(screen->dev);
 }
 
 static void
@@ -1050,7 +1050,7 @@ fd_screen_create(int fd,
    screen->kgsl_dmabuf = screen->is_kgsl && fd_kgsl_dmabuf_enabled();
    if (!ro && screen->is_kgsl && fd_kgsl_has_kms_control_fd(dev) &&
        debug_get_bool_option("FD_KGSL_RENDERONLY", false)) {
-      ro = fd_kgsl_renderonly_create(fd_device_fd(dev));
+      ro = fd_kgsl_renderonly_create(fd_device_control_fd(dev));
       if (!ro) {
          mesa_loge("freedreno/kgsl: failed to create KMS renderonly screen");
          fd_device_del(dev);
