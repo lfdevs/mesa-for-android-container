@@ -135,7 +135,14 @@ static bool
 fd_kgsl_has_kms_control_fd(struct fd_device *dev)
 {
    drmVersionPtr version = drmGetVersion(fd_device_fd(dev));
-   bool has_kms = version && !strcmp(version->name, "msm");
+   /*
+    * Mainline names this DRM driver "msm".  Qualcomm's downstream display
+    * stack, including the Sony pdx234 kernel, reports "msm_drm" instead.
+    * Both expose the KMS/dumb-buffer interface needed by renderonly.
+    */
+   bool has_kms = version &&
+                  (!strcmp(version->name, "msm") ||
+                   !strcmp(version->name, "msm_drm"));
 
    if (version)
       drmFreeVersion(version);
