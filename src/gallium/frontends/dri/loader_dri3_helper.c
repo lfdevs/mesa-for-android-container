@@ -90,6 +90,7 @@ struct dri3_shm_bridge_state {
    xcb_special_event_t *present_event;
    uint32_t present_stamp;
    xcb_pixmap_t pixmaps[LOADER_DRI3_SHM_BRIDGE_SLOTS];
+   struct dri_image *slot_images[LOADER_DRI3_SHM_BRIDGE_SLOTS];
    uint32_t slot_serials[LOADER_DRI3_SHM_BRIDGE_SLOTS];
    uint64_t slot_sequences[LOADER_DRI3_SHM_BRIDGE_SLOTS];
    bool slot_completed[LOADER_DRI3_SHM_BRIDGE_SLOTS];
@@ -105,6 +106,7 @@ struct dri3_shm_bridge_state {
    bool capture_in_progress;
    bool ready;
    bool present_primed;
+   bool gpu_blit;
    int stop;
    int capture_slot;
    int ready_slot;
@@ -209,6 +211,8 @@ dri3_shm_bridge_fini(struct loader_dri3_drawable *draw)
             xcb_shm_detach(draw->shm_bridge_conn, slot->seg);
          munmap(slot->map, slot->size);
       }
+      if (state && state->slot_images[i])
+         dri2_destroy_image(state->slot_images[i]);
       memset(slot, 0, sizeof(*slot));
    }
    if (draw->shm_bridge_gc && draw->shm_bridge_conn)
@@ -275,6 +279,13 @@ dri3_shm_bridge_init(struct loader_dri3_drawable *draw,
    state->capture_fence_fd = -1;
    state->capture_slot = -1;
    state->ready_slot = -1;
+   int64_t gpu_bridge_min_pixels = debug_get_num_option(
+      "MESA_KGSL_X11_GPU_BRIDGE_MIN_PIXELS", 8000000);
+   uint64_t drawable_pixels = (uint64_t) buffer->width * buffer->height;
+   state->gpu_blit =
+      debug_get_bool_option("MESA_KGSL_X11_GPU_BRIDGE", false) &&
+      (gpu_bridge_min_pixels <= 0 ||
+       drawable_pixels >= (uint64_t) gpu_bridge_min_pixels);
    draw->shm_bridge_present_event = (void *) state;
    if (mtx_init(&state->mtx, mtx_plain) != thrd_success) {
       dri3_shm_bridge_fini(draw);
@@ -294,46 +305,110 @@ dri3_shm_bridge_init(struct loader_dri3_drawable *draw,
       return false;
    }
 
-   for (unsigned i = 0; i < LOADER_DRI3_SHM_BRIDGE_SLOTS; i++) {
-      struct loader_dri3_shm_bridge_slot *slot = &draw->shm_bridge_slots[i];
-      int fd = os_create_anonymous_file(size, "mesa-kgsl-x11-bridge");
-      if (fd < 0) {
-         dri3_shm_bridge_fini(draw);
-         return false;
+   if (state->gpu_blit) {
+      int fourcc = DRM_FORMAT_XRGB8888;
+
+      if (!dri2_query_image(buffer->image, __DRI_IMAGE_ATTRIB_FOURCC,
+                            &fourcc))
+         fourcc = draw->depth == 32 ? DRM_FORMAT_ARGB8888 :
+                                     DRM_FORMAT_XRGB8888;
+      for (unsigned i = 0; i < LOADER_DRI3_SHM_BRIDGE_SLOTS; i++) {
+         struct loader_dri3_shm_bridge_slot *slot =
+            &draw->shm_bridge_slots[i];
+         int server_width = 0;
+         int server_height = 0;
+
+         state->pixmaps[i] = xcb_generate_id(draw->shm_bridge_conn);
+         error = xcb_request_check(
+            draw->shm_bridge_conn,
+            xcb_create_pixmap_checked(draw->shm_bridge_conn, draw->depth,
+                                      state->pixmaps[i], draw->drawable,
+                                      buffer->width, buffer->height));
+         if (error) {
+            mesa_logw("DRI3: KGSL bridge could not create an Xorg-owned "
+                      "GPU slot: X error %u", error->error_code);
+            free(error);
+            state->gpu_blit = false;
+            break;
+         }
+
+         state->slot_images[i] = loader_dri3_get_pixmap_buffer(
+            draw->shm_bridge_conn, state->pixmaps[i],
+            draw->dri_screen_render_gpu, fourcc,
+            draw->multiplanes_available, &server_width, &server_height, slot);
+         if (!state->slot_images[i] || server_width != buffer->width ||
+             server_height != buffer->height) {
+            mesa_logw("DRI3: KGSL bridge could not import an Xorg-owned "
+                      "GPU slot; using CPU readback");
+            state->gpu_blit = false;
+            break;
+         }
+         slot->size = size;
+         slot->stride = stride;
       }
-      slot->map = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-      if (slot->map == MAP_FAILED) {
-         slot->map = NULL;
+   }
+
+   if (!state->gpu_blit) {
+      for (unsigned i = 0; i < LOADER_DRI3_SHM_BRIDGE_SLOTS; i++) {
+         if (state->slot_images[i]) {
+            dri2_destroy_image(state->slot_images[i]);
+            state->slot_images[i] = NULL;
+         }
+         if (state->pixmaps[i]) {
+            xcb_free_pixmap(draw->shm_bridge_conn, state->pixmaps[i]);
+            state->pixmaps[i] = 0;
+         }
+         memset(&draw->shm_bridge_slots[i], 0,
+                sizeof(draw->shm_bridge_slots[i]));
+      }
+
+      for (unsigned i = 0; i < LOADER_DRI3_SHM_BRIDGE_SLOTS; i++) {
+         struct loader_dri3_shm_bridge_slot *slot =
+            &draw->shm_bridge_slots[i];
+         int fd = os_create_anonymous_file(size, "mesa-kgsl-x11-bridge");
+         if (fd < 0) {
+            dri3_shm_bridge_fini(draw);
+            return false;
+         }
+         slot->map = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                          fd, 0);
+         if (slot->map == MAP_FAILED) {
+            slot->map = NULL;
+            close(fd);
+            dri3_shm_bridge_fini(draw);
+            return false;
+         }
+         slot->size = size;
+         slot->stride = stride;
+         slot->seg = xcb_generate_id(draw->shm_bridge_conn);
+         error = xcb_request_check(
+            draw->shm_bridge_conn,
+            xcb_shm_attach_fd_checked(draw->shm_bridge_conn, slot->seg, fd,
+                                      false));
          close(fd);
-         dri3_shm_bridge_fini(draw);
-         return false;
+         if (error) {
+            mesa_loge("DRI3: KGSL MIT-SHM bridge attach failed: X error %u",
+                      error->error_code);
+            free(error);
+            dri3_shm_bridge_fini(draw);
+            return false;
+         }
+         state->pixmaps[i] = xcb_generate_id(draw->shm_bridge_conn);
+         error = xcb_request_check(
+            draw->shm_bridge_conn,
+            xcb_shm_create_pixmap_checked(
+               draw->shm_bridge_conn, state->pixmaps[i], draw->drawable,
+               buffer->width, buffer->height, draw->depth, slot->seg, 0));
+         if (error) {
+            mesa_loge("DRI3: KGSL MIT-SHM pixmap creation failed: X error %u",
+                      error->error_code);
+            free(error);
+            dri3_shm_bridge_fini(draw);
+            return false;
+         }
       }
-      slot->size = size;
-      slot->stride = stride;
-      slot->seg = xcb_generate_id(draw->shm_bridge_conn);
-      error = xcb_request_check(draw->shm_bridge_conn,
-         xcb_shm_attach_fd_checked(draw->shm_bridge_conn, slot->seg, fd, false));
-      close(fd);
-      if (error) {
-         mesa_loge("DRI3: KGSL MIT-SHM bridge attach failed: X error %u",
-                   error->error_code);
-         free(error);
-         dri3_shm_bridge_fini(draw);
-         return false;
-      }
-      state->pixmaps[i] = xcb_generate_id(draw->shm_bridge_conn);
-      error = xcb_request_check(draw->shm_bridge_conn,
-         xcb_shm_create_pixmap_checked(draw->shm_bridge_conn,
-                                       state->pixmaps[i], draw->drawable,
-                                       buffer->width, buffer->height,
-                                       draw->depth, slot->seg, 0));
-      if (error) {
-         mesa_loge("DRI3: KGSL MIT-SHM pixmap creation failed: X error %u",
-                   error->error_code);
-         free(error);
-         dri3_shm_bridge_fini(draw);
-         return false;
-      }
+   } else if (draw->shm_bridge_stats) {
+      mesa_logi("DRI3: KGSL bridge using GPU blits into Xorg-owned pixmaps");
    }
 
    draw->shm_bridge_present_eid = xcb_generate_id(draw->shm_bridge_conn);
@@ -597,10 +672,17 @@ dri3_shm_bridge_present_thread(void *data)
       void *transfer = NULL;
       int source_stride = 0;
       uint8_t *source = NULL;
+      bool copied = false;
       bool fence_ready = fence_fd < 0 || sync_wait(fence_fd, -1) == 0;
       if (fence_fd >= 0)
          close(fence_fd);
-      if (ctx && buffer && fence_ready) {
+      if (ctx && buffer && fence_ready && state->gpu_blit) {
+         dri2_blit_image(ctx, state->slot_images[slot_index], buffer->image,
+                         0, 0, buffer->width, buffer->height,
+                         0, 0, buffer->width, buffer->height,
+                         __BLIT_FLAG_FINISH);
+         copied = true;
+      } else if (ctx && buffer && fence_ready) {
          source = dri2_map_image(ctx, buffer->image, 0, 0,
                                  buffer->width, buffer->height,
                                  __DRI_IMAGE_TRANSFER_READ,
@@ -615,6 +697,7 @@ dri3_shm_bridge_present_thread(void *data)
                    (size_t) buffer->width * buffer->cpp);
          }
          dri2_unmap_image(ctx, buffer->image, transfer);
+         copied = true;
       }
       if (ctx)
          loader_dri3_blit_context_put();
@@ -629,13 +712,13 @@ dri3_shm_bridge_present_thread(void *data)
       state->capture_in_progress = false;
       state->capture_buffer = NULL;
       cnd_broadcast(&state->cnd);
-      if (!source || p_atomic_read(&state->stop)) {
+      if (!copied || p_atomic_read(&state->stop)) {
          draw->shm_bridge_slots[slot_index].busy = false;
          mtx_unlock(&state->mtx);
          if (!fence_ready)
             mesa_loge("DRI3: KGSL bridge worker could not wait for its render fence");
-         else if (!source)
-            mesa_loge("DRI3: KGSL bridge worker could not map its selected frame");
+         else if (!copied)
+            mesa_loge("DRI3: KGSL bridge worker could not copy its selected frame");
          p_atomic_set(&state->stop, true);
          break;
       }
