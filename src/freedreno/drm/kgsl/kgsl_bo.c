@@ -132,6 +132,17 @@ kgsl_bo_kms_handle(struct fd_bo *bo)
     struct kgsl_bo *kgsl_bo = to_kgsl_bo(bo);
     int dma_buf;
 
+    /*
+     * fd_bo_handle() predates the separate KMS control fd and normally
+     * returns KGSL's allocation id.  Translating it into a GEM handle is
+     * needed only by the opt-in Xorg scanout allocator.  Keeping this gated
+     * also preserves the established handle contract for ordinary KGSL BOs,
+     * which cannot be exported by kgsl_bo_dmabuf() and would otherwise turn
+     * into handle 0 merely because this callback is installed.
+     */
+    if (!debug_get_bool_option("FD_KGSL_USE_KMS_DUMB", false))
+       return bo->handle;
+
     if (kgsl_bo->kms_handle)
        return kgsl_bo->kms_handle;
 
