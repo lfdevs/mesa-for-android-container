@@ -12,6 +12,8 @@
 
 #include "util/format/u_format.h"
 #include "util/format/u_format_s3tc.h"
+#include "util/libdrm.h"
+#include "util/os_file.h"
 #include "util/os_misc.h"
 #include "util/u_debug.h"
 #include "util/u_inlines.h"
@@ -25,6 +27,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include "drm-uapi/drm_fourcc.h"
 
 #include "freedreno_fence.h"
@@ -85,6 +88,59 @@ static const struct debug_named_value fd_debug_options[] = {
    DEBUG_NAMED_VALUE_END
 };
 /* clang-format on */
+
+static void
+fd_kgsl_renderonly_destroy(struct renderonly *ro)
+{
+   if (ro->kms_fd >= 0)
+      close(ro->kms_fd);
+
+   util_sparse_array_finish(&ro->bo_map);
+   FREE(ro);
+}
+
+/*
+ * Android KGSL submits GPU work through /dev/kgsl-3d0 while scanout is owned
+ * by a separate DRM/KMS device.  Model that split with Mesa's established
+ * renderonly contract instead of teaching the byte-oriented KGSL BO allocator
+ * how to manufacture display buffers.  The fd supplied to this screen is the
+ * DRI3/KMS control fd; duplicating it preserves the GEM handle namespace used
+ * by the X server while render submissions continue through screen->dev->fd.
+ */
+static struct renderonly *
+fd_kgsl_renderonly_create(int kms_fd)
+{
+   struct renderonly *ro = CALLOC_STRUCT(renderonly);
+
+   if (!ro)
+      return NULL;
+
+   ro->kms_fd = os_dupfd_cloexec(kms_fd);
+   ro->gpu_fd = -1;
+   if (ro->kms_fd < 0) {
+      FREE(ro);
+      return NULL;
+   }
+
+   ro->create_for_resource =
+      renderonly_create_kms_dumb_buffer_for_resource;
+   ro->destroy = fd_kgsl_renderonly_destroy;
+   util_sparse_array_init(&ro->bo_map,
+                          sizeof(struct renderonly_scanout), 64);
+   simple_mtx_init(&ro->bo_map_lock, mtx_plain);
+   return ro;
+}
+
+static bool
+fd_kgsl_has_kms_control_fd(struct fd_device *dev)
+{
+   drmVersionPtr version = drmGetVersion(fd_device_fd(dev));
+   bool has_kms = version && !strcmp(version->name, "msm");
+
+   if (version)
+      drmFreeVersion(version);
+   return has_kms;
+}
 
 DEBUG_GET_ONCE_FLAGS_OPTION(fd_mesa_debug, "FD_MESA_DEBUG", fd_debug_options, 0)
 
@@ -985,6 +1041,17 @@ fd_screen_create(int fd,
    screen->dev = dev;
    screen->is_kgsl = fd_get_features(dev) & FD_FEATURE_KGSL;
    screen->kgsl_dmabuf = screen->is_kgsl && fd_kgsl_dmabuf_enabled();
+   if (!ro && screen->is_kgsl && fd_kgsl_has_kms_control_fd(dev) &&
+       debug_get_bool_option("FD_KGSL_RENDERONLY", false)) {
+      ro = fd_kgsl_renderonly_create(fd_device_fd(dev));
+      if (!ro) {
+         mesa_loge("freedreno/kgsl: failed to create KMS renderonly screen");
+         fd_device_del(dev);
+         FREE(screen);
+         return NULL;
+      }
+      mesa_logi("freedreno/kgsl: using Mesa renderonly for KMS scanout");
+   }
    screen->ro = ro;
 
    // maybe this should be in context?

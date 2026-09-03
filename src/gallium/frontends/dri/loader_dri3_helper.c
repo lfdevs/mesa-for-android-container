@@ -54,6 +54,7 @@
 #include "util/u_queue.h"
 #include "util/simple_mtx.h"
 #include "drm-uapi/drm_fourcc.h"
+#include "dri_context.h"
 #include "dri_screen.h"
 #include "dri_util.h"
 
@@ -673,7 +674,22 @@ dri3_shm_bridge_present_thread(void *data)
       int source_stride = 0;
       uint8_t *source = NULL;
       bool copied = false;
-      bool fence_ready = fence_fd < 0 || sync_wait(fence_fd, -1) == 0;
+      void *gpu_wait_fence = NULL;
+      bool fence_ready = true;
+      if (ctx && state->gpu_blit && fence_fd >= 0) {
+         /* Queue the producer's native sync-file as an in-fence for this
+          * context.  This is Gallium's normal cross-context synchronization
+          * path: KGSL waits before executing the blit without blocking this
+          * worker on the producer first. */
+         gpu_wait_fence = dri_create_fence_fd(ctx, fence_fd);
+         if (gpu_wait_fence)
+            dri_server_wait_sync(ctx, gpu_wait_fence, 0);
+         else
+            fence_ready = false;
+      } else if (fence_fd >= 0) {
+         /* CPU readback cannot start until the producer is complete. */
+         fence_ready = sync_wait(fence_fd, -1) == 0;
+      }
       if (fence_fd >= 0)
          close(fence_fd);
       if (ctx && buffer && fence_ready && state->gpu_blit) {
@@ -699,6 +715,8 @@ dri3_shm_bridge_present_thread(void *data)
          dri2_unmap_image(ctx, buffer->image, transfer);
          copied = true;
       }
+      if (gpu_wait_fence)
+         dri_destroy_fence(ctx->screen, gpu_wait_fence);
       if (ctx)
          loader_dri3_blit_context_put();
 
@@ -937,7 +955,6 @@ dri3_present_sync_init(struct loader_dri3_drawable *draw, int buffer_fd)
 
    if (draw->shm_bridge ||
        draw->type != LOADER_DRI3_DRAWABLE_WINDOW ||
-       draw->dri_screen_render_gpu != draw->dri_screen_display_gpu ||
        !(dri_fence_get_caps(draw->dri_screen_render_gpu) &
          __DRI_FENCE_CAP_NATIVE_FD) ||
        !dri3_dmabuf_sync_file_unavailable(buffer_fd))
@@ -2056,8 +2073,12 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
    if (!draw->have_back || draw->type == LOADER_DRI3_DRAWABLE_PIXMAP)
       return ret;
 
+   bool prime_explicit_sync =
+      draw->present_sync &&
+      draw->dri_screen_render_gpu != draw->dri_screen_display_gpu;
+
    if (draw->type == LOADER_DRI3_DRAWABLE_WINDOW &&
-       (draw->shm_bridge || draw->present_sync) &&
+       (draw->shm_bridge || (draw->present_sync && !prime_explicit_sync)) &&
        draw->vtable->flush_drawable_with_fence_fd) {
       render_fence_fd =
          draw->vtable->flush_drawable_with_fence_fd(draw, flush_flags);
@@ -2115,6 +2136,15 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
                                     back->image,
                                     0, 0, back->width, back->height,
                                     0, 0, __BLIT_FLAG_FLUSH);
+
+      /* The normal PRIME path relies on dma-buf implicit fencing.  KGSL
+       * dma-bufs on Android do not expose that contract, so export a native
+       * fence after the render-to-display blit and pass it to Present through
+       * the existing X Sync wait-fence path. */
+      if (prime_explicit_sync &&
+          draw->vtable->flush_drawable_with_fence_fd)
+         render_fence_fd =
+            draw->vtable->flush_drawable_with_fence_fd(draw, flush_flags);
    }
 
    /* If we need to preload the new back buffer, remember the source.

@@ -42,7 +42,6 @@ struct kgsl_bo {
     const char *name;
     uint64_t iova;
     uint32_t queue_id;
-    uint32_t kms_handle;
     int import_fd; // fd for imported buffers
 
     enum {

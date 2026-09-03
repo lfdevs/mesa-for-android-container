@@ -488,6 +488,21 @@ bool loader_get_user_preferred_fd(int *fd_render_gpu, int *original_fd)
    } prime = {};
    prime.str = NULL;
 
+   /* KGSL is a render device without a DRM node, so libdrm cannot discover
+    * it as a DRI_PRIME candidate.  Preserve the DRI3-provided DRM fd as the
+    * display GPU and use KGSL as the render GPU.  This feeds the established
+    * PRIME render/display path instead of bypassing DRI3 in x11_dri3_open().
+    */
+   if (original_fd && debug_get_bool_option("FD_FORCE_KGSL", false)) {
+      int kgsl_fd = loader_open_device("/dev/kgsl-3d0");
+
+      if (kgsl_fd >= 0) {
+         *original_fd = *fd_render_gpu;
+         *fd_render_gpu = kgsl_fd;
+         return true;
+      }
+   }
+
    if (dri_prime)
       prime.str = strdup(dri_prime);
 #ifdef USE_DRICONF

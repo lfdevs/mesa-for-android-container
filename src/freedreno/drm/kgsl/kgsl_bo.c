@@ -2,7 +2,6 @@
 #include "util/os_file.h"
 #include "util/os_mman.h"
 
-#include "drm-uapi/drm_mode.h"
 #include <linux/dma-heap.h>
 
 static uint64_t
@@ -46,16 +45,6 @@ void
 kgsl_bo_close_handle(struct fd_bo *bo)
 {
     struct kgsl_bo *kgsl_bo = to_kgsl_bo(bo);
-    if (kgsl_bo->kms_handle) {
-       struct drm_gem_close close_req = {
-          .handle = kgsl_bo->kms_handle,
-       };
-       if (drmIoctl(bo->dev->control_fd, DRM_IOCTL_GEM_CLOSE, &close_req)) {
-          ERROR_MSG("Failed to close KMS handle %u (%s)",
-                    kgsl_bo->kms_handle, strerror(errno));
-       }
-       kgsl_bo->kms_handle = 0;
-    }
     if (kgsl_bo->bo_type == KGSL_BO_IMPORT) {
        close(kgsl_bo->import_fd);
     }
@@ -126,40 +115,6 @@ static int kgsl_bo_dmabuf(struct fd_bo *bo) {
     return os_dupfd_cloexec(kgsl_bo->import_fd);
 }
 
-static uint32_t
-kgsl_bo_kms_handle(struct fd_bo *bo)
-{
-    struct kgsl_bo *kgsl_bo = to_kgsl_bo(bo);
-    int dma_buf;
-
-    /*
-     * fd_bo_handle() predates the separate KMS control fd and normally
-     * returns KGSL's allocation id.  Translating it into a GEM handle is
-     * needed only by the opt-in Xorg scanout allocator.  Keeping this gated
-     * also preserves the established handle contract for ordinary KGSL BOs,
-     * which cannot be exported by kgsl_bo_dmabuf() and would otherwise turn
-     * into handle 0 merely because this callback is installed.
-     */
-    if (!debug_get_bool_option("FD_KGSL_USE_KMS_DUMB", false))
-       return bo->handle;
-
-    if (kgsl_bo->kms_handle)
-       return kgsl_bo->kms_handle;
-
-    dma_buf = kgsl_bo_dmabuf(bo);
-    if (dma_buf < 0)
-       return 0;
-
-    if (drmPrimeFDToHandle(bo->dev->control_fd, dma_buf,
-                           &kgsl_bo->kms_handle)) {
-       ERROR_MSG("Failed to import dma-buf into KMS control fd (%s)",
-                 strerror(errno));
-       kgsl_bo->kms_handle = 0;
-    }
-    close(dma_buf);
-    return kgsl_bo->kms_handle;
-}
-
 static const struct fd_bo_funcs bo_funcs = {
     .iova = kgsl_bo_iova,
     .set_name = kgsl_bo_set_name,
@@ -169,7 +124,6 @@ static const struct fd_bo_funcs bo_funcs = {
     .cpu_prep = kgsl_bo_cpu_prep,
     .destroy = kgsl_bo_destroy,
     .dmabuf = kgsl_bo_dmabuf,
-    .kms_handle = kgsl_bo_kms_handle,
 };
 
 /* Size is not used by KGSL */
@@ -290,97 +244,19 @@ dma_heap_alloc(uint64_t size)
    }
 }
 
-/*
- * Qualcomm's SDE KMS can reject generic dma-heap allocations in AddFB even
- * though KGSL can render to them.  When explicitly requested, allocate the
- * shared object as a KMS dumb BO instead, export it as a dma-buf, and then
- * import that dma-buf into KGSL.  The original GEM handle can be destroyed as
- * soon as PRIME export succeeds; the dma-buf keeps the object alive and the X
- * server will import its own handle before scanout.
- *
- * Width/height here only size the allocation.  The eventual framebuffer's
- * actual dimensions, format and pitch are supplied by GBM/DRI3 when the X
- * server imports this dma-buf.
- */
-static int
-kms_dumb_alloc(struct fd_device *dev, uint32_t size)
-{
-   struct drm_mode_create_dumb create = {
-      .width = DIV_ROUND_UP(size, 4),
-      .height = 1,
-      .bpp = 32,
-   };
-   struct drm_mode_destroy_dumb destroy = {0};
-   const char *kms_path;
-   int kms_fd;
-   int owned_fd = -1;
-   int fd = -1;
-
-   if (!debug_get_bool_option("FD_KGSL_USE_KMS_DUMB", false) ||
-       dev->control_fd < 0)
-      return -1;
-
-   kms_fd = dev->control_fd;
-   if (drmIoctl(kms_fd, DRM_IOCTL_MODE_CREATE_DUMB, &create)) {
-      kms_path = debug_get_option("FD_KGSL_KMS_DEVICE", NULL);
-      if (!kms_path ||
-          (owned_fd = open(kms_path, O_RDWR | O_CLOEXEC)) < 0 ||
-          drmIoctl(owned_fd, DRM_IOCTL_MODE_CREATE_DUMB, &create)) {
-         ERROR_MSG("Failed to allocate KMS dumb dma-buf (%s); falling back to dma-heap",
-                   strerror(errno));
-         if (owned_fd >= 0)
-            close(owned_fd);
-         return -1;
-      }
-      kms_fd = owned_fd;
-   }
-
-   destroy.handle = create.handle;
-   if (drmPrimeHandleToFD(kms_fd, create.handle,
-                          DRM_CLOEXEC | DRM_RDWR, &fd)) {
-      ERROR_MSG("Failed to export KMS dumb dma-buf (%s); falling back to dma-heap",
-                strerror(errno));
-      fd = -1;
-   }
-
-   if (drmIoctl(kms_fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy)) {
-      ERROR_MSG("Failed to destroy temporary KMS dumb handle (%s)",
-                strerror(errno));
-   }
-   if (owned_fd >= 0)
-      close(owned_fd);
-
-   return fd;
-}
-
 static struct fd_bo *
 kgsl_bo_new_dmabuf(struct fd_device *dev, uint32_t size)
 {
-   bool kms_backed;
    int fd;
    struct fd_bo *bo;
 
-   fd = kms_dumb_alloc(dev, size);
-   kms_backed = fd >= 0;
-   if (fd < 0)
-      fd = dma_heap_alloc(size);
+   fd = dma_heap_alloc(size);
    if (fd < 0) {
       ERROR_MSG("Failed to allocate dma-buf (%s)", strerror(errno));
       return NULL;
    }
 
    bo = kgsl_bo_from_dmabuf(dev, fd);
-
-   /* A platform may support dumb allocation/PRIME export but still reject the
-    * object at KGSL import.  Preserve the established dma-heap path as a
-    * strict fallback rather than failing shared-buffer allocation outright. */
-   if (!bo && kms_backed) {
-      close(fd);
-      fd = dma_heap_alloc(size);
-      if (fd < 0)
-         return NULL;
-      bo = kgsl_bo_from_dmabuf(dev, fd);
-   }
 
    close(fd);
    return bo;
