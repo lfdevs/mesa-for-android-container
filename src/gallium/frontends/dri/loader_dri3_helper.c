@@ -93,7 +93,6 @@ struct dri3_shm_bridge_state {
    xcb_pixmap_t pixmaps[LOADER_DRI3_SHM_BRIDGE_SLOTS];
    struct dri_image *slot_images[LOADER_DRI3_SHM_BRIDGE_SLOTS];
    uint32_t slot_serials[LOADER_DRI3_SHM_BRIDGE_SLOTS];
-   uint64_t slot_sequences[LOADER_DRI3_SHM_BRIDGE_SLOTS];
    bool slot_completed[LOADER_DRI3_SHM_BRIDGE_SLOTS];
    bool slot_idle[LOADER_DRI3_SHM_BRIDGE_SLOTS];
    mtx_t mtx;
@@ -118,9 +117,10 @@ struct dri3_shm_bridge_state {
    uint64_t presented_frames;
    uint64_t dropped_frames;
    uint64_t server_skipped_frames;
+   uint64_t flip_frames;
+   uint64_t copy_frames;
+   uint64_t suboptimal_copy_frames;
    uint64_t submitted_frames;
-   uint64_t pending_sequence;
-   uint64_t presented_sequence;
    uint64_t next_target_msc;
    uint64_t bytes;
    uint64_t waits;
@@ -173,9 +173,12 @@ dri3_shm_bridge_report_stats(struct loader_dri3_drawable *draw,
    mesa_logi("DRI3: KGSL bridge produced=%" PRIu64
              " presented=%" PRIu64 " dropped=%" PRIu64
              " server_skipped=%" PRIu64
+             " modes=%" PRIu64 "/%" PRIu64 "/%" PRIu64
              " copied=%.1f MiB rate=%.1f fps waits=%" PRIu64,
              state->produced_frames, state->presented_frames,
              state->dropped_frames, state->server_skipped_frames,
+             state->flip_frames, state->copy_frames,
+             state->suboptimal_copy_frames,
              state->bytes / (1024.0 * 1024.0),
              seconds > 0.0 ? state->produced_frames / seconds : 0.0,
              state->waits);
@@ -281,7 +284,7 @@ dri3_shm_bridge_init(struct loader_dri3_drawable *draw,
    state->capture_slot = -1;
    state->ready_slot = -1;
    int64_t gpu_bridge_min_pixels = debug_get_num_option(
-      "MESA_KGSL_X11_GPU_BRIDGE_MIN_PIXELS", 8000000);
+      "MESA_KGSL_X11_GPU_BRIDGE_MIN_PIXELS", 0);
    uint64_t drawable_pixels = (uint64_t) buffer->width * buffer->height;
    state->gpu_blit =
       debug_get_bool_option("MESA_KGSL_X11_GPU_BRIDGE", false) &&
@@ -490,21 +493,32 @@ dri3_shm_bridge_handle_present_event(struct loader_dri3_drawable *draw,
          draw->shm_bridge_msc = complete->msc;
          if (!state->present_primed) {
             state->present_primed = true;
-            state->next_target_msc = complete->msc + 1;
+            /* Leave one complete refresh between the priming Present and the
+             * first scheduled frame.  The bridge can fill the following
+             * slots during that lead instead of racing a full-surface copy
+             * against the immediately following vblank. */
+            state->next_target_msc = complete->msc + 2;
          } else if (state->next_target_msc <= complete->msc) {
-            state->next_target_msc = complete->msc + 1;
+            /* Re-prime a starved queue with the same one-refresh lead. */
+            state->next_target_msc = complete->msc + 2;
          }
 
          for (unsigned i = 0; i < LOADER_DRI3_SHM_BRIDGE_SLOTS; i++) {
             if (state->slot_serials[i] != complete->serial)
                continue;
             state->slot_completed[i] = true;
-            if (complete->mode == XCB_PRESENT_COMPLETE_MODE_SKIP)
+            if (complete->mode == XCB_PRESENT_COMPLETE_MODE_SKIP) {
                state->server_skipped_frames++;
-            else
+            } else {
                state->presented_frames++;
-            state->presented_sequence =
-               MAX2(state->presented_sequence, state->slot_sequences[i]);
+               if (complete->mode == XCB_PRESENT_COMPLETE_MODE_FLIP)
+                  state->flip_frames++;
+               else if (complete->mode == XCB_PRESENT_COMPLETE_MODE_COPY)
+                  state->copy_frames++;
+               else if (complete->mode ==
+                        XCB_PRESENT_COMPLETE_MODE_SUBOPTIMAL_COPY)
+                  state->suboptimal_copy_frames++;
+            }
             dri3_shm_bridge_maybe_release_slot(draw, state, i);
             break;
          }
@@ -755,10 +769,14 @@ dri3_shm_bridge_present_thread(void *data)
          (uint64_t) buffer->width * buffer->height * buffer->cpp;
       mtx_unlock(&state->mtx);
 
+      uint32_t options = state->gpu_blit ? XCB_PRESENT_OPTION_NONE :
+                                           XCB_PRESENT_OPTION_COPY;
+      if (state->gpu_blit && interval <= 0)
+         options |= XCB_PRESENT_OPTION_ASYNC;
       xcb_present_pixmap(draw->shm_bridge_conn, draw->drawable,
                          state->pixmaps[slot_index], serial,
                          0, 0, 0, 0, XCB_NONE, XCB_NONE, XCB_NONE,
-                         XCB_PRESENT_OPTION_COPY, target_msc,
+                         options, target_msc,
                          0, 0, 0, NULL);
       if (xcb_flush(draw->shm_bridge_conn) <= 0)
          break;
@@ -783,8 +801,6 @@ dri3_shm_bridge_present(struct loader_dri3_drawable *draw,
    struct dri3_shm_bridge_state *state;
    int slot_index;
    int interval = draw->swap_interval;
-   uint64_t sequence;
-   bool ok;
 
    if (!draw->vtable->get_dri_context(draw) || buffer->cpp != 4 ||
        !dri3_shm_bridge_init(draw, buffer)) {
@@ -799,6 +815,12 @@ dri3_shm_bridge_present(struct loader_dri3_drawable *draw,
    mtx_lock(&state->mtx);
    state->produced_frames++;
    bool first_frame = state->produced_frames == 1;
+
+   /* Synchronized clients are backpressured by the three Present slots.  The
+    * worker copies and submits distinct future-MSC requests until every slot
+    * is busy; CompleteNotify plus IdleNotify then releases one slot per
+    * refresh.  Waiting for each completion in this producer path would defer
+    * the copy until its target vblank and reduce a 60 Hz display to 30 Hz. */
    while ((interval != 0 || first_frame) &&
           (!state->capture_available || state->capture_in_progress) &&
           !p_atomic_read(&state->stop))
@@ -826,8 +848,6 @@ dri3_shm_bridge_present(struct loader_dri3_drawable *draw,
    state->capture_available = false;
    state->capture_slot = -1;
    state->capture_in_progress = true;
-   sequence = ++state->pending_sequence;
-   state->slot_sequences[slot_index] = sequence;
    state->capture_buffer = buffer;
    state->capture_fence_fd = render_fence_fd;
    state->ready_slot = slot_index;
@@ -840,15 +860,7 @@ dri3_shm_bridge_present(struct loader_dri3_drawable *draw,
    cnd_broadcast(&state->cnd);
    mtx_unlock(&state->mtx);
    dri3_shm_bridge_wake(state);
-
-   mtx_lock(&state->mtx);
-   while (interval != 0 &&
-          state->presented_sequence < sequence &&
-          !p_atomic_read(&state->stop))
-      cnd_wait(&state->cnd, &state->mtx);
-   ok = !p_atomic_read(&state->stop);
-   mtx_unlock(&state->mtx);
-   return ok;
+   return true;
 }
 
 struct loader_dri3_present_sync {
