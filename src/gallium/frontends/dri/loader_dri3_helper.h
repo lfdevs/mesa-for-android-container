@@ -53,6 +53,7 @@ struct loader_dri3_buffer {
     *           while creating screen in dri3_create_screen() function.
     */
    struct dri_image   *linear_buffer;
+   bool         needs_present_blit;
 
    /* Synchronization between the client and X server is done using an
     * xshmfence that is mapped into an X server SyncFence. This lets the
@@ -103,7 +104,7 @@ struct loader_dri3_drawable;
 struct loader_dri3_present_sync;
 
 #define LOADER_DRI3_SHM_BRIDGE_SLOTS 3
-#define LOADER_DRI3_SHM_BRIDGE_ABI "HDMI_LOS_MESA_BRIDGE_ABI=4"
+#define LOADER_DRI3_SHM_BRIDGE_ABI "HDMI_LOS_MESA_BRIDGE_ABI=5"
 
 struct loader_dri3_shm_bridge_slot {
    xcb_shm_seg_t seg;
@@ -189,6 +190,7 @@ struct loader_dri3_drawable {
    bool queries_buffer_age;
    bool present_sync_checked;
    bool shm_bridge;
+   bool shadow_present;
    bool shm_bridge_stats;
    xcb_connection_t *shm_bridge_conn;
    xcb_gcontext_t shm_bridge_gc;

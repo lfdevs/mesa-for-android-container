@@ -944,11 +944,13 @@ dri3_dmabuf_sync_file_unavailable(int fd)
 }
 
 static bool
-dri3_present_sync_init(struct loader_dri3_drawable *draw, int buffer_fd)
+dri3_present_sync_init(struct loader_dri3_drawable *draw, int buffer_fd,
+                       bool explicit_sync_required)
 {
    struct loader_dri3_present_sync *sync;
 
-   if (draw->present_sync_checked)
+   if (draw->present_sync_checked &&
+       (draw->present_sync || !explicit_sync_required))
       return draw->present_sync != NULL;
 
    draw->present_sync_checked = true;
@@ -957,7 +959,8 @@ dri3_present_sync_init(struct loader_dri3_drawable *draw, int buffer_fd)
        draw->type != LOADER_DRI3_DRAWABLE_WINDOW ||
        !(dri_fence_get_caps(draw->dri_screen_render_gpu) &
          __DRI_FENCE_CAP_NATIVE_FD) ||
-       !dri3_dmabuf_sync_file_unavailable(buffer_fd))
+       (!explicit_sync_required &&
+        !dri3_dmabuf_sync_file_unavailable(buffer_fd)))
       return false;
 
    sync = calloc(1, sizeof(*sync));
@@ -1416,6 +1419,12 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
    draw->present_sync = NULL;
    draw->shm_bridge =
       debug_get_bool_option("MESA_KGSL_X11_SHM_BRIDGE", false);
+   draw->shadow_present =
+      debug_get_bool_option("MESA_KGSL_X11_SHADOW", false);
+   if (draw->shm_bridge && draw->shadow_present) {
+      mesa_loge("DRI3: SHM bridge and shadow presentation are mutually exclusive");
+      return 1;
+   }
    draw->shm_bridge_stats =
       debug_get_bool_option("MESA_KGSL_X11_BRIDGE_STATS", false);
    draw->shm_bridge_conn = NULL;
@@ -2073,17 +2082,21 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
    if (!draw->have_back || draw->type == LOADER_DRI3_DRAWABLE_PIXMAP)
       return ret;
 
+   bool shadow_present =
+      draw->shadow_present && draw->type == LOADER_DRI3_DRAWABLE_WINDOW;
    bool prime_explicit_sync =
       draw->present_sync &&
       draw->dri_screen_render_gpu != draw->dri_screen_display_gpu;
 
-   if (draw->type == LOADER_DRI3_DRAWABLE_WINDOW &&
-       (draw->shm_bridge || (draw->present_sync && !prime_explicit_sync)) &&
-       draw->vtable->flush_drawable_with_fence_fd) {
-      render_fence_fd =
-         draw->vtable->flush_drawable_with_fence_fd(draw, flush_flags);
-   } else {
-      draw->vtable->flush_drawable(draw, flush_flags);
+   if (!shadow_present) {
+      if (draw->type == LOADER_DRI3_DRAWABLE_WINDOW &&
+          (draw->shm_bridge || (draw->present_sync && !prime_explicit_sync)) &&
+          draw->vtable->flush_drawable_with_fence_fd) {
+         render_fence_fd =
+            draw->vtable->flush_drawable_with_fence_fd(draw, flush_flags);
+      } else {
+         draw->vtable->flush_drawable(draw, flush_flags);
+      }
    }
 
    back = dri3_find_back_alloc(draw);
@@ -2092,6 +2105,36 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
       if (render_fence_fd >= 0)
          close(render_fence_fd);
       return ret;
+   }
+
+   if (shadow_present) {
+      if (!back->needs_present_blit || !back->linear_buffer) {
+         mesa_loge("DRI3: shadow presentation buffer is incomplete");
+         return ret;
+      }
+
+      /* Resolve in the application's current context.  This orders the copy
+       * after all rendering to the private image.  The following native-fence
+       * flush therefore covers both rendering and the tiled/UBWC-to-linear
+       * resolve exported to Xorg. */
+      if (!loader_dri3_blit_image(draw, back->linear_buffer, back->image,
+                                  0, 0, back->width, back->height,
+                                  0, 0, __BLIT_FLAG_FLUSH)) {
+         mesa_loge("DRI3: failed to resolve KGSL shadow buffer");
+         return ret;
+      }
+      if (!draw->present_sync ||
+          !draw->vtable->flush_drawable_with_fence_fd) {
+         mesa_loge("DRI3: explicit presentation sync is unavailable for "
+                   "KGSL shadow");
+         return ret;
+      }
+      render_fence_fd =
+         draw->vtable->flush_drawable_with_fence_fd(draw, flush_flags);
+      if (render_fence_fd < 0) {
+         mesa_loge("DRI3: failed to export KGSL shadow completion fence");
+         return ret;
+      }
    }
 
    bool bridge_presented = false;
@@ -2484,7 +2527,8 @@ has_supported_modifier(struct loader_dri3_drawable *draw, unsigned int format,
  */
 static struct loader_dri3_buffer *
 dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
-                         int width, int height, int depth)
+                         int width, int height, int depth,
+                         enum loader_dri3_buffer_type buffer_type)
 {
    struct loader_dri3_buffer *buffer;
    struct dri_image *pixmap_buffer = NULL, *linear_buffer_display_gpu = NULL;
@@ -2507,7 +2551,47 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
    if (!buffer->cpp)
       goto no_image;
 
-   if (draw->dri_screen_render_gpu == draw->dri_screen_display_gpu) {
+   bool shadow_present =
+      draw->shadow_present && draw->type == LOADER_DRI3_DRAWABLE_WINDOW &&
+      buffer_type == loader_dri3_buffer_back;
+
+   if (shadow_present) {
+      /* Keep the application's render target private so Freedreno can select
+       * its native tiled/UBWC layout.  Only the persistent linear renderonly
+       * image is exported to Xorg and participates in Present/KMS lifetime. */
+      buffer->image =
+         dri_create_image(draw->dri_screen_render_gpu,
+                          width, height, format, NULL, 0,
+                          __DRI_IMAGE_USE_BACKBUFFER |
+                          (draw->is_protected_content ?
+                           __DRI_IMAGE_USE_PROTECTED : 0),
+                          buffer);
+      if (!buffer->image) {
+         mesa_loge("DRI3: failed to allocate private KGSL shadow image");
+         goto no_image;
+      }
+
+      buffer->linear_buffer =
+         dri_create_image(draw->dri_screen_render_gpu,
+                          width, height,
+                          dri3_linear_format_for_format(draw, format),
+                          NULL, 0,
+                          __DRI_IMAGE_USE_SHARE |
+                          __DRI_IMAGE_USE_LINEAR |
+                          __DRI_IMAGE_USE_BACKBUFFER |
+                          __DRI_IMAGE_USE_SCANOUT |
+                          __DRI_IMAGE_USE_PRIME_BUFFER |
+                          (draw->is_protected_content ?
+                           __DRI_IMAGE_USE_PROTECTED : 0),
+                          buffer);
+      if (!buffer->linear_buffer) {
+         mesa_loge("DRI3: failed to allocate KMS shadow-present image");
+         goto no_linear_buffer;
+      }
+
+      buffer->needs_present_blit = true;
+      pixmap_buffer = buffer->linear_buffer;
+   } else if (draw->dri_screen_render_gpu == draw->dri_screen_display_gpu) {
       if (draw->multiplanes_available && draw->dri_screen_render_gpu->base.screen->resource_create_with_modifiers) {
          xcb_dri3_get_supported_modifiers_cookie_t mod_cookie;
          xcb_dri3_get_supported_modifiers_reply_t *mod_reply;
@@ -2660,7 +2744,12 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
     * though DRI3 buffer sharing itself works.  In that case Present needs an
     * explicit render-completion fence.
     */
-   dri3_present_sync_init(draw, buffer_fds[0]);
+   if (!dri3_present_sync_init(draw, buffer_fds[0],
+                               buffer->needs_present_blit) &&
+       buffer->needs_present_blit) {
+      mesa_loge("DRI3: KGSL shadow requires native explicit Present fences");
+      goto no_buffer_attrib;
+   }
 
    if (draw->dri_screen_render_gpu != draw->dri_screen_display_gpu &&
        draw->dri_screen_display_gpu && linear_buffer_display_gpu) {
@@ -2720,6 +2809,12 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
    buffer->width = width;
    buffer->height = height;
    dri3_setup_present_wait_fence(draw, buffer);
+   if (buffer->needs_present_blit && !buffer->present_wait_fence) {
+      mesa_loge("DRI3: failed to create KGSL shadow Present wait fence");
+      xcb_free_pixmap(draw->conn, buffer->pixmap);
+      buffer->pixmap = 0;
+      goto no_buffer_attrib;
+   }
 
    /* Mark the buffer as idle
     */
@@ -2734,7 +2829,7 @@ no_buffer_attrib:
    } while (--i >= 0);
    dri2_destroy_image(pixmap_buffer);
 no_linear_buffer:
-   if (draw->dri_screen_render_gpu != draw->dri_screen_display_gpu)
+   if (buffer->image && buffer->image != pixmap_buffer)
       dri2_destroy_image(buffer->image);
 no_image:
    free(buffer);
@@ -3087,7 +3182,8 @@ dri3_get_buffer(struct dri_drawable *driDrawable,
                                             fourcc,
                                             draw->width,
                                             draw->height,
-                                            draw->depth);
+                                            draw->depth,
+                                            buffer_type);
       if (!new_buffer)
          return NULL;
 
@@ -3399,7 +3495,8 @@ dri3_find_back_alloc(struct loader_dri3_drawable *draw)
    if (!back && draw->back_format != DRM_FORMAT_INVALID &&
        dri3_update_drawable(draw))
       back = dri3_alloc_render_buffer(draw, draw->back_format,
-                                      draw->width, draw->height, draw->depth);
+                                      draw->width, draw->height, draw->depth,
+                                      loader_dri3_buffer_back);
 
    if (!back)
       return NULL;
