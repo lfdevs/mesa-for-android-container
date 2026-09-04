@@ -8,6 +8,9 @@
 #include <linux/dma-heap.h>
 #include <poll.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
@@ -45,6 +48,32 @@ safe_ioctl(int fd, unsigned long request, void *arg)
    } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
 
    return ret;
+}
+
+/* Imported dma-bufs are backed by cached system memory on KGSL.  A producer
+ * in another API (for example the termux-va Gallium bridge) can have dirty
+ * CPU cache lines when Turnip imports the object.  Synchronize the object
+ * before exposing it to GPU commands; Vulkan's mapped-memory entrypoints are
+ * not involved for an externally imported image.
+ */
+static int
+kgsl_sync_imported_bo_to_gpu(struct tu_device *dev, uint32_t id,
+                             uint64_t size)
+{
+   struct kgsl_gpuobj_sync_obj obj = {
+      .offset = 0,
+      .length = size,
+      .id = id,
+      .op = KGSL_GPUMEM_CACHE_FLUSH,
+   };
+   struct kgsl_gpuobj_sync sync = {
+      .objs = (uintptr_t)&obj,
+      .obj_len = sizeof(obj),
+      .count = 1,
+   };
+
+   return safe_ioctl(dev->physical_device->local_fd,
+                     IOCTL_KGSL_GPUOBJ_SYNC, &sync);
 }
 
 static int
@@ -355,6 +384,11 @@ kgsl_bo_init(struct tu_device *dev,
       .base = base,
    };
 
+   if (getenv("TU_KGSL_DEBUG_IMPORT"))
+      fprintf(stderr, "tu kgsl new id=%u size=%llu iova=%#llx flags=%#x\n",
+              bo->gem_handle, (unsigned long long)bo->size,
+              (unsigned long long)bo->iova, (unsigned)mem_property);
+
    tu_dump_bo_init(dev, bo);
 
    VkResult result = VK_SUCCESS;
@@ -425,6 +459,11 @@ kgsl_bo_init_dmabuf(struct tu_device *dev,
       .shared_fd = os_dupfd_cloexec(fd),
    };
 
+   if (getenv("TU_KGSL_DEBUG_IMPORT"))
+      fprintf(stderr, "tu kgsl dmabuf id=%u size=%llu iova=%#llx fd=%d\n",
+              bo->gem_handle, (unsigned long long)bo->size,
+              (unsigned long long)bo->iova, fd);
+
    struct stat st;
    if (fstat(fd, &st) == 0)
       /* Use the inode number as the unique ID, but set the MSB to avoid
@@ -433,6 +472,30 @@ kgsl_bo_init_dmabuf(struct tu_device *dev,
       bo->unique_id = st.st_ino | (1ULL << 63);
 
    tu_dump_bo_init(dev, bo);
+
+   /* The dma-buf may have been written through a cached CPU mapping by the
+    * producer.  Clean it before the first Vulkan GPU read. */
+   int sync_ret = kgsl_sync_imported_bo_to_gpu(dev, bo->gem_handle, bo->size);
+   if (sync_ret != 0)
+      mesa_logw("KGSL cache sync for imported dma-buf failed: %s\n",
+                strerror(errno));
+
+   if (getenv("TU_KGSL_DEBUG_IMPORT")) {
+      void *map = mmap(NULL, MIN2((uint64_t)4096, bo->size), PROT_READ,
+                       MAP_SHARED, fd, 0);
+      if (map == MAP_FAILED) {
+         fprintf(stderr, "tu kgsl import id=%u size=%llu"
+                         " sync=%d errno=%d mmap failed\n",
+                 bo->gem_handle, (unsigned long long)bo->size, sync_ret, errno);
+      } else {
+         const uint8_t *p = (const uint8_t *)map;
+         fprintf(stderr, "tu kgsl import id=%u size=%llu"
+                         " sync=%d bytes=%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                 bo->gem_handle, (unsigned long long)bo->size, sync_ret,
+                 p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+         munmap(map, MIN2((uint64_t)4096, bo->size));
+      }
+   }
 
    *out_bo = bo;
 
@@ -1352,6 +1415,20 @@ kgsl_submit_add_entries(struct tu_device *device, void *_submit,
          .flags = KGSL_CMDLIST_IB,
          .id = entries[i].bo->gem_handle,
       };
+      if (getenv("TU_KGSL_DEBUG_SUBMIT"))
+         fprintf(stderr, "kgsl cmd gpu=%#llx size=%llu id=%u off=%llu\n",
+                 (unsigned long long)cmds[i].gpuaddr,
+                 (unsigned long long)cmds[i].size,
+                 cmds[i].id, (unsigned long long)cmds[i].offset);
+      if (getenv("TU_KGSL_DEBUG_SUBMIT") && entries[i].bo->map) {
+         const uint32_t *p = (const uint32_t *)entries[i].bo->map +
+                             entries[i].offset / 4;
+         unsigned n = MIN2(entries[i].size / 4, 1000);
+         fprintf(stderr, "kgsl ib:");
+         for (unsigned j = 0; j < n; j++)
+            fprintf(stderr, " %08x", p[j]);
+         fprintf(stderr, "\n");
+      }
    }
 }
 
@@ -1431,6 +1508,19 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
 {
    struct tu_kgsl_queue_submit *submit =
       (struct tu_kgsl_queue_submit *)_submit;
+
+   if (getenv("TU_KGSL_DEBUG_SUBMIT")) {
+      fprintf(stderr, "kgsl submit begin queue=%u prior_ts=%d waits=%u signals=%u cmds=%u binds=%u\n",
+              queue->msm_queue_id, p_atomic_read(&queue->fence), wait_count,
+              signal_count, submit->commands.size, submit->bind_cmds.size);
+      for (uint32_t i = 0; i < wait_count; i++) {
+         const struct kgsl_syncobj *wait =
+            &container_of(waits[i].sync, struct vk_kgsl_syncobj, vk)->syncobj;
+         fprintf(stderr, "kgsl submit wait[%u] state=%d queue=%u ts=%u fd=%d\n",
+                 i, wait->state, wait->queue ? wait->queue->msm_queue_id : 0,
+                 wait->timestamp, wait->fd);
+      }
+   }
 
 #if HAVE_PERFETTO
    uint64_t start_ts = tu_perfetto_begin_submit();
@@ -1548,6 +1638,12 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
    assert(wait_sync.state !=
           KGSL_SYNCOBJ_STATE_UNSIGNALED); // Would wait forever
 
+   if (getenv("TU_KGSL_DEBUG_SUBMIT"))
+      fprintf(stderr, "kgsl submit merged-wait state=%d queue=%u ts=%u fd=%d\n",
+              wait_sync.state,
+              wait_sync.queue ? wait_sync.queue->msm_queue_id : 0,
+              wait_sync.timestamp, wait_sync.fd);
+
    struct kgsl_cmd_syncpoint_timestamp ts;
    struct kgsl_cmd_syncpoint_fence fn;
    struct kgsl_command_syncpoint sync = { 0 };
@@ -1607,6 +1703,9 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
                        IOCTL_KGSL_GPU_COMMAND, &req);
 
       timestamp = req.timestamp;
+      if (getenv("TU_KGSL_DEBUG_SUBMIT"))
+         fprintf(stderr, "kgsl submit ret=%d errno=%d ts=%u cmds=%u\n",
+                 ret, ret ? errno : 0, timestamp, req.numcmds);
    } else {
       /* kgsl doesn't support multiple bind commands at once */
       uint32_t i = 0;
