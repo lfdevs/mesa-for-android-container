@@ -43,6 +43,82 @@
 
 #include "va_private.h"
 
+#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
+#ifndef _WIN32
+#include <errno.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include "drm-uapi/dma-buf.h"
+#endif
+
+static bool
+vl_va_export_debug_enabled(void)
+{
+   const char *e = getenv("DMD_VA_LOG");
+   return e && e[0] == '1';
+}
+
+static bool
+vl_va_bridge_skip_clear(void)
+{
+   const char *e = getenv("TERMUX_VA_BRIDGE");
+   return e && (e[0] == '1' || e[0] == 'y' || e[0] == 'Y');
+}
+
+#define TVA_EXPORT_LOG(...) do { \
+   if (vl_va_export_debug_enabled()) \
+      fprintf(stderr, "tva-export: " __VA_ARGS__); \
+} while (0)
+
+#ifndef _WIN32
+static void
+vl_va_export_probe_fd(int fd, uint64_t size, int plane)
+{
+   const char *e = getenv("DMD_VA_PROBE");
+   if (!e || e[0] != '1' || fd < 0 || size < 8)
+      return;
+
+   size_t map_size = size < 4096 ? (size_t)size : 4096;
+   bool sync_started = false;
+   struct dma_buf_sync sync = {
+      /* The bridge writes through a CPU mapping before exporting this fd.
+       * Use a write transaction here so cached lines are committed for a
+       * Vulkan/KGSL importer; READ-only sync does not promise that. */
+      .flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_WRITE,
+   };
+   if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) == 0) {
+      sync_started = true;
+   } else if (errno != ENOTTY && errno != EOPNOTSUPP && errno != ENOSYS) {
+      fprintf(stderr, "tva-export probe plane=%d sync start failed errno=%d\n",
+              plane, errno);
+      return;
+   }
+
+   void *map = mmap(NULL, map_size, PROT_READ, MAP_SHARED, fd, 0);
+   if (map == MAP_FAILED) {
+      fprintf(stderr, "tva-export probe plane=%d mmap failed errno=%d\n",
+              plane, errno);
+      if (sync_started) {
+         sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE;
+         ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+      }
+      return;
+   }
+   const unsigned char *p = map;
+   fprintf(stderr, "tva-export probe plane=%d bytes=%02x %02x %02x %02x %02x %02x %02x %02x\n",
+           plane, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+   munmap(map, map_size);
+   if (sync_started) {
+      sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE;
+      if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) < 0)
+         fprintf(stderr, "tva-export probe plane=%d sync end failed errno=%d\n",
+                 plane, errno);
+   }
+}
+#endif
+
 #ifdef _WIN32
 #include "frontend/winsys_handle.h"
 #include <va/va_win32.h>
@@ -200,7 +276,10 @@ _vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target, uint64_t timeo
 
    if (surf->pipe_fence) {
       struct pipe_screen *pscreen = drv->pipe->screen;
+      TVA_EXPORT_LOG("sync surface=%#x pipe fence=%p timeout=%" PRIu64 "\n",
+                     render_target, (void *)surf->pipe_fence, timeout_ns);
       if (!pscreen->fence_finish(pscreen, NULL, surf->pipe_fence, timeout_ns)) {
+         TVA_EXPORT_LOG("sync surface=%#x pipe fence timed out\n", render_target);
          mtx_unlock(&drv->mutex);
          return VA_STATUS_ERROR_TIMEDOUT;
       }
@@ -209,11 +288,15 @@ _vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target, uint64_t timeo
 
    /* No outstanding operation: nothing to do. */
    if (!fence) {
+      TVA_EXPORT_LOG("sync surface=%#x no decoder fence\n", render_target);
       mtx_unlock(&drv->mutex);
       return VA_STATUS_SUCCESS;
    }
 
    if (!context || !context->decoder) {
+      TVA_EXPORT_LOG("sync surface=%#x invalid context=%p decoder=%p\n",
+                     render_target, (void *)context,
+                     context ? (void *)context->decoder : NULL);
       mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_CONTEXT;
    }
@@ -221,6 +304,8 @@ _vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target, uint64_t timeo
    mtx_lock(&context->mutex);
    mtx_unlock(&drv->mutex);
    int ret = context->decoder->fence_wait(context->decoder, fence, timeout_ns);
+   TVA_EXPORT_LOG("sync surface=%#x decoder fence=%p result=%d\n",
+                  render_target, (void *)fence, ret);
    mtx_unlock(&context->mutex);
    return ret ? VA_STATUS_SUCCESS : VA_STATUS_ERROR_TIMEDOUT;
 }
@@ -785,6 +870,13 @@ vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface,
    if (!surface->buffer)
       return VA_STATUS_ERROR_ALLOCATION_FAILED;
 
+   /* The termux-va bridge fills every plane before exporting a decoded
+    * surface.  Avoid submitting the generic Gallium clear for these linear
+    * resources: the clear fence can otherwise serialize the independent
+    * KGSL Gallium and Vulkan queues before the first decoded frame. */
+   if (vl_va_bridge_skip_clear())
+      return VA_STATUS_SUCCESS;
+
    if (drv->pipe->screen->get_video_param(drv->pipe->screen,
                                           PIPE_VIDEO_PROFILE_UNKNOWN,
                                           PIPE_VIDEO_ENTRYPOINT_UNKNOWN,
@@ -1224,6 +1316,16 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
 
    drv    = VL_VA_DRIVER(ctx);
    screen = VL_VA_PSCREEN(ctx);
+
+   /* VA clients such as FFmpeg export surfaces before importing them into
+    * another API.  Make the bridge's staged frame copy visible before a
+    * read-capable DMA-BUF export; WRITE_ONLY exports are destinations. */
+   if (!(flags & VA_EXPORT_SURFACE_WRITE_ONLY)) {
+      ret = _vlVaSyncSurface(ctx, surface_id, VA_TIMEOUT_INFINITE);
+      if (ret != VA_STATUS_SUCCESS)
+         return ret;
+   }
+
    mtx_lock(&drv->mutex);
 
    surf = handle_table_get(drv->htab, surface_id);
@@ -1243,6 +1345,12 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
    }
 
    surfaces = surf->buffer->get_surfaces(surf->buffer);
+
+   if (vl_va_export_debug_enabled())
+      fprintf(stderr, "tva-export surface=%#x format=%d size=%ux%u flags=%#x mem=%#x p0=%p p1=%p\n",
+              surface_id, surf->buffer->buffer_format, surf->templat.width,
+              surf->templat.height, flags, mem_type,
+              surfaces[0].texture, surfaces[1].texture);
 
    usage = 0;
    if (flags & VA_EXPORT_SURFACE_WRITE_ONLY)
@@ -1297,9 +1405,18 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
 
       if (!screen->resource_get_handle(screen, drv->pipe, resource,
                                        &whandle, usage)) {
+         if (vl_va_export_debug_enabled())
+            fprintf(stderr, "tva-export resource_get_handle failed plane=%d res=%p\n",
+                    p, (void *)resource);
          ret = VA_STATUS_ERROR_INVALID_SURFACE;
          goto fail;
       }
+
+      if (vl_va_export_debug_enabled())
+         fprintf(stderr, "tva-export plane=%d fd=%d stride=%u offset=%u size=%" PRIu64 " mod=%#" PRIx64 " fmt=%#x\n",
+                 p, whandle.handle, whandle.stride, whandle.offset,
+                 whandle.size, whandle.modifier, drm_format);
+      vl_va_export_probe_fd(whandle.handle, whandle.size, p);
 
       /* If this plane shares storage with previous one, we can reuse
        * the existing object (fd) instead of adding new one.
@@ -1366,6 +1483,11 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
    return VA_STATUS_SUCCESS;
 
 fail:
+#ifndef _WIN32
+   if (vl_va_export_debug_enabled())
+      fprintf(stderr, "tva-export failed surface=%#x status=%#x objects=%u\n",
+              surface_id, ret, desc->num_objects);
+#endif
 #ifndef _WIN32
    for (i = 0; i < desc->num_objects; i++)
       close(desc->objects[i].fd);

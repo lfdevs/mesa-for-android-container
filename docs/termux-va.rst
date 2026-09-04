@@ -62,10 +62,10 @@ Data path
 - vaRenderPicture: the frontend parses the VA buffers and hands the
   bridge slice data that already carries H.264/HEVC start codes
   (parameter sets arrive as slice data buffers).
-- vaEndPicture: the bridge splits the picture into Annex B units (one
-  NALU per daemon length prefix), sends them, and returns; the pending
-  pipeline depth is capped at 6 to stay within the daemon's 8-slot SHM
-  pool.
+- vaEndPicture: the bridge sends the complete access unit as one daemon
+  input unit and associates one pending fence with the picture.  The normal
+  pending depth defaults to 6 and may grow while the decoder reorders output;
+  SHM mode clamps it to 8 to stay within the daemon's slot pool.
 - vaSyncSurface: the bridge waits for the frame tagged with the
   picture's unit index, stages it, and copies the visible (cropped)
   region into the surface's plane resources, honoring the decoder's

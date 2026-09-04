@@ -28,9 +28,9 @@
  *   vaRenderPicture -> frontend parses VA buffers, prepends H.264/HEVC
  *                      start codes to slice data, then calls
  *                      decode_bitstream(...)  -> we ACCUMULATE the bytes
- *   vaEndPicture    -> end_frame(...)      -> we split the accumulation into
- *                      Annex B units (one NALU per daemon length prefix),
- *                      send them, and register a fence for the picture
+ *   vaEndPicture    -> end_frame(...)      -> we send the accumulated Annex B
+ *                      access unit as one daemon input unit and register a
+ *                      fence for the picture
  *   vaSyncSurface   -> fence_wait(...)     -> we pump frames from the daemon,
  *                      stage the frame matching the picture's unit index,
  *                      and copy the visible (cropped) region into the
@@ -41,13 +41,11 @@
  * publishes a pending record before sending output-producing units.  The
  * fence_wait callback remains on the application thread and copies staged
  * planes through pipe_context after the reader signals the record.
-
  *
  * Unit-index pairing: the daemon tags every VCL input unit with an index
  * (1-based, parameter sets excluded) and carries it back on the matching
- * output frame.  A picture maps to the index of its LAST VCL unit
- * (MediaCodec stamps the completing input buffer's PTS onto the output
- * frame); frames with unknown indices fall back to FIFO matching.
+ * output frame.  A picture's complete access unit therefore maps to one
+ * index; frames with unknown indices fall back to FIFO matching.
  */
 #include "tva_bridge.h"
 
@@ -81,11 +79,10 @@
 #include "tva_client.h"
 #include "tva_protocol.h"
 
-/* Bridge-side pipeline depth.  In SHM mode it MUST stay <= SHM_SLOTS (8,
- * tva_protocol.h) or the daemon's slot pool stalls; inline delivery has no
- * such limit, so a deeper ring can be used to ride out decoder reordering
- * (TERMUX_VA_PIPELINE_DEPTH).  Same coupling as the upstream driver's
- * DMD_PIPELINE_DEPTH. */
+/* Normal bridge pipeline depth.  In SHM mode it MUST stay <= SHM_SLOTS (8,
+ * tva_protocol.h) or the daemon's slot pool stalls; the pending cache below
+ * may temporarily grow beyond this threshold while a decoder reorders output,
+ * but each SHM slot is released immediately after staging. */
 #define DMD_PIPELINE_DEPTH_MAX 32
 static unsigned tva_pipeline_depth_default = 6;
 
@@ -235,10 +232,11 @@ struct tva_fence;
 
 struct tva_pending {
     bool in_use;
-    uint32_t unit_seq;            /* last VCL unit index of the picture */
+    uint32_t unit_seq;            /* access-unit index of the picture */
     bool ready;                   /* staged frame available */
     bool failed;                  /* session error: fence must not hang */
     bool copied;                  /* staging already written into the target */
+    unsigned waiters;              /* fence_wait callers holding this entry */
     struct pipe_resource *resources[2]; /* owned until the entry is reaped */
     uint8_t *staging;
     size_t staging_size;
@@ -375,7 +373,7 @@ tva_pend_pop_locked(struct tva_codec *c)
         pipe_resource_reference(&p->resources[i], NULL);
     free(p->staging);
     memset(p, 0, sizeof(*p));
-    c->pend_head = (c->pend_head + 1) % c->pipeline_depth;
+    c->pend_head = (c->pend_head + 1) % DMD_PIPELINE_DEPTH_MAX;
     c->pend_count--;
 }
 
@@ -385,7 +383,7 @@ tva_pend_find_locked(struct tva_codec *c, uint32_t unit_seq)
 {
     for (unsigned i = 0; i < c->pend_count; i++) {
         struct tva_pending *p =
-            &c->pend[(c->pend_head + i) % c->pipeline_depth];
+            &c->pend[(c->pend_head + i) % DMD_PIPELINE_DEPTH_MAX];
         if (p->in_use && !p->ready && unit_seq && p->unit_seq == unit_seq)
             return p;
     }
@@ -402,7 +400,7 @@ tva_fail_pending_locked(struct tva_codec *c)
 {
     for (unsigned i = 0; i < c->pend_count; i++) {
         struct tva_pending *p =
-            &c->pend[(c->pend_head + i) % c->pipeline_depth];
+            &c->pend[(c->pend_head + i) % DMD_PIPELINE_DEPTH_MAX];
         if (!p->ready) {
             p->ready = true;
             p->failed = true;
@@ -456,6 +454,39 @@ tva_detach_fence_locked(struct tva_fence *fence, bool fail)
     }
 }
 
+static bool
+tva_copy_frame(struct tva_codec *c, struct tva_pending *p);
+
+/* Caller must hold pend_mutex.  A pending entry is reclaimable only after its
+ * frame has been staged and no fence waiter is still using it.  The copy is
+ * deliberately performed here, on the application thread; the reader thread
+ * is restricted to socket I/O and staging. */
+static int
+tva_pend_retire_oldest_locked(struct tva_codec *c)
+{
+    struct tva_pending *p = tva_pend_oldest(c);
+    if (!p || p->waiters || !p->ready)
+        return 0;
+
+    if (!p->failed && !p->copied && p->staging) {
+        p->copied = tva_copy_frame(c, p);
+        TVA_TRACE("retire copy unit=%u result=%d", p->unit_seq, p->copied);
+        if (!p->copied)
+            p->failed = true;
+    }
+    if (!p->copied && !p->failed)
+        return -1;
+
+    if (p->fence) {
+        p->fence->failed = p->failed;
+        p->fence->slot = NULL;
+        p->fence = NULL;
+    }
+    tva_pend_pop_locked(c);
+    u_cnd_monotonic_broadcast(&c->pend_cond);
+    return 1;
+}
+
 /* Caller must hold pend_mutex. */
 static struct tva_pending *
 tva_pend_reserve_locked(struct tva_codec *c, uint32_t unit_seq,
@@ -463,20 +494,57 @@ tva_pend_reserve_locked(struct tva_codec *c, uint32_t unit_seq,
                        struct tva_fence *fence)
 {
     while (c->pend_count >= c->pipeline_depth) {
-        struct tva_pending *oldest = tva_pend_oldest(c);
-        if (oldest) {
-            oldest->ready = true;
-            oldest->failed = true;
-            if (oldest->fence) {
-                oldest->fence->failed = true;
-                tva_detach_fence_locked(oldest->fence, false);
-            }
+        int retired = tva_pend_retire_oldest_locked(c);
+        if (retired > 0)
+            continue;
+        if (retired < 0) {
+            tva_mark_broken_locked(c);
+            return NULL;
         }
-        tva_pend_pop_locked(c);
+
+        /* The normal threshold is a scheduling hint, not a reason to drop a
+         * frame.  If the decoder is still reordering the oldest output, let
+         * the host-side pending cache grow up to its fixed bound. */
+        if (c->pend_count < DMD_PIPELINE_DEPTH_MAX)
+            break;
+
+        struct tva_pending *oldest = tva_pend_oldest(c);
+        if (!oldest) {
+            tva_mark_broken_locked(c);
+            return NULL;
+        }
+
+        /* The cache is full.  Wait for the oldest frame to become available,
+         * then retire it on this application thread before reserving space. */
+        uint64_t deadline = os_time_get_nano() +
+                            (uint64_t)SHM_SLOT_WAIT_MS * 1000000ull;
+        while (!oldest->ready || oldest->waiters) {
+            if (c->broken) {
+                tva_fail_pending_locked(c);
+                break;
+            }
+            uint64_t now = os_time_get_nano();
+            if (now >= deadline) {
+                tva_mark_broken_locked(c);
+                return NULL;
+            }
+            struct timespec ts;
+            timespec_from_nsec(&ts, MIN2(deadline, now + 200000000ull));
+            u_cnd_monotonic_timedwait(&c->pend_cond, &c->pend_mutex, &ts);
+            oldest = tva_pend_oldest(c);
+            if (!oldest)
+                break;
+        }
+
+        retired = tva_pend_retire_oldest_locked(c);
+        if (retired <= 0) {
+            tva_mark_broken_locked(c);
+            return NULL;
+        }
     }
 
     struct tva_pending *p =
-        &c->pend[(c->pend_head + c->pend_count) % c->pipeline_depth];
+        &c->pend[(c->pend_head + c->pend_count) % DMD_PIPELINE_DEPTH_MAX];
     memset(p, 0, sizeof(*p));
     p->in_use = true;
     p->unit_seq = unit_seq;
@@ -496,6 +564,24 @@ tva_pend_reserve_locked(struct tva_codec *c, uint32_t unit_seq,
 }
 
 static bool
+tva_cpu_copy_enabled(void)
+{
+    const char *e = getenv("DMD_VA_CPU_COPY");
+    if (e && *e)
+        return !(strcmp(e, "0") == 0 || strcmp(e, "false") == 0 ||
+                 strcmp(e, "off") == 0);
+
+    /* KGSL exposes Gallium and Turnip as separate GPU contexts.  A
+     * texture_subdata() upload can complete in the Gallium context while
+     * leaving cache state that is not visible to the importing Turnip
+     * context.  Linear CPU writes provide the cache hand-off required by the
+     * dma-buf export path. */
+    const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
+    return backend && (strcmp(backend, "kgsl") == 0 ||
+                       strcmp(backend, "KGSL") == 0);
+}
+
+static bool
 tva_copy_plane(struct pipe_context *pipe, struct pipe_resource *res,
                const uint8_t *data, unsigned w, unsigned h, unsigned stride)
 {
@@ -504,29 +590,105 @@ tva_copy_plane(struct pipe_context *pipe, struct pipe_resource *res,
         stride < w * blocksize)
         return false;
 
-    struct pipe_box box = {0, 0, 0, (int)w, (int)h, 1};
-
-    if (pipe->texture_subdata) {
+    struct pipe_box box = {
+        .x = 0,
+        .width = (int)w,
+        .y = 0,
+        .height = (int)h,
+        .z = 0,
+        .depth = 1,
+    };
+    TVA_TRACE("copy plane fmt=%s %ux%u stride=%u src=%02x %02x %02x %02x",
+              util_format_short_name(res->format), w, h, stride,
+              data[0], data[1], data[2], data[3]);
+    /* On KGSL use a CPU-mapped upload by default.  The imported dma-buf is
+     * then flushed by Turnip when it is subsequently imported.  Other
+     * backends retain the asynchronous texture_subdata path, and callers can
+     * force either mode with DMD_VA_CPU_COPY=1/0. */
+    if (tva_cpu_copy_enabled() && pipe->texture_map &&
+        pipe->texture_unmap) {
+        TVA_TRACE("copy path=cpu");
+        struct pipe_transfer *transfer = NULL;
+        uint8_t *dst = pipe->texture_map(pipe, res, 0, PIPE_MAP_WRITE,
+                                          &box, &transfer);
+        if (!dst || !transfer) {
+            if (transfer)
+                pipe->texture_unmap(pipe, transfer);
+            return false;
+        }
+        unsigned row_bytes = w * blocksize;
+        if (transfer->stride < row_bytes) {
+            pipe->texture_unmap(pipe, transfer);
+            return false;
+        }
+        for (unsigned y = 0; y < h; y++)
+            memcpy(dst + (size_t)y * transfer->stride,
+                   data + (size_t)y * stride, row_bytes);
+        pipe->texture_unmap(pipe, transfer);
+    } else if (pipe->texture_subdata) {
+        TVA_TRACE("copy path=gpu");
         pipe->texture_subdata(pipe, res, 0, PIPE_MAP_WRITE, &box, data,
                               stride, (uintptr_t)stride);
-        return true;
-    }
-
-    struct pipe_transfer *transfer = NULL;
-    void *map = pipe->texture_map(pipe, res, 0, PIPE_MAP_WRITE, &box,
-                                  &transfer);
-    if (!map || !transfer)
-        return false;
-    size_t row_bytes = (size_t)w * blocksize;
-    if (transfer->stride < row_bytes) {
-        pipe->texture_unmap(pipe, transfer);
+    } else {
         return false;
     }
-    for (unsigned row = 0; row < h; row++)
-        memcpy((uint8_t *)map + (size_t)row * transfer->stride,
-               data + (size_t)row * stride, row_bytes);
-    pipe->texture_unmap(pipe, transfer);
     return true;
+}
+
+/* texture_subdata() is asynchronous when the real context is wrapped by
+ * threaded_context.  The bridge fence is the completion point exposed to VA
+ * clients, so make the queued resource writes visible before signaling it. */
+static bool
+tva_flush_copy(struct pipe_context *pipe)
+{
+    struct pipe_fence_handle *fence = NULL;
+    struct pipe_screen *screen;
+    bool ready = true;
+
+    if (!pipe || !pipe->flush || !(screen = pipe->screen))
+        return false;
+
+    pipe->flush(pipe, &fence, 0);
+    if (fence) {
+        ready = screen->fence_finish(screen, pipe, fence,
+                                     OS_TIMEOUT_INFINITE);
+        screen->fence_reference(screen, &fence, NULL);
+    }
+    TVA_TRACE("copy flush ready=%d", ready);
+    return ready;
+}
+
+static void
+tva_probe_resource(struct pipe_context *pipe, struct pipe_resource *res,
+                   unsigned width)
+{
+    const char *e = getenv("DMD_VA_PROBE");
+    if (!e || e[0] != '1' || !pipe || !res || !pipe->texture_map ||
+        !pipe->texture_unmap)
+        return;
+
+    struct pipe_box box = {
+        .x = 0,
+        .width = (int)MIN2(width, 8u),
+        .y = 0,
+        .height = 1,
+        .z = 0,
+        .depth = 1,
+    };
+    struct pipe_transfer *transfer = NULL;
+    uint8_t *map = pipe->texture_map(pipe, res, 0, PIPE_MAP_READ, &box,
+                                      &transfer);
+    if (!map || !transfer) {
+        fprintf(stderr, "tva: resource probe map failed res=%p\n",
+                (void *)res);
+        if (transfer)
+            pipe->texture_unmap(pipe, transfer);
+        return;
+    }
+    fprintf(stderr, "tva: resource probe res=%p stride=%u bytes=%02x %02x %02x %02x %02x %02x %02x %02x\n",
+            (void *)res, transfer->stride, map[0], map[1], map[2], map[3],
+            map[4], map[5], map[6], map[7]);
+    pipe->texture_unmap(pipe, transfer);
 }
 
 static bool
@@ -595,12 +757,25 @@ tva_copy_frame(struct tva_codec *c, struct tva_pending *p)
     if (y_end > p->staging_size || uv_end > p->staging_size)
         return false;
 
-    if (!tva_copy_plane(c->pipe, p->resources[0], p->staging + y_offset,
+    struct pipe_context *pipe = c->pipe;
+    if (!pipe)
+        return false;
+
+    TVA_TRACE("copy frame unit=%u frame=%ux%u stride=%d slice=%d crop=%d,%d-%d,%d yoff=%zu uvoff=%zu size=%zu",
+              p->unit_seq, p->frame_width, p->frame_height, p->stride,
+              p->slice_height, p->crop_left, p->crop_top, p->crop_right,
+              p->crop_bottom, y_offset, uv_offset, p->staging_size);
+
+    if (!tva_copy_plane(pipe, p->resources[0], p->staging + y_offset,
                         w, h, (unsigned)p->stride))
         return false;
-    if (!tva_copy_plane(c->pipe, p->resources[1], p->staging + uv_offset,
+    if (!tva_copy_plane(pipe, p->resources[1], p->staging + uv_offset,
                         uv_w, uv_h, (unsigned)p->stride))
         return false;
+    if (!tva_flush_copy(pipe))
+        return false;
+    tva_probe_resource(pipe, p->resources[0], w);
+    tva_probe_resource(pipe, p->resources[1], uv_w * 2);
     return true;
 }
 
@@ -645,6 +820,9 @@ tva_reader_thread(void *param)
             mtx_unlock(&c->pend_mutex);
             break;
         }
+
+        TVA_TRACE("reader frame unit=%u size=%zu slot=%d", f.unit_seq,
+                  f.size, f.shm_slot);
 
         /* Match the frame to a pending picture by unit index.  Unknown
          * indices fall back to the oldest waiting entry for old peers. */
@@ -930,6 +1108,9 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
     if (!c->sess)
         return 0;   /* TVA_NO_SESSION dry run */
 
+    if (!c->acc_len)
+        return 0;   /* an empty VA picture carries no decode work */
+
     int codec_id = tva_codec_id(c->base.profile);
     enum pipe_video_format format = u_reduce_video_profile(c->base.profile);
     struct tva_pending *pending = NULL;
@@ -1014,58 +1195,19 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                 return -1;
         }
 
-    /* Reserve the picture before the first VCL reaches the daemon.  The
-     * daemon reports the completing unit's sequence number, so calculate the
-     * final sequence up front when a picture contains several slices. */
-    uint32_t picture_last_vcl = (uint32_t)c->next_unit;
-    size_t scan = 0;
-    while (scan < c->acc_len) {
-        size_t sc = tva_next_start_code(c->acc, c->acc_len, scan);
-        if (sc >= c->acc_len)
-            break;
-        size_t next = tva_next_start_code(c->acc, c->acc_len, sc + 3);
-        if (next > c->acc_len)
-            next = c->acc_len;
-        size_t end = next;
-        if (end < c->acc_len) {
-            while (end > sc + 3 && c->acc[end - 1] == 0)
-                end--;
-        }
-        if (!tva_is_param_set(codec_id, c->acc + sc, end - sc)) {
-            if (picture_last_vcl == UINT32_MAX) {
-                tva_mark_broken(c);
-                return -1;
-            }
-            picture_last_vcl++;
-        }
-        scan = next;
-    }
-    if (picture_last_vcl != (uint32_t)c->next_unit) {
-        struct tva_fence *fence = CALLOC_STRUCT(tva_fence);
-        if (!fence) {
-            tva_mark_broken(c);
-            return -1;
-        }
-        mtx_lock(&c->pend_mutex);
-        pending = tva_pend_reserve_locked(c, picture_last_vcl, target, fence);
-        mtx_unlock(&c->pend_mutex);
-        if (picture && picture->out_fence) {
-            if (*picture->out_fence)
-                tva_codec_destroy_fence(codec, *picture->out_fence);
-            *picture->out_fence = (struct pipe_fence_handle *)fence;
-        }
-    }
-
-    /* Split the accumulation into Annex B units: exactly one NALU per
-         * daemon length prefix, each KEEPING its start code.  Zeros before
-         * a following start code (4-byte-code padding) are stripped; the
-         * tail of the last NALU is kept verbatim (cabac_zero_words are
-         * legal trailing data). */
-        size_t pos = 0;
-        while (pos < c->acc_len) {
-            size_t sc = tva_next_start_code(c->acc, c->acc_len, pos);
+        /* A VA picture may contain several slice NALUs.  MediaCodec consumes
+         * an access unit, not an individual slice: sending each slice as a
+         * separate input buffer gives the decoder several different PTS
+         * values for one output frame, and the value returned on that frame
+         * is implementation dependent (usually the first or last slice).
+         * Keep the NALUs together so one daemon unit and one PTS identify the
+         * whole picture. */
+        bool have_vcl = false;
+        size_t scan = 0;
+        while (scan < c->acc_len) {
+            size_t sc = tva_next_start_code(c->acc, c->acc_len, scan);
             if (sc >= c->acc_len)
-                break;   /* trailing bytes without a start code: dropped */
+                break;
             size_t next = tva_next_start_code(c->acc, c->acc_len, sc + 3);
             if (next > c->acc_len)
                 next = c->acc_len;
@@ -1074,23 +1216,62 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                 while (end > sc + 3 && c->acc[end - 1] == 0)
                     end--;
             }
-
-            bool param = tva_is_param_set(codec_id, c->acc + sc, end - sc);
-            TVA_TRACE("unit off=%zu len=%zu nal=%d param=%d",
-                      sc, end - sc,
-                      tva_nalu_type(c->acc + sc, end - sc), param);
-            int r = tva_session_send_unit(c->sess, c->acc + sc, end - sc);
-            if (r != TVA_OK) {
-                debug_printf("tva: send_unit failed: %s\n",
-                             tva_session_last_error(c->sess));
+            if (!tva_is_param_set(codec_id, c->acc + sc, end - sc))
+                have_vcl = true;
+            scan = next;
+        }
+        if (have_vcl && c->next_unit >= UINT32_MAX) {
+            debug_printf("tva: input unit sequence exhausted\n");
+            c->acc_len = 0;
+            tva_mark_broken(c);
+            return -1;
+        }
+        uint32_t picture_unit = have_vcl ? (uint32_t)c->next_unit + 1
+                                         : (uint32_t)c->next_unit;
+        if (c->acc_len > MAX_FRAME) {
+            debug_printf("tva: picture access unit too large (%zu bytes)\n",
+                         c->acc_len);
+            c->acc_len = 0;
+            tva_mark_broken(c);
+            return -1;
+        }
+        if (have_vcl) {
+            if (picture_unit == 0) {
                 tva_mark_broken(c);
                 return -1;
             }
-            if (!param) {
-                c->next_unit++;
-                last_vcl = (uint32_t)c->next_unit;
+            struct tva_fence *fence = CALLOC_STRUCT(tva_fence);
+            if (!fence) {
+                tva_mark_broken(c);
+                return -1;
             }
-            pos = next;
+            mtx_lock(&c->pend_mutex);
+            pending = tva_pend_reserve_locked(c, picture_unit, target, fence);
+            mtx_unlock(&c->pend_mutex);
+            if (!pending) {
+                FREE(fence);
+                c->acc_len = 0;
+                return -1;
+            }
+            if (picture && picture->out_fence) {
+                if (*picture->out_fence)
+                    tva_codec_destroy_fence(codec, *picture->out_fence);
+                *picture->out_fence = (struct pipe_fence_handle *)fence;
+            }
+        }
+
+        TVA_TRACE("access unit len=%zu vcl=%d unit=%u", c->acc_len,
+                  have_vcl, picture_unit);
+        int r = tva_session_send_unit(c->sess, c->acc, c->acc_len);
+        if (r != TVA_OK) {
+            debug_printf("tva: send_unit failed: %s\n",
+                         tva_session_last_error(c->sess));
+            tva_mark_broken(c);
+            return -1;
+        }
+        if (have_vcl) {
+            c->next_unit++;
+            last_vcl = (uint32_t)c->next_unit;
         }
     } else {
         /* VP9 (and any future no-start-code codec): one whole frame */
@@ -1102,6 +1283,11 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
         pending = tva_pend_reserve_locked(c, (uint32_t)(c->next_unit + 1),
                                           target, fence);
         mtx_unlock(&c->pend_mutex);
+        if (!pending) {
+            FREE(fence);
+            c->acc_len = 0;
+            return -1;
+        }
         if (picture && picture->out_fence) {
             if (*picture->out_fence)
                 tva_codec_destroy_fence(codec, *picture->out_fence);
@@ -1183,8 +1369,9 @@ tva_codec_fence_wait(struct pipe_video_codec *codec,
     p = fence->slot;
     if (!p) {
         mtx_unlock(&c->pend_mutex);
-        return 0;
+        return 1;
     }
+    p->waiters++;
     while (!p->ready) {
         if (!infinite && timeout == 0) {
             ret = 0;
@@ -1202,13 +1389,19 @@ tva_codec_fence_wait(struct pipe_video_codec *codec,
         u_cnd_monotonic_timedwait(&c->pend_cond, &c->pend_mutex, &ts);
     }
 
+    TVA_TRACE("fence unit=%u ready=%d failed=%d copied=%d staging=%p",
+              p->unit_seq, p->ready, p->failed, p->copied, (void *)p->staging);
+
     if (p->ready && !p->failed && !p->copied && p->staging) {
         p->copied = tva_copy_frame(c, p);
+        TVA_TRACE("fence copy unit=%u result=%d", p->unit_seq, p->copied);
         if (!p->copied)
             p->failed = true;
     }
     if (p->failed)
         ret = 0;
+    p->waiters--;
+    u_cnd_monotonic_broadcast(&c->pend_cond);
     mtx_unlock(&c->pend_mutex);
     return ret;
 }
@@ -1312,6 +1505,8 @@ tva_pipe_create_video_codec(struct pipe_context *context,
      * kept on purpose) */
     const char *shm = getenv("DMD_WANT_SHM");
     cfg.want_shm = !(shm && !strcmp(shm, "0"));
+    if (cfg.want_shm && pipeline_depth > SHM_SLOTS)
+        pipeline_depth = SHM_SLOTS;
 
     struct tva_error err;
     memset(&err, 0, sizeof(err));

@@ -30,6 +30,10 @@
 #include "tu_tracepoints.h"
 #include "tu_trace_bin_layout.h"
 
+#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 enum tu_cmd_buffer_status {
    TU_CMD_BUFFER_STATUS_IDLE = 0,
    TU_CMD_BUFFER_STATUS_ACTIVE = 1,
@@ -5821,6 +5825,14 @@ tu_flush_for_access(struct tu_cache_state *cache,
 
    cache->flush_bits |= flush_bits;
    cache->pending_flush_bits &= ~flush_bits;
+
+   if (getenv("TU_KGSL_DEBUG_BARRIER")) {
+      fprintf(stderr,
+              "tu access src=%#x dst=%#x add=%#x flush=%#x pending=%#x\n",
+              (unsigned)src_mask, (unsigned)dst_mask, (unsigned)flush_bits,
+              (unsigned)cache->flush_bits,
+              (unsigned)cache->pending_flush_bits);
+   }
 }
 
 /* When translating Vulkan access flags to which cache is accessed
@@ -10183,6 +10195,18 @@ tu_barrier(struct tu_cmd_buffer *cmd,
 
    struct tu_cache_state *cache =
       cmd->state.pass  ? &cmd->state.renderpass_cache : &cmd->state.cache;
+
+   if (getenv("TU_KGSL_DEBUG_BARRIER")) {
+      fprintf(stderr,
+              "tu barrier srcStage=%#" PRIx64 " dstStage=%#" PRIx64
+              " src=%#x dst=%#x no_sync=%d pass=%d gmem=%d preflush=%#x"
+              " prepen=%#x\n",
+              (uint64_t)srcStage, (uint64_t)dstStage,
+              (unsigned)src_flags, (unsigned)dst_flags, no_sync,
+              cmd->state.pass != NULL, gmem,
+              (unsigned)cache->flush_bits,
+              (unsigned)cache->pending_flush_bits);
+   }
 
    /* a750 has a HW bug where writing a UBWC compressed image with a compute
     * shader followed by reading it as a texture (or readonly image) requires

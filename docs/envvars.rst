@@ -1449,6 +1449,21 @@ decode).  See :doc:`termux-va`.
    ``DMD_`` prefix is kept for compatibility with the upstream protocol
    tooling.
 
+.. envvar:: TERMUX_VA_PIPELINE_DEPTH
+
+   sets the bridge's normal pending-picture depth to a value from 2 to 32
+   (default 6).
+   When shared-memory transport is enabled, the value is clamped to the
+   daemon's ``SHM_SLOTS`` limit.
+
+.. envvar:: DMD_VA_CPU_COPY
+
+   controls how staged frames are copied into bridge surfaces.  On the KGSL
+   backend CPU-mapped writes are enabled by default to make the cache handoff
+   to a separate Vulkan/KGSL importer explicit.  Set to ``0``, ``false`` or
+   ``off`` to retain the asynchronous Gallium ``texture_subdata`` path; set
+   to any other non-empty value to force CPU copies.
+
 .. envvar:: DMD_VA_LOG
 
    set to ``1`` to enable the bridge's daemon-client logging on stderr.

@@ -214,8 +214,10 @@ void tva_session_destroy(struct tva_session *s);
 
 /*
  * Send one data unit.
- *   H.264/HEVC: one NALU WITH its Annex B start code (3 or 4 bytes) - the
- *               daemon locates the nal_unit_header through it
+ *   H.264/HEVC: one or more NALUs WITH their Annex B start codes (3 or 4
+ *               bytes each) - the daemon locates the first nal_unit_header
+ *               through the leading start code.  A complete access unit may
+ *               contain multiple slice NALUs.
  *   VP8/VP9:    one whole frame WITHOUT start codes
  * The library never adds start codes itself (adding them wrongly corrupts
  * the stream silently); H.264/HEVC units without a start code are rejected
