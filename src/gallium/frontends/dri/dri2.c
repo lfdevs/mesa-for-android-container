@@ -698,6 +698,11 @@ dri_create_image_from_winsys(struct dri_screen *screen,
    const unsigned format_planes = util_format_get_num_planes(map->pipe_format);
    uint64_t modifier = whandle[0].modifier;
 
+   if (getenv("DMD_VA_LOG"))
+      fprintf(stderr, "tva-dri import begin fourcc=%#x map=%s %ux%u handles=%d modifier=%#" PRIx64 "\n",
+              map->dri_fourcc, util_format_short_name(map->pipe_format),
+              width, height, num_handles, modifier);
+
    if (format_and_modifier_supported(pscreen, map->pipe_format, screen->target, 0, 0,
                                      PIPE_BIND_RENDER_TARGET, modifier))
       tex_usage |= PIPE_BIND_RENDER_TARGET;
@@ -713,6 +718,17 @@ dri_create_image_from_winsys(struct dri_screen *screen,
                                      screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW, modifier)) {
       map = &r8_g8b8_mapping;
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
+      /* On the KGSL/ANGLE path, importing the high-level
+       * R8_G8B8_420 resource can produce stale or incorrectly sampled
+       * frames even though the underlying dma-buf planes are valid.  Use the
+       * native R8/GR88 plane resources for that Android backend. */
+      const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
+      if (backend && (!strcmp(backend, "kgsl") ||
+                      !strcmp(backend, "KGSL")))
+         use_lowered = true;
+      if (getenv("DMD_VA_LOG"))
+         fprintf(stderr, "tva-dri import fallback NV12 -> %s\n",
+                 util_format_short_name(map->pipe_format));
    }
 
    /* For NV21, see if we have support for sampling r8_b8g8 */
@@ -833,6 +849,11 @@ dri_create_image_from_winsys(struct dri_screen *screen,
    if (!tex_usage)
       return NULL;
 
+   if (getenv("DMD_VA_LOG"))
+      fprintf(stderr, "tva-dri import selected map=%s usage=%#x lowered=%d planes=%u\n",
+              util_format_short_name(map->pipe_format), tex_usage,
+              use_lowered, format_planes);
+
    img = CALLOC_STRUCT(dri_image);
    if (!img)
       return NULL;
@@ -858,12 +879,20 @@ dri_create_image_from_winsys(struct dri_screen *screen,
 
       tex = pscreen->resource_from_handle(pscreen, &templ, &whandle[i], handle_usage);
       if (!tex) {
+         if (getenv("DMD_VA_LOG"))
+            fprintf(stderr, "tva-dri import resource failed extra plane=%d fmt=%s %ux%u stride=%u offset=%u\n",
+                    i, util_format_short_name(templ.format), templ.width0,
+                    templ.height0, whandle[i].stride, whandle[i].offset);
          pipe_resource_reference(&img->texture, NULL);
          FREE(img);
          return NULL;
       }
 
       img->texture = tex;
+      if (getenv("DMD_VA_LOG"))
+         fprintf(stderr, "tva-dri import resource extra plane=%d fmt=%s %ux%u stride=%u offset=%u ok\n",
+                 i, util_format_short_name(templ.format), templ.width0,
+                 templ.height0, whandle[i].stride, whandle[i].offset);
    }
 
    for (i = (use_lowered ? map->nplanes : format_planes) - 1; i >= 0; i--) {
@@ -882,6 +911,11 @@ dri_create_image_from_winsys(struct dri_screen *screen,
                &templ, &whandle[use_lowered ? map->planes[i].buffer_index : i],
                handle_usage);
       if (!tex) {
+         if (getenv("DMD_VA_LOG"))
+            fprintf(stderr, "tva-dri import resource failed plane=%d fmt=%s %ux%u stride=%u offset=%u\n",
+                    i, util_format_short_name(templ.format), templ.width0,
+                    templ.height0, whandle[use_lowered ? map->planes[i].buffer_index : i].stride,
+                    whandle[use_lowered ? map->planes[i].buffer_index : i].offset);
          pipe_resource_reference(&img->texture, NULL);
          FREE(img);
          return NULL;
@@ -900,6 +934,11 @@ dri_create_image_from_winsys(struct dri_screen *screen,
       }
 
       img->texture = tex;
+      if (getenv("DMD_VA_LOG"))
+         fprintf(stderr, "tva-dri import resource plane=%d fmt=%s %ux%u stride=%u offset=%u ok\n",
+                 i, util_format_short_name(templ.format), templ.width0,
+                 templ.height0, whandle[use_lowered ? map->planes[i].buffer_index : i].stride,
+                 whandle[use_lowered ? map->planes[i].buffer_index : i].offset);
    }
 
    img->level = 0;
@@ -1419,6 +1458,11 @@ dri2_from_dma_bufs(struct dri_screen *screen,
    struct dri_image *img;
    const struct dri2_format_mapping *map = dri2_get_mapping_by_fourcc(fourcc);
 
+   if (getenv("DMD_VA_LOG"))
+      fprintf(stderr, "tva-dri from_dma_bufs fourcc=%#x %ux%u modifier=%#" PRIx64 " fds=%d map=%s\n",
+              fourcc, width, height, modifier, num_fds,
+              map ? util_format_short_name(map->pipe_format) : "none");
+
    if (!screen->dmabuf_import) {
       if (error)
          *error = __DRI_IMAGE_ERROR_BAD_PARAMETER;
@@ -1439,11 +1483,17 @@ dri2_from_dma_bufs(struct dri_screen *screen,
 
    const int expected_num_fds = dri2_get_modifier_num_planes(screen, modifier, fourcc);
    if (!map || expected_num_fds == 0) {
+      if (getenv("DMD_VA_LOG"))
+         fprintf(stderr, "tva-dri from_dma_bufs reject map=%p expected_fds=%d\n",
+                 (void *)map, expected_num_fds);
       err = __DRI_IMAGE_ERROR_BAD_MATCH;
       goto exit;
    }
 
    if (num_fds != expected_num_fds) {
+      if (getenv("DMD_VA_LOG"))
+         fprintf(stderr, "tva-dri from_dma_bufs reject fd count=%d expected=%d\n",
+                 num_fds, expected_num_fds);
       err = __DRI_IMAGE_ERROR_BAD_MATCH;
       goto exit;
    }

@@ -190,6 +190,28 @@ kgsl_bo_from_dmabuf(struct fd_device *dev, int fd)
     kgsl_bo->bo_type = KGSL_BO_IMPORT;
     kgsl_bo->import_fd = os_dupfd_cloexec(fd);
 
+    /* A dma-buf may have been populated through a cached CPU mapping in
+     * another API (for example the termux-va VA bridge).  KGSL does not
+     * infer that CPU-to-GPU transition from the dma-buf import itself.  Flush
+     * the imported object before the first GPU read, matching Turnip's KGSL
+     * import path.  Keep import successful on kernels which do not implement
+     * GPUOBJ_SYNC; those kernels still retain the historical behaviour. */
+    struct kgsl_gpuobj_sync_obj sync_obj = {
+        .offset = 0,
+        .length = bo->size,
+        .id = bo->handle,
+        .op = KGSL_GPUMEM_CACHE_FLUSH,
+    };
+    struct kgsl_gpuobj_sync sync = {
+        .objs = (uintptr_t)&sync_obj,
+        .obj_len = sizeof(sync_obj),
+        .count = 1,
+    };
+    if (kgsl_pipe_safe_ioctl(dev->fd, IOCTL_KGSL_GPUOBJ_SYNC, &sync) != 0 &&
+        getenv("DMD_VA_LOG"))
+        fprintf(stderr, "kgsl: dma-buf GPU cache sync failed id=%u errno=%d\n",
+                bo->handle, errno);
+
     return bo;
 }
 
