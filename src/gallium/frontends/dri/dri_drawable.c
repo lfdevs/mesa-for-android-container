@@ -106,6 +106,12 @@ dri_st_framebuffer_validate(struct st_context *st,
    if (!out)
       return true;
 
+   /* Once the state tracker gets the attachments it may render to them again.
+    * This also invalidates the optimization when validation reused an image
+    * without calling allocate_textures().
+    */
+   drawable->back_buffer_fenced = false;
+
    /* Set the window-system buffers for the gallium frontend. */
    for (i = 0; i < count; i++)
       pipe_resource_reference(&out[i], textures[statts[i]]);
@@ -455,30 +461,36 @@ notify_before_flush_cb(void* _args)
  * \param flags             a combination of _DRI2_FLUSH_xxx flags
  * \param throttle_reason   the reason for throttling, 0 = no throttling
  */
-void
-dri_flush(struct dri_context *ctx,
-          struct dri_drawable *drawable,
-          unsigned flags,
-          enum __DRI2throttleReason reason)
+static int
+dri_flush_impl(struct dri_context *ctx,
+               struct dri_drawable *drawable,
+               unsigned flags,
+               enum __DRI2throttleReason reason,
+               bool request_fence_fd)
 {
    struct st_context *st;
+   struct pipe_screen *screen;
+   struct pipe_fence_handle *new_fence = NULL;
    unsigned flush_flags;
+   int fence_fd = -1;
    struct notify_before_flush_cb_args args = { 0 };
 
    if (!ctx) {
       assert(0);
-      return;
+      return -1;
    }
 
    st = ctx->st;
+   screen = ctx->screen->base.screen;
    _mesa_glthread_finish(st->ctx);
 
    if (drawable) {
       /* prevent recursion */
       if (drawable->flushing)
-         return;
+         return -1;
 
       drawable->flushing = true;
+      drawable->back_buffer_fenced = false;
    }
    else {
       flags &= ~__DRI2_FLUSH_DRAWABLE;
@@ -505,23 +517,53 @@ dri_flush(struct dri_context *ctx,
        reason == __DRI2_NOTHROTTLE_SWAPBUFFER)
       flush_flags |= ST_FLUSH_END_OF_FRAME;
 
+   if (request_fence_fd && screen->caps.native_fence_fd) {
+      if (st->pipe->set_context_param) {
+         st->pipe->set_context_param(st->pipe,
+                                     PIPE_CONTEXT_PARAM_EXPLICIT_PRESENT_FENCE,
+                                     true);
+      }
+      flush_flags |= ST_FLUSH_FENCE_FD;
+   } else {
+      request_fence_fd = false;
+   }
+
    /* Flush the context and throttle if needed. */
-   if (ctx->screen->throttle &&
-       drawable &&
-       (reason == __DRI2_THROTTLE_SWAPBUFFER ||
-        reason == __DRI2_THROTTLE_FLUSHFRONT)) {
+   const bool throttle = ctx->screen->throttle && drawable &&
+      (reason == __DRI2_THROTTLE_SWAPBUFFER ||
+       reason == __DRI2_THROTTLE_FLUSHFRONT);
 
-      struct pipe_screen *screen = drawable->screen->base.screen;
-      struct pipe_fence_handle *new_fence = NULL;
-
+   if ((flags & (__DRI2_FLUSH_DRAWABLE | __DRI2_FLUSH_CONTEXT)) &&
+       (throttle || request_fence_fd)) {
       st_context_flush(st, flush_flags, &new_fence, args.ctx ? notify_before_flush_cb : NULL, &args);
 
-      /* throttle on the previous fence */
-      if (drawable->throttle_fence) {
-         screen->fence_finish(screen, NULL, drawable->throttle_fence, OS_TIMEOUT_INFINITE);
-         screen->fence_reference(screen, &drawable->throttle_fence, NULL);
+      if (request_fence_fd && new_fence)
+         fence_fd = screen->fence_get_fd(screen, new_fence);
+
+      /* If native-fence export failed after the rendering flush, wait on the
+       * exact pipe fence before allowing an unfenced Present request.
+       */
+      if (request_fence_fd && fence_fd < 0) {
+         if (!new_fence)
+            st_context_flush(st, 0, &new_fence, NULL, NULL);
+         if (new_fence)
+            screen->fence_finish(screen, NULL, new_fence,
+                                 OS_TIMEOUT_INFINITE);
       }
-      drawable->throttle_fence = new_fence;
+
+      if (throttle) {
+         /* throttle on the previous fence */
+         if (drawable->throttle_fence) {
+            screen->fence_finish(screen, NULL, drawable->throttle_fence,
+                                 OS_TIMEOUT_INFINITE);
+            screen->fence_reference(screen, &drawable->throttle_fence, NULL);
+         }
+         drawable->throttle_fence = new_fence;
+         new_fence = NULL;
+      }
+
+      if (new_fence)
+         screen->fence_reference(screen, &new_fence, NULL);
    }
    else if (flags & (__DRI2_FLUSH_DRAWABLE | __DRI2_FLUSH_CONTEXT)) {
       st_context_flush(st, flush_flags, NULL, args.ctx ? notify_before_flush_cb : NULL, &args);
@@ -549,7 +591,33 @@ dri_flush(struct dri_context *ctx,
       p_atomic_inc(&drawable->base.stamp);
    }
 
+   if (drawable && args.ctx && fence_fd >= 0 &&
+       !ctx->is_shared_buffer_bound &&
+       (reason == __DRI2_THROTTLE_SWAPBUFFER ||
+        reason == __DRI2_NOTHROTTLE_SWAPBUFFER)) {
+      drawable->back_buffer_fenced = true;
+   }
+
    st_context_invalidate_state(st, ST_INVALIDATE_FB_STATE);
+   return fence_fd;
+}
+
+void
+dri_flush(struct dri_context *ctx,
+          struct dri_drawable *drawable,
+          unsigned flags,
+          enum __DRI2throttleReason reason)
+{
+   dri_flush_impl(ctx, drawable, flags, reason, false);
+}
+
+int
+dri_flush_with_fence_fd(struct dri_context *ctx,
+                        struct dri_drawable *drawable,
+                        unsigned flags,
+                        enum __DRI2throttleReason reason)
+{
+   return dri_flush_impl(ctx, drawable, flags, reason, true);
 }
 
 /**

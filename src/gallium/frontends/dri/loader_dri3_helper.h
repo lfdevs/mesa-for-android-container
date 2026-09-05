@@ -34,6 +34,7 @@
 #include <GL/gl.h>
 #include "mesa_interface.h"
 #include "util/macros.h"
+#include "util/u_queue.h"
 #include <c11/threads.h>
 
 enum loader_dri3_buffer_type {
@@ -65,6 +66,9 @@ struct loader_dri3_buffer {
     */
 
    uint32_t     sync_fence;     /* XID of X SyncFence object */
+   uint32_t     present_wait_fence; /* GPU completion fence for Present */
+   int          present_wait_fence_triggered;
+   struct util_queue_fence present_wait_job;
    struct xshmfence *shm_fence; /* pointer to xshmfence object */
    bool         busy;           /* Set on swap, cleared on IdleNotify */
    bool         own_pixmap;     /* We allocated the pixmap ID, free on destroy */
@@ -95,6 +99,7 @@ loader_dri3_pixmap_buf_id(enum loader_dri3_buffer_type buffer_type)
 }
 
 struct loader_dri3_drawable;
+struct loader_dri3_present_sync;
 
 struct loader_dri3_vtable {
    void (*set_drawable_size)(struct loader_dri3_drawable *, int, int);
@@ -102,6 +107,8 @@ struct loader_dri3_vtable {
    struct dri_context *(*get_dri_context)(struct loader_dri3_drawable *);
    struct dri_screen *(*get_dri_screen)(void);
    void (*flush_drawable)(struct loader_dri3_drawable *, unsigned);
+   int (*flush_drawable_with_fence_fd)(struct loader_dri3_drawable *,
+                                       unsigned);
 };
 
 #define LOADER_DRI3_NUM_BUFFERS (1 + LOADER_DRI3_MAX_BACK)
@@ -168,7 +175,10 @@ struct loader_dri3_drawable {
    bool adaptive_sync_active;
    bool block_on_depleted_buffers;
    bool queries_buffer_age;
+   bool present_sync_checked;
    int swap_interval;
+
+   struct loader_dri3_present_sync *present_sync;
 
    const struct loader_dri3_vtable *vtable;
 
@@ -230,6 +240,11 @@ PUBLIC void
 loader_dri3_flush(struct loader_dri3_drawable *draw,
                   unsigned flags,
                   enum __DRI2throttleReason throttle_reason);
+
+PUBLIC int
+loader_dri3_flush_with_fence_fd(struct loader_dri3_drawable *draw,
+                                unsigned flags,
+                                enum __DRI2throttleReason throttle_reason);
 
 PUBLIC void
 loader_dri3_copy_sub_buffer(struct loader_dri3_drawable *draw,

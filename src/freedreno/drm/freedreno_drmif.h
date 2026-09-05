@@ -313,6 +313,10 @@ void fd_bo_del(struct fd_bo *bo);
 void fd_bo_del_array(struct fd_bo **bos, int count);
 void fd_bo_del_list_nocache(struct list_head *list);
 int fd_bo_get_name(struct fd_bo *bo, uint32_t *name);
+/* Return the BO's handle in its owning device's namespace, not a handle for
+ * another device used for scanout.  Native KGSL BOs need not be dma-buf
+ * exportable to have a valid handle.  Suballocated BOs return zero.
+ */
 uint32_t fd_bo_handle(struct fd_bo *bo);
 int fd_bo_dmabuf_drm(struct fd_bo *bo);
 int fd_bo_dmabuf(struct fd_bo *bo);

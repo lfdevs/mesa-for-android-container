@@ -101,12 +101,22 @@ egl_dri3_flush_drawable(struct loader_dri3_drawable *draw, unsigned flags)
    dri2_flush_drawable_for_swapbuffers(disp, &dri3_surf->surf.base);
 }
 
+static int
+egl_dri3_flush_drawable_with_fence_fd(struct loader_dri3_drawable *draw,
+                                      unsigned flags)
+{
+   return loader_dri3_flush_with_fence_fd(
+      draw, __DRI2_FLUSH_DRAWABLE | __DRI2_FLUSH_INVALIDATE_ANCILLARY,
+      __DRI2_THROTTLE_SWAPBUFFER);
+}
+
 static const struct loader_dri3_vtable egl_dri3_vtable = {
    .set_drawable_size = egl_dri3_set_drawable_size,
    .in_current_context = egl_dri3_in_current_context,
    .get_dri_context = egl_dri3_get_dri_context,
    .get_dri_screen = egl_dri3_get_dri_screen,
    .flush_drawable = egl_dri3_flush_drawable,
+   .flush_drawable_with_fence_fd = egl_dri3_flush_drawable_with_fence_fd,
 };
 
 static EGLBoolean

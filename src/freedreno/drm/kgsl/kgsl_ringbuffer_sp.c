@@ -59,9 +59,6 @@ flush_submit_list(struct list_head *submit_list)
             DEBUG_MSG("merged %u submits", cmd_idx);
             break;
         }
-
-        list_del(&submit->node);
-        fd_submit_del(submit);
     }
 
     struct kgsl_cmd_syncpoint_fence sync_fence = {
@@ -109,6 +106,18 @@ flush_submit_list(struct list_head *submit_list)
         close(fd_submit->in_fence_fd);
 
 fail:
+    /* Keep merged submits alive until KGSL has consumed the command list and,
+     * on success, populated the shared kernel timestamp.  Dropping them before
+     * IOCTL_KGSL_GPU_COMMAND can free BOs that the command stream still uses.
+     */
+    foreach_submit_safe (submit, submit_list) {
+        if (submit == last_submit(submit_list))
+            break;
+
+        list_del(&submit->node);
+        fd_submit_del(submit);
+    }
+
     return ret;
 }
 

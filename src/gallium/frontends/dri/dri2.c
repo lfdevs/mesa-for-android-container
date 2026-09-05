@@ -227,13 +227,16 @@ dri2_allocate_textures(struct dri_context *ctx,
       /* Flush the texture before unreferencing, so that other clients can
        * see what the driver has rendered.
        */
-      if (i != ST_ATTACHMENT_DEPTH_STENCIL && drawable->textures[i]) {
+      if (i != ST_ATTACHMENT_DEPTH_STENCIL && drawable->textures[i] &&
+          !(i == ST_ATTACHMENT_BACK_LEFT && drawable->back_buffer_fenced)) {
          struct pipe_context *pipe = ctx->st->pipe;
          pipe->flush_resource(pipe, drawable->textures[i]);
       }
 
       pipe_resource_reference(&drawable->textures[i], NULL);
    }
+
+   drawable->back_buffer_fenced = false;
 
    if (drawable->stvis.samples > 1) {
       for (i = 0; i < ST_ATTACHMENT_COUNT; i++) {
