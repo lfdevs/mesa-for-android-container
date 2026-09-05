@@ -501,6 +501,15 @@ dri3_update_max_num_back(struct loader_dri3_drawable *draw)
    case XCB_PRESENT_COMPLETE_MODE_SKIP:
       break;
 
+   case XCB_PRESENT_COMPLETE_MODE_COPY:
+      /* With an explicit render wait, two buffers can both be held by
+       * Present while the worker signals one and the server copies the other.
+       * Allow an uncapped client to render into a third buffer during that
+       * handoff. Keep the existing limit for interval-controlled swaps.
+       */
+      draw->max_num_back = draw->present_sync && draw->swap_interval == 0 ? 3 : 2;
+      break;
+
    default:
       draw->max_num_back = 2;
    }
