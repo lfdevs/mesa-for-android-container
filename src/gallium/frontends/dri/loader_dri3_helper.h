@@ -34,6 +34,7 @@
 #include <GL/gl.h>
 #include "mesa_interface.h"
 #include "util/macros.h"
+#include "util/u_queue.h"
 #include <c11/threads.h>
 
 enum loader_dri3_buffer_type {
@@ -67,6 +68,7 @@ struct loader_dri3_buffer {
    uint32_t     sync_fence;     /* XID of X SyncFence object */
    uint32_t     present_wait_fence; /* GPU completion fence for Present */
    int          present_wait_fence_triggered;
+   struct util_queue_fence present_wait_job;
    struct xshmfence *shm_fence; /* pointer to xshmfence object */
    bool         busy;           /* Set on swap, cleared on IdleNotify */
    bool         own_pixmap;     /* We allocated the pixmap ID, free on destroy */

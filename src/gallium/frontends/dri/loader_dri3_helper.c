@@ -214,6 +214,8 @@ dri3_setup_present_wait_fence(struct loader_dri3_drawable *draw,
                 error->error_code);
       free(error);
       buffer->present_wait_fence = 0;
+   } else {
+      util_queue_fence_init(&buffer->present_wait_job);
    }
 }
 
@@ -240,6 +242,13 @@ dri3_queue_present_wait_fence(struct loader_dri3_drawable *draw,
    job->fence_fd = fence_fd;
    job->cancel_fd = draw->present_sync->cancel_fd;
 
+   /* A skipped Present can release its pixmap before the render fence has
+    * signaled. Buffer idleness therefore does not imply that the previous
+    * worker is done with this reusable X Sync fence. Finish that job before
+    * resetting the fence or associating it with another submission.
+    */
+   util_queue_fence_wait(&buffer->present_wait_job);
+
    /* A Sync fence remains triggered until its owner resets it.  Reset only
     * after our previous worker has triggered this per-buffer fence; resetting
     * an unsignaled fence is a Sync Match error.  XCB serializes the reset
@@ -250,7 +259,7 @@ dri3_queue_present_wait_fence(struct loader_dri3_drawable *draw,
       p_atomic_set(&buffer->present_wait_fence_triggered, false);
    }
 
-   util_queue_add_job(&draw->present_sync->queue, job, NULL,
+   util_queue_add_job(&draw->present_sync->queue, job, &buffer->present_wait_job,
                       dri3_present_job_execute, dri3_present_job_cleanup,
                       sizeof(*job));
    return buffer->present_wait_fence;
@@ -542,10 +551,12 @@ dri3_free_render_buffer(struct loader_dri3_drawable *draw,
       return;
 
    if (buffer->present_wait_fence && draw->present_sync)
-      util_queue_finish(&draw->present_sync->queue);
+      util_queue_fence_wait(&buffer->present_wait_job);
 
-   if (buffer->present_wait_fence)
+   if (buffer->present_wait_fence) {
+      util_queue_fence_destroy(&buffer->present_wait_job);
       xcb_sync_destroy_fence(draw->conn, buffer->present_wait_fence);
+   }
    if (buffer->own_pixmap)
       xcb_free_pixmap(draw->conn, buffer->pixmap);
    dri2_destroy_image(buffer->image);
