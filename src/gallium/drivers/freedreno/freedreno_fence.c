@@ -144,6 +144,16 @@ fd_pipe_fence_finish(struct pipe_screen *pscreen, struct pipe_context *pctx,
 
    if (fence->use_fence_fd) {
       assert(fence->fence);
+      /* Locally submitted fences also have a GPU-written completion marker.
+       * Check it before waiting for the kernel's sync-file notification, as
+       * fence signaling can lag behind completion of the command stream.
+       * Imported fences have no userspace sequence number. A wrapped zero
+       * sequence simply takes the existing sync-file path as well.
+       */
+      if (fence->fence->ufence &&
+          !fd_pipe_wait_timeout(fence->pipe, fence->fence, 0))
+         return true;
+
       int ret = sync_wait(fence->fence->fence_fd, timeout / 1000000);
       return ret == 0;
    }
