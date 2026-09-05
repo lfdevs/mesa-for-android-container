@@ -290,6 +290,9 @@ struct tva_codec {
     /* synthesized CSD cache: re-sent to the daemon only when it changes */
     uint8_t *csd;
     size_t csd_len;
+    bool h264_pps_defaults_valid;
+    unsigned h264_pps_l0_default;
+    unsigned h264_pps_l1_default;
 
     bool broken;                  /* session error, further decodes fail */
 
@@ -1000,6 +1003,15 @@ tva_bw_rbsp_trailing(struct tva_bw *w)
         tva_bw_put(w, 1, 0);
 }
 
+static bool
+tva_h264_high_profile(enum pipe_video_profile profile)
+{
+    return profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH ||
+           profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10 ||
+           profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422 ||
+           profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444;
+}
+
 /*
  * Build the SPS NALU (with NAL header + emulation prevention) from the
  * frontend-parsed struct.  Returns the RBSP size; the NAL header byte is
@@ -1141,7 +1153,8 @@ tva_build_h264_sps(enum pipe_video_profile profile,
 /* PPS NALU: nal_ref_idc=3, type=8 */
 static size_t
 tva_build_h264_pps(enum pipe_video_profile profile,
-                   const struct pipe_h264_pps *pps, unsigned max_refs,
+                   const struct pipe_h264_pps *pps,
+                   unsigned default_l0, unsigned default_l1,
                    uint8_t **out)
 {
     struct tva_bw w = {0};
@@ -1157,16 +1170,11 @@ tva_build_h264_pps(enum pipe_video_profile profile,
      * because the working stream uses four references.  High-profile streams
      * commonly keep the PPS defaults at zero and carry larger lists in their
      * slice headers, so preserve that zero instead. */
-    bool high_profile = profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH ||
-                        profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10 ||
-                        profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422 ||
-                        profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444;
-    unsigned default_refs = !high_profile && max_refs
-                            ? MIN2(max_refs, 16) - 1 : 0;
+    bool high_profile = tva_h264_high_profile(profile);
     tva_bw_ue(&w, pps->num_ref_idx_l0_default_active_minus1 ?
-             pps->num_ref_idx_l0_default_active_minus1 : default_refs);
+             pps->num_ref_idx_l0_default_active_minus1 : default_l0);
     tva_bw_ue(&w, pps->num_ref_idx_l1_default_active_minus1 ?
-             pps->num_ref_idx_l1_default_active_minus1 : default_refs);
+             pps->num_ref_idx_l1_default_active_minus1 : default_l1);
     tva_bw_put(&w, 1, pps->weighted_pred_flag);
     tva_bw_put(&w, 2, pps->weighted_bipred_idc);
     tva_bw_se(&w, pps->pic_init_qp_minus26);
@@ -1275,6 +1283,43 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
             if (h264 && h264->pps && h264->pps->sps) {
                 uint8_t *sps_rbsp = NULL, *pps_rbsp = NULL;
                 static const uint8_t sc[4] = { 0, 0, 0, 1 };
+                if (!c->h264_pps_defaults_valid) {
+                    if (tva_h264_high_profile(c->base.profile)) {
+                        /* High-profile streams commonly keep the PPS
+                         * defaults at zero and carry larger lists in their
+                         * slice headers. */
+                        c->h264_pps_l0_default = 0;
+                        c->h264_pps_l1_default = 0;
+                    } else if (h264->slice_parameter.slice_info_present) {
+                        /* VA exposes the active list sizes with each slice
+                         * parameter.  The PPS defaults themselves are not
+                         * part of VAPictureParameterBufferH264, so seed the
+                         * synthetic PPS from the first observed values. */
+                        c->h264_pps_l0_default =
+                            h264->num_ref_idx_l0_active_minus1;
+                        c->h264_pps_l1_default =
+                            h264->num_ref_idx_l1_active_minus1;
+                    } else {
+                        unsigned default_refs = c->base.max_references
+                                                ? MIN2(c->base.max_references, 16) - 1
+                                                : 0;
+                        c->h264_pps_l0_default = default_refs;
+                        c->h264_pps_l1_default = default_refs;
+                    }
+                    c->h264_pps_defaults_valid = true;
+                } else if (!tva_h264_high_profile(c->base.profile) &&
+                           h264->slice_parameter.slice_info_present) {
+                    /* Reference-list counts can be zero for an IDR picture
+                     * and increase on later P/B pictures.  Retain the largest
+                     * values observed so the PPS converges without emitting a
+                     * new parameter set for every frame. */
+                    c->h264_pps_l0_default = MAX2(
+                        c->h264_pps_l0_default,
+                        (unsigned)h264->num_ref_idx_l0_active_minus1);
+                    c->h264_pps_l1_default = MAX2(
+                        c->h264_pps_l1_default,
+                        (unsigned)h264->num_ref_idx_l1_active_minus1);
+                }
                 size_t sps_rbsp_len = tva_build_h264_sps(c->base.profile,
                                                          h264->pps->sps,
                                                          c->base.max_references,
@@ -1283,7 +1328,8 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                                                          &sps_rbsp);
                 size_t pps_rbsp_len = tva_build_h264_pps(c->base.profile,
                                                          h264->pps,
-                                                         c->base.max_references,
+                                                         c->h264_pps_l0_default,
+                                                         c->h264_pps_l1_default,
                                                          &pps_rbsp);
                 if (!sps_rbsp_len || !pps_rbsp_len) {
                     debug_printf("tva: CSD synthesis failed\n");
@@ -1334,9 +1380,11 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                                      tva_session_last_error(c->sess));
                         tva_mark_broken(c);
                     } else {
-                        TVA_TRACE("CSD sent: profile=%d sps=%zu pps=%zu maxrefs=%u",
+                        TVA_TRACE("CSD sent: profile=%d sps=%zu pps=%zu maxrefs=%u defaults=%u/%u",
                                   (int)c->base.profile, sps_len, pps_len,
-                                  c->base.max_references);
+                                  c->base.max_references,
+                                  c->h264_pps_l0_default,
+                                  c->h264_pps_l1_default);
                     }
                 }
                 free(csd);
