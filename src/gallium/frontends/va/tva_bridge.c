@@ -1201,9 +1201,10 @@ tva_build_h264_pps(enum pipe_video_profile profile,
  *
  * A few syntax elements are not represented by the VA decode descriptor.  In
  * particular, the contents of SPS short-term reference-picture sets cannot be
- * reconstructed from their count alone.  tva_h265_can_build() rejects those
- * streams rather than sending a malformed SPS.  The tested x265 streams use
- * inline reference sets (count zero).
+ * reconstructed from the VA descriptor.  The Qualcomm decoder still requires
+ * the declared RPS count to be non-zero, even when every slice carries its own
+ * inline RPS, so the bridge emits empty placeholder sets and rejects a slice
+ * that instead references an SPS RPS.
  */
 
 static unsigned
@@ -1292,9 +1293,6 @@ tva_build_h265_sps(const struct pipe_h265_sps *sps,
 {
     struct tva_bw w = {0};
 
-    if (sps->num_short_term_ref_pic_sets > 0)
-        return 0;
-
     tva_bw_hevc_header(&w, 33);
     tva_bw_put(&w, 4, 0);                /* sps_video_parameter_set_id */
     tva_bw_put(&w, 3, 0);                /* sps_max_sub_layers_minus1 */
@@ -1334,7 +1332,18 @@ tva_build_h265_sps(const struct pipe_h265_sps *sps,
         tva_bw_ue(&w, sps->log2_diff_max_min_luma_coding_block_size);
         tva_bw_put(&w, 1, sps->pcm_loop_filter_disabled_flag);
     }
-    tva_bw_ue(&w, 0);                    /* num_short_term_ref_pic_sets */
+    /* Keep the count from VA-API.  Its descriptor does not carry the RPS
+     * contents, so emit empty non-predicted sets as placeholders.  The tested
+     * Qualcomm decoder requires a non-zero count even for inline slice RPS.
+     * tva_h265_can_build() rejects streams whose slices reference these
+     * placeholders through short_term_ref_pic_set_sps_flag. */
+    tva_bw_ue(&w, sps->num_short_term_ref_pic_sets);
+    for (unsigned i = 0; i < sps->num_short_term_ref_pic_sets; i++) {
+        if (i)
+            tva_bw_put(&w, 1, 0);         /* inter_ref_pic_set_prediction */
+        tva_bw_ue(&w, 0);                /* num_negative_pics */
+        tva_bw_ue(&w, 0);                /* num_positive_pics */
+    }
     tva_bw_put(&w, 1, sps->long_term_ref_pics_present_flag);
     if (sps->long_term_ref_pics_present_flag)
         tva_bw_ue(&w, sps->num_long_term_ref_pics_sps);
@@ -1420,14 +1429,21 @@ tva_build_h265_pps(const struct pipe_h265_pps *pps, uint8_t **out)
 }
 
 static bool
-tva_h265_can_build(const struct pipe_h265_sps *sps)
+tva_h265_can_build(const struct pipe_h265_sps *sps,
+                   const struct pipe_h265_picture_desc *pic)
 {
-    if (!sps)
+    if (!sps || !pic)
         return false;
     /* VA-API exposes only the number of short-term RPS entries, not their
-     * contents.  Long-term SPS entries have the same limitation. */
-    if (sps->num_short_term_ref_pic_sets > 0)
+     * contents.  The slice header bit count is non-zero when the current
+     * picture carries an inline RPS (st_rps_bits in VAPictureParameterBuffer
+     * HEVC).  An IDR picture has no RPS syntax, so it is also safe to seed the
+     * synthetic SPS there.  If a later picture references an SPS RPS, the
+     * synthetic SPS cannot represent it and must be rejected. */
+    if (sps->num_short_term_ref_pic_sets > 0 &&
+        !pic->IDRPicFlag && pic->NumShortTermPictureSliceHeaderBits == 0)
         return false;
+    /* Long-term SPS entries have the same limitation. */
     if (sps->long_term_ref_pics_present_flag &&
         sps->num_long_term_ref_pics_sps > 0)
         return false;
@@ -1643,7 +1659,7 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                 uint8_t *vps_nalu = NULL, *sps_nalu = NULL;
                 uint8_t *pps_nalu = NULL;
 
-                if (!tva_h265_can_build(sps)) {
+                if (!tva_h265_can_build(sps, h265)) {
                     debug_printf("tva: HEVC parameter sets cannot be synthesized "
                                  "for this stream\n");
                     tva_mark_broken(c);
