@@ -89,3 +89,16 @@ libfreedreno_drm = static_library(
   build_by_default : false,
 )
 
+if with_tests and freedreno_kmds.contains('kgsl')
+  test(
+    'kgsl_bo_handle',
+    executable(
+      'kgsl_bo_handle_test',
+      ['tests/kgsl_bo_handle_test.c', freedreno_xml_header_files],
+      include_directories : libfreedreno_drm_includes,
+      dependencies : [libfreedreno_drm_deps, idep_libfreedreno_common],
+      link_with : libfreedreno_drm,
+    ),
+    suite : ['freedreno'],
+  )
+endif
