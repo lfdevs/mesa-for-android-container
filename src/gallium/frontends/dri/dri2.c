@@ -1548,7 +1548,7 @@ dri2_blit_image(struct dri_context *ctx, struct dri_image *dst, struct dri_image
 {
    struct pipe_context *pipe = ctx->st->pipe;
    struct pipe_screen *screen;
-   struct pipe_fence_handle *fence;
+   struct pipe_fence_handle *fence = NULL;
    struct pipe_blit_info blit;
 
    if (!dst || !src)

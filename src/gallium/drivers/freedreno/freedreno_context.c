@@ -44,6 +44,7 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
       fd_bc_dump(ctx, "need fence, last_fence=%p", ctx->last_fence);
       batch = fd_context_batch(ctx);
    } else if (!batch) {
+      ctx->explicit_present_fence = false;
       return;
    }
 
@@ -118,6 +119,8 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
    fd_bc_dump(ctx, "%p: remaining:\n", ctx);
 
 out:
+   ctx->explicit_present_fence = false;
+
    if (fencep)
       fd_pipe_fence_ref(fencep, fence);
 
@@ -132,6 +135,21 @@ out:
 
    if (FD_DBG(ABORT))
       assert(pctx->get_device_reset_status(pctx) == PIPE_NO_RESET);
+}
+
+static void
+fd_set_context_param(struct pipe_context *pctx, enum pipe_context_param param,
+                     unsigned value)
+{
+   struct fd_context *ctx = fd_context(pctx);
+
+   switch (param) {
+   case PIPE_CONTEXT_PARAM_EXPLICIT_PRESENT_FENCE:
+      ctx->explicit_present_fence = value;
+      break;
+   default:
+      break;
+   }
 }
 
 static void
@@ -699,6 +717,7 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
    pctx->screen = pscreen;
    pctx->priv = priv;
    pctx->flush = fd_context_flush;
+   pctx->set_context_param = fd_set_context_param;
    pctx->emit_string_marker = fd_emit_string_marker;
    pctx->set_debug_callback = fd_set_debug_callback;
    pctx->create_fence_fd = fd_create_pipe_fence_fd;

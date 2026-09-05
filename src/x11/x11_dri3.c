@@ -33,6 +33,8 @@
 #include <xcb/present.h>
 #include <xcb/xfixes.h>
 
+#include "util/u_debug.h"
+
 /** x11_dri3_open
  *
  * Wrapper around xcb_dri3_open
@@ -49,9 +51,16 @@ x11_dri3_open(xcb_connection_t *conn,
    int                          fd;
    const xcb_query_extension_reply_t *extension;
 
-   const char *env = getenv("MESA_LOADER_DRIVER_OVERRIDE");
-   if (env && !strcmp(env, "kgsl"))
-      return open("/dev/kgsl-3d0", O_RDWR);
+   /* Preserve the KGSL override for Android X servers such as Termux:X11,
+    * which accept DRI3 pixmaps but do not provide a DRI3 device fd. Only
+    * explicitly enabled renderonly clients need the server's KMS fd for
+    * scanout allocation. Bridge clients still render on native KGSL and copy
+    * completed frames into separately allocated Xorg-owned pixmaps. */
+   const char *driver = getenv("MESA_LOADER_DRIVER_OVERRIDE");
+   if (debug_get_bool_option("MESA_KGSL_X11_SHM_BRIDGE", false) ||
+       (driver && !strcmp(driver, "kgsl") &&
+        !debug_get_bool_option("FD_KGSL_RENDERONLY", false)))
+      return open("/dev/kgsl-3d0", O_RDWR | O_CLOEXEC);
 
    xcb_prefetch_extension_data(conn, &xcb_dri3_id);
    extension = xcb_get_extension_data(conn, &xcb_dri3_id);

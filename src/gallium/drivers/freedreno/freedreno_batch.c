@@ -386,6 +386,14 @@ batch_flush(struct fd_batch *batch, bool last_batch)
    if (last_batch && !batch->fence)
       batch->fence = fd_pipe_fence_create(batch);
 
+   /* flush_resource() can submit the drawable's writer before the frontend's
+    * context flush reaches fd_context_flush().  Mark that writer's fence for
+    * native-fd export here so the Present fence still comes from the rendering
+    * submission rather than a following empty submit.
+    */
+   if (last_batch && batch->ctx->explicit_present_fence && batch->fence)
+      batch->fence->use_fence_fd = true;
+
    if (batch->fence)
       fd_pipe_fence_ref(&batch->ctx->last_fence, batch->fence);
 

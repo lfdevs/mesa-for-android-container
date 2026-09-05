@@ -78,6 +78,10 @@
 #include "x11_dri3.h"
 #include "loader_dri_helper.h"
 #include "util/u_debug.h"
+
+/* Keep the private GLX frontend tied to the DRI bridge structure ABI. */
+const char hdmi_los_mesa_glx_bridge_abi[]
+   __attribute__((used, retain)) = LOADER_DRI3_SHM_BRIDGE_ABI;
 #include "dri_util.h"
 
 static struct dri3_drawable *
@@ -132,12 +136,21 @@ glx_dri3_flush_drawable(struct loader_dri3_drawable *draw, unsigned flags)
    loader_dri3_flush(draw, flags, __DRI2_THROTTLE_SWAPBUFFER);
 }
 
+static int
+glx_dri3_flush_drawable_with_fence_fd(struct loader_dri3_drawable *draw,
+                                      unsigned flags)
+{
+   return loader_dri3_flush_with_fence_fd(draw, flags,
+                                          __DRI2_THROTTLE_SWAPBUFFER);
+}
+
 static const struct loader_dri3_vtable glx_dri3_vtable = {
    .set_drawable_size = glx_dri3_set_drawable_size,
    .in_current_context = glx_dri3_in_current_context,
    .get_dri_context = glx_dri3_get_dri_context,
    .get_dri_screen = glx_dri3_get_dri_screen,
    .flush_drawable = glx_dri3_flush_drawable,
+   .flush_drawable_with_fence_fd = glx_dri3_flush_drawable_with_fence_fd,
 };
 
 
