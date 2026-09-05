@@ -15,12 +15,13 @@
  * ******************************************************************************
  * MODIFICATION NOTICE (GPL-3.0 section 5)
  *
- * Parts of this file are a MODIFIED version of vaapi-driver/src/decode.c and
- * vaapi-driver/src/profiles.c from the droidspaces-media-decode project
- * (Apache License, Version 2.0): the codec capability table, the pending
- * pipeline-depth model and the is_param_set() unit classification were
- * ported from there and relicensed under GPL-3.0.  The Mesa-side wrappers
- * and the fence/pending machinery are new code written for termux-va.
+ * Parts of this file are a MODIFIED version of vaapi-driver/src/decode.c,
+ * vaapi-driver/src/profiles.c, and vaapi-driver/src/hevc_bitstream.c from
+ * the droidspaces-media-decode project (Apache License, Version 2.0): the
+ * codec capability table, the pending pipeline-depth model, the
+ * is_param_set() unit classification, and the HEVC parameter-set writer were
+ * ported from there and relicensed under GPL-3.0.  The Mesa-side wrappers and
+ * the fence/pending machinery are new code written for termux-va.
  * ******************************************************************************
  *
  * Architecture (Mesa 26.x VA frontend, new video API):
@@ -144,9 +145,8 @@ tva_profile_supported(enum pipe_video_profile profile)
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
+    case PIPE_VIDEO_PROFILE_HEVC_MAIN:
     case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
-        /* HEVC Main is parsed by the frontend but its CSD (VPS/SPS/PPS) is
-         * not synthesized yet, so it is not advertised. */
         return true;
     default:
         return false;
@@ -935,12 +935,11 @@ tva_reader_thread(void *param)
 
 /* ---------------------------------- H.264 CSD synthesis (SPS/PPS) */
 /*
- * ffmpeg's vaapi h264 does not deliver SPS/PPS as slice data buffers, and
- * the frontend has no H264 header synthesizer (unlike HEVC/VP9).  The
+ * FFmpeg's VAAPI H.264 path does not deliver SPS/PPS as slice-data buffers;
+ * the VA frontend exposes only the parsed pipe_h264_sps/pps structures.  The
  * daemon's MediaCodec needs the parameter sets as CSD, so the bridge
- * regenerates them from the parsed pipe_h264_sps/pps structures the
- * frontend fills in.  (Same role as upstream vaapi-driver's
- * h264_bitstream.c, ported to the gallium-side data model.)
+ * regenerates them from those parsed structures.  (Same role as upstream
+ * vaapi-driver's h264_bitstream.c, ported to the gallium-side data model.)
  */
 
 struct tva_bw {
@@ -1166,10 +1165,8 @@ tva_build_h264_pps(enum pipe_video_profile profile,
     tva_bw_put(&w, 1, pps->bottom_field_pic_order_in_frame_present_flag);
     tva_bw_ue(&w, pps->num_slice_groups_minus1);
     /* VAPictureParameterBufferH264 has no PPS default-reference fields.  The
-     * Main-profile path historically uses the decoder DPB size as a fallback
-     * because the working stream uses four references.  High-profile streams
-     * commonly keep the PPS defaults at zero and carry larger lists in their
-     * slice headers, so preserve that zero instead. */
+     * caller supplies defaults inferred from the slice parameters (or the
+     * decoder DPB size when slice parameters are unavailable). */
     bool high_profile = tva_h264_high_profile(profile);
     tva_bw_ue(&w, pps->num_ref_idx_l0_default_active_minus1 ?
              pps->num_ref_idx_l0_default_active_minus1 : default_l0);
@@ -1191,6 +1188,250 @@ tva_build_h264_pps(enum pipe_video_profile profile,
     tva_bw_rbsp_trailing(&w);
     *out = w.buf;
     return w.len;
+}
+
+/* ---------------------------------- HEVC CSD synthesis (VPS/SPS/PPS) */
+/*
+ * VA-API gives the frontend parsed HEVC picture parameters, but does not
+ * carry the original VPS/SPS/PPS byte stream.  MediaCodec needs those
+ * parameter sets before the first VCL unit, so reconstruct the minimal
+ * single-layer Annex B headers from the pipe_h265 descriptors.  Slice data
+ * itself is forwarded unchanged: VA's slice-data offsets guarantee that the
+ * slice header is still present in the buffer.
+ *
+ * A few syntax elements are not represented by the VA decode descriptor.  In
+ * particular, the contents of SPS short-term reference-picture sets cannot be
+ * reconstructed from their count alone.  tva_h265_can_build() rejects those
+ * streams rather than sending a malformed SPS.  The tested x265 streams use
+ * inline reference sets (count zero).
+ */
+
+static unsigned
+tva_h265_profile_idc(enum pipe_video_profile profile)
+{
+    return profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10 ? 2 : 1;
+}
+
+/* Return a conservative level_idc based on the luma-picture size.  VA-API's
+ * HEVC picture descriptor does not expose the stream's original level. */
+static unsigned
+tva_h265_level_idc(unsigned width, unsigned height)
+{
+    uint64_t luma = (uint64_t)width * height;
+    if (luma <=   36864) return 30;  /* 1.0 */
+    if (luma <=  122880) return 60;  /* 2.0 */
+    if (luma <=  245760) return 63;  /* 2.1 */
+    if (luma <=  552960) return 90;  /* 3.0 */
+    if (luma <=  983040) return 93;  /* 3.1 */
+    if (luma <= 2228224) return 120; /* 4.0 */
+    if (luma <= 8912896) return 150; /* 5.0 */
+    return 180;                      /* 6.0 */
+}
+
+static void
+tva_bw_hevc_header(struct tva_bw *w, unsigned nal_type)
+{
+    /* forbidden_zero_bit=0, nal_unit_type, nuh_layer_id=0,
+     * nuh_temporal_id_plus1=1. */
+    tva_bw_put(w, 8, (nal_type & 0x3f) << 1);
+    tva_bw_put(w, 8, 1);
+}
+
+static void
+tva_h265_put_ptl(struct tva_bw *w, enum pipe_video_profile profile,
+                 unsigned width, unsigned height)
+{
+    unsigned profile_idc = tva_h265_profile_idc(profile);
+
+    tva_bw_put(w, 2, 0);                 /* general_profile_space */
+    tva_bw_put(w, 1, 0);                 /* general_tier_flag */
+    tva_bw_put(w, 5, profile_idc);       /* general_profile_idc */
+    for (unsigned i = 0; i < 32; i++)
+        tva_bw_put(w, 1, i == profile_idc);
+    tva_bw_put(w, 1, 1);                 /* progressive_source */
+    tva_bw_put(w, 1, 0);                 /* interlaced_source */
+    tva_bw_put(w, 1, 0);                 /* non_packed_constraint */
+    tva_bw_put(w, 1, 1);                 /* frame_only_constraint */
+    tva_bw_put(w, 22, 0);                /* reserved_zero_43bits (part 1) */
+    tva_bw_put(w, 21, 0);                /* reserved_zero_43bits (part 2) */
+    tva_bw_put(w, 1, 0);                 /* inbld/reserved_zero_bit */
+    tva_bw_put(w, 8, tva_h265_level_idc(width, height));
+}
+
+static size_t
+tva_build_h265_vps(const struct pipe_h265_sps *sps,
+                   enum pipe_video_profile profile, uint8_t **out)
+{
+    struct tva_bw w = {0};
+
+    tva_bw_hevc_header(&w, 32);
+    tva_bw_put(&w, 4, 0);                /* vps_video_parameter_set_id */
+    tva_bw_put(&w, 2, 3);                /* base_layer_internal/available */
+    tva_bw_put(&w, 6, 0);                /* vps_max_layers_minus1 */
+    tva_bw_put(&w, 3, 0);                /* vps_max_sub_layers_minus1 */
+    tva_bw_put(&w, 1, 1);                /* vps_temporal_id_nesting_flag */
+    tva_bw_put(&w, 16, 0xffff);          /* vps_reserved_0xffff_16bits */
+    tva_h265_put_ptl(&w, profile, sps->pic_width_in_luma_samples,
+                     sps->pic_height_in_luma_samples);
+    tva_bw_put(&w, 1, 0);                /* sub_layer_ordering_info_present */
+    tva_bw_ue(&w, sps->sps_max_dec_pic_buffering_minus1);
+    tva_bw_ue(&w, 0);                    /* vps_max_num_reorder_pics */
+    tva_bw_ue(&w, 0);                    /* vps_max_latency_increase_plus1 */
+    tva_bw_put(&w, 6, 0);                /* vps_max_layer_id */
+    tva_bw_ue(&w, 0);                    /* vps_num_layer_sets_minus1 */
+    tva_bw_put(&w, 1, 0);                /* vps_timing_info_present_flag */
+    tva_bw_put(&w, 1, 0);                /* vps_extension_flag */
+    tva_bw_rbsp_trailing(&w);
+    *out = w.buf;
+    return w.len;
+}
+
+static size_t
+tva_build_h265_sps(const struct pipe_h265_sps *sps,
+                   enum pipe_video_profile profile, uint8_t **out)
+{
+    struct tva_bw w = {0};
+
+    if (sps->num_short_term_ref_pic_sets > 0)
+        return 0;
+
+    tva_bw_hevc_header(&w, 33);
+    tva_bw_put(&w, 4, 0);                /* sps_video_parameter_set_id */
+    tva_bw_put(&w, 3, 0);                /* sps_max_sub_layers_minus1 */
+    tva_bw_put(&w, 1, 1);                /* sps_temporal_id_nesting_flag */
+    tva_h265_put_ptl(&w, profile, sps->pic_width_in_luma_samples,
+                     sps->pic_height_in_luma_samples);
+    tva_bw_ue(&w, 0);                    /* sps_seq_parameter_set_id */
+    tva_bw_ue(&w, sps->chroma_format_idc);
+    if (sps->chroma_format_idc == 3)
+        tva_bw_put(&w, 1, sps->separate_colour_plane_flag);
+    tva_bw_ue(&w, sps->pic_width_in_luma_samples);
+    tva_bw_ue(&w, sps->pic_height_in_luma_samples);
+    tva_bw_put(&w, 1, 0);                /* conformance_window_flag */
+    tva_bw_ue(&w, sps->bit_depth_luma_minus8);
+    tva_bw_ue(&w, sps->bit_depth_chroma_minus8);
+    tva_bw_ue(&w, sps->log2_max_pic_order_cnt_lsb_minus4);
+    tva_bw_put(&w, 1, 0);                /* sub_layer_ordering_info_present */
+    tva_bw_ue(&w, sps->sps_max_dec_pic_buffering_minus1);
+    tva_bw_ue(&w, 0);                    /* sps_max_num_reorder_pics */
+    tva_bw_ue(&w, 0);                    /* sps_max_latency_increase_plus1 */
+    tva_bw_ue(&w, sps->log2_min_luma_coding_block_size_minus3);
+    tva_bw_ue(&w, sps->log2_diff_max_min_luma_coding_block_size);
+    tva_bw_ue(&w, sps->log2_min_transform_block_size_minus2);
+    tva_bw_ue(&w, sps->log2_diff_max_min_transform_block_size);
+    tva_bw_ue(&w, sps->max_transform_hierarchy_depth_inter);
+    tva_bw_ue(&w, sps->max_transform_hierarchy_depth_intra);
+    tva_bw_put(&w, 1, sps->scaling_list_enabled_flag);
+    if (sps->scaling_list_enabled_flag)
+        tva_bw_put(&w, 1, 0);            /* use default scaling lists */
+    tva_bw_put(&w, 1, sps->amp_enabled_flag);
+    tva_bw_put(&w, 1, sps->sample_adaptive_offset_enabled_flag);
+    tva_bw_put(&w, 1, sps->pcm_enabled_flag);
+    if (sps->pcm_enabled_flag) {
+        tva_bw_put(&w, 4, sps->pcm_sample_bit_depth_luma_minus1);
+        tva_bw_put(&w, 4, sps->pcm_sample_bit_depth_chroma_minus1);
+        tva_bw_ue(&w, sps->log2_min_pcm_luma_coding_block_size_minus3);
+        tva_bw_ue(&w, sps->log2_diff_max_min_luma_coding_block_size);
+        tva_bw_put(&w, 1, sps->pcm_loop_filter_disabled_flag);
+    }
+    tva_bw_ue(&w, 0);                    /* num_short_term_ref_pic_sets */
+    tva_bw_put(&w, 1, sps->long_term_ref_pics_present_flag);
+    if (sps->long_term_ref_pics_present_flag)
+        tva_bw_ue(&w, sps->num_long_term_ref_pics_sps);
+    tva_bw_put(&w, 1, sps->sps_temporal_mvp_enabled_flag);
+    tva_bw_put(&w, 1, sps->strong_intra_smoothing_enabled_flag);
+    tva_bw_put(&w, 1, 0);                /* vui_parameters_present_flag */
+    tva_bw_put(&w, 1, 0);                /* sps_extension_present_flag */
+    tva_bw_rbsp_trailing(&w);
+    *out = w.buf;
+    return w.len;
+}
+
+static size_t
+tva_build_h265_pps(const struct pipe_h265_pps *pps, uint8_t **out)
+{
+    struct tva_bw w = {0};
+
+    if (pps->tiles_enabled_flag &&
+        (pps->num_tile_columns_minus1 >= ARRAY_SIZE(pps->column_width_minus1) ||
+         pps->num_tile_rows_minus1 >= ARRAY_SIZE(pps->row_height_minus1)))
+        return 0;
+
+    tva_bw_hevc_header(&w, 34);
+    tva_bw_ue(&w, 0);                    /* pps_pic_parameter_set_id */
+    tva_bw_ue(&w, 0);                    /* pps_seq_parameter_set_id */
+    tva_bw_put(&w, 1, pps->dependent_slice_segments_enabled_flag);
+    tva_bw_put(&w, 1, pps->output_flag_present_flag);
+    tva_bw_put(&w, 3, pps->num_extra_slice_header_bits);
+    tva_bw_put(&w, 1, pps->sign_data_hiding_enabled_flag);
+    tva_bw_put(&w, 1, pps->cabac_init_present_flag);
+    tva_bw_ue(&w, pps->num_ref_idx_l0_default_active_minus1);
+    tva_bw_ue(&w, pps->num_ref_idx_l1_default_active_minus1);
+    tva_bw_se(&w, pps->init_qp_minus26);
+    tva_bw_put(&w, 1, pps->constrained_intra_pred_flag);
+    tva_bw_put(&w, 1, pps->transform_skip_enabled_flag);
+    tva_bw_put(&w, 1, pps->cu_qp_delta_enabled_flag);
+    if (pps->cu_qp_delta_enabled_flag)
+        tva_bw_ue(&w, pps->diff_cu_qp_delta_depth);
+    tva_bw_se(&w, pps->pps_cb_qp_offset);
+    tva_bw_se(&w, pps->pps_cr_qp_offset);
+    tva_bw_put(&w, 1, pps->pps_slice_chroma_qp_offsets_present_flag);
+    tva_bw_put(&w, 1, pps->weighted_pred_flag);
+    tva_bw_put(&w, 1, pps->weighted_bipred_flag);
+    tva_bw_put(&w, 1, pps->transquant_bypass_enabled_flag);
+    tva_bw_put(&w, 1, pps->tiles_enabled_flag);
+    tva_bw_put(&w, 1, pps->entropy_coding_sync_enabled_flag);
+    if (pps->tiles_enabled_flag) {
+        tva_bw_ue(&w, pps->num_tile_columns_minus1);
+        tva_bw_ue(&w, pps->num_tile_rows_minus1);
+        /* The frontend does not preserve uniform_spacing_flag.  Explicit
+         * widths/heights are available, so use the non-uniform form. */
+        tva_bw_put(&w, 1, 0);
+        for (unsigned i = 0; i < pps->num_tile_columns_minus1; i++)
+            tva_bw_ue(&w, pps->column_width_minus1[i]);
+        for (unsigned i = 0; i < pps->num_tile_rows_minus1; i++)
+            tva_bw_ue(&w, pps->row_height_minus1[i]);
+        tva_bw_put(&w, 1, pps->loop_filter_across_tiles_enabled_flag);
+    }
+    tva_bw_put(&w, 1, pps->pps_loop_filter_across_slices_enabled_flag);
+
+    /* VA-API does not expose deblocking_filter_control_present_flag itself;
+     * infer it from the controls which follow it in the bitstream. */
+    bool dbf_ctrl = pps->deblocking_filter_override_enabled_flag ||
+                    pps->pps_deblocking_filter_disabled_flag ||
+                    pps->pps_beta_offset_div2 || pps->pps_tc_offset_div2;
+    tva_bw_put(&w, 1, dbf_ctrl);
+    if (dbf_ctrl) {
+        tva_bw_put(&w, 1, pps->deblocking_filter_override_enabled_flag);
+        tva_bw_put(&w, 1, pps->pps_deblocking_filter_disabled_flag);
+        if (!pps->pps_deblocking_filter_disabled_flag) {
+            tva_bw_se(&w, pps->pps_beta_offset_div2);
+            tva_bw_se(&w, pps->pps_tc_offset_div2);
+        }
+    }
+    tva_bw_put(&w, 1, 0);                /* pps_scaling_list_data_present */
+    tva_bw_put(&w, 1, pps->lists_modification_present_flag);
+    tva_bw_ue(&w, pps->log2_parallel_merge_level_minus2);
+    tva_bw_put(&w, 1, pps->slice_segment_header_extension_present_flag);
+    tva_bw_put(&w, 1, 0);                /* pps_extension_present_flag */
+    tva_bw_rbsp_trailing(&w);
+    *out = w.buf;
+    return w.len;
+}
+
+static bool
+tva_h265_can_build(const struct pipe_h265_sps *sps)
+{
+    if (!sps)
+        return false;
+    /* VA-API exposes only the number of short-term RPS entries, not their
+     * contents.  Long-term SPS entries have the same limitation. */
+    if (sps->num_short_term_ref_pic_sets > 0)
+        return false;
+    if (sps->long_term_ref_pics_present_flag &&
+        sps->num_long_term_ref_pics_sps > 0)
+        return false;
+    return true;
 }
 
 /* ---------------------------- codec vfuncs */
@@ -1390,6 +1631,89 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                 free(csd);
                 free(sps_buf);
                 free(pps_buf);
+            }
+            if (tva_codec_is_broken(c))
+                return -1;
+        } else if (format == PIPE_VIDEO_FORMAT_HEVC) {
+            struct pipe_h265_picture_desc *h265 =
+                (struct pipe_h265_picture_desc *)picture;
+            if (h265 && h265->pps && h265->pps->sps) {
+                const struct pipe_h265_sps *sps = h265->pps->sps;
+                static const uint8_t sc[4] = { 0, 0, 0, 1 };
+                uint8_t *vps_nalu = NULL, *sps_nalu = NULL;
+                uint8_t *pps_nalu = NULL;
+
+                if (!tva_h265_can_build(sps)) {
+                    debug_printf("tva: HEVC parameter sets cannot be synthesized "
+                                 "for this stream\n");
+                    tva_mark_broken(c);
+                    return -1;
+                }
+
+                size_t vps_nalu_len =
+                    tva_build_h265_vps(sps, c->base.profile, &vps_nalu);
+                size_t sps_nalu_len =
+                    tva_build_h265_sps(sps, c->base.profile, &sps_nalu);
+                size_t pps_nalu_len = tva_build_h265_pps(h265->pps, &pps_nalu);
+                if (!vps_nalu_len || !sps_nalu_len || !pps_nalu_len) {
+                    debug_printf("tva: HEVC CSD synthesis failed\n");
+                    free(vps_nalu);
+                    free(sps_nalu);
+                    free(pps_nalu);
+                    tva_mark_broken(c);
+                    return -1;
+                }
+
+                size_t vps_len = vps_nalu_len + 4;
+                size_t sps_len = sps_nalu_len + 4;
+                size_t pps_len = pps_nalu_len + 4;
+                size_t nlen = vps_len + sps_len + pps_len;
+                uint8_t *csd = malloc(nlen);
+                if (!csd) {
+                    free(vps_nalu);
+                    free(sps_nalu);
+                    free(pps_nalu);
+                    tva_mark_broken(c);
+                    return -1;
+                }
+                memcpy(csd, sc, 4);
+                memcpy(csd + 4, vps_nalu, vps_nalu_len);
+                memcpy(csd + vps_len, sc, 4);
+                memcpy(csd + vps_len + 4, sps_nalu, sps_nalu_len);
+                memcpy(csd + vps_len + sps_len, sc, 4);
+                memcpy(csd + vps_len + sps_len + 4,
+                       pps_nalu, pps_nalu_len);
+
+                if (!c->csd || c->csd_len != nlen ||
+                    memcmp(c->csd, csd, nlen)) {
+                    free(c->csd);
+                    c->csd = csd;
+                    c->csd_len = nlen;
+                    csd = NULL;
+
+                    int rc = tva_session_send_unit(c->sess,
+                                                    c->csd, vps_len);
+                    if (rc == TVA_OK)
+                        rc = tva_session_send_unit(c->sess,
+                                                    c->csd + vps_len, sps_len);
+                    if (rc == TVA_OK)
+                        rc = tva_session_send_unit(c->sess,
+                                                    c->csd + vps_len + sps_len,
+                                                    pps_len);
+                    if (rc != TVA_OK) {
+                        debug_printf("tva: HEVC CSD send failed: %s\n",
+                                     tva_session_last_error(c->sess));
+                        tva_mark_broken(c);
+                    } else {
+                        TVA_TRACE("HEVC CSD sent: profile=%d vps=%zu sps=%zu pps=%zu",
+                                  (int)c->base.profile, vps_len, sps_len,
+                                  pps_len);
+                    }
+                }
+                free(csd);
+                free(vps_nalu);
+                free(sps_nalu);
+                free(pps_nalu);
             }
             if (tva_codec_is_broken(c))
                 return -1;
