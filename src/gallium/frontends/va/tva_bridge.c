@@ -1006,28 +1006,58 @@ tva_bw_rbsp_trailing(struct tva_bw *w)
  * written first (nal_ref_idc=3, type=7).
  */
 static size_t
-tva_build_h264_sps(const struct pipe_h264_sps *sps, unsigned max_refs,
+tva_build_h264_sps(enum pipe_video_profile profile,
+                   const struct pipe_h264_sps *sps, unsigned max_refs,
                    unsigned visible_width, unsigned visible_height,
                    uint8_t **out)
 {
     struct tva_bw w = {0};
 
-    /* profile_idc does not exist in VA-API; derive it exactly like the
-     * upstream driver's derive_profile_idc(): the fields written below are
-     * only self-consistent for the profile chosen here. */
+    /* VA-API carries the H.264 profile in the decode context rather than in
+     * VAPictureParameterBufferH264.  Preserve that profile in the synthetic
+     * SPS; inferring High solely from chroma/depth mislabels ordinary 8-bit
+     * 4:2:0 High streams as Main. */
     uint8_t profile_idc;
-    if (sps->bit_depth_luma_minus8 || sps->bit_depth_chroma_minus8 ||
-        sps->chroma_format_idc > 1)
-        profile_idc = 100;   /* high: carries chroma/depth fields */
-    else
-        profile_idc = 77;    /* main: baseline has no CABAC */
+    switch (profile) {
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
+        profile_idc = 66;
+        break;
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
+        profile_idc = 77;
+        break;
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED:
+        profile_idc = 88;
+        break;
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
+        profile_idc = 100;
+        break;
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10:
+        profile_idc = 110;
+        break;
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422:
+        profile_idc = 122;
+        break;
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444:
+        profile_idc = 244;
+        break;
+    default:
+        /* Keep a conservative fallback for callers that pass an unknown
+         * profile while still providing high-profile SPS fields when the
+         * parsed descriptor requires them. */
+        profile_idc = (sps->bit_depth_luma_minus8 ||
+                       sps->bit_depth_chroma_minus8 ||
+                       sps->chroma_format_idc > 1) ? 100 : 77;
+        break;
+    }
 
     tva_bw_put(&w, 8, 0x67);             /* nal_ref_idc=3, type=7 */
     tva_bw_put(&w, 8, profile_idc);
     tva_bw_put(&w, 8, 0);                /* constraint flags + reserved */
     tva_bw_put(&w, 8, sps->level_idc ? sps->level_idc : 40);
     tva_bw_ue(&w, 0);                    /* seq_parameter_set_id */
-    if (profile_idc == 100) {
+    if (profile_idc == 100 || profile_idc == 110 ||
+        profile_idc == 122 || profile_idc == 244) {
         tva_bw_ue(&w, sps->chroma_format_idc);
         if (sps->chroma_format_idc == 3)
             tva_bw_put(&w, 1, sps->separate_colour_plane_flag);
@@ -1110,7 +1140,8 @@ tva_build_h264_sps(const struct pipe_h264_sps *sps, unsigned max_refs,
 
 /* PPS NALU: nal_ref_idc=3, type=8 */
 static size_t
-tva_build_h264_pps(const struct pipe_h264_pps *pps, unsigned max_refs,
+tva_build_h264_pps(enum pipe_video_profile profile,
+                   const struct pipe_h264_pps *pps, unsigned max_refs,
                    uint8_t **out)
 {
     struct tva_bw w = {0};
@@ -1122,11 +1153,16 @@ tva_build_h264_pps(const struct pipe_h264_pps *pps, unsigned max_refs,
     tva_bw_put(&w, 1, pps->bottom_field_pic_order_in_frame_present_flag);
     tva_bw_ue(&w, pps->num_slice_groups_minus1);
     /* VAPictureParameterBufferH264 has no PPS default-reference fields.  The
-     * parser leaves these Gallium fields at zero, but a stream can legally
-     * omit num_ref_idx_active_override_flag and rely on defaults (the test
-     * stream uses four references).  Use the decoder's DPB size as the safe
-     * fallback unless a future frontend supplies explicit defaults. */
-    unsigned default_refs = max_refs ? MIN2(max_refs, 16) - 1 : 0;
+     * Main-profile path historically uses the decoder DPB size as a fallback
+     * because the working stream uses four references.  High-profile streams
+     * commonly keep the PPS defaults at zero and carry larger lists in their
+     * slice headers, so preserve that zero instead. */
+    bool high_profile = profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH ||
+                        profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH10 ||
+                        profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH422 ||
+                        profile == PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH444;
+    unsigned default_refs = !high_profile && max_refs
+                            ? MIN2(max_refs, 16) - 1 : 0;
     tva_bw_ue(&w, pps->num_ref_idx_l0_default_active_minus1 ?
              pps->num_ref_idx_l0_default_active_minus1 : default_refs);
     tva_bw_ue(&w, pps->num_ref_idx_l1_default_active_minus1 ?
@@ -1139,6 +1175,11 @@ tva_build_h264_pps(const struct pipe_h264_pps *pps, unsigned max_refs,
     tva_bw_put(&w, 1, pps->deblocking_filter_control_present_flag);
     tva_bw_put(&w, 1, pps->constrained_intra_pred_flag);
     tva_bw_put(&w, 1, pps->redundant_pic_cnt_present_flag);
+    if (high_profile) {
+        tva_bw_put(&w, 1, pps->transform_8x8_mode_flag);
+        tva_bw_put(&w, 1, 0);            /* pic_scaling_matrix_present */
+        tva_bw_se(&w, pps->second_chroma_qp_index_offset);
+    }
     tva_bw_rbsp_trailing(&w);
     *out = w.buf;
     return w.len;
@@ -1234,12 +1275,14 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
             if (h264 && h264->pps && h264->pps->sps) {
                 uint8_t *sps_rbsp = NULL, *pps_rbsp = NULL;
                 static const uint8_t sc[4] = { 0, 0, 0, 1 };
-                size_t sps_rbsp_len = tva_build_h264_sps(h264->pps->sps,
+                size_t sps_rbsp_len = tva_build_h264_sps(c->base.profile,
+                                                         h264->pps->sps,
                                                          c->base.max_references,
                                                          target ? target->width : c->base.width,
                                                          target ? target->height : c->base.height,
                                                          &sps_rbsp);
-                size_t pps_rbsp_len = tva_build_h264_pps(h264->pps,
+                size_t pps_rbsp_len = tva_build_h264_pps(c->base.profile,
+                                                         h264->pps,
                                                          c->base.max_references,
                                                          &pps_rbsp);
                 if (!sps_rbsp_len || !pps_rbsp_len) {
@@ -1291,8 +1334,9 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                                      tva_session_last_error(c->sess));
                         tva_mark_broken(c);
                     } else {
-                        TVA_TRACE("CSD sent: sps=%zu pps=%zu maxrefs=%u",
-                                  sps_len, pps_len, c->base.max_references);
+                        TVA_TRACE("CSD sent: profile=%d sps=%zu pps=%zu maxrefs=%u",
+                                  (int)c->base.profile, sps_len, pps_len,
+                                  c->base.max_references);
                     }
                 }
                 free(csd);
