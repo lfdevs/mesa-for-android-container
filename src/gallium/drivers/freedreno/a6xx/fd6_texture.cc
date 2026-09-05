@@ -14,7 +14,11 @@
 #include "util/u_memory.h"
 #include "util/u_string.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "freedreno_dev_info.h"
+#include "fd6_barrier.h"
 #include "fd6_emit.h"
 #include "fd6_resource.h"
 #include "fd6_screen.h"
@@ -817,6 +821,35 @@ fd6_texture_state(struct fd_context *ctx, mesa_shader_stage type)
    struct fd6_texture_state *state = NULL;
    struct fd6_texture_key key;
 
+   /* EGL/DRI dma-buf imports are shared with an external producer (the
+    * termux-va bridge).  The producer can update the BO without touching this
+    * context's resource sequence number or submitting a Gallium batch.  Make
+    * the consumer invalidate its texture cache immediately before the draw;
+    * this is deliberately keyed to shared resources so ordinary textures do
+    * not pay the extra barrier. */
+   bool shared_texture = false;
+   for (unsigned i = 0; i < tex->num_textures; i++) {
+      if (tex->textures[i] &&
+          fd_resource(tex->textures[i]->texture)->b.is_shared) {
+         shared_texture = true;
+         break;
+      }
+   }
+   if (shared_texture) {
+      const unsigned external_flushes = FD6_FLUSH_CACHE |
+                                        FD6_INVALIDATE_CACHE |
+                                        FD6_WAIT_MEM_WRITES |
+                                        FD6_WAIT_FOR_IDLE;
+      if (ctx->batch)
+         ctx->batch->barrier |= external_flushes;
+      if (ctx->batch_nondraw)
+         ctx->batch_nondraw->barrier |= external_flushes;
+      if (getenv("DMD_VA_LOG"))
+         fprintf(stderr, "tva-fd shared texture stage=%d batch=%p barrier=%#x\n",
+                 type, (void *)ctx->batch,
+                 ctx->batch ? ctx->batch->barrier : 0);
+   }
+
    if (unlikely(fd6_ctx->tex_cache_needs_invalidate))
       handle_invalidates<CHIP>(ctx);
 
@@ -905,6 +938,20 @@ fd6_rebind_resource(struct fd_context *ctx, struct fd_resource *rsc) assert_dt
       return;
 
    struct fd6_context *fd6_ctx = fd6_context(ctx);
+
+   /* A dma-buf may have been written by another GPU/CPU context without a
+    * BO rebind.  Rebuilding the sampler state is not enough: invalidate the
+    * consumer-side texture cache before the next draw that uses this
+    * resource.  The barrier is attached to whichever batch is active; the
+    * normal state emission path will consume it before issuing the draw. */
+   const unsigned external_flushes = FD6_FLUSH_CACHE |
+                                     FD6_INVALIDATE_CACHE |
+                                     FD6_WAIT_MEM_WRITES |
+                                     FD6_WAIT_FOR_IDLE;
+   if (ctx->batch)
+      ctx->batch->barrier |= external_flushes;
+   if (ctx->batch_nondraw)
+      ctx->batch_nondraw->barrier |= external_flushes;
 
    hash_table_foreach (fd6_ctx->tex_cache, entry) {
       struct fd6_texture_state *state = (struct fd6_texture_state *)entry->data;

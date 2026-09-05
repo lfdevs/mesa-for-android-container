@@ -55,6 +55,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifndef _WIN32
+#include <errno.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+#include "drm-uapi/dma-buf.h"
+#include "frontend/drm_driver.h"
+#endif
 
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
@@ -567,19 +574,70 @@ static bool
 tva_cpu_copy_enabled(void)
 {
     const char *e = getenv("DMD_VA_CPU_COPY");
-    if (e && *e)
-        return !(strcmp(e, "0") == 0 || strcmp(e, "false") == 0 ||
-                 strcmp(e, "off") == 0);
+    if (e && *e && (strcmp(e, "0") == 0 || strcmp(e, "false") == 0 ||
+                    strcmp(e, "off") == 0))
+        return false;
 
-    /* KGSL exposes Gallium and Turnip as separate GPU contexts.  A
-     * texture_subdata() upload can complete in the Gallium context while
-     * leaving cache state that is not visible to the importing Turnip
-     * context.  Linear CPU writes provide the cache hand-off required by the
-     * dma-buf export path. */
-    const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
-    return backend && (strcmp(backend, "kgsl") == 0 ||
-                       strcmp(backend, "KGSL") == 0);
+    /* The Chrome GPU process sanitizes TERMUX_VA_* from its inherited
+     * environment, so backend-based autodetection is not reliable here.  The
+     * bridge is only used for decoder output resources; use the cache-safe CPU
+     * handoff by default and retain DMD_VA_CPU_COPY=0 as an escape hatch. */
+    bool enabled = true;
+    if (tva_dbg())
+        fprintf(stderr, "tva: copy mode env=%s enabled=%d\n",
+                e ? e : "<unset>", enabled);
+    return enabled;
 }
+
+#ifndef _WIN32
+/* KGSL exposes the same dma-buf through the VA producer and Chrome's ANGLE
+ * consumer, but it does not provide an implicit cross-context GPU dependency
+ * for a Gallium texture upload.  Bracket CPU writes with the dma-buf exporter
+ * cache hooks so a consumer importing the fd observes completed frame data. */
+static int
+tva_dmabuf_write_begin(struct pipe_context *pipe, struct pipe_resource *res)
+{
+   if (!pipe || !pipe->screen || !pipe->screen->resource_get_handle)
+      return -1;
+
+   struct winsys_handle whandle;
+   memset(&whandle, 0, sizeof(whandle));
+   whandle.type = WINSYS_HANDLE_TYPE_FD;
+   if (!pipe->screen->resource_get_handle(pipe->screen, pipe, res,
+                                          &whandle,
+                                          PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE))
+      return -1;
+
+   struct dma_buf_sync sync = {
+      .flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_WRITE,
+   };
+   if (ioctl(whandle.handle, DMA_BUF_IOCTL_SYNC, &sync) < 0) {
+      int err = errno;
+      if (err != ENOTTY && err != EOPNOTSUPP && err != ENOSYS &&
+          getenv("DMD_VA_LOG"))
+         fprintf(stderr, "tva: dma-buf write sync start failed fd=%d errno=%d\n",
+                 whandle.handle, err);
+      close(whandle.handle);
+      return -1;
+   }
+   return whandle.handle;
+}
+
+static void
+tva_dmabuf_write_end(int fd)
+{
+   if (fd < 0)
+      return;
+
+   struct dma_buf_sync sync = {
+      .flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE,
+   };
+   if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) < 0 && getenv("DMD_VA_LOG"))
+      fprintf(stderr, "tva: dma-buf write sync end failed fd=%d errno=%d\n",
+              fd, errno);
+   close(fd);
+}
+#endif
 
 static bool
 tva_copy_plane(struct pipe_context *pipe, struct pipe_resource *res,
@@ -601,30 +659,43 @@ tva_copy_plane(struct pipe_context *pipe, struct pipe_resource *res,
     TVA_TRACE("copy plane fmt=%s %ux%u stride=%u src=%02x %02x %02x %02x",
               util_format_short_name(res->format), w, h, stride,
               data[0], data[1], data[2], data[3]);
-    /* On KGSL use a CPU-mapped upload by default.  The imported dma-buf is
-     * then flushed by Turnip when it is subsequently imported.  Other
-     * backends retain the asynchronous texture_subdata path, and callers can
-     * force either mode with DMD_VA_CPU_COPY=1/0. */
+    /* CPU-mapped uploads are used by default for the cache-safe KGSL handoff.
+     * Callers can force the asynchronous GPU upload path with
+     * DMD_VA_CPU_COPY=0. */
     if (tva_cpu_copy_enabled() && pipe->texture_map &&
         pipe->texture_unmap) {
         TVA_TRACE("copy path=cpu");
+#ifndef _WIN32
+        int sync_fd = tva_dmabuf_write_begin(pipe, res);
+#else
+        int sync_fd = -1;
+#endif
         struct pipe_transfer *transfer = NULL;
         uint8_t *dst = pipe->texture_map(pipe, res, 0, PIPE_MAP_WRITE,
                                           &box, &transfer);
         if (!dst || !transfer) {
             if (transfer)
                 pipe->texture_unmap(pipe, transfer);
+#ifndef _WIN32
+            tva_dmabuf_write_end(sync_fd);
+#endif
             return false;
         }
         unsigned row_bytes = w * blocksize;
         if (transfer->stride < row_bytes) {
             pipe->texture_unmap(pipe, transfer);
+#ifndef _WIN32
+            tva_dmabuf_write_end(sync_fd);
+#endif
             return false;
         }
         for (unsigned y = 0; y < h; y++)
             memcpy(dst + (size_t)y * transfer->stride,
                    data + (size_t)y * stride, row_bytes);
         pipe->texture_unmap(pipe, transfer);
+#ifndef _WIN32
+        tva_dmabuf_write_end(sync_fd);
+#endif
     } else if (pipe->texture_subdata) {
         TVA_TRACE("copy path=gpu");
         pipe->texture_subdata(pipe, res, 0, PIPE_MAP_WRITE, &box, data,
@@ -936,6 +1007,7 @@ tva_bw_rbsp_trailing(struct tva_bw *w)
  */
 static size_t
 tva_build_h264_sps(const struct pipe_h264_sps *sps, unsigned max_refs,
+                   unsigned visible_width, unsigned visible_height,
                    uint8_t **out)
 {
     struct tva_bw w = {0};
@@ -986,11 +1058,41 @@ tva_build_h264_sps(const struct pipe_h264_sps *sps, unsigned max_refs,
     if (!sps->frame_mbs_only_flag)
         tva_bw_put(&w, 1, sps->mb_adaptive_frame_field_flag);
     tva_bw_put(&w, 1, sps->direct_8x8_inference_flag);
-    tva_bw_put(&w, 1, 0);                /* frame_cropping: unavailable */
-    /* VUI with a bitstream restriction of zero reorder depth: without it a
-     * C2 decoder buffers every frame until EOS (its reorder window defaults
-     * to large when the VUI is absent), which deadlocks the pipeline - the
-     * consumer stops submitting while frames are held. */
+
+    /* VA exposes the coded macroblock dimensions, while the video template
+     * retains the visible dimensions requested by the application.  Preserve
+     * a right/bottom crop when those differ; Qualcomm's decoder otherwise
+     * treats the synthetic stream as 816 pixels wide and may reject the
+     * 810-pixel output surfaces. */
+    unsigned coded_width = (sps->pic_width_in_mbs_minus1 + 1) * 16;
+    unsigned coded_height = (sps->pic_height_in_mbs_minus1 + 1) * 16 *
+                            (sps->frame_mbs_only_flag ? 1 : 2);
+    unsigned crop_unit_x = sps->chroma_format_idc == 0 ? 1 : 2;
+    unsigned crop_unit_y = sps->chroma_format_idc == 0 ?
+                           (sps->frame_mbs_only_flag ? 1 : 2) :
+                           (sps->frame_mbs_only_flag ? 2 : 4);
+    unsigned crop_right = 0, crop_bottom = 0;
+    if (visible_width && coded_width > visible_width &&
+        (coded_width - visible_width) % crop_unit_x == 0)
+        crop_right = (coded_width - visible_width) / crop_unit_x;
+    if (visible_height && coded_height > visible_height &&
+        (coded_height - visible_height) % crop_unit_y == 0)
+        crop_bottom = (coded_height - visible_height) / crop_unit_y;
+    bool cropped = crop_right || crop_bottom;
+    tva_bw_put(&w, 1, cropped);
+    if (cropped) {
+        tva_bw_ue(&w, 0);                /* frame_crop_left_offset */
+        tva_bw_ue(&w, crop_right);
+        tva_bw_ue(&w, 0);                /* frame_crop_top_offset */
+        tva_bw_ue(&w, crop_bottom);
+    }
+    /* The VA picture descriptor does not carry the original VUI.  Emit only a
+     * minimal parameter block and, importantly, do not invent a bitstream
+     * restriction: the source stream may permit reordering (the test stream
+     * does), and Qualcomm C2 treats a fabricated max_num_reorder_frames=0 as
+     * a different stream, dropping output after its initial reorder window.
+     * The remaining VUI flags are left absent because their values are not
+     * represented by the VA descriptor. */
     tva_bw_put(&w, 1, 1);                /* vui_parameters_present */
     tva_bw_put(&w, 1, 0);                /* aspect_ratio_info_present */
     tva_bw_put(&w, 1, 0);                /* overscan_info_present */
@@ -1000,14 +1102,7 @@ tva_build_h264_sps(const struct pipe_h264_sps *sps, unsigned max_refs,
     tva_bw_put(&w, 1, 0);                /* nal_hrd_parameters_present */
     tva_bw_put(&w, 1, 0);                /* vcl_hrd_parameters_present */
     tva_bw_put(&w, 1, 0);                /* pic_struct_present */
-    tva_bw_put(&w, 1, 1);                /* bitstream_restriction_flag */
-    tva_bw_put(&w, 1, 1);                /* motion_vectors_over_pic_boundaries */
-    tva_bw_ue(&w, 0);                    /* max_bytes_per_pic_denom */
-    tva_bw_ue(&w, 0);                    /* max_bits_per_mb_denom */
-    tva_bw_ue(&w, 0);                    /* log2_max_mv_length_horizontal */
-    tva_bw_ue(&w, 0);                    /* log2_max_mv_length_vertical */
-    tva_bw_ue(&w, 0);                    /* max_num_reorder_frames */
-    tva_bw_ue(&w, max_refs);             /* max_dec_frame_buffering */
+    tva_bw_put(&w, 1, 0);                /* bitstream_restriction_flag */
     tva_bw_rbsp_trailing(&w);
     *out = w.buf;
     return w.len;
@@ -1015,7 +1110,8 @@ tva_build_h264_sps(const struct pipe_h264_sps *sps, unsigned max_refs,
 
 /* PPS NALU: nal_ref_idc=3, type=8 */
 static size_t
-tva_build_h264_pps(const struct pipe_h264_pps *pps, uint8_t **out)
+tva_build_h264_pps(const struct pipe_h264_pps *pps, unsigned max_refs,
+                   uint8_t **out)
 {
     struct tva_bw w = {0};
 
@@ -1025,8 +1121,16 @@ tva_build_h264_pps(const struct pipe_h264_pps *pps, uint8_t **out)
     tva_bw_put(&w, 1, pps->entropy_coding_mode_flag);
     tva_bw_put(&w, 1, pps->bottom_field_pic_order_in_frame_present_flag);
     tva_bw_ue(&w, pps->num_slice_groups_minus1);
-    tva_bw_ue(&w, pps->num_ref_idx_l0_default_active_minus1);
-    tva_bw_ue(&w, pps->num_ref_idx_l1_default_active_minus1);
+    /* VAPictureParameterBufferH264 has no PPS default-reference fields.  The
+     * parser leaves these Gallium fields at zero, but a stream can legally
+     * omit num_ref_idx_active_override_flag and rely on defaults (the test
+     * stream uses four references).  Use the decoder's DPB size as the safe
+     * fallback unless a future frontend supplies explicit defaults. */
+    unsigned default_refs = max_refs ? MIN2(max_refs, 16) - 1 : 0;
+    tva_bw_ue(&w, pps->num_ref_idx_l0_default_active_minus1 ?
+             pps->num_ref_idx_l0_default_active_minus1 : default_refs);
+    tva_bw_ue(&w, pps->num_ref_idx_l1_default_active_minus1 ?
+             pps->num_ref_idx_l1_default_active_minus1 : default_refs);
     tva_bw_put(&w, 1, pps->weighted_pred_flag);
     tva_bw_put(&w, 2, pps->weighted_bipred_idc);
     tva_bw_se(&w, pps->pic_init_qp_minus26);
@@ -1132,8 +1236,12 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                 static const uint8_t sc[4] = { 0, 0, 0, 1 };
                 size_t sps_rbsp_len = tva_build_h264_sps(h264->pps->sps,
                                                          c->base.max_references,
+                                                         target ? target->width : c->base.width,
+                                                         target ? target->height : c->base.height,
                                                          &sps_rbsp);
-                size_t pps_rbsp_len = tva_build_h264_pps(h264->pps, &pps_rbsp);
+                size_t pps_rbsp_len = tva_build_h264_pps(h264->pps,
+                                                         c->base.max_references,
+                                                         &pps_rbsp);
                 if (!sps_rbsp_len || !pps_rbsp_len) {
                     debug_printf("tva: CSD synthesis failed\n");
                     free(sps_rbsp);
@@ -1416,7 +1524,12 @@ tva_codec_destroy_fence(struct pipe_video_codec *codec,
     if (!fence)
         return;
     mtx_lock(&c->pend_mutex);
-    tva_detach_fence_locked(fence, true);
+    /* Destroying the VA fence only drops the client's wait handle.  The
+     * output surface/resource may still be reused while MediaCodec is
+     * reordering frames, so keep the pending record alive and copy its staged
+     * frame when the matching output arrives.  Marking it failed here drops
+     * the frame before the reader can pair it with the pending unit. */
+    tva_detach_fence_locked(fence, false);
     u_cnd_monotonic_broadcast(&c->pend_cond);
     mtx_unlock(&c->pend_mutex);
     FREE(fence);

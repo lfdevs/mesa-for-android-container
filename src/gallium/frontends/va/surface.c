@@ -274,6 +274,11 @@ _vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target, uint64_t timeo
       fence = surf->fence;
    }
 
+   if (vl_va_export_debug_enabled())
+      fprintf(stderr, "tva-export sync inspect surface=%#x surf=%p ctx=%p fence=%p coded=%p pipe=%p\n",
+              render_target, (void *)surf, (void *)context, (void *)fence,
+              (void *)surf->coded_buf, (void *)surf->pipe_fence);
+
    if (surf->pipe_fence) {
       struct pipe_screen *pscreen = drv->pipe->screen;
       TVA_EXPORT_LOG("sync surface=%#x pipe fence=%p timeout=%" PRIu64 "\n",
