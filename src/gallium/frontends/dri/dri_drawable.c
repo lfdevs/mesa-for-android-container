@@ -106,6 +106,12 @@ dri_st_framebuffer_validate(struct st_context *st,
    if (!out)
       return true;
 
+   /* Once the state tracker gets the attachments it may render to them again.
+    * This also invalidates the optimization when validation reused an image
+    * without calling allocate_textures().
+    */
+   drawable->back_buffer_fenced = false;
+
    /* Set the window-system buffers for the gallium frontend. */
    for (i = 0; i < count; i++)
       pipe_resource_reference(&out[i], textures[statts[i]]);
@@ -484,6 +490,7 @@ dri_flush_impl(struct dri_context *ctx,
          return -1;
 
       drawable->flushing = true;
+      drawable->back_buffer_fenced = false;
    }
    else {
       flags &= ~__DRI2_FLUSH_DRAWABLE;
@@ -582,6 +589,13 @@ dri_flush_impl(struct dri_context *ctx,
        * frontend to revalidate the framebuffer.
        */
       p_atomic_inc(&drawable->base.stamp);
+   }
+
+   if (drawable && args.ctx && fence_fd >= 0 &&
+       !ctx->is_shared_buffer_bound &&
+       (reason == __DRI2_THROTTLE_SWAPBUFFER ||
+        reason == __DRI2_NOTHROTTLE_SWAPBUFFER)) {
+      drawable->back_buffer_fenced = true;
    }
 
    st_context_invalidate_state(st, ST_INVALIDATE_FB_STATE);

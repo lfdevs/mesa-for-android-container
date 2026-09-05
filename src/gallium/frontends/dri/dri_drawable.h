@@ -64,6 +64,12 @@ struct dri_drawable
    struct pipe_fence_handle *throttle_fence;
    bool flushing; /* prevents recursion in dri_flush */
 
+   /* The current back attachment was flushed by an explicit-fence swap and
+    * has not been handed back to the state tracker for further use. Its
+    * replacement need not repeat the external-consumer flush.
+    */
+   bool back_buffer_fenced;
+
    /**
     * Private data from the loader.  We just hold on to it and pass
     * it back when calling into loader provided functions.
