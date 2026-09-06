@@ -2431,17 +2431,14 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                 uint8_t *sps_rbsp = NULL, *pps_rbsp = NULL;
                 static const uint8_t sc[4] = { 0, 0, 0, 1 };
                 if (!c->h264_pps_defaults_valid) {
-                    if (tva_h264_high_profile(c->base.profile)) {
-                        /* High-profile streams commonly keep the PPS
-                         * defaults at zero and carry larger lists in their
-                         * slice headers. */
-                        c->h264_pps_l0_default = 0;
-                        c->h264_pps_l1_default = 0;
-                    } else if (h264->slice_parameter.slice_info_present) {
+                    if (h264->slice_parameter.slice_info_present) {
                         /* VA exposes the active list sizes with each slice
                          * parameter.  The PPS defaults themselves are not
                          * part of VAPictureParameterBufferH264, so seed the
-                         * synthetic PPS from the first observed values. */
+                         * synthetic PPS from the first observed values.  The
+                         * values are the effective counts reported by the
+                         * VA/FFmpeg parser, including defaults used when a
+                         * slice omits num_ref_idx_active_override_flag. */
                         c->h264_pps_l0_default =
                             h264->num_ref_idx_l0_active_minus1;
                         c->h264_pps_l1_default =
@@ -2454,18 +2451,25 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                         c->h264_pps_l1_default = default_refs;
                     }
                     c->h264_pps_defaults_valid = true;
-                } else if (!tva_h264_high_profile(c->base.profile) &&
-                           h264->slice_parameter.slice_info_present) {
+                } else if (h264->slice_parameter.slice_info_present) {
                     /* Reference-list counts can be zero for an IDR picture
-                     * and increase on later P/B pictures.  Retain the largest
-                     * values observed so the PPS converges without emitting a
-                     * new parameter set for every frame. */
-                    c->h264_pps_l0_default = MAX2(
-                        c->h264_pps_l0_default,
-                        (unsigned)h264->num_ref_idx_l0_active_minus1);
-                    c->h264_pps_l1_default = MAX2(
-                        c->h264_pps_l1_default,
-                        (unsigned)h264->num_ref_idx_l1_active_minus1);
+                     * and increase on later P/B pictures.  Non-high profiles
+                     * retain the largest values observed so the PPS converges
+                     * without emitting a new parameter set for every frame.
+                     * High-profile streams may use explicit per-slice list
+                     * sizes larger than their PPS defaults; once a non-zero
+                     * default has been learned, keep it stable instead of
+                     * replacing it with those explicit values. */
+                    if (!tva_h264_high_profile(c->base.profile) ||
+                        c->h264_pps_l0_default == 0)
+                        c->h264_pps_l0_default = MAX2(
+                            c->h264_pps_l0_default,
+                            (unsigned)h264->num_ref_idx_l0_active_minus1);
+                    if (!tva_h264_high_profile(c->base.profile) ||
+                        c->h264_pps_l1_default == 0)
+                        c->h264_pps_l1_default = MAX2(
+                            c->h264_pps_l1_default,
+                            (unsigned)h264->num_ref_idx_l1_active_minus1);
                 }
                 size_t sps_rbsp_len = tva_build_h264_sps(c->base.profile,
                                                          h264->pps->sps,
