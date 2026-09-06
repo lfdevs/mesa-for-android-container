@@ -162,6 +162,11 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
 #endif
       if (!drv->vscreen)
          drv->vscreen = vl_dri3_screen_create(ctx->native_dpy, ctx->x11_screen);
+      /* PRoot exposes KGSL but no DRM render node.  When the normal X11
+       * DRI3 path cannot obtain a render device, let the termux-va bridge
+       * create its KGSL screen directly instead of falling back to swrast. */
+      if (!drv->vscreen && tva_bridge_active())
+         drv->vscreen = tva_bridge_vscreen_create(-1, false);
       if (!drv->vscreen)
          drv->vscreen = vl_xlib_swrast_screen_create(ctx->native_dpy, ctx->x11_screen);
       break;
@@ -169,16 +174,22 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    case VA_DISPLAY_DRM:
    case VA_DISPLAY_DRM_RENDERNODES: {
       const struct drm_state *drm_info = (struct drm_state *) ctx->drm_state;
+      const int drm_fd = drm_info ? drm_info->fd : -1;
 
-      if (!drm_info || drm_info->fd < 0) {
+      /* A Wayland compositor in a PRoot container may expose no DRM fd at
+       * all.  The termux-va bridge can open KGSL directly, so let it handle
+       * that case instead of rejecting the display before driver init. */
+      if (drm_fd < 0 && !(tva_bridge_active() &&
+                          ctx->display_type == VA_DISPLAY_WAYLAND)) {
          FREE(drv);
          return VA_STATUS_ERROR_INVALID_PARAMETER;
       }
 #ifdef HAVE_DRISW_KMS
-      char* drm_driver_name = loader_get_driver_for_fd(drm_info->fd);
+      char* drm_driver_name = drm_fd >= 0 ?
+         loader_get_driver_for_fd(drm_fd) : NULL;
       if(drm_driver_name) {
          if (strcmp(drm_driver_name, "vgem") == 0)
-            drv->vscreen = vl_vgem_drm_screen_create(drm_info->fd);
+            drv->vscreen = vl_vgem_drm_screen_create(drm_fd);
          FREE(drm_driver_name);
       }
 #endif
@@ -191,9 +202,9 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
           */
          bool honor_dri_prime = ctx->display_type == VA_DISPLAY_WAYLAND;
          if (tva_bridge_active())
-            drv->vscreen = tva_bridge_vscreen_create(drm_info->fd, honor_dri_prime);
+            drv->vscreen = tva_bridge_vscreen_create(drm_fd, honor_dri_prime);
          else
-            drv->vscreen = vl_drm_screen_create(drm_info->fd, honor_dri_prime);
+            drv->vscreen = vl_drm_screen_create(drm_fd, honor_dri_prime);
       }
       break;
    }

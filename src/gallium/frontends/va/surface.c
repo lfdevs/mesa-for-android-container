@@ -1427,8 +1427,9 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
        * the existing object (fd) instead of adding new one.
        */
       bool same_object = desc->num_objects &&
-          os_same_file_description(desc->objects[desc->num_objects - 1].fd,
-                                   whandle.handle) == 0;
+          (surf->buffer->contiguous_planes ||
+           os_same_file_description(desc->objects[desc->num_objects - 1].fd,
+                                    whandle.handle) == 0);
       if (!same_object) {
          desc->objects[desc->num_objects].fd = (int) whandle.handle;
 

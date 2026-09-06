@@ -1464,6 +1464,15 @@ decode).  See :doc:`termux-va`.
    ``off`` to retain the asynchronous Gallium ``texture_subdata`` path; set
    to any other non-empty value to force CPU copies.
 
+.. envvar:: DMD_VA_CONTIGUOUS_DMABUF
+
+   controls the NV12 surface layout exported to consumers.  Set to ``1``,
+   ``true`` or ``on`` to place both planes in one dma-buf, or to ``0`` (or any
+   other value) to retain separate plane objects.  When unset, the bridge
+   automatically selects the single-object layout for a KGSL-only container
+   that has no DRM render node; this is required by Chromium's current native
+   pixmap importer.  ``TERMUX_VA_CONTIGUOUS_DMABUF`` is an alias.
+
 .. envvar:: DMD_VA_LOG
 
    set to ``1`` to enable the bridge's daemon-client logging on stderr.
