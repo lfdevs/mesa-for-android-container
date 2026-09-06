@@ -89,8 +89,7 @@ typedef enum {
     CODEC_HEVC = 1,
     CODEC_VP9  = 2,
     CODEC_VP8  = 3,
-    CODEC_AV1  = 4,   /* accepted by the daemon; the Mesa bridge never
-                       * requests it (not implemented upstream either) */
+    CODEC_AV1  = 4,   /* AV1 Main decode */
     CODEC_MAX
 } CodecId;
 

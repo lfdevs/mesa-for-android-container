@@ -15,7 +15,8 @@ libva_files = files(
 # termux-va bridge: forwards VA decode over a Unix socket to the Termux
 # daemon.  Compiled in unless disabled; activation is runtime-gated.
 if with_termux_va_bridge
-  libva_files += files('tva_client.c', 'tva_bridge.c', 'tva_protocol.h')
+  libva_files += files('tva_client.c', 'tva_bridge.c', 'tva_protocol.h',
+    'bitstream.c', 'bitstream.h', 'av1_bitstream.c', 'av1_bitstream.h')
 endif
 
 if with_gfx_compute
