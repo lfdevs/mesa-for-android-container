@@ -56,6 +56,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <va/va.h>
+#include <va/va_dec_av1.h>
 #ifndef _WIN32
 #include <errno.h>
 #include <sys/ioctl.h>
@@ -86,6 +88,7 @@
 
 #include "tva_client.h"
 #include "tva_protocol.h"
+#include "av1_bitstream.h"
 
 /* Normal bridge pipeline depth.  In SHM mode it MUST stay <= SHM_SLOTS (8,
  * tva_protocol.h) or the daemon's slot pool stalls; the pending cache below
@@ -147,6 +150,7 @@ tva_profile_supported(enum pipe_video_profile profile)
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
     case PIPE_VIDEO_PROFILE_HEVC_MAIN:
     case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
+    case PIPE_VIDEO_PROFILE_AV1_MAIN:
         return true;
     default:
         return false;
@@ -163,6 +167,8 @@ tva_codec_id(enum pipe_video_profile profile)
         return CODEC_HEVC;
     case PIPE_VIDEO_FORMAT_VP9:
         return CODEC_VP9;
+    case PIPE_VIDEO_FORMAT_AV1:
+        return CODEC_AV1;
     default:
         return -1;
     }
@@ -236,6 +242,7 @@ tva_bridge_screen_set_video_hooks(struct pipe_screen *screen)
 
 /* ------------------------------------------------------- bridge codec */
 struct tva_fence;
+struct tva_av1_frame;
 
 struct tva_pending {
     bool in_use;
@@ -262,6 +269,34 @@ struct tva_fence {
     struct tva_codec *codec;
     struct tva_pending *slot;
     bool failed;           /* the associated pending entry was abandoned */
+};
+
+/* AV1's VA-API descriptor does not carry refresh_frame_flags.  Keep a whole
+ * temporal unit in hand until the next descriptor arrives: its reference map
+ * then reveals which slots contain the just-finished target, allowing us to
+ * reconstruct the exact refresh mask before submitting the unit.  MediaCodec
+ * expects the hidden frames and the displayed frame from an AV1 temporal unit
+ * in one input buffer; submitting every VA picture as a separate unit stalls
+ * the Qualcomm decoder after the first reordered frame. */
+#define TVA_AV1_GROUP_MAX_FRAMES 64
+
+struct tva_av1_picture {
+    struct pipe_video_buffer *target;
+    VADecPictureParameterBufferAV1 picture;
+    struct dmd_av1_tile tiles[256];
+    uint8_t *tile_data;
+    size_t tile_bytes;
+    unsigned tile_count;
+    uint8_t refresh_frame_flags;
+};
+
+struct tva_av1_frame {
+    bool valid;
+    struct tva_av1_picture pictures[TVA_AV1_GROUP_MAX_FRAMES];
+    unsigned picture_count;
+    bool include_sequence;
+    bool have_show_frame;
+    bool hidden_since_show_frame;
 };
 
 struct tva_codec {
@@ -293,6 +328,8 @@ struct tva_codec {
     bool h264_pps_defaults_valid;
     unsigned h264_pps_l0_default;
     unsigned h264_pps_l1_default;
+    bool av1_sequence_sent;
+    struct tva_av1_frame av1_pending;
 
     bool broken;                  /* session error, further decodes fail */
 
@@ -1500,6 +1537,314 @@ tva_codec_decode_bitstream(struct pipe_video_codec *codec,
 }
 
 /*
+ * The Gallium AV1 descriptor is a compact, driver-facing representation of
+ * the VA-API picture parameters.  AV1 OBU reconstruction uses the public VA
+ * structure because its field names and semantics are defined by libva, so
+ * copy the fields needed by the bitstream writer here.  Fields that the
+ * Gallium frontend intentionally does not retain (color range and still
+ * picture) use the safe defaults for ordinary 8-bit 4:2:0 video.
+ */
+static bool
+tva_av1_to_va_picture(const struct pipe_av1_picture_desc *src,
+                      VADecPictureParameterBufferAV1 *dst)
+{
+    if (!src || !dst)
+        return false;
+
+    const __typeof__(src->picture_parameter) *p = &src->picture_parameter;
+    memset(dst, 0, sizeof(*dst));
+
+    dst->profile = p->profile;
+    dst->order_hint_bits_minus_1 = p->order_hint_bits_minus_1;
+    dst->bit_depth_idx = p->bit_depth_idx;
+    dst->matrix_coefficients = p->matrix_coefficients;
+    dst->seq_info_fields.fields.still_picture = 0;
+    dst->seq_info_fields.fields.use_128x128_superblock =
+        p->seq_info_fields.use_128x128_superblock;
+    dst->seq_info_fields.fields.enable_filter_intra =
+        p->seq_info_fields.enable_filter_intra;
+    dst->seq_info_fields.fields.enable_intra_edge_filter =
+        p->seq_info_fields.enable_intra_edge_filter;
+    dst->seq_info_fields.fields.enable_interintra_compound =
+        p->seq_info_fields.enable_interintra_compound;
+    dst->seq_info_fields.fields.enable_masked_compound =
+        p->seq_info_fields.enable_masked_compound;
+    dst->seq_info_fields.fields.enable_dual_filter =
+        p->seq_info_fields.enable_dual_filter;
+    dst->seq_info_fields.fields.enable_order_hint =
+        p->seq_info_fields.enable_order_hint;
+    dst->seq_info_fields.fields.enable_jnt_comp =
+        p->seq_info_fields.enable_jnt_comp;
+    dst->seq_info_fields.fields.enable_cdef = p->seq_info_fields.enable_cdef;
+    dst->seq_info_fields.fields.mono_chrome = p->seq_info_fields.mono_chrome;
+    dst->seq_info_fields.fields.color_range = 0;
+    dst->seq_info_fields.fields.subsampling_x =
+        p->seq_info_fields.subsampling_x;
+    dst->seq_info_fields.fields.subsampling_y =
+        p->seq_info_fields.subsampling_y;
+    dst->seq_info_fields.fields.film_grain_params_present =
+        p->seq_info_fields.film_grain_params_present;
+
+    if (p->frame_width == 0 || p->frame_height == 0)
+        return false;
+    dst->frame_width_minus1 = p->frame_width - 1;
+    dst->frame_height_minus1 = p->frame_height - 1;
+    memcpy(dst->ref_frame_idx, p->ref_frame_idx,
+           sizeof(dst->ref_frame_idx));
+    dst->primary_ref_frame = p->primary_ref_frame;
+    dst->order_hint = p->order_hint;
+
+    dst->seg_info.segment_info_fields.bits.enabled =
+        p->seg_info.segment_info_fields.enabled;
+    dst->seg_info.segment_info_fields.bits.update_map =
+        p->seg_info.segment_info_fields.update_map;
+    dst->seg_info.segment_info_fields.bits.update_data =
+        p->seg_info.segment_info_fields.update_data;
+    dst->seg_info.segment_info_fields.bits.temporal_update =
+        p->seg_info.segment_info_fields.temporal_update;
+    memcpy(dst->seg_info.feature_data, p->seg_info.feature_data,
+           sizeof(dst->seg_info.feature_data));
+    memcpy(dst->seg_info.feature_mask, p->seg_info.feature_mask,
+           sizeof(dst->seg_info.feature_mask));
+
+    dst->tile_cols = p->tile_cols;
+    dst->tile_rows = p->tile_rows;
+    if (!dst->tile_cols || !dst->tile_rows || dst->tile_cols > 64 ||
+        dst->tile_rows > 64 ||
+        (uint32_t)dst->tile_cols * dst->tile_rows > 256)
+        return false;
+    for (unsigned i = 0; i < dst->tile_cols && i < 63; i++) {
+        if (!p->width_in_sbs[i])
+            return false;
+        dst->width_in_sbs_minus_1[i] = p->width_in_sbs[i] - 1;
+    }
+    for (unsigned i = 0; i < dst->tile_rows && i < 63; i++) {
+        if (!p->height_in_sbs[i])
+            return false;
+        dst->height_in_sbs_minus_1[i] = p->height_in_sbs[i] - 1;
+    }
+    dst->context_update_tile_id = p->context_update_tile_id;
+
+    dst->pic_info_fields.bits.frame_type = p->pic_info_fields.frame_type;
+    dst->pic_info_fields.bits.show_frame = p->pic_info_fields.show_frame;
+    dst->pic_info_fields.bits.showable_frame = p->pic_info_fields.showable_frame;
+    dst->pic_info_fields.bits.error_resilient_mode =
+        p->pic_info_fields.error_resilient_mode;
+    dst->pic_info_fields.bits.disable_cdf_update =
+        p->pic_info_fields.disable_cdf_update;
+    dst->pic_info_fields.bits.allow_screen_content_tools =
+        p->pic_info_fields.allow_screen_content_tools;
+    dst->pic_info_fields.bits.force_integer_mv =
+        p->pic_info_fields.force_integer_mv;
+    dst->pic_info_fields.bits.allow_intrabc = p->pic_info_fields.allow_intrabc;
+    dst->pic_info_fields.bits.use_superres = p->pic_info_fields.use_superres;
+    dst->pic_info_fields.bits.allow_high_precision_mv =
+        p->pic_info_fields.allow_high_precision_mv;
+    dst->pic_info_fields.bits.is_motion_mode_switchable =
+        p->pic_info_fields.is_motion_mode_switchable;
+    dst->pic_info_fields.bits.use_ref_frame_mvs =
+        p->pic_info_fields.use_ref_frame_mvs;
+    dst->pic_info_fields.bits.disable_frame_end_update_cdf =
+        p->pic_info_fields.disable_frame_end_update_cdf;
+    dst->pic_info_fields.bits.uniform_tile_spacing_flag =
+        p->pic_info_fields.uniform_tile_spacing_flag;
+    dst->pic_info_fields.bits.allow_warped_motion =
+        p->pic_info_fields.allow_warped_motion;
+    dst->pic_info_fields.bits.large_scale_tile = p->pic_info_fields.large_scale_tile;
+
+    dst->superres_scale_denominator = p->superres_scale_denominator;
+    dst->interp_filter = p->interp_filter;
+    memcpy(dst->filter_level, p->filter_level, sizeof(dst->filter_level));
+    dst->filter_level_u = p->filter_level_u;
+    dst->filter_level_v = p->filter_level_v;
+    dst->loop_filter_info_fields.bits.sharpness_level =
+        p->loop_filter_info_fields.sharpness_level;
+    dst->loop_filter_info_fields.bits.mode_ref_delta_enabled =
+        p->loop_filter_info_fields.mode_ref_delta_enabled;
+    dst->loop_filter_info_fields.bits.mode_ref_delta_update =
+        p->loop_filter_info_fields.mode_ref_delta_update;
+    memcpy(dst->ref_deltas, p->ref_deltas, sizeof(dst->ref_deltas));
+    memcpy(dst->mode_deltas, p->mode_deltas, sizeof(dst->mode_deltas));
+
+    dst->base_qindex = p->base_qindex;
+    dst->y_dc_delta_q = p->y_dc_delta_q;
+    dst->u_dc_delta_q = p->u_dc_delta_q;
+    dst->u_ac_delta_q = p->u_ac_delta_q;
+    dst->v_dc_delta_q = p->v_dc_delta_q;
+    dst->v_ac_delta_q = p->v_ac_delta_q;
+    dst->qmatrix_fields.bits.using_qmatrix = p->qmatrix_fields.using_qmatrix;
+    dst->qmatrix_fields.bits.qm_y = p->qmatrix_fields.qm_y;
+    dst->qmatrix_fields.bits.qm_u = p->qmatrix_fields.qm_u;
+    dst->qmatrix_fields.bits.qm_v = p->qmatrix_fields.qm_v;
+
+    dst->mode_control_fields.bits.delta_q_present_flag =
+        p->mode_control_fields.delta_q_present_flag;
+    dst->mode_control_fields.bits.log2_delta_q_res =
+        p->mode_control_fields.log2_delta_q_res;
+    dst->mode_control_fields.bits.delta_lf_present_flag =
+        p->mode_control_fields.delta_lf_present_flag;
+    dst->mode_control_fields.bits.log2_delta_lf_res =
+        p->mode_control_fields.log2_delta_lf_res;
+    dst->mode_control_fields.bits.delta_lf_multi = p->mode_control_fields.delta_lf_multi;
+    dst->mode_control_fields.bits.tx_mode = p->mode_control_fields.tx_mode;
+    dst->mode_control_fields.bits.reference_select =
+        p->mode_control_fields.reference_select;
+    dst->mode_control_fields.bits.reduced_tx_set_used =
+        p->mode_control_fields.reduced_tx_set_used;
+    dst->mode_control_fields.bits.skip_mode_present =
+        p->mode_control_fields.skip_mode_present;
+
+    dst->cdef_damping_minus_3 = p->cdef_damping_minus_3;
+    dst->cdef_bits = p->cdef_bits;
+    memcpy(dst->cdef_y_strengths, p->cdef_y_strengths,
+           sizeof(dst->cdef_y_strengths));
+    memcpy(dst->cdef_uv_strengths, p->cdef_uv_strengths,
+           sizeof(dst->cdef_uv_strengths));
+    /* FFmpeg's VA-API backend remaps AV1 restoration values for the VA
+     * interface: {NONE, SWITCHABLE, WIENER, SGRPROJ}.  The bitstream syntax
+     * uses {NONE, WIENER, SGRPROJ, SWITCHABLE}, so undo that remap here. */
+    static const uint8_t restore_remap[4] = { 0, 2, 3, 1 };
+    if (p->loop_restoration_fields.yframe_restoration_type > 3 ||
+        p->loop_restoration_fields.cbframe_restoration_type > 3 ||
+        p->loop_restoration_fields.crframe_restoration_type > 3)
+        return false;
+    dst->loop_restoration_fields.bits.yframe_restoration_type =
+        restore_remap[p->loop_restoration_fields.yframe_restoration_type];
+    dst->loop_restoration_fields.bits.cbframe_restoration_type =
+        restore_remap[p->loop_restoration_fields.cbframe_restoration_type];
+    dst->loop_restoration_fields.bits.crframe_restoration_type =
+        restore_remap[p->loop_restoration_fields.crframe_restoration_type];
+    dst->loop_restoration_fields.bits.lr_unit_shift =
+        p->loop_restoration_fields.lr_unit_shift;
+    dst->loop_restoration_fields.bits.lr_uv_shift =
+        p->loop_restoration_fields.lr_uv_shift;
+
+    return true;
+}
+
+static void
+tva_av1_pending_clear(struct tva_av1_frame *frame)
+{
+    for (unsigned i = 0; i < frame->picture_count; i++)
+        free(frame->pictures[i].tile_data);
+    memset(frame, 0, sizeof(*frame));
+}
+
+/* The next VA picture exposes the reference-frame map after the pending
+ * picture.  A target appearing in map slot i means that the pending picture
+ * refreshed slot i; multiple matches are preserved for key-like updates. */
+static uint8_t
+tva_av1_refresh_mask(const struct pipe_av1_picture_desc *next,
+                     const struct pipe_video_buffer *target)
+{
+    if (!next || !target)
+        return 0;
+
+    uint8_t mask = 0;
+    for (unsigned i = 0; i < 8; i++) {
+        if (next->ref[i] == target)
+            mask |= (uint8_t)(1u << i);
+    }
+    return mask;
+}
+
+static int
+tva_av1_send_pending(struct tva_codec *c)
+{
+    struct tva_av1_frame *frame = &c->av1_pending;
+    if (!frame->valid)
+        return 0;
+
+    size_t tile_bytes = 0;
+    size_t overhead = 2048;
+    for (unsigned i = 0; i < frame->picture_count; i++) {
+        const struct tva_av1_picture *pic = &frame->pictures[i];
+        if (pic->tile_bytes > SIZE_MAX - tile_bytes ||
+            tile_bytes + pic->tile_bytes > SIZE_MAX - overhead ||
+            overhead > SIZE_MAX - 1024 - (size_t)pic->tile_count * 4)
+            goto too_large;
+        tile_bytes += pic->tile_bytes;
+        overhead += 1024 + (size_t)pic->tile_count * 4;
+    }
+    if (tile_bytes > MAX_FRAME || tile_bytes > SIZE_MAX - overhead ||
+        tile_bytes + overhead > MAX_FRAME) {
+too_large:
+        debug_printf("tva: AV1 temporal unit is too large (%zu bytes)\n",
+                     tile_bytes);
+        tva_mark_broken(c);
+        tva_av1_pending_clear(frame);
+        return -1;
+    }
+
+    const size_t unit_cap = tile_bytes + overhead;
+    uint8_t *unit = malloc(unit_cap);
+    if (!unit) {
+        tva_mark_broken(c);
+        tva_av1_pending_clear(frame);
+        return -1;
+    }
+
+    size_t unit_len = 0;
+    size_t n = dmd_av1_obu_header(DMD_OBU_TEMPORAL_DELIMITER, 0,
+                                  unit, unit_cap);
+    if (!n)
+        goto failed;
+    unit_len += n;
+
+    if (frame->include_sequence) {
+        n = dmd_av1_build_sequence_header(&frame->pictures[0].picture,
+                                          unit + unit_len,
+                                          unit_cap - unit_len);
+        if (!n)
+            goto failed;
+        unit_len += n;
+    }
+
+    for (unsigned i = 0; i < frame->picture_count; i++) {
+        struct tva_av1_picture *pic = &frame->pictures[i];
+        n = dmd_av1_build_frame(&pic->picture, pic->tiles,
+                                (int)pic->tile_count,
+                                pic->refresh_frame_flags,
+                                unit + unit_len, unit_cap - unit_len);
+        if (!n)
+            goto failed;
+        unit_len += n;
+    }
+
+    TVA_TRACE("AV1 unit len=%zu pictures=%u payload=%zu%s", unit_len,
+              frame->picture_count, tile_bytes,
+              frame->include_sequence ? " sequence" : "");
+    for (unsigned i = 0; i < frame->picture_count; i++)
+        TVA_TRACE("AV1 unit picture=%u show=%u refresh=%02x order=%u type=%u",
+                  i + 1,
+                  frame->pictures[i].picture.pic_info_fields.bits.show_frame,
+                  frame->pictures[i].refresh_frame_flags,
+                  frame->pictures[i].picture.order_hint,
+                  frame->pictures[i].picture.pic_info_fields.bits.frame_type);
+
+    if (tva_session_send_unit(c->sess, unit, unit_len) != TVA_OK) {
+        debug_printf("tva: AV1 send_unit failed: %s\n",
+                     tva_session_last_error(c->sess));
+        free(unit);
+        tva_av1_pending_clear(frame);
+        tva_mark_broken(c);
+        return -1;
+    }
+
+    free(unit);
+    c->av1_sequence_sent |= frame->include_sequence;
+    c->next_unit++;
+    tva_av1_pending_clear(frame);
+    return 0;
+
+failed:
+    free(unit);
+    tva_av1_pending_clear(frame);
+    tva_mark_broken(c);
+    return -1;
+}
+
+/*
  * Send the accumulated picture to the daemon and register the fence.
  * Returns 0 on success, non-zero to make EndPicture report
  * VA_STATUS_ERROR_OPERATION_FAILED.
@@ -1813,8 +2158,184 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
             c->next_unit++;
             last_vcl = (uint32_t)c->next_unit;
         }
+    } else if (format == PIPE_VIDEO_FORMAT_AV1) {
+        /* VA-API supplies AV1 tile payloads separately from the structured
+         * picture parameters.  Rebuild complete temporal units before
+         * passing them to MediaCodec; forwarding c->acc directly is not valid
+         * AV1 and starts with tile bytes rather than an OBU header. */
+        const struct pipe_av1_picture_desc *av1 =
+            (const struct pipe_av1_picture_desc *)picture;
+        VADecPictureParameterBufferAV1 va_pic;
+        if (!tva_av1_to_va_picture(av1, &va_pic)) {
+            debug_printf("tva: AV1 picture parameters are invalid\n");
+            c->acc_len = 0;
+            tva_mark_broken(c);
+            return -1;
+        }
+        const bool show_frame = va_pic.pic_info_fields.bits.show_frame;
+        TVA_TRACE("AV1 VA params: warp=%u tx=%u show=%u refresh=%u",
+                  va_pic.pic_info_fields.bits.allow_warped_motion,
+                  va_pic.mode_control_fields.bits.reduced_tx_set_used,
+                  show_frame,
+                  av1->picture_parameter.refresh_frame_flags);
+
+        const uint32_t tile_count =
+            (uint32_t)va_pic.tile_cols * (uint32_t)va_pic.tile_rows;
+        if (!tile_count || tile_count > 256 ||
+            av1->slice_parameter.slice_count != tile_count) {
+            debug_printf("tva: AV1 tile count mismatch (params=%u slices=%u)\n",
+                         tile_count,
+                         av1 ? (unsigned)av1->slice_parameter.slice_count : 0);
+            c->acc_len = 0;
+            tva_mark_broken(c);
+            return -1;
+        }
+
+        struct dmd_av1_tile tiles[256];
+        size_t tile_bytes = 0;
+        for (uint32_t i = 0; i < tile_count; i++) {
+            const size_t off = av1->slice_parameter.slice_data_offset[i];
+            const size_t len = av1->slice_parameter.slice_data_size[i];
+            if (!len || off > c->acc_len || len > c->acc_len - off) {
+                debug_printf("tva: AV1 tile %u is outside the slice buffer "
+                             "(off=%zu len=%zu buffer=%zu)\n",
+                             i, off, len, c->acc_len);
+                c->acc_len = 0;
+                tva_mark_broken(c);
+                return -1;
+            }
+            if (tile_bytes > SIZE_MAX - len) {
+                c->acc_len = 0;
+                tva_mark_broken(c);
+                return -1;
+            }
+            tiles[i].data = c->acc + off;
+            tiles[i].len = len;
+            tile_bytes += len;
+        }
+
+        struct tva_av1_frame *frame = &c->av1_pending;
+
+        /* The VA descriptor has no temporal-delimiter marker.  Chromium's
+         * AV1 parser presents each temporal unit as either one displayed
+         * frame, or a run of hidden reference frames followed by one displayed
+         * frame.  Once a displayed frame has been seen without a hidden frame
+         * after it, the next descriptor (hidden or displayed) starts the next
+         * temporal unit.  This keeps a displayed key frame separate from the
+         * hidden references of the following unit. */
+        bool boundary = frame->valid && frame->picture_count &&
+                        frame->have_show_frame &&
+                        !frame->hidden_since_show_frame;
+        if (frame->valid && frame->picture_count) {
+            struct tva_av1_picture *previous =
+                &frame->pictures[frame->picture_count - 1];
+            previous->refresh_frame_flags = tva_av1_refresh_mask(av1,
+                                                                  previous->target);
+        }
+        if (boundary) {
+            TVA_TRACE("AV1 group flush before show frame: pictures=%u",
+                      frame->picture_count);
+            if (tva_av1_send_pending(c)) {
+                c->acc_len = 0;
+                return -1;
+            }
+            frame = &c->av1_pending;
+        }
+        if (frame->picture_count >= TVA_AV1_GROUP_MAX_FRAMES) {
+            debug_printf("tva: AV1 temporal unit has too many frames (%u)\n",
+                         frame->picture_count);
+            c->acc_len = 0;
+            tva_mark_broken(c);
+            return -1;
+        }
+
+        const bool key_frame = va_pic.pic_info_fields.bits.frame_type == 0;
+        const bool include_sequence = key_frame || !c->av1_sequence_sent;
+        uint8_t *tile_data = malloc(tile_bytes);
+        if (!tile_data) {
+            c->acc_len = 0;
+            tva_mark_broken(c);
+            return -1;
+        }
+        size_t tile_offset = 0;
+        for (uint32_t i = 0; i < tile_count; i++) {
+            memcpy(tile_data + tile_offset, tiles[i].data, tiles[i].len);
+            tiles[i].data = tile_data + tile_offset;
+            tile_offset += tiles[i].len;
+        }
+
+        struct tva_av1_picture *current =
+            &frame->pictures[frame->picture_count];
+        memset(current, 0, sizeof(*current));
+        current->target = target;
+        current->picture = va_pic;
+        current->tile_data = tile_data;
+        current->tile_bytes = tile_bytes;
+        current->tile_count = tile_count;
+        for (uint32_t i = 0; i < tile_count; i++)
+            current->tiles[i] = tiles[i];
+
+        frame->valid = true;
+        frame->picture_count++;
+        frame->include_sequence |= include_sequence;
+        if (show_frame) {
+            frame->have_show_frame = true;
+            frame->hidden_since_show_frame = false;
+        } else {
+            frame->hidden_since_show_frame = true;
+        }
+
+        /* Hidden AV1 frames update the decoder's reference state but do not
+         * produce an output buffer.  Only displayed frames get a pending
+         * entry; otherwise the reader would wait forever for a frame that
+         * MediaCodec deliberately does not return. */
+        struct tva_fence *fence = NULL;
+        if (show_frame) {
+            fence = CALLOC_STRUCT(tva_fence);
+            if (!fence) {
+                tva_av1_pending_clear(frame);
+                c->acc_len = 0;
+                tva_mark_broken(c);
+                return -1;
+            }
+            if (c->next_unit >= UINT32_MAX) {
+                FREE(fence);
+                tva_av1_pending_clear(frame);
+                c->acc_len = 0;
+                tva_mark_broken(c);
+                return -1;
+            }
+            mtx_lock(&c->pend_mutex);
+            pending = tva_pend_reserve_locked(c, (uint32_t)(c->next_unit + 1),
+                                              target, fence);
+            mtx_unlock(&c->pend_mutex);
+            if (!pending) {
+                FREE(fence);
+                tva_av1_pending_clear(frame);
+                c->acc_len = 0;
+                return -1;
+            }
+        }
+
+        TVA_TRACE("AV1 group append picture=%u show=%u tiles=%u payload=%zu%s",
+                  frame->picture_count, show_frame, tile_count, tile_bytes,
+                  show_frame ? " output" : " hidden");
+
+        if (picture && picture->out_fence && show_frame) {
+            if (*picture->out_fence)
+                tva_codec_destroy_fence(codec, *picture->out_fence);
+            *picture->out_fence = (struct pipe_fence_handle *)fence;
+        } else if (picture && picture->out_fence) {
+            /* A hidden frame has no corresponding output.  Drop a stale
+             * surface fence so VA sync does not wait for a nonexistent frame. */
+            if (*picture->out_fence)
+                tva_codec_destroy_fence(codec, *picture->out_fence);
+            *picture->out_fence = NULL;
+        }
+        if (show_frame)
+            last_vcl = (uint32_t)(c->next_unit + 1);
     } else {
-        /* VP9 (and any future no-start-code codec): one whole frame */
+        /* VP9 (no-start-code codec): one whole frame */
         TVA_TRACE("sending whole frame, len=%zu", c->acc_len);
         struct tva_fence *fence = CALLOC_STRUCT(tva_fence);
         if (!fence)
@@ -1868,8 +2389,17 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
 static void
 tva_codec_flush(struct pipe_video_codec *codec)
 {
-    /* no command buffer to flush */
-    (void)codec;
+    struct tva_codec *c = tva_codec(codec);
+    if (!c->av1_pending.valid || tva_codec_is_broken(c))
+        return;
+
+    /* No following VA descriptor is available at end of stream.  The final
+     * picture does not need to be referenced by a later picture, so its zero
+     * mask is sufficient; key frames infer all slots and do not code it. */
+    if (c->av1_pending.picture_count)
+        c->av1_pending.pictures[c->av1_pending.picture_count - 1]
+            .refresh_frame_flags = 0;
+    (void)tva_av1_send_pending(c);
 }
 
 /*
@@ -1985,6 +2515,7 @@ tva_codec_destroy(struct pipe_video_codec *codec)
     while (c->pend_count)
         tva_pend_pop_locked(c);
     mtx_unlock(&c->pend_mutex);
+    tva_av1_pending_clear(&c->av1_pending);
     mtx_destroy(&c->pend_mutex);
     u_cnd_monotonic_destroy(&c->pend_cond);
     TVA_TRACE("codec destroy: %llu units, %llu frames", (unsigned long long)c->next_unit, (unsigned long long)c->frames_done);
