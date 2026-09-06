@@ -310,6 +310,7 @@ vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
 {
    vlVaDriver *drv;
    vlVaBuffer *buf;
+   vlVaContext *context;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -321,6 +322,10 @@ vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
       mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_INVALID_BUFFER;
    }
+
+   context = buf->ctx;
+   if (context)
+      mtx_lock(&context->mutex);
 
    if (buf->derived_surface.resource)
       pipe_resource_reference(&buf->derived_surface.resource, NULL);
@@ -336,12 +341,15 @@ vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
       FREE(buf->data);
    }
 
-   if (buf->ctx) {
-      assert(_mesa_set_search(buf->ctx->buffers, buf));
-      _mesa_set_remove_key(buf->ctx->buffers, buf);
+   if (context) {
+      assert(_mesa_set_search(context->buffers, buf));
+      _mesa_set_remove_key(context->buffers, buf);
       vlVaGetBufferFeedback(buf);
-      if (buf->fence && buf->ctx->decoder && buf->ctx->decoder->destroy_fence)
-         buf->ctx->decoder->destroy_fence(buf->ctx->decoder, buf->fence);
+      if (buf->fence && context->decoder && context->decoder->destroy_fence) {
+         context->decoder->destroy_fence(context->decoder, buf->fence);
+         buf->fence = NULL;
+      }
+      mtx_unlock(&context->mutex);
    }
 
    if (buf->coded_surf)

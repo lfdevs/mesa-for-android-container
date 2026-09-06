@@ -6,6 +6,8 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#include "compiler/glsl_types.h"
+
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
@@ -187,6 +189,8 @@ fd_screen_destroy(struct pipe_screen *pscreen)
 
    if (screen->compiler)
       ir3_screen_fini(pscreen);
+
+   glsl_type_singleton_decref();
 
    free(screen->perfcntr_queries);
    free(screen);
@@ -802,6 +806,7 @@ fd_screen_bo_get_handle(struct pipe_screen *pscreen, struct fd_bo *bo,
    struct fd_screen *screen = fd_screen(pscreen);
 
    whandle->stride = stride;
+   whandle->size = fd_bo_size(bo);
 
    if (whandle->type == WINSYS_HANDLE_TYPE_SHARED) {
       return fd_bo_get_name(bo, &whandle->handle) == 0;
@@ -987,14 +992,19 @@ fd_screen_create(int fd,
    if (!dev)
       return NULL;
 
+   glsl_type_singleton_init_or_ref();
+
    struct fd_screen *screen = CALLOC_STRUCT(fd_screen);
    struct pipe_screen *pscreen;
    uint64_t val;
 
    fd_screen_debug_init();
 
-   if (!screen)
+   if (!screen) {
+      glsl_type_singleton_decref();
+      fd_device_del(dev);
       return NULL;
+   }
 
 #ifdef HAVE_PERFETTO
    fd_perfetto_init();

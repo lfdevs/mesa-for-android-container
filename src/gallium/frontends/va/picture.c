@@ -37,6 +37,9 @@
 
 #include "va_private.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+
 void
 vlVaSetSurfaceContext(vlVaDriver *drv, vlVaSurface *surf, vlVaContext *context)
 {
@@ -395,6 +398,11 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       surf->coded_buf = coded_buf;
    } else if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM) {
       context->desc.base.out_fence = &surf->fence;
+      if (getenv("DMD_VA_LOG"))
+         fprintf(stderr, "tva-picture end target=%#x surf=%p before_fence=%p out_ptr=%p entry=%d\n",
+                 output_id, (void *)surf, (void *)surf->fence,
+                 (void *)context->desc.base.out_fence,
+                 context->decoder->entrypoint);
    } else if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING) {
       context->desc.base.out_fence = &surf->fence;
       context->desc.base.out_pipe_fence = &surf->pipe_fence;
@@ -416,6 +424,11 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       mtx_unlock(&drv->mutex);
       return VA_STATUS_ERROR_OPERATION_FAILED;
    }
+
+   if (getenv("DMD_VA_LOG"))
+      fprintf(stderr, "tva-picture end target=%#x surf=%p after_fence=%p out_ptr=%p\n",
+              output_id, (void *)surf, (void *)surf->fence,
+              (void *)context->desc.base.out_fence);
 
    if (drv->pipe->screen->get_video_param(drv->pipe->screen,
                            context->decoder->profile,

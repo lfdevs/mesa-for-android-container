@@ -30,6 +30,8 @@
 #include "freedreno_util.h"
 
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "drm-uapi/drm_fourcc.h"
 
 /* XXX this should go away, needed for 'struct winsys_handle' */
@@ -155,6 +157,35 @@ rebind_resource(struct fd_resource *rsc) assert_dt
 
    fd_resource_unlock(rsc);
    fd_screen_unlock(screen);
+}
+
+/*
+ * External producers (for example a VA decoder writing a shared dma-buf)
+ * can update the backing BO without changing the BO handle or the resource
+ * sequence number.  Gallium's external-image paths call resource_changed()
+ * in that situation so the driver can invalidate any derived texture state.
+ * Freedreno normally reaches this path when a resource is reallocated; make
+ * the same cache invalidation explicit for imported resources as well.
+ */
+static void
+fd_resource_changed(struct pipe_screen *pscreen, struct pipe_resource *prsc)
+{
+   (void)pscreen;
+   if (!prsc)
+      return;
+
+   if (getenv("DMD_VA_LOG"))
+      fprintf(stderr, "tva-fd resource_changed res=%p fmt=%d %ux%u\n",
+              (void *)prsc, prsc->format, prsc->width0, prsc->height0);
+
+   fd_resource_set_usage(prsc, FD_DIRTY_TEX);
+   rebind_resource(fd_resource(prsc));
+
+   /* A lowered multi-plane import is represented by a linked resource chain;
+    * invalidate each plane's cached texture state when the external producer
+    * publishes a new frame. */
+   if (prsc->next)
+      fd_resource_changed(pscreen, prsc->next);
 }
 
 static inline void
@@ -1134,6 +1165,8 @@ fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
 
    bool ret = fd_screen_bo_get_handle(pscreen, rsc->bo, rsc->scanout,
                                       fd_resource_pitch(rsc, 0), handle);
+   if (ret)
+      handle->offset = fd_resource_offset(rsc, 0, handle->layer);
 
    if (!ret && !(prsc->bind & PIPE_BIND_SHARED)) {
 
@@ -1845,6 +1878,7 @@ fd_resource_screen_init(struct pipe_screen *pscreen)
    pscreen->resource_from_handle = fd_resource_from_handle;
    pscreen->resource_get_handle = fd_resource_get_handle;
    pscreen->resource_get_param = fd_resource_get_param;
+   pscreen->resource_changed = fd_resource_changed;
    pscreen->resource_destroy = u_transfer_helper_resource_destroy;
 
    pscreen->transfer_helper =

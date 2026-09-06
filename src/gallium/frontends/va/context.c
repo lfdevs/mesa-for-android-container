@@ -41,6 +41,8 @@
 #include "loader/loader.h"
 #endif
 
+#include "tva_bridge.h"
+
 #include <va/va_drmcommon.h>
 
 static struct VADriverVTable vtable =
@@ -160,6 +162,11 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
 #endif
       if (!drv->vscreen)
          drv->vscreen = vl_dri3_screen_create(ctx->native_dpy, ctx->x11_screen);
+      /* PRoot exposes KGSL but no DRM render node.  When the normal X11
+       * DRI3 path cannot obtain a render device, let the termux-va bridge
+       * create its KGSL screen directly instead of falling back to swrast. */
+      if (!drv->vscreen && tva_bridge_active())
+         drv->vscreen = tva_bridge_vscreen_create(-1, false);
       if (!drv->vscreen)
          drv->vscreen = vl_xlib_swrast_screen_create(ctx->native_dpy, ctx->x11_screen);
       break;
@@ -167,16 +174,22 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    case VA_DISPLAY_DRM:
    case VA_DISPLAY_DRM_RENDERNODES: {
       const struct drm_state *drm_info = (struct drm_state *) ctx->drm_state;
+      const int drm_fd = drm_info ? drm_info->fd : -1;
 
-      if (!drm_info || drm_info->fd < 0) {
+      /* A Wayland compositor in a PRoot container may expose no DRM fd at
+       * all.  The termux-va bridge can open KGSL directly, so let it handle
+       * that case instead of rejecting the display before driver init. */
+      if (drm_fd < 0 && !(tva_bridge_active() &&
+                          ctx->display_type == VA_DISPLAY_WAYLAND)) {
          FREE(drv);
          return VA_STATUS_ERROR_INVALID_PARAMETER;
       }
 #ifdef HAVE_DRISW_KMS
-      char* drm_driver_name = loader_get_driver_for_fd(drm_info->fd);
+      char* drm_driver_name = drm_fd >= 0 ?
+         loader_get_driver_for_fd(drm_fd) : NULL;
       if(drm_driver_name) {
          if (strcmp(drm_driver_name, "vgem") == 0)
-            drv->vscreen = vl_vgem_drm_screen_create(drm_info->fd);
+            drv->vscreen = vl_vgem_drm_screen_create(drm_fd);
          FREE(drm_driver_name);
       }
 #endif
@@ -188,7 +201,10 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
           * so don't try to override them.
           */
          bool honor_dri_prime = ctx->display_type == VA_DISPLAY_WAYLAND;
-         drv->vscreen = vl_drm_screen_create(drm_info->fd, honor_dri_prime);
+         if (tva_bridge_active())
+            drv->vscreen = tva_bridge_vscreen_create(drm_fd, honor_dri_prime);
+         else
+            drv->vscreen = vl_drm_screen_create(drm_fd, honor_dri_prime);
       }
       break;
    }
@@ -201,14 +217,32 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv->vscreen)
       goto error_screen;
 
+   struct pipe_screen *raw_pscreen = drv->vscreen->pscreen;
+
+   /* termux-va bridge: the underlying screen may lack the video capability
+    * hooks entirely (freedreno, llvmpipe); fill them in directly on the
+    * screen so the init check below passes and capability queries answer
+    * for the bridge's codec set. */
+   if (tva_bridge_active())
+      tva_bridge_screen_set_video_hooks(raw_pscreen);
+
    /* video cannot work if these are not supported */
-   if (!drv->vscreen->pscreen->get_video_param || !drv->vscreen->pscreen->is_video_format_supported)
+   if (!drv->vscreen->pscreen->get_video_param || !drv->vscreen->pscreen->is_video_format_supported) {
+      if (tva_bridge_active())
+         fprintf(stderr, "tva: video capability hooks missing on the underlying screen\n");
       goto error_pipe;
+   }
 
    bool compute_only = drv->vscreen->pscreen->caps.prefer_compute_for_multimedia;
-   drv->pipe = pipe_create_multimedia_context(drv->vscreen->pscreen, compute_only);
-   if (!drv->pipe)
+   drv->pipe = pipe_create_multimedia_context(raw_pscreen, compute_only);
+   if (!drv->pipe) {
+      if (tva_bridge_active())
+         fprintf(stderr, "tva: multimedia context creation failed on the underlying screen\n");
       goto error_pipe;
+   }
+
+   if (tva_bridge_active())
+      tva_bridge_pipe_set_codec_hooks(drv->pipe);
 
    drv->htab = handle_table_create();
    if (!drv->htab)
@@ -235,6 +269,11 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    snprintf(drv->vendor_string, sizeof(drv->vendor_string),
             "Mesa Gallium driver " PACKAGE_VERSION " for %s",
             drv->vscreen->pscreen->get_name(drv->vscreen->pscreen));
+   if (tva_bridge_active()) {
+      size_t len = strlen(drv->vendor_string);
+      snprintf(drv->vendor_string + len, sizeof(drv->vendor_string) - len,
+               " (termux-va bridge)");
+   }
    ctx->str_vendor = drv->vendor_string;
 
    return VA_STATUS_SUCCESS;
