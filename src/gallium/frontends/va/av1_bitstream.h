@@ -142,6 +142,13 @@ size_t dmd_av1_build_frame(const void *pic,
                            uint8_t refresh_frame_flags,
                            unsigned char *out, size_t out_cap);
 
+/* Build an OBU_FRAME_HEADER carrying show_existing_frame for a reference
+ * slot.  The synthetic sequence header emitted by the bridge does not carry
+ * frame IDs, timing information, or a decoder model, so the payload consists
+ * only of show_existing_frame, frame_to_show_map_idx, and trailing_bits. */
+size_t dmd_av1_build_show_existing(uint8_t map_idx,
+                                   unsigned char *out, size_t out_cap);
+
 /* ---------------------------------------------------- frame-header assembly */
 
 /* Build a complete OBU_FRAME_HEADER from a VADecPictureParameterBufferAV1

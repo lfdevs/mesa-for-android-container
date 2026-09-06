@@ -14,6 +14,7 @@
  */
 #include <va/va.h>
 #include <va/va_dec_av1.h>
+#include <string.h>
 
 #include "av1_bitstream.h"
 
@@ -1187,6 +1188,30 @@ size_t dmd_av1_build_frame(const void *pic_v,
             *q++ = tiles[i].data[k];
     }
     return hdr + payload_len;
+}
+
+size_t dmd_av1_build_show_existing(uint8_t map_idx,
+                                   unsigned char *out, size_t out_cap)
+{
+    if (!out || out_cap < 4 || map_idx >= 8)
+        return 0;
+
+    unsigned char body[2];
+    struct dmd_bitwriter bw;
+    dmd_bw_init(&bw, body, sizeof(body));
+    dmd_bw_put_flag(&bw, 1);          /* show_existing_frame */
+    dmd_bw_put_bits(&bw, map_idx, 3); /* frame_to_show_map_idx */
+    dmd_av1_trailing_bits(&bw);
+    if (bw.overflow)
+        return 0;
+
+    const size_t body_len = dmd_bw_bytes(&bw);
+    const size_t hdr = dmd_av1_obu_header(DMD_OBU_FRAME_HEADER,
+                                          body_len, out, out_cap);
+    if (!hdr || hdr + body_len > out_cap)
+        return 0;
+    memcpy(out + hdr, body, body_len);
+    return hdr + body_len;
 }
 
 /* --------------------------------------------------------------- OBU header */
