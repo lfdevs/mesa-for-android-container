@@ -61,6 +61,7 @@
 #ifndef _WIN32
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include "drm-uapi/dma-buf.h"
 #include "frontend/drm_driver.h"
@@ -250,6 +251,7 @@ struct tva_pending {
     bool ready;                   /* staged frame available */
     bool failed;                  /* session error: fence must not hang */
     bool copied;                  /* staging already written into the target */
+    bool drop_on_fence_destroy;   /* target was reused before this output */
     unsigned waiters;              /* fence_wait callers holding this entry */
     struct pipe_resource *resources[2]; /* owned until the entry is reaped */
     uint8_t *staging;
@@ -274,14 +276,17 @@ struct tva_fence {
 /* AV1's VA-API descriptor does not carry refresh_frame_flags.  Keep a whole
  * temporal unit in hand until the next descriptor arrives: its reference map
  * then reveals which slots contain the just-finished target, allowing us to
- * reconstruct the exact refresh mask before submitting the unit.  MediaCodec
- * expects the hidden frames and the displayed frame from an AV1 temporal unit
- * in one input buffer; submitting every VA picture as a separate unit stalls
- * the Qualcomm decoder after the first reordered frame. */
+ * reconstruct the exact refresh mask before submitting the unit.  The legacy
+ * path submits hidden frames and their displayed frame together; the default
+ * hidden-output path intentionally splits them so MediaCodec returns every
+ * frame needed by show_existing_frame playback. */
 #define TVA_AV1_GROUP_MAX_FRAMES 64
+/* Keep surface reuse bounded even when MediaCodec is temporarily stalled. */
+#define TVA_FENCE_DESTROY_WAIT_MS 200
 
 struct tva_av1_picture {
     struct pipe_video_buffer *target;
+    struct tva_pending *pending;
     VADecPictureParameterBufferAV1 picture;
     struct dmd_av1_tile tiles[256];
     uint8_t *tile_data;
@@ -316,6 +321,7 @@ struct tva_codec {
     /* Pending ring, FIFO order */
     struct tva_pending pend[DMD_PIPELINE_DEPTH_MAX];
     unsigned pipeline_depth;
+    bool strict_pending;         /* optional hard in-flight limit */
     unsigned pend_head;           /* oldest entry */
     unsigned pend_count;
 
@@ -552,7 +558,7 @@ tva_pend_reserve_locked(struct tva_codec *c, uint32_t unit_seq,
         /* The normal threshold is a scheduling hint, not a reason to drop a
          * frame.  If the decoder is still reordering the oldest output, let
          * the host-side pending cache grow up to its fixed bound. */
-        if (c->pend_count < DMD_PIPELINE_DEPTH_MAX)
+        if (c->pend_count < DMD_PIPELINE_DEPTH_MAX && !c->strict_pending)
             break;
 
         struct tva_pending *oldest = tva_pend_oldest(c);
@@ -604,10 +610,67 @@ tva_pend_reserve_locked(struct tva_codec *c, uint32_t unit_seq,
         }
     }
     p->fence = fence;
-    fence->codec = c;
-    fence->slot = p;
+    if (fence) {
+        fence->codec = c;
+        fence->slot = p;
+    }
     c->pend_count++;
     return p;
+}
+
+/* AV1 show_existing_frame packets do not enter the VA decode callbacks.  A
+ * hidden reference picture therefore has no consumer-visible callback even
+ * though its surface must still contain decoded pixels before a later
+ * show_existing_frame can display it.  The Qualcomm decoder only returns
+ * output buffers for show_frame pictures, so mark hidden pictures as shown
+ * in the reconstructed stream and pair those extra output buffers with their
+ * original VA surfaces.  DMD_AV1_OUTPUT_HIDDEN=0 restores the legacy path. */
+static bool
+tva_av1_output_hidden(void)
+{
+    const char *e = getenv("DMD_AV1_OUTPUT_HIDDEN");
+    if (!e || !*e)
+        return true;
+    return !(!strcmp(e, "0") || !strcmp(e, "false") ||
+             !strcmp(e, "off"));
+}
+
+static bool
+tva_av1_synthetic_show_existing(void)
+{
+    const char *e = getenv("DMD_AV1_SYNTHETIC_SHOW");
+    return e && (!strcmp(e, "1") || !strcmp(e, "true") ||
+                 !strcmp(e, "on"));
+}
+
+static bool
+tva_av1_inline_show_existing(void)
+{
+    const char *e = getenv("DMD_AV1_INLINE_SHOW");
+    return e && (!strcmp(e, "1") || !strcmp(e, "true") ||
+                 !strcmp(e, "on"));
+}
+
+static bool
+tva_av1_strict_pending(void)
+{
+    const char *e = getenv("DMD_AV1_STRICT_PENDING");
+    return e && (!strcmp(e, "1") || !strcmp(e, "true") ||
+                 !strcmp(e, "on"));
+}
+
+static unsigned
+tva_av1_fence_destroy_wait_ms(void)
+{
+    const char *e = getenv("DMD_AV1_FENCE_WAIT_MS");
+    if (!e || !*e)
+        return TVA_FENCE_DESTROY_WAIT_MS;
+
+    char *end = NULL;
+    unsigned long value = strtoul(e, &end, 10);
+    if (end == e || *end || value > 5000)
+        return TVA_FENCE_DESTROY_WAIT_MS;
+    return (unsigned)value;
 }
 
 static bool
@@ -622,11 +685,7 @@ tva_cpu_copy_enabled(void)
      * environment, so backend-based autodetection is not reliable here.  The
      * bridge is only used for decoder output resources; use the cache-safe CPU
      * handoff by default and retain DMD_VA_CPU_COPY=0 as an escape hatch. */
-    bool enabled = true;
-    if (tva_dbg())
-        fprintf(stderr, "tva: copy mode env=%s enabled=%d\n",
-                e ? e : "<unset>", enabled);
-    return enabled;
+    return true;
 }
 
 #ifndef _WIN32
@@ -676,6 +735,185 @@ tva_dmabuf_write_end(int fd)
       fprintf(stderr, "tva: dma-buf write sync end failed fd=%d errno=%d\n",
               fd, errno);
    close(fd);
+}
+
+static bool
+tva_reader_copy_enabled(void)
+{
+   const char *e = getenv("DMD_VA_READER_COPY");
+   if (!e || !*e)
+      return true;
+   return !(!strcmp(e, "0") || !strcmp(e, "false") ||
+            !strcmp(e, "off"));
+}
+
+/* Copy directly into a linear dma-buf without touching pipe_context.  The
+ * reader thread can therefore complete a surface as soon as the daemon
+ * output arrives, while the application-thread Gallium path remains available
+ * as a fallback for drivers that cannot mmap an exported BO. */
+static bool
+tva_direct_copy_plane(struct pipe_screen *screen, struct pipe_resource *res,
+                      const uint8_t *data, unsigned w, unsigned h,
+                      unsigned src_stride)
+{
+   if (!screen || !screen->resource_get_handle || !res || !data || !w || !h)
+      return false;
+
+   const unsigned blocksize = util_format_get_blocksize(res->format);
+   if (!blocksize || w > UINT_MAX / blocksize)
+      return false;
+   const size_t row_bytes = (size_t)w * blocksize;
+   if (src_stride < row_bytes)
+      return false;
+
+   struct winsys_handle whandle;
+   memset(&whandle, 0, sizeof(whandle));
+   whandle.type = WINSYS_HANDLE_TYPE_FD;
+   if (!screen->resource_get_handle(screen, NULL, res, &whandle,
+                                    PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE))
+      return false;
+
+   const int fd = whandle.handle;
+   const size_t dst_stride = whandle.stride;
+   const uint64_t object_size = whandle.size;
+   if (fd < 0 || dst_stride < row_bytes || !object_size ||
+       (uint64_t)(h - 1) > (UINT64_MAX - row_bytes) / dst_stride ||
+       (uint64_t)(h - 1) * dst_stride + row_bytes > object_size) {
+      if (fd >= 0)
+         close(fd);
+      return false;
+   }
+
+   long page_size = sysconf(_SC_PAGESIZE);
+   if (page_size <= 0)
+      page_size = 4096;
+   const uint64_t page_mask = (uint64_t)page_size - 1;
+   const uint64_t map_offset = whandle.offset & ~page_mask;
+   const uint64_t delta = whandle.offset - map_offset;
+   const uint64_t need = (uint64_t)(h - 1) * dst_stride + row_bytes;
+   if (delta > object_size || need > object_size - delta ||
+       delta + need > SIZE_MAX) {
+      close(fd);
+      return false;
+   }
+
+   const size_t map_len = (size_t)(delta + need);
+   uint8_t *map = mmap(NULL, map_len, PROT_READ | PROT_WRITE, MAP_SHARED,
+                       fd, (off_t)map_offset);
+   if (map == MAP_FAILED) {
+      close(fd);
+      return false;
+   }
+
+   bool synced = false;
+   struct dma_buf_sync sync = {
+      .flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_WRITE,
+   };
+   if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) == 0) {
+      synced = true;
+   } else if (errno != ENOTTY && errno != EOPNOTSUPP && errno != ENOSYS &&
+              getenv("DMD_VA_LOG")) {
+      fprintf(stderr, "tva: direct dma-buf sync start failed fd=%d errno=%d\n",
+              fd, errno);
+   }
+
+   uint8_t *dst = map + delta;
+   if (dst_stride == src_stride) {
+      memcpy(dst, data, row_bytes * h);
+   } else {
+      for (unsigned y = 0; y < h; y++)
+         memcpy(dst + (size_t)y * dst_stride,
+                data + (size_t)y * src_stride, row_bytes);
+   }
+
+   if (synced) {
+      sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE;
+      if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) < 0 && getenv("DMD_VA_LOG"))
+         fprintf(stderr, "tva: direct dma-buf sync end failed fd=%d errno=%d\n",
+                 fd, errno);
+   }
+   munmap(map, map_len);
+   close(fd);
+   return true;
+}
+
+static bool
+tva_copy_frame_direct(struct tva_codec *c, struct tva_pending *p,
+                      const uint8_t *src, size_t src_size)
+{
+   if (!c || !c->pipe || !p || !src || !p->resources[0] ||
+       !p->resources[1] || !p->frame_width || !p->frame_height ||
+       p->stride <= 0 || p->slice_height <= 0 || p->crop_left < 0 ||
+       p->crop_top < 0 || p->crop_right < p->crop_left ||
+       p->crop_bottom < p->crop_top ||
+       p->crop_right >= (int)p->frame_width ||
+       p->crop_bottom >= (int)p->frame_height ||
+       p->crop_right >= p->stride || p->slice_height < (int)p->frame_height)
+      return false;
+
+   const unsigned display_w =
+      (unsigned)(p->crop_right - p->crop_left + 1);
+   const unsigned display_h =
+      (unsigned)(p->crop_bottom - p->crop_top + 1);
+   const unsigned w = p->resources[0]->width0 < display_w
+                      ? p->resources[0]->width0 : display_w;
+   const unsigned h = p->resources[0]->height0 < display_h
+                      ? p->resources[0]->height0 : display_h;
+   if (!w || !h || p->resources[1]->width0 < (w + 1) / 2 ||
+       p->resources[1]->height0 < (h + 1) / 2)
+      return false;
+
+   const size_t stride = (size_t)p->stride;
+   const unsigned uv_w = (w + 1) / 2;
+   const unsigned uv_h = (h + 1) / 2;
+   const unsigned y_blocksize =
+      util_format_get_blocksize(p->resources[0]->format);
+   const unsigned uv_blocksize =
+      util_format_get_blocksize(p->resources[1]->format);
+   if (!y_blocksize || !uv_blocksize || w > UINT_MAX / y_blocksize ||
+       uv_w > UINT_MAX / uv_blocksize || stride < (size_t)w * y_blocksize ||
+       stride < (size_t)uv_w * uv_blocksize)
+      return false;
+
+   if ((size_t)p->crop_top > SIZE_MAX / stride ||
+       (size_t)p->crop_top * stride > SIZE_MAX - (size_t)p->crop_left ||
+       (size_t)p->slice_height > SIZE_MAX / stride ||
+       (size_t)(p->crop_top / 2) > SIZE_MAX / stride)
+      return false;
+   const size_t y_offset = (size_t)p->crop_top * stride +
+                           (size_t)p->crop_left;
+   size_t uv_offset = (size_t)p->slice_height * stride;
+   if (uv_offset > SIZE_MAX - (size_t)(p->crop_top / 2) * stride)
+      return false;
+   uv_offset += (size_t)(p->crop_top / 2) * stride;
+   if (uv_offset > SIZE_MAX - (size_t)(p->crop_left & ~1))
+      return false;
+   uv_offset += (size_t)(p->crop_left & ~1);
+
+   const size_t y_rows = h - 1;
+   const size_t uv_rows = uv_h - 1;
+   const size_t y_row_bytes = (size_t)w * y_blocksize;
+   const size_t uv_row_bytes = (size_t)uv_w * uv_blocksize;
+   if (y_rows > SIZE_MAX / stride ||
+       y_offset > SIZE_MAX - y_rows * stride ||
+       y_offset + y_rows * stride > SIZE_MAX - y_row_bytes ||
+       uv_rows > SIZE_MAX / stride ||
+       uv_offset > SIZE_MAX - uv_rows * stride ||
+       uv_offset + uv_rows * stride > SIZE_MAX - uv_row_bytes)
+      return false;
+   const size_t y_end = y_offset + y_rows * stride + y_row_bytes;
+   const size_t uv_end = uv_offset + uv_rows * stride + uv_row_bytes;
+   if (y_end > src_size || uv_end > src_size)
+      return false;
+
+   struct pipe_screen *screen = c->pipe->screen;
+   if (!tva_direct_copy_plane(screen, p->resources[0], src + y_offset,
+                               w, h, (unsigned)p->stride))
+      return false;
+   if (!tva_direct_copy_plane(screen, p->resources[1], src + uv_offset,
+                              uv_w, uv_h, (unsigned)p->stride))
+      return false;
+   return true;
 }
 #endif
 
@@ -729,9 +967,17 @@ tva_copy_plane(struct pipe_context *pipe, struct pipe_resource *res,
 #endif
             return false;
         }
-        for (unsigned y = 0; y < h; y++)
-            memcpy(dst + (size_t)y * transfer->stride,
-                   data + (size_t)y * stride, row_bytes);
+        /* Bridge surfaces are linear and normally preserve the daemon's
+         * pitch.  Collapse the row loop to one transfer in that common case;
+         * AV1 at 1080p otherwise performs more than 1,600 tiny memcpys per
+         * frame (and quickly becomes CPU-bound at 60 fps). */
+        if (transfer->stride == stride) {
+            memcpy(dst, data, (size_t)row_bytes * h);
+        } else {
+            for (unsigned y = 0; y < h; y++)
+                memcpy(dst + (size_t)y * transfer->stride,
+                       data + (size_t)y * stride, row_bytes);
+        }
         pipe->texture_unmap(pipe, transfer);
 #ifndef _WIN32
         tva_dmabuf_write_end(sync_fd);
@@ -805,6 +1051,7 @@ tva_probe_resource(struct pipe_context *pipe, struct pipe_resource *res,
 static bool
 tva_copy_frame(struct tva_codec *c, struct tva_pending *p)
 {
+    const uint64_t copy_start_ns = os_time_get_nano();
     if (!p->staging || !p->resources[0] || !p->resources[1] ||
         !p->frame_width || !p->frame_height || p->stride <= 0 ||
         p->slice_height <= 0 || p->crop_left < 0 || p->crop_top < 0 ||
@@ -872,6 +1119,14 @@ tva_copy_frame(struct tva_codec *c, struct tva_pending *p)
     if (!pipe)
         return false;
 
+    /* CPU mappings write the exported allocation synchronously; there is no
+     * Gallium batch to submit in that path.  Keep the information here so the
+     * caller can avoid flushing unrelated GPU work after every decoded frame.
+     * The GPU-upload path still needs an explicit flush before its dma-buf is
+     * handed to the consumer. */
+    const bool cpu_copy = tva_cpu_copy_enabled() && pipe->texture_map &&
+                          pipe->texture_unmap;
+
     TVA_TRACE("copy frame unit=%u frame=%ux%u stride=%d slice=%d crop=%d,%d-%d,%d yoff=%zu uvoff=%zu size=%zu",
               p->unit_seq, p->frame_width, p->frame_height, p->stride,
               p->slice_height, p->crop_left, p->crop_top, p->crop_right,
@@ -883,10 +1138,13 @@ tva_copy_frame(struct tva_codec *c, struct tva_pending *p)
     if (!tva_copy_plane(pipe, p->resources[1], p->staging + uv_offset,
                         uv_w, uv_h, (unsigned)p->stride))
         return false;
-    if (!tva_flush_copy(pipe))
+    if (!cpu_copy && !tva_flush_copy(pipe))
         return false;
     tva_probe_resource(pipe, p->resources[0], w);
     tva_probe_resource(pipe, p->resources[1], uv_w * 2);
+    TVA_TRACE("copy frame complete unit=%u duration=%.3f ms",
+              p->unit_seq,
+              (double)(os_time_get_nano() - copy_start_ns) / 1000000.0);
     return true;
 }
 
@@ -944,6 +1202,33 @@ tva_reader_thread(void *param)
             tva_session_release_frame(c->sess, &f);
             continue;
         }
+        p->frame_width = f.width;
+        p->frame_height = f.height;
+        p->stride = f.stride;
+        p->slice_height = f.slice_height;
+        p->crop_left = f.crop_left;
+        p->crop_top = f.crop_top;
+        p->crop_right = f.crop_right;
+        p->crop_bottom = f.crop_bottom;
+
+#ifndef _WIN32
+        /* A direct dma-buf copy closes the surface-reuse window for AV1
+         * hidden references.  It is enabled by default for the validated
+         * linear resources; DMD_VA_READER_COPY=0 opts out.  A failed direct
+         * map falls back to the staged application-thread copy below. */
+        if (tva_reader_copy_enabled() && tva_cpu_copy_enabled() &&
+            tva_copy_frame_direct(c, p, f.data, f.size)) {
+            p->copied = true;
+            p->ready = true;
+            c->frames_done++;
+            TVA_TRACE("reader direct copy unit=%u result=1", p->unit_seq);
+            u_cnd_monotonic_broadcast(&c->pend_cond);
+            mtx_unlock(&c->pend_mutex);
+            tva_session_release_frame(c->sess, &f);
+            continue;
+        }
+#endif
+
         p->staging = malloc(f.size ? f.size : 1);
         if (!p->staging) {
             tva_mark_broken_locked(c);
@@ -953,14 +1238,6 @@ tva_reader_thread(void *param)
         }
         memcpy(p->staging, f.data, f.size);
         p->staging_size = f.size;
-        p->frame_width = f.width;
-        p->frame_height = f.height;
-        p->stride = f.stride;
-        p->slice_height = f.slice_height;
-        p->crop_left = f.crop_left;
-        p->crop_top = f.crop_top;
-        p->crop_right = f.crop_right;
-        p->crop_bottom = f.crop_bottom;
         p->ready = true;
         c->frames_done++;
         u_cnd_monotonic_broadcast(&c->pend_cond);
@@ -1755,6 +2032,211 @@ tva_av1_send_pending(struct tva_codec *c)
     if (!frame->valid)
         return 0;
 
+    /* Submit one temporal unit per decoded picture, appending a
+     * show_existing_frame OBU immediately after hidden pictures.  Keeping
+     * the synthetic presentation next to the frame which refreshes the
+     * reference slot prevents a later temporal unit from changing the map
+     * before the Qualcomm decoder has emitted the hidden surface. */
+    if (tva_av1_inline_show_existing()) {
+        if (frame->picture_count > UINT32_MAX - c->next_unit) {
+            debug_printf("tva: AV1 picture sequence overflow\n");
+            tva_mark_broken(c);
+            tva_av1_pending_clear(frame);
+            return -1;
+        }
+
+        mtx_lock(&c->pend_mutex);
+        for (unsigned i = 0; i < frame->picture_count; i++) {
+            if (frame->pictures[i].pending)
+                frame->pictures[i].pending->unit_seq =
+                    (uint32_t)(c->next_unit + i + 1);
+        }
+        mtx_unlock(&c->pend_mutex);
+
+        for (unsigned i = 0; i < frame->picture_count; i++) {
+            struct tva_av1_picture *pic = &frame->pictures[i];
+            size_t unit_cap = pic->tile_bytes + 8192u + 64u;
+            if (unit_cap < pic->tile_bytes || unit_cap > MAX_FRAME) {
+                debug_printf("tva: AV1 picture is too large (%zu bytes)\n",
+                             pic->tile_bytes);
+                tva_mark_broken(c);
+                tva_av1_pending_clear(frame);
+                return -1;
+            }
+
+            uint8_t *unit = malloc(unit_cap);
+            if (!unit) {
+                tva_mark_broken(c);
+                tva_av1_pending_clear(frame);
+                return -1;
+            }
+
+            size_t unit_len = 0;
+            size_t n = dmd_av1_obu_header(DMD_OBU_TEMPORAL_DELIMITER, 0,
+                                          unit, unit_cap);
+            if (!n) {
+                free(unit);
+                tva_mark_broken(c);
+                tva_av1_pending_clear(frame);
+                return -1;
+            }
+            unit_len += n;
+            if (i == 0 && frame->include_sequence) {
+                n = dmd_av1_build_sequence_header(&pic->picture,
+                                                  unit + unit_len,
+                                                  unit_cap - unit_len);
+                if (!n) {
+                    free(unit);
+                    tva_mark_broken(c);
+                    tva_av1_pending_clear(frame);
+                    return -1;
+                }
+                unit_len += n;
+            }
+
+            n = dmd_av1_build_frame(&pic->picture, pic->tiles,
+                                    (int)pic->tile_count,
+                                    pic->refresh_frame_flags,
+                                    unit + unit_len, unit_cap - unit_len);
+            if (!n) {
+                free(unit);
+                tva_mark_broken(c);
+                tva_av1_pending_clear(frame);
+                return -1;
+            }
+            unit_len += n;
+
+            uint8_t map_idx = 0;
+            if (!pic->picture.pic_info_fields.bits.show_frame) {
+                const uint8_t mask = pic->refresh_frame_flags;
+                map_idx = mask ? (uint8_t)__builtin_ctz(mask) : 0;
+                n = dmd_av1_build_show_existing(map_idx,
+                                                unit + unit_len,
+                                                unit_cap - unit_len);
+                if (!n) {
+                    free(unit);
+                    tva_mark_broken(c);
+                    tva_av1_pending_clear(frame);
+                    return -1;
+                }
+                unit_len += n;
+            }
+
+            TVA_TRACE("AV1 inline picture=%u unit=%u show=%u map=%u refresh=%02x",
+                      i + 1, (unsigned)c->next_unit + 1,
+                      pic->picture.pic_info_fields.bits.show_frame,
+                      map_idx, pic->refresh_frame_flags);
+            if (tva_session_send_unit(c->sess, unit, unit_len) != TVA_OK) {
+                debug_printf("tva: AV1 inline send failed: %s\n",
+                             tva_session_last_error(c->sess));
+                free(unit);
+                tva_av1_pending_clear(frame);
+                tva_mark_broken(c);
+                return -1;
+            }
+            free(unit);
+            c->next_unit++;
+        }
+
+        c->av1_sequence_sent |= frame->include_sequence;
+        tva_av1_pending_clear(frame);
+        return 0;
+    }
+
+    /* In hidden-output mode each picture gets its own input unit.  The
+     * Qualcomm decoder otherwise emits only one output for a temporal unit,
+     * even when all of its frame OBUs carry show_frame=1.  Separate units
+     * preserve the AV1 reference chain while giving the daemon one PTS (and
+     * therefore one pending surface) per decoded picture. */
+    if (tva_av1_output_hidden()) {
+        if (frame->picture_count > UINT32_MAX - c->next_unit) {
+            debug_printf("tva: AV1 temporal unit sequence overflow\n");
+            tva_mark_broken(c);
+            tva_av1_pending_clear(frame);
+            return -1;
+        }
+
+        for (unsigned i = 0; i < frame->picture_count; i++) {
+            struct tva_av1_picture *pic = &frame->pictures[i];
+            size_t unit_cap = pic->tile_bytes + 8192u +
+                              (size_t)pic->tile_count * 4u;
+            if (unit_cap < pic->tile_bytes || unit_cap > MAX_FRAME) {
+                debug_printf("tva: AV1 temporal unit is too large (%zu bytes)\n",
+                             pic->tile_bytes);
+                tva_mark_broken(c);
+                tva_av1_pending_clear(frame);
+                return -1;
+            }
+
+            uint8_t *unit = malloc(unit_cap);
+            if (!unit) {
+                tva_mark_broken(c);
+                tva_av1_pending_clear(frame);
+                return -1;
+            }
+
+            size_t unit_len = 0;
+            size_t n = dmd_av1_obu_header(DMD_OBU_TEMPORAL_DELIMITER, 0,
+                                          unit, unit_cap);
+            if (!n) {
+                free(unit);
+                tva_mark_broken(c);
+                tva_av1_pending_clear(frame);
+                return -1;
+            }
+            unit_len += n;
+
+            if (i == 0 && frame->include_sequence) {
+                n = dmd_av1_build_sequence_header(&pic->picture,
+                                                  unit + unit_len,
+                                                  unit_cap - unit_len);
+                if (!n) {
+                    free(unit);
+                    tva_mark_broken(c);
+                    tva_av1_pending_clear(frame);
+                    return -1;
+                }
+                unit_len += n;
+            }
+
+            VADecPictureParameterBufferAV1 picture = pic->picture;
+            picture.pic_info_fields.bits.show_frame = 1;
+            n = dmd_av1_build_frame(&picture, pic->tiles,
+                                    (int)pic->tile_count,
+                                    pic->refresh_frame_flags,
+                                    unit + unit_len, unit_cap - unit_len);
+            if (!n) {
+                free(unit);
+                tva_mark_broken(c);
+                tva_av1_pending_clear(frame);
+                return -1;
+            }
+            unit_len += n;
+
+            TVA_TRACE("AV1 unit len=%zu picture=%u/%u source_show=%u "
+                      "encoded_show=1 refresh=%02x order=%u type=%u%s",
+                      unit_len, i + 1, frame->picture_count,
+                      pic->picture.pic_info_fields.bits.show_frame,
+                      pic->refresh_frame_flags, pic->picture.order_hint,
+                      pic->picture.pic_info_fields.bits.frame_type,
+                      i == 0 && frame->include_sequence ? " sequence" : "");
+            if (tva_session_send_unit(c->sess, unit, unit_len) != TVA_OK) {
+                debug_printf("tva: AV1 send_unit failed: %s\n",
+                             tva_session_last_error(c->sess));
+                free(unit);
+                tva_av1_pending_clear(frame);
+                tva_mark_broken(c);
+                return -1;
+            }
+            free(unit);
+            c->next_unit++;
+        }
+
+        c->av1_sequence_sent |= frame->include_sequence;
+        tva_av1_pending_clear(frame);
+        return 0;
+    }
+
     size_t tile_bytes = 0;
     size_t overhead = 2048;
     for (unsigned i = 0; i < frame->picture_count; i++) {
@@ -1822,6 +2304,30 @@ too_large:
                   frame->pictures[i].picture.order_hint,
                   frame->pictures[i].picture.pic_info_fields.bits.frame_type);
 
+    /* A hidden AV1 picture updates the decoder reference map but does not
+     * normally produce a MediaCodec output buffer.  Keep the efficient
+     * temporal-unit submission above, then ask the decoder to present each
+     * refreshed reference with a tiny show_existing_frame unit.  This fills
+     * the VA surface assigned to the hidden picture without decoding it a
+     * second time or forcing every picture into a separate access unit. */
+    unsigned synthetic_hidden = 0;
+    if (tva_av1_synthetic_show_existing()) {
+        const uint32_t base_seq = (uint32_t)c->next_unit + 1;
+        mtx_lock(&c->pend_mutex);
+        for (unsigned i = 0; i < frame->picture_count; i++) {
+            struct tva_av1_picture *pic = &frame->pictures[i];
+            if (!pic->pending)
+                continue;
+            if (pic->picture.pic_info_fields.bits.show_frame) {
+                pic->pending->unit_seq = base_seq;
+            } else {
+                pic->pending->unit_seq = base_seq + 1 + synthetic_hidden;
+                synthetic_hidden++;
+            }
+        }
+        mtx_unlock(&c->pend_mutex);
+    }
+
     if (tva_session_send_unit(c->sess, unit, unit_len) != TVA_OK) {
         debug_printf("tva: AV1 send_unit failed: %s\n",
                      tva_session_last_error(c->sess));
@@ -1834,6 +2340,45 @@ too_large:
     free(unit);
     c->av1_sequence_sent |= frame->include_sequence;
     c->next_unit++;
+
+    if (tva_av1_synthetic_show_existing()) {
+        for (unsigned i = 0; i < frame->picture_count; i++) {
+            struct tva_av1_picture *pic = &frame->pictures[i];
+            if (pic->picture.pic_info_fields.bits.show_frame)
+                continue;
+
+            uint8_t mask = pic->refresh_frame_flags;
+            uint8_t map_idx = mask ? (uint8_t)__builtin_ctz(mask) : 0;
+            unsigned char show_unit[32];
+            size_t show_hdr = dmd_av1_obu_header(DMD_OBU_TEMPORAL_DELIMITER,
+                                                 0, show_unit,
+                                                 sizeof(show_unit));
+            size_t show_obu = show_hdr
+                ? dmd_av1_build_show_existing(map_idx,
+                                              show_unit + show_hdr,
+                                              sizeof(show_unit) - show_hdr)
+                : 0;
+            if (!show_hdr || !show_obu ||
+                show_hdr + show_obu > sizeof(show_unit)) {
+                debug_printf("tva: AV1 show_existing_frame build failed\n");
+                tva_av1_pending_clear(frame);
+                tva_mark_broken(c);
+                return -1;
+            }
+            const size_t show_len = show_hdr + show_obu;
+            TVA_TRACE("AV1 synthetic show_existing unit=%u map=%u refresh=%02x",
+                      (unsigned)c->next_unit + 1, map_idx, mask);
+            if (tva_session_send_unit(c->sess, show_unit, show_len) != TVA_OK) {
+                debug_printf("tva: AV1 show_existing send failed: %s\n",
+                             tva_session_last_error(c->sess));
+                tva_av1_pending_clear(frame);
+                tva_mark_broken(c);
+                return -1;
+            }
+            c->next_unit++;
+        }
+    }
+
     tva_av1_pending_clear(frame);
     return 0;
 
@@ -2285,12 +2830,15 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
             frame->hidden_since_show_frame = true;
         }
 
-        /* Hidden AV1 frames update the decoder's reference state but do not
-         * produce an output buffer.  Only displayed frames get a pending
-         * entry; otherwise the reader would wait forever for a frame that
-         * MediaCodec deliberately does not return. */
+        /* Hidden AV1 frames normally update the decoder's reference state but
+         * do not produce an output buffer.  In hidden-output mode the
+         * reconstructed stream marks them as shown, so reserve a fence-less
+         * entry for each one and let the reader pair repeated output frames
+         * with the entries sharing this temporal-unit sequence number. */
         struct tva_fence *fence = NULL;
-        if (show_frame) {
+        if (show_frame || tva_av1_output_hidden() ||
+            tva_av1_synthetic_show_existing() ||
+            tva_av1_inline_show_existing()) {
             fence = CALLOC_STRUCT(tva_fence);
             if (!fence) {
                 tva_av1_pending_clear(frame);
@@ -2305,9 +2853,33 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                 tva_mark_broken(c);
                 return -1;
             }
+            /* In hidden-output mode pictures are submitted as separate
+             * daemon units.  Reserve the sequence number this picture will
+             * receive within the accumulated temporal unit; the normal path
+             * keeps one sequence number for the whole group. */
+            uint64_t pending_seq = c->next_unit + 1;
+            if (tva_av1_output_hidden())
+                pending_seq = c->next_unit + frame->picture_count;
+            else if (tva_av1_synthetic_show_existing() ||
+                     tva_av1_inline_show_existing())
+                pending_seq = 0; /* assigned when the group is flushed */
+            if (pending_seq > UINT32_MAX) {
+                FREE(fence);
+                tva_av1_pending_clear(frame);
+                c->acc_len = 0;
+                tva_mark_broken(c);
+                return -1;
+            }
             mtx_lock(&c->pend_mutex);
-            pending = tva_pend_reserve_locked(c, (uint32_t)(c->next_unit + 1),
+            pending = tva_pend_reserve_locked(c, (uint32_t)pending_seq,
                                               target, fence);
+            /* Chromium recycles AV1 surfaces as soon as their VA fence is
+             * replaced.  A late daemon output must never be copied into that
+             * surface, including the ordinary visible-frame path: doing so
+             * can overwrite a newer frame and make old images flash back on
+             * screen. */
+            if (pending)
+                pending->drop_on_fence_destroy = true;
             mtx_unlock(&c->pend_mutex);
             if (!pending) {
                 FREE(fence);
@@ -2315,25 +2887,35 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                 c->acc_len = 0;
                 return -1;
             }
+            current->pending = pending;
         }
 
         TVA_TRACE("AV1 group append picture=%u show=%u tiles=%u payload=%zu%s",
                   frame->picture_count, show_frame, tile_count, tile_bytes,
                   show_frame ? " output" : " hidden");
 
-        if (picture && picture->out_fence && show_frame) {
+        if (picture && picture->out_fence &&
+            (show_frame || tva_av1_output_hidden() ||
+             tva_av1_synthetic_show_existing() ||
+             tva_av1_inline_show_existing())) {
             if (*picture->out_fence)
                 tva_codec_destroy_fence(codec, *picture->out_fence);
             *picture->out_fence = (struct pipe_fence_handle *)fence;
         } else if (picture && picture->out_fence) {
-            /* A hidden frame has no corresponding output.  Drop a stale
-             * surface fence so VA sync does not wait for a nonexistent frame. */
+            /* A hidden frame has no corresponding output in the normal mode.
+             * Keep the historical fence-less behaviour there; in
+             * hidden-output mode it receives the regular fence above so an
+             * export of a later show_existing_frame surface waits for the
+             * reference copy. */
             if (*picture->out_fence)
                 tva_codec_destroy_fence(codec, *picture->out_fence);
             *picture->out_fence = NULL;
         }
-        if (show_frame)
-            last_vcl = (uint32_t)(c->next_unit + 1);
+        if (show_frame || tva_av1_output_hidden() ||
+            tva_av1_synthetic_show_existing() ||
+            tva_av1_inline_show_existing())
+            last_vcl = pending && pending->unit_seq ? pending->unit_seq :
+                       (uint32_t)(c->next_unit + 1);
     } else {
         /* VP9 (no-start-code codec): one whole frame */
         TVA_TRACE("sending whole frame, len=%zu", c->acc_len);
@@ -2486,12 +3068,54 @@ tva_codec_destroy_fence(struct pipe_video_codec *codec,
     if (!fence)
         return;
     mtx_lock(&c->pend_mutex);
-    /* Destroying the VA fence only drops the client's wait handle.  The
-     * output surface/resource may still be reused while MediaCodec is
-     * reordering frames, so keep the pending record alive and copy its staged
-     * frame when the matching output arrives.  Marking it failed here drops
-     * the frame before the reader can pair it with the pending unit. */
-    tva_detach_fence_locked(fence, false);
+    /* Chromium destroys a surface fence immediately before reusing the VA
+     * surface for another picture.  Do not let a reordered daemon output
+     * arrive after that reuse: it would overwrite the newer picture and make
+     * an already displayed frame flash back on screen.  Wait for the pending
+     * output while the resource is still owned by this entry, then copy a
+     * staged frame before detaching the client fence. */
+    bool fail = false;
+    struct tva_pending *p = fence->slot;
+    if (p && p->drop_on_fence_destroy) {
+        const unsigned wait_ms = tva_av1_fence_destroy_wait_ms();
+        const uint64_t wait_start = os_time_get_nano();
+        const uint64_t deadline = os_time_get_nano() +
+                                  (uint64_t)wait_ms * 1000000ull;
+        /* Keep the entry alive while waiting, but release pend_mutex so the
+         * reader can publish the matching frame.  Waiting on pend_cond while
+         * holding this mutex would deadlock: the reader needs the same mutex
+         * to set p->ready and signal the condition. */
+        p->waiters++;
+        mtx_unlock(&c->pend_mutex);
+        for (;;) {
+            mtx_lock(&c->pend_mutex);
+            bool done = p->ready || c->broken;
+            mtx_unlock(&c->pend_mutex);
+            uint64_t now = os_time_get_nano();
+            if (done || now >= deadline)
+                break;
+            uint64_t remaining_us = (deadline - now) / 1000ull;
+            os_time_sleep((int64_t)MIN2(remaining_us, 1000ull));
+        }
+        mtx_lock(&c->pend_mutex);
+        const uint64_t wait_elapsed = os_time_get_nano() - wait_start;
+        if (!p->ready || wait_elapsed >= 1000000ull)
+            TVA_TRACE("recycled AV1 fence wait unit=%u ready=%d wait_ms=%u "
+                      "elapsed=%.3f ms", p->unit_seq, p->ready, wait_ms,
+                      (double)wait_elapsed / 1000000.0);
+        if (!p->ready) {
+            TVA_TRACE("recycled AV1 fence timed out unit=%u", p->unit_seq);
+            fail = true;
+        } else if (!p->failed && !p->copied && p->staging) {
+            p->copied = tva_copy_frame(c, p);
+            TVA_TRACE("recycled AV1 fence copy unit=%u result=%d",
+                      p->unit_seq, p->copied);
+            if (!p->copied)
+                fail = true;
+        }
+        p->waiters--;
+    }
+    tva_detach_fence_locked(fence, fail);
     u_cnd_monotonic_broadcast(&c->pend_cond);
     mtx_unlock(&c->pend_mutex);
     FREE(fence);
@@ -2566,6 +3190,11 @@ tva_pipe_create_video_codec(struct pipe_context *context,
         long v = atol(d);
         if (v >= 2 && v <= DMD_PIPELINE_DEPTH_MAX)
             pipeline_depth = (unsigned)v;
+    } else if (codec_id == CODEC_AV1 && tva_av1_output_hidden()) {
+        /* Hidden-output AV1 produces one daemon result for every reference
+         * and displayed frame.  Use the complete SHM pool by default so the
+         * sixth pending surface does not add avoidable backpressure. */
+        pipeline_depth = SHM_SLOTS;
     }
 
     struct tva_codec *c = CALLOC_STRUCT(tva_codec);
@@ -2600,6 +3229,10 @@ tva_pipe_create_video_codec(struct pipe_context *context,
     c->pipe = context;
     c->next_unit = 0;
     c->pipeline_depth = pipeline_depth;
+    /* DMD_AV1_STRICT_PENDING=1 keeps AV1 output submissions within the
+     * configured depth.  The default soft limit lets the pending cache absorb
+     * short decoder bursts while fence recycling still protects old surfaces. */
+    c->strict_pending = codec_id == CODEC_AV1 && tva_av1_strict_pending();
 
     mtx_init(&c->pend_mutex, mtx_plain);
     if (u_cnd_monotonic_init(&c->pend_cond) != thrd_success) {
@@ -2630,7 +3263,10 @@ tva_pipe_create_video_codec(struct pipe_context *context,
     c->base.fence_wait = tva_codec_fence_wait;
     c->base.destroy_fence = tva_codec_destroy_fence;
 
-    TVA_TRACE("codec ready");
+    TVA_TRACE("codec ready pipeline=%u strict=%d hidden=%d synthetic=%d inline=%d shm=%d",
+              c->pipeline_depth, c->strict_pending,
+              tva_av1_output_hidden(), tva_av1_synthetic_show_existing(),
+              tva_av1_inline_show_existing(), cfg.want_shm);
     return &c->base;
 }
 
