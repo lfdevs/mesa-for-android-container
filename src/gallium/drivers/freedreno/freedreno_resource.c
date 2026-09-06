@@ -1165,6 +1165,8 @@ fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
 
    bool ret = fd_screen_bo_get_handle(pscreen, rsc->bo, rsc->scanout,
                                       fd_resource_pitch(rsc, 0), handle);
+   if (ret)
+      handle->offset = fd_resource_offset(rsc, 0, handle->layer);
 
    if (!ret && !(prsc->bind & PIPE_BIND_SHARED)) {
 

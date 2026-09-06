@@ -60,10 +60,16 @@
 #include <va/va_dec_av1.h>
 #ifndef _WIN32
 #include <errno.h>
+#include <dirent.h>
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include "drm-uapi/dma-buf.h"
+#include "drm-uapi/drm_fourcc.h"
+#ifdef __linux__
+#include <linux/dma-heap.h>
+#endif
 #include "frontend/drm_driver.h"
 #endif
 
@@ -688,7 +694,196 @@ tva_cpu_copy_enabled(void)
     return true;
 }
 
+#if defined(__linux__)
+static bool
+tva_drm_render_node_present(void)
+{
+    DIR *dir = opendir("/dev/dri");
+    if (!dir)
+        return false;
+
+    bool present = false;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (!strncmp(entry->d_name, "renderD", 7)) {
+            present = true;
+            break;
+        }
+    }
+    closedir(dir);
+    return present;
+}
+#endif
+
+/* Chromium's Vulkan importer currently expects all NV12 planes to refer to
+ * one dma-buf object.  The normal Gallium video-buffer allocator creates one
+ * object per plane, which is valid for VA-API but cannot be consumed by that
+ * importer in a PRoot environment.  It can be overridden explicitly, and is
+ * enabled automatically for KGSL-only containers without a DRM render node. */
+static bool
+tva_contiguous_dmabuf_enabled(void)
+{
+    const char *e = getenv("DMD_VA_CONTIGUOUS_DMABUF");
+    if (!e || !*e)
+        e = getenv("TERMUX_VA_CONTIGUOUS_DMABUF");
+    if (e && *e)
+        return !strcmp(e, "1") || !strcmp(e, "true") || !strcmp(e, "on");
+
+#if defined(__linux__)
+    /* PRoot exposes KGSL directly but has no DRM render node.  Chromium's
+     * native-pixmap importer accepts only one NV12 dma-buf in that setup, so
+     * select the shared-object layout automatically when no override is set. */
+    const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
+    if ((!backend || !*backend || !strcmp(backend, "auto") ||
+         !strcmp(backend, "kgsl")) &&
+        access("/dev/kgsl-3d0", R_OK) == 0 &&
+        !tva_drm_render_node_present())
+        return true;
+#endif
+
+    return false;
+}
+
 #ifndef _WIN32
+#if defined(__linux__)
+static int
+tva_alloc_dmabuf(size_t size)
+{
+   if (!size)
+      return -1;
+
+   int heap_fd = open("/dev/dma_heap/system", O_RDONLY | O_CLOEXEC);
+   if (heap_fd < 0)
+      return -1;
+
+   struct dma_heap_allocation_data alloc = {
+      .len = size,
+      .fd_flags = O_RDWR | O_CLOEXEC,
+   };
+   int ret = ioctl(heap_fd, DMA_HEAP_IOCTL_ALLOC, &alloc);
+   int saved_errno = errno;
+   close(heap_fd);
+   if (ret < 0) {
+      errno = saved_errno;
+      return -1;
+   }
+
+   return (int)alloc.fd;
+}
+
+/* Allocate a linear NV12 buffer backed by one dma-buf and import each plane
+ * as a separate Gallium resource with an explicit offset.  The resources
+ * intentionally have independent KGSL BO wrappers, but their exported FDs
+ * still refer to the same dma-buf file description. */
+static struct pipe_video_buffer *
+tva_create_contiguous_video_buffer(struct pipe_context *context,
+                                   const struct pipe_video_buffer *templat)
+{
+   struct pipe_screen *screen = context ? context->screen : NULL;
+   struct pipe_video_buffer bridge_templ;
+   struct pipe_resource *resources[VL_NUM_COMPONENTS] = {0};
+   enum pipe_format formats[VL_NUM_COMPONENTS] = {0};
+   struct pipe_resource res_templ;
+   enum pipe_video_chroma_format chroma;
+   const unsigned page_size = 4096;
+   unsigned y_stride, y_height, uv_height;
+   size_t y_size, uv_size, uv_offset, total_size;
+   int dmabuf = -1;
+   struct pipe_video_buffer *result = NULL;
+
+   if (!screen || !screen->resource_from_handle ||
+       !templat || templat->buffer_format != PIPE_FORMAT_NV12 ||
+       templat->interlaced)
+      return NULL;
+
+   bridge_templ = *templat;
+   bridge_templ.bind |= PIPE_BIND_SHARED | PIPE_BIND_LINEAR;
+   bridge_templ.width = align(templat->width, VL_MACROBLOCK_WIDTH);
+   bridge_templ.height = align(templat->height, VL_MACROBLOCK_HEIGHT);
+   chroma = pipe_format_to_chroma_format(bridge_templ.buffer_format);
+
+   vl_get_video_buffer_formats(screen, bridge_templ.buffer_format, formats);
+   if (formats[0] == PIPE_FORMAT_NONE || formats[1] == PIPE_FORMAT_NONE)
+      return NULL;
+
+   memset(&res_templ, 0, sizeof(res_templ));
+   vl_video_buffer_template(&res_templ, &bridge_templ, formats[0], 1, 1,
+                            PIPE_USAGE_DEFAULT, 0, chroma);
+   y_stride = align(res_templ.width0 * util_format_get_blocksize(res_templ.format),
+                    64);
+   y_height = res_templ.height0;
+
+   vl_video_buffer_template(&res_templ, &bridge_templ, formats[1], 1, 1,
+                            PIPE_USAGE_DEFAULT, 1, chroma);
+   uv_height = res_templ.height0;
+
+   if (!y_stride || !y_height || !uv_height ||
+       y_height > SIZE_MAX / y_stride ||
+       uv_height > SIZE_MAX / y_stride)
+      return NULL;
+
+   y_size = (size_t)y_stride * y_height;
+   uv_size = (size_t)y_stride * uv_height;
+   uv_offset = align(y_size, page_size);
+   if (uv_offset < y_size || uv_size > SIZE_MAX - uv_offset)
+      return NULL;
+   total_size = align(uv_offset + uv_size, page_size);
+   if (total_size < uv_offset + uv_size || total_size > UINT32_MAX)
+      return NULL;
+
+   dmabuf = tva_alloc_dmabuf(total_size);
+   if (dmabuf < 0)
+      return NULL;
+
+   for (unsigned plane = 0; plane < 2; plane++) {
+      const enum pipe_format format = formats[plane];
+      const size_t offset = plane ? uv_offset : 0;
+      int import_fd;
+
+      vl_video_buffer_template(&res_templ, &bridge_templ, format, 1, 1,
+                               PIPE_USAGE_DEFAULT, plane, chroma);
+      res_templ.bind |= PIPE_BIND_SHARED | PIPE_BIND_LINEAR;
+
+      struct winsys_handle whandle = {
+         .type = WINSYS_HANDLE_TYPE_FD,
+         .plane = plane,
+         .size = (uint64_t)total_size,
+         .stride = y_stride,
+         .offset = offset,
+         .format = format,
+         .modifier = DRM_FORMAT_MOD_LINEAR,
+      };
+      import_fd = dup(dmabuf);
+      if (import_fd < 0)
+         goto fail;
+      whandle.handle = import_fd;
+      resources[plane] = screen->resource_from_handle(
+         screen, &res_templ, &whandle,
+         PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE);
+      close(import_fd);
+      if (!resources[plane])
+         goto fail;
+   }
+
+   result = vl_video_buffer_create_ex2(context, &bridge_templ, resources);
+   if (!result)
+      goto fail;
+   result->contiguous_planes = true;
+   close(dmabuf);
+   if (getenv("DMD_VA_LOG"))
+      fprintf(stderr, "tva: contiguous NV12 dmabuf=%d size=%zu y=%ux%u "
+              "stride=%u uv_offset=%zu\n", dmabuf, total_size,
+              bridge_templ.width, bridge_templ.height, y_stride, uv_offset);
+   return result;
+
+fail:
+   for (unsigned i = 0; i < ARRAY_SIZE(resources); i++)
+      pipe_resource_reference(&resources[i], NULL);
+   close(dmabuf);
+   return NULL;
+}
+#endif
+
 /* KGSL exposes the same dma-buf through the VA producer and Chrome's ANGLE
  * consumer, but it does not provide an implicit cross-context GPU dependency
  * for a Gallium texture upload.  Bracket CPU writes with the dma-buf exporter
@@ -3157,6 +3352,18 @@ static struct pipe_video_buffer *
 tva_pipe_create_video_buffer(struct pipe_context *context,
                              const struct pipe_video_buffer *templat)
 {
+#if defined(__linux__)
+    if (tva_contiguous_dmabuf_enabled()) {
+        struct pipe_video_buffer *buffer =
+            tva_create_contiguous_video_buffer(context, templat);
+        if (buffer)
+            return buffer;
+        if (getenv("DMD_VA_LOG"))
+            fprintf(stderr, "tva: contiguous NV12 allocation failed; "
+                    "falling back to separate plane resources\n");
+    }
+#endif
+
     /* Bridge surfaces are CPU-filled and may be exported to Vulkan.  Allocate
      * them as linear shared resources so KGSL does not need an export-time
      * shadow allocation. */
@@ -3364,8 +3571,24 @@ struct vl_screen *
 tva_bridge_vscreen_create(int fd, bool honor_dri_prime)
 {
     const char *backend = os_get_option("TERMUX_VA_GPU_BACKEND");
+    int opened_fd = -1;
     if (!backend || !*backend || !strcmp(backend, "auto"))
         backend = "auto";
+
+#if defined(__linux__)
+    /* An X11 VA display in a PRoot container does not carry a DRM fd.  Open
+     * KGSL here so the bridge can still create a GPU screen without a DRM
+     * render node; the loader override below selects the KGSL alias. */
+    if (fd < 0 && (!strcmp(backend, "auto") || !strcmp(backend, "kgsl"))) {
+        opened_fd = open("/dev/kgsl-3d0", O_RDWR | O_CLOEXEC);
+        if (opened_fd >= 0) {
+            fd = opened_fd;
+            if (!strcmp(backend, "auto"))
+                backend = "kgsl";
+        }
+    }
+#endif
+
     if (getenv("DMD_VA_LOG"))
         fprintf(stderr, "tva: creating the bridge vscreen, backend='%s'\n", backend);
 
@@ -3386,13 +3609,19 @@ tva_bridge_vscreen_create(int fd, bool honor_dri_prime)
          * stack fails here by construction: the display node's kernel name
          * matches no descriptor and zink has no Vulkan device. */
         struct vl_screen *vscreen = vl_drm_screen_create(fd, honor_dri_prime);
-        if (vscreen)
+        if (vscreen) {
+            if (opened_fd >= 0)
+                close(opened_fd);
             return vscreen;
+        }
         /* 2. software fallback.  The KGSL alias is intentionally explicit:
          * applications must opt into GPU submission through /dev/kgsl-3d0
          * with TERMUX_VA_GPU_BACKEND=kgsl. */
         fprintf(stderr, "tva: stock drm screen creation failed, using llvmpipe\n");
-        return tva_vscreen_sw();
+        struct vl_screen *vscreen_sw = tva_vscreen_sw();
+        if (opened_fd >= 0)
+            close(opened_fd);
+        return vscreen_sw;
     }
     if (!strcmp(backend, "kgsl")) {
         /* Probe with the loader override so the device resolves to the
@@ -3410,15 +3639,32 @@ tva_bridge_vscreen_create(int fd, bool honor_dri_prime)
             unsetenv("MESA_LOADER_DRIVER_OVERRIDE");
         }
         if (vscreen)
+        {
+            if (opened_fd >= 0)
+                close(opened_fd);
             return vscreen;
+        }
         fprintf(stderr, "tva: kgsl screen creation failed, trying llvmpipe\n");
-        return tva_vscreen_sw();
+        struct vl_screen *vscreen_sw = tva_vscreen_sw();
+        if (opened_fd >= 0)
+            close(opened_fd);
+        return vscreen_sw;
     }
-    if (!strcmp(backend, "sw"))
-        return tva_vscreen_sw();
-    if (!strcmp(backend, "drm"))
-        return vl_drm_screen_create(fd, honor_dri_prime);
+    if (!strcmp(backend, "sw")) {
+        struct vl_screen *vscreen = tva_vscreen_sw();
+        if (opened_fd >= 0)
+            close(opened_fd);
+        return vscreen;
+    }
+    if (!strcmp(backend, "drm")) {
+        struct vl_screen *vscreen = vl_drm_screen_create(fd, honor_dri_prime);
+        if (opened_fd >= 0)
+            close(opened_fd);
+        return vscreen;
+    }
 
     fprintf(stderr, "tva: unknown TERMUX_VA_GPU_BACKEND '%s', using auto\n", backend);
+    if (opened_fd >= 0)
+        close(opened_fd);
     return tva_bridge_vscreen_create(fd, honor_dri_prime);
 }

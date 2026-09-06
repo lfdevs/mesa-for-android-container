@@ -56,6 +56,24 @@ frontend asks for one.  ``TERMUX_VA_GPU_BACKEND`` selects how:
 
 ``auto`` (default) tries the stock loader first and falls back to llvmpipe. It does not try the KGSL alias automatically because environments that expose a display DRM node may not have a usable Vulkan or stock DRM path. ``kgsl`` explicitly selects the fork's KGSL Freedreno alias: GPU submission goes to ``/dev/kgsl-3d0`` while the handed fd stays the control/identity fd, matching the EGL path (``MESA_LOADER_DRIVER_OVERRIDE=kgsl`` + ``FD_FORCE_KGSL=1``). ``sw`` forces llvmpipe for setups without GPU access; the VA decode paths used by vainfo and ffmpeg work without a GPU. ``drm`` selects the stock loader only.
 
+PRoot containers
+----------------
+
+A PRoot container can expose ``/dev/kgsl-3d0`` while exposing no usable DRM
+render node.  With ``TERMUX_VA_GPU_BACKEND=kgsl`` the bridge opens KGSL itself
+when the display backend supplies no fd.  It also uses one linear dma-buf for
+both NV12 planes when no DRM render node is present, because Chromium's native
+pixmap importer currently accepts only one dma-buf for this format.  Override
+this choice with ``DMD_VA_CONTIGUOUS_DMABUF`` or
+``TERMUX_VA_CONTIGUOUS_DMABUF`` when needed.
+
+Chromium's native Wayland Ozone backend still requires a DRM render node for
+its GPU process, independently of VA-API.  On a DRM-less PRoot desktop, run
+Chromium through XWayland (``--ozone-platform=x11`` with the XWayland
+``DISPLAY``) and set ``--hardware-video-device-path=/dev/kgsl-3d0``.  The
+standard libva DRM backend also rejects a KGSL fd; use a libva build that
+recognizes the KGSL bridge environment or an equivalent compatibility shim.
+
 Data path
 ---------
 
