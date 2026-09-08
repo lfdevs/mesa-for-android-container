@@ -101,6 +101,9 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   fprintf(stderr, "tva-va: begin picture context=%u target=%u\n",
+           context_id, render_target);
+
    mtx_lock(&drv->mutex);
    context = handle_table_get(drv->htab, context_id);
    if (!context) {
@@ -196,6 +199,9 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
    drv = VL_VA_DRIVER(ctx);
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
+
+   fprintf(stderr, "tva-va: render picture context=%u buffers=%d\n",
+           context_id, num_buffers);
 
    mtx_lock(&drv->mutex);
    context = handle_table_get(drv->htab, context_id);
@@ -439,6 +445,15 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
 
    if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM) {
       if (context->proc.dst_surface) {
+         /* tva_codec_end_frame only queues the daemon request.  The generic
+          * compositor must not sample the decode target until the bridge has
+          * copied that frame into its Gallium resources. */
+         VAStatus sync_status = vlVaSyncSurfaceObjectLocked(
+            drv, surf, VA_TIMEOUT_INFINITE);
+         if (sync_status != VA_STATUS_SUCCESS) {
+            mtx_unlock(&drv->mutex);
+            return sync_status;
+         }
          if (!context->decoder->process_frame ||
              context->decoder->process_frame(context->decoder, context->target, &context->proc.vpp) != 0) {
             VAStatus ret =

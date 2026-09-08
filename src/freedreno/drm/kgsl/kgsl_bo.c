@@ -115,6 +115,48 @@ static int kgsl_bo_dmabuf(struct fd_bo *bo) {
     return os_dupfd_cloexec(kgsl_bo->import_fd);
 }
 
+static int
+kgsl_bo_sync_to_gpu(struct fd_bo *bo)
+{
+    /* The legacy GPUOBJ_SYNC path is not implemented consistently by all
+     * Android KGSL kernels.  Try the explicit cache ioctl first; this is the
+     * operation that tells the dma-buf exporter to clean CPU lines for a GPU
+     * consumer. */
+    struct kgsl_gpumem_sync_cache cache = {
+        .gpuaddr = 0,
+        .id = bo->handle,
+        .op = KGSL_GPUMEM_CACHE_FLUSH,
+        .offset = 0,
+        .length = bo->size,
+    };
+    int cache_ret = kgsl_pipe_safe_ioctl(bo->dev->fd,
+                                         IOCTL_KGSL_GPUMEM_SYNC_CACHE,
+                                         &cache);
+
+    struct kgsl_gpuobj_sync_obj sync_obj = {
+        .offset = 0,
+        .length = bo->size,
+        .id = bo->handle,
+        .op = KGSL_GPUMEM_CACHE_FLUSH,
+    };
+    struct kgsl_gpuobj_sync sync = {
+        .objs = (uintptr_t)&sync_obj,
+        .obj_len = sizeof(sync_obj),
+        .count = 1,
+    };
+
+    int obj_ret = kgsl_pipe_safe_ioctl(bo->dev->fd,
+                                       IOCTL_KGSL_GPUOBJ_SYNC, &sync);
+    if (getenv("DMD_VA_LOG"))
+        fprintf(stderr, "kgsl: sync-to-gpu id=%u size=%u cache=%d/%d obj=%d/%d\n",
+                bo->handle, bo->size, cache_ret, cache_ret ? errno : 0,
+                obj_ret, obj_ret ? errno : 0);
+
+    if (cache_ret == 0 || obj_ret == 0)
+        return 0;
+    return obj_ret;
+}
+
 static const struct fd_bo_funcs bo_funcs = {
     .iova = kgsl_bo_iova,
     .set_name = kgsl_bo_set_name,
@@ -124,6 +166,7 @@ static const struct fd_bo_funcs bo_funcs = {
     .cpu_prep = kgsl_bo_cpu_prep,
     .destroy = kgsl_bo_destroy,
     .dmabuf = kgsl_bo_dmabuf,
+    .sync_to_gpu = kgsl_bo_sync_to_gpu,
 };
 
 /* Size is not used by KGSL */

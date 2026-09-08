@@ -1439,6 +1439,9 @@ decode).  See :doc:`termux-va`.
    - ``auto`` (default): try the stock loader and fall back to llvmpipe.  The KGSL alias is not attempted automatically.
    - ``kgsl``: force the KGSL Freedreno alias.  GPU submission uses
      ``/dev/kgsl-3d0`` while the handed fd remains the control/identity fd.
+     EGL and GLX loader selection follows this value, so
+     ``MESA_LOADER_DRIVER_OVERRIDE=kgsl`` and ``FD_FORCE_KGSL=1`` are not
+     required separately.
    - ``drm``: use stock loader selection only.
    - ``sw``: use llvmpipe only; no GPU is needed for the CPU frame-copy paths.
 

@@ -54,7 +54,7 @@ Underlying screen
 The decode surfaces live on a screen created by the bridge before the
 frontend asks for one.  ``TERMUX_VA_GPU_BACKEND`` selects how:
 
-``auto`` (default) tries the stock loader first and falls back to llvmpipe. It does not try the KGSL alias automatically because environments that expose a display DRM node may not have a usable Vulkan or stock DRM path. ``kgsl`` explicitly selects the fork's KGSL Freedreno alias: GPU submission goes to ``/dev/kgsl-3d0`` while the handed fd stays the control/identity fd, matching the EGL path (``MESA_LOADER_DRIVER_OVERRIDE=kgsl`` + ``FD_FORCE_KGSL=1``). ``sw`` forces llvmpipe for setups without GPU access; the VA decode paths used by vainfo and ffmpeg work without a GPU. ``drm`` selects the stock loader only.
+``auto`` (default) tries the stock loader first and falls back to llvmpipe. It does not try the KGSL alias automatically because environments that expose a display DRM node may not have a usable Vulkan or stock DRM path. ``kgsl`` explicitly selects the fork's KGSL Freedreno alias: GPU submission goes to ``/dev/kgsl-3d0`` while the handed fd stays the control/identity fd. The same selection is propagated to Mesa's EGL and GLX loaders, so callers do not need to add ``MESA_LOADER_DRIVER_OVERRIDE=kgsl`` or ``FD_FORCE_KGSL=1``. ``sw`` forces llvmpipe for setups without GPU access; the VA decode paths used by vainfo and ffmpeg work without a GPU. ``drm`` selects the stock loader only.
 
 PRoot containers
 ----------------
