@@ -54,6 +54,9 @@ vlVaCreateBuffer(VADriverContextP ctx, VAContextID context, VABufferType type,
    vlVaDriver *drv;
    vlVaBuffer *buf;
 
+   fprintf(stderr, "tva-va: create buffer context=%u type=%d size=%u elements=%u\n",
+           context, type, size, num_elements);
+
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 

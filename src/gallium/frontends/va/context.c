@@ -135,6 +135,9 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   fprintf(stderr, "tva-va: driver init display_type=%lu\n",
+           (unsigned long)ctx->display_type);
+
    drv = CALLOC(1, sizeof(vlVaDriver));
    if (!drv)
       return VA_STATUS_ERROR_ALLOCATION_FAILED;
@@ -217,6 +220,8 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv->vscreen)
       goto error_screen;
 
+   fprintf(stderr, "tva-va: driver screen ready\n");
+
    struct pipe_screen *raw_pscreen = drv->vscreen->pscreen;
 
    /* termux-va bridge: the underlying screen may lack the video capability
@@ -248,6 +253,11 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv->htab)
       goto error_htab;
 
+   drv->surfaces = _mesa_set_create(NULL, _mesa_hash_pointer,
+                                    _mesa_key_pointer_equal);
+   if (!drv->surfaces)
+      goto error_surfaces;
+
    (void) mtx_init(&drv->mutex, mtx_plain);
 
    ctx->pDriverData = (void *)drv;
@@ -278,6 +288,9 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
 
    return VA_STATUS_SUCCESS;
 
+error_surfaces:
+   handle_table_destroy(drv->htab);
+
 error_htab:
    drv->pipe->destroy(drv->pipe);
 
@@ -304,13 +317,19 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   fprintf(stderr, "tva-va: create context config=%u size=%dx%d targets=%d\n",
+           config_id, picture_width, picture_height, num_render_targets);
+
    drv = VL_VA_DRIVER(ctx);
    mtx_lock(&drv->mutex);
    config = handle_table_get(drv->htab, config_id);
    mtx_unlock(&drv->mutex);
 
    if (!config)
+   {
+      fprintf(stderr, "tva-va: create context invalid config\n");
       return VA_STATUS_ERROR_INVALID_CONFIG;
+   }
 
    bool is_decode = config->entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM;
    bool is_encode = config->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE;
@@ -463,6 +482,8 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
       }
    }
 
+   fprintf(stderr, "tva-va: create context success id=%u decoder=%p\n",
+           *context_id, (void *)context->decoder);
    return VA_STATUS_SUCCESS;
 }
 
@@ -474,6 +495,8 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
+
+   fprintf(stderr, "tva-va: destroy context id=%u\n", context_id);
 
    if (context_id == 0)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -593,6 +616,7 @@ vlVaTerminate(VADriverContextP ctx)
       drv->pipe2->destroy(drv->pipe2);
    drv->pipe->destroy(drv->pipe);
    drv->vscreen->destroy(drv->vscreen);
+   _mesa_set_destroy(drv->surfaces, NULL);
    handle_table_destroy(drv->htab);
    mtx_destroy(&drv->mutex);
    FREE(drv);

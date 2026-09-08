@@ -737,13 +737,21 @@ struct tva_session *tva_session_create(const struct tva_session_config *cfg,
     char defep[300];
     const char *path = cfg->sock_path ? cfg->sock_path
                                       : tva_default_endpoint(defep, sizeof(defep));
+    fprintf(stderr, "tva-client: opening %s codec=%d %dx%d shm=%d\n",
+            path ? path : "(null)", cfg->codec, cfg->width, cfg->height,
+            cfg->want_shm);
     if (unix_connect(s, path, cto, err) < 0) {
+        fprintf(stderr, "tva-client: connect failed code=%d msg=%s\n",
+                err ? err->code : 0, err && err->msg[0] ? err->msg : "(none)");
         if (err)
             s->err = *err;
         tva_session_destroy(s);
         return NULL;
     }
     if (do_handshake(s, cfg, HELLO_VERSION, err) < 0) {
+        fprintf(stderr, "tva-client: handshake failed code=%d status=%d msg=%s\n",
+                s->err.code, s->err.handshake_status,
+                s->err.msg[0] ? s->err.msg : "(none)");
         /*
          * Version downgrade retry: daemons that check the version strictly
          * reject v3 with status=1.  Retry once with v2 (whose response has

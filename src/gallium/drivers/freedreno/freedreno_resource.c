@@ -30,8 +30,12 @@
 #include "freedreno_util.h"
 
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "drm-uapi/drm_fourcc.h"
 
 /* XXX this should go away, needed for 'struct winsys_handle' */
@@ -178,8 +182,26 @@ fd_resource_changed(struct pipe_screen *pscreen, struct pipe_resource *prsc)
       fprintf(stderr, "tva-fd resource_changed res=%p fmt=%d %ux%u\n",
               (void *)prsc, prsc->format, prsc->width0, prsc->height0);
 
-   fd_resource_set_usage(prsc, FD_DIRTY_TEX);
-   rebind_resource(fd_resource(prsc));
+   struct fd_resource *rsc = fd_resource(prsc);
+   fd_resource_lock(rsc);
+   rsc->tva_external_sync_valid = false;
+   rsc->tva_external_barrier_pending = true;
+   fd_resource_unlock(rsc);
+
+   /* The termux-va bridge writes a stable linear imported resource in place.
+    * Its sampler descriptor does not change between frames, so invalidate
+    * only the external cache handoff instead of rebuilding every shader
+    * state object on each frame.  Keep the normal rebind path for all other
+    * external-image users. */
+   const char *bridge_env = getenv("TERMUX_VA_BRIDGE");
+   const bool tva_in_place = rsc->b.is_shared && bridge_env &&
+                             strcmp(bridge_env, "0") != 0 &&
+                             strcmp(bridge_env, "false") != 0 &&
+                             strcmp(bridge_env, "off") != 0;
+   if (!tva_in_place) {
+      fd_resource_set_usage(prsc, FD_DIRTY_TEX);
+      rebind_resource(rsc);
+   }
 
    /* A lowered multi-plane import is represented by a linked resource chain;
     * invalidate each plane's cached texture state when the external producer
@@ -192,6 +214,13 @@ static inline void
 fd_resource_set_bo(struct fd_resource *rsc, struct fd_bo *bo)
 {
    struct fd_screen *screen = fd_screen(rsc->b.b.screen);
+
+   if (getenv("DMD_VA_PROBE") &&
+       (rsc->b.is_shared || (bo && (bo->alloc_flags & FD_BO_SHARED))))
+      fprintf(stderr, "tva-fd set_bo pid=%d res=%p old=%u new=%u shared=%d\n",
+              (int)getpid(), (void *)rsc,
+              rsc->bo ? rsc->bo->handle : 0,
+              bo ? bo->handle : 0, rsc->b.is_shared);
 
    rsc->bo = bo;
    rsc->seqno = seqno_next_u16(&screen->rsc_seqno);
@@ -455,6 +484,13 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
     * sees the wrong status..
     */
    struct fd_resource *shadow = fd_resource(pshadow);
+
+   if (getenv("DMD_VA_PROBE"))
+      fprintf(stderr, "tva-fd shadow pid=%d res=%p old=%u shadow=%p new=%u shared=%d/%d modifier=%" PRIx64 "\n",
+              (int)getpid(), (void *)rsc,
+              rsc->bo ? rsc->bo->handle : 0, (void *)shadow,
+              shadow->bo ? shadow->bo->handle : 0,
+              rsc->b.is_shared, shadow->b.is_shared, modifier);
 
    DBG("shadow: %p (%d, %p) -> %p (%d, %p)", rsc, rsc->b.b.reference.count,
        rsc->track, shadow, shadow->b.b.reference.count, shadow->track);
@@ -736,15 +772,36 @@ fd_resource_transfer_unmap(struct pipe_context *pctx,
    struct fd_resource *rsc = fd_resource(ptrans->resource);
    struct fd_transfer *trans = fd_transfer(ptrans);
 
+   if (getenv("DMD_VA_PROBE"))
+      fprintf(stderr, "tva-fd unmap res=%p bo=%u shared=%d usage=%#x staging=%p upload=%p\n",
+              (void *)ptrans->resource, rsc->bo ? rsc->bo->handle : 0,
+              rsc->b.is_shared,
+              ptrans->usage, (void *)trans->staging_prsc,
+              trans->upload_ptr);
+
    if (trans->staging_prsc) {
-      if (ptrans->usage & PIPE_MAP_WRITE)
+      if (ptrans->usage & PIPE_MAP_WRITE) {
+         /* The CPU has just populated the staging BO.  KGSL does not provide
+          * implicit cache maintenance for this CPU-to-GPU handoff, so clean
+          * it before the blit reads the staging contents. */
+         fd_bo_sync_to_gpu(fd_resource(trans->staging_prsc)->bo);
          fd_blit_from_staging(ctx, trans);
+      }
       pipe_resource_reference(&trans->staging_prsc, NULL);
    }
 
    if (trans->upload_ptr) {
       fd_bo_upload(rsc->bo, trans->upload_ptr, ptrans->box.x, ptrans->box.width);
+      fd_bo_sync_to_gpu(rsc->bo);
       free(trans->upload_ptr);
+   } else if (ptrans->usage & PIPE_MAP_WRITE) {
+      /* Direct maps and upload-manager maps write the BO from the CPU. */
+      fd_bo_sync_to_gpu(rsc->bo);
+   } else if (ptrans->usage & PIPE_MAP_READ) {
+      /* Complete the GPU-to-dma-buf transition after a shared resource has
+       * been observed by the CPU.  This is needed by KGSL consumers that
+       * import the same dma-buf in a separate GPU context. */
+      fd_bo_sync_to_gpu(rsc->bo);
    }
 
    util_range_add(&rsc->b.b, &rsc->valid_buffer_range, ptrans->box.x,
@@ -981,6 +1038,15 @@ resource_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
          if (ret)
             return NULL;
       }
+
+      /* A shared resource may have just been written by a GPU producer in a
+       * different API context (for example the VA compositor).  KGSL does not
+       * provide an implicit dma-buf cache transition for that handoff.  Flush
+       * the producer's cache before exposing the resource to a CPU mapping;
+       * this also makes the completed contents visible to a subsequent GPU
+       * import in another context. */
+      if ((usage & PIPE_MAP_READ) && rsc->b.is_shared)
+         fd_bo_sync_to_gpu(rsc->bo);
    }
 
    return resource_transfer_map_unsync(pctx, prsc, level, usage, box, trans);
@@ -1129,6 +1195,10 @@ fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
    assert_dt
 {
    struct fd_resource *rsc = fd_resource(prsc);
+   /* Keep track of resources imported from an external handle.  The
+    * is_shared bit is also set when a newly allocated resource is exported,
+    * so it must be sampled before this function marks the resource shared. */
+   const bool imported = rsc->b.is_shared;
 
    rsc->b.is_shared = true;
 
@@ -1141,16 +1211,19 @@ fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
       handle->modifier = DRM_FORMAT_MOD_LINEAR;
 
       if (!(prsc->bind & PIPE_BIND_SHARED)) {
-         struct fd_context *ctx = fd_screen_aux_context_get(pscreen);
-
+         /* Preserve the shared binding for callers which cache the resource
+          * usage, but never replace storage that was imported from an
+          * external dma-buf. */
          prsc->bind |= PIPE_BIND_SHARED;
 
-         bool ret = fd_try_shadow_resource(ctx, rsc, 0, NULL, handle->modifier);
-
-         fd_screen_aux_context_put(pscreen);
-
-         if (!ret)
-            return false;
+         if (!imported) {
+            struct fd_context *ctx = fd_screen_aux_context_get(pscreen);
+            bool ret = fd_try_shadow_resource(ctx, rsc, 0, NULL,
+                                              handle->modifier);
+            fd_screen_aux_context_put(pscreen);
+            if (!ret)
+               return false;
+         }
       }
    }
 
@@ -1168,7 +1241,7 @@ fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
    if (ret)
       handle->offset = fd_resource_offset(rsc, 0, handle->layer);
 
-   if (!ret && !(prsc->bind & PIPE_BIND_SHARED)) {
+   if (!ret && !imported && !(prsc->bind & PIPE_BIND_SHARED)) {
 
       pctx = threaded_context_unwrap_sync(pctx);
 
@@ -1609,6 +1682,25 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
       if (FD_DBG(LAYOUT))
          mesa_loge("handle import failed for: %" PRSC_FMT, PRSC_ARGS(tmpl));
       goto fail;
+   }
+
+   if (getenv("DMD_VA_PROBE") && handle->type == WINSYS_HANDLE_TYPE_FD) {
+      struct stat st;
+      if (fstat((int)handle->handle, &st) == 0)
+         fprintf(stderr, "tva-fd import res=%p fd=%d dev=%ju ino=%ju bo=%u "
+                 "fmt=%s %ux%u stride=%u offset=%u shared=%d\n",
+                 (void *)rsc, (int)handle->handle,
+                 (uintmax_t)st.st_dev, (uintmax_t)st.st_ino,
+                 fd_bo_handle(bo), util_format_short_name(tmpl->format),
+                 tmpl->width0, tmpl->height0, handle->stride, handle->offset,
+                 rsc->b.is_shared);
+      else
+         fprintf(stderr, "tva-fd import res=%p fd=%d fstat errno=%d bo=%u "
+                 "fmt=%s %ux%u stride=%u offset=%u shared=%d\n",
+                 (void *)rsc, (int)handle->handle, errno, fd_bo_handle(bo),
+                 util_format_short_name(tmpl->format), tmpl->width0,
+                 tmpl->height0, handle->stride, handle->offset,
+                 rsc->b.is_shared);
    }
 
    fd_resource_set_bo(rsc, bo);

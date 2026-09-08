@@ -684,8 +684,13 @@ eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor)
                  "Found 'LIBGL_ALWAYS_SOFTWARE' set, will use a CPU renderer");
 
       const char *env = os_get_option("MESA_LOADER_DRIVER_OVERRIDE");
-      disp->Options.Zink = !env || !strcmp(env, "zink");
-      disp->Options.Kgsl = env && !strcmp(env, "kgsl");
+      const char *backend = os_get_option("TERMUX_VA_GPU_BACKEND");
+      const bool kgsl_backend = backend && !strcmp(backend, "kgsl");
+      if (!env && kgsl_backend &&
+          setenv("MESA_LOADER_DRIVER_OVERRIDE", "kgsl", 0) == 0)
+         env = os_get_option("MESA_LOADER_DRIVER_OVERRIDE");
+      disp->Options.Zink = !kgsl_backend && (!env || !strcmp(env, "zink"));
+      disp->Options.Kgsl = kgsl_backend || (env && !strcmp(env, "kgsl"));
 
       const char *gallium_hud_env = os_get_option("GALLIUM_HUD");
       disp->Options.GalliumHudWarn =

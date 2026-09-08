@@ -46,8 +46,11 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #ifndef _WIN32
+#include <dirent.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include "drm-uapi/dma-buf.h"
@@ -65,6 +68,53 @@ vl_va_bridge_skip_clear(void)
 {
    const char *e = getenv("TERMUX_VA_BRIDGE");
    return e && (e[0] == '1' || e[0] == 'y' || e[0] == 'Y');
+}
+
+static bool
+vl_va_export_no_wait(void)
+{
+   const char *e = getenv("DMD_VA_EXPORT_NO_WAIT");
+   return e && (e[0] == '1' || e[0] == 'y' || e[0] == 'Y');
+}
+
+bool
+vlVaSurfaceNoWait(void)
+{
+   const char *e = getenv("DMD_VA_SURFACE_NO_WAIT");
+   if (e && (e[0] == '1' || e[0] == 'y' || e[0] == 'Y'))
+      return true;
+   if (e && (e[0] == '0' || e[0] == 'n' || e[0] == 'N'))
+      return false;
+
+#ifndef _WIN32
+   /* Chromium's PRoot VA path has no DRM render node.  A blocking producer
+    * wait there prevents the same VA thread from submitting the next input
+    * unit, so use the bridge's asynchronous handoff.  Chroot keeps the
+    * normal fence wait when a render node is available. */
+   const char *bridge = getenv("TERMUX_VA_BRIDGE");
+   const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
+   if (!bridge || !(bridge[0] == '1' || bridge[0] == 'y' || bridge[0] == 'Y') ||
+       !backend || strcmp(backend, "kgsl") != 0 ||
+       access("/dev/kgsl-3d0", R_OK) != 0)
+      return false;
+
+   DIR *dir = opendir("/dev/dri");
+   if (!dir)
+      return true;
+
+   bool render_node = false;
+   struct dirent *entry;
+   while ((entry = readdir(dir))) {
+      if (strncmp(entry->d_name, "renderD", 7) == 0) {
+         render_node = true;
+         break;
+      }
+   }
+   closedir(dir);
+   return !render_node;
+#else
+   return false;
+#endif
 }
 
 #define TVA_EXPORT_LOG(...) do { \
@@ -184,6 +234,18 @@ vlVaDestroySurface(vlVaDriver *drv, vlVaSurface *surf)
    if (!surf)
       return;
 
+   /* Imported PRIME surfaces may retain a producer association until the
+    * compositor destroys them.  Clear reverse links before releasing the
+    * producer object so a later VPP submission cannot dereference it. */
+   if (drv && drv->surfaces) {
+      set_foreach(drv->surfaces, entry) {
+         vlVaSurface *other = (vlVaSurface *)entry->key;
+         if (other && other != surf && other->sync_surface == surf)
+            other->sync_surface = NULL;
+      }
+      _mesa_set_remove_key(drv->surfaces, surf);
+   }
+
    context = surf->ctx;
    if (context)
       mtx_lock(&context->mutex);
@@ -244,13 +306,78 @@ vlVaDestroySurfaces(VADriverContextP ctx, VASurfaceID *surface_list, int num_sur
    return VA_STATUS_SUCCESS;
 }
 
+VAStatus
+vlVaSyncSurfaceObjectLocked(vlVaDriver *drv, vlVaSurface *surf,
+                            uint64_t timeout_ns)
+{
+   vlVaContext *context;
+   struct pipe_fence_handle *fence;
+
+   if (!drv || !surf)
+      return VA_STATUS_ERROR_INVALID_SURFACE;
+
+   /* A PRIME-imported VPP source has no VA context of its own.  If it was
+    * created from a decoder export, wait for that producer before examining
+    * the imported resource. */
+   if (surf->sync_surface && surf->sync_surface != surf &&
+       surf->prime_fence && surf->sync_surface->fence == surf->prime_fence) {
+      VAStatus sync_status = vlVaSyncSurfaceObjectLocked(
+         drv, surf->sync_surface, timeout_ns);
+      if (sync_status != VA_STATUS_SUCCESS)
+         return sync_status;
+   }
+
+   if (surf->coded_buf) {
+      context = surf->coded_buf->ctx;
+      fence = surf->coded_buf->fence;
+   } else {
+      context = surf->ctx;
+      fence = surf->fence;
+   }
+
+   if (vl_va_export_debug_enabled())
+      fprintf(stderr, "tva-export sync inspect surf=%p ctx=%p fence=%p coded=%p pipe=%p\n",
+              (void *)surf, (void *)context, (void *)fence,
+              (void *)surf->coded_buf, (void *)surf->pipe_fence);
+
+   if (surf->pipe_fence) {
+      struct pipe_screen *pscreen = drv->pipe->screen;
+      TVA_EXPORT_LOG("sync pipe fence=%p timeout=%" PRIu64 "\n",
+                     (void *)surf->pipe_fence, timeout_ns);
+      if (!pscreen->fence_finish(pscreen, NULL, surf->pipe_fence, timeout_ns)) {
+         TVA_EXPORT_LOG("sync pipe fence timed out\n");
+         return VA_STATUS_ERROR_TIMEDOUT;
+      }
+      pscreen->fence_reference(pscreen, &surf->pipe_fence, NULL);
+   }
+
+   /* No outstanding operation: nothing to do. */
+   if (!fence) {
+      TVA_EXPORT_LOG("sync no decoder fence\n");
+      return VA_STATUS_SUCCESS;
+   }
+
+   if (!context || !context->decoder || !context->decoder->fence_wait) {
+      TVA_EXPORT_LOG("sync invalid context=%p decoder=%p\n",
+                     (void *)context,
+                     context ? (void *)context->decoder : NULL);
+      return VA_STATUS_ERROR_INVALID_CONTEXT;
+   }
+
+   mtx_lock(&context->mutex);
+   mtx_unlock(&drv->mutex);
+   int ret = context->decoder->fence_wait(context->decoder, fence, timeout_ns);
+   TVA_EXPORT_LOG("sync decoder fence=%p result=%d\n", (void *)fence, ret);
+   mtx_unlock(&context->mutex);
+   mtx_lock(&drv->mutex);
+   return ret ? VA_STATUS_SUCCESS : VA_STATUS_ERROR_TIMEDOUT;
+}
+
 static VAStatus
 _vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target, uint64_t timeout_ns)
 {
    vlVaDriver *drv;
-   vlVaContext *context;
    vlVaSurface *surf;
-   struct pipe_fence_handle *fence;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -266,53 +393,18 @@ _vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target, uint64_t timeo
       return VA_STATUS_ERROR_INVALID_SURFACE;
    }
 
-   if (surf->coded_buf) {
-      context = surf->coded_buf->ctx;
-      fence = surf->coded_buf->fence;
-   } else {
-      context = surf->ctx;
-      fence = surf->fence;
-   }
-
-   if (vl_va_export_debug_enabled())
-      fprintf(stderr, "tva-export sync inspect surface=%#x surf=%p ctx=%p fence=%p coded=%p pipe=%p\n",
-              render_target, (void *)surf, (void *)context, (void *)fence,
-              (void *)surf->coded_buf, (void *)surf->pipe_fence);
-
-   if (surf->pipe_fence) {
-      struct pipe_screen *pscreen = drv->pipe->screen;
-      TVA_EXPORT_LOG("sync surface=%#x pipe fence=%p timeout=%" PRIu64 "\n",
-                     render_target, (void *)surf->pipe_fence, timeout_ns);
-      if (!pscreen->fence_finish(pscreen, NULL, surf->pipe_fence, timeout_ns)) {
-         TVA_EXPORT_LOG("sync surface=%#x pipe fence timed out\n", render_target);
-         mtx_unlock(&drv->mutex);
-         return VA_STATUS_ERROR_TIMEDOUT;
-      }
-      pscreen->fence_reference(pscreen, &surf->pipe_fence, NULL);
-   }
-
-   /* No outstanding operation: nothing to do. */
-   if (!fence) {
-      TVA_EXPORT_LOG("sync surface=%#x no decoder fence\n", render_target);
+   /* Some Chromium paths call vaSyncSurface before they have submitted the
+    * next AV1 temporal unit.  The bridge's reader thread cannot receive that
+    * first output until the pipeline is allowed to advance; defer the actual
+    * producer wait to VPP when this diagnostic override is enabled. */
+   if (vlVaSurfaceNoWait()) {
       mtx_unlock(&drv->mutex);
       return VA_STATUS_SUCCESS;
    }
 
-   if (!context || !context->decoder) {
-      TVA_EXPORT_LOG("sync surface=%#x invalid context=%p decoder=%p\n",
-                     render_target, (void *)context,
-                     context ? (void *)context->decoder : NULL);
-      mtx_unlock(&drv->mutex);
-      return VA_STATUS_ERROR_INVALID_CONTEXT;
-   }
-
-   mtx_lock(&context->mutex);
+   VAStatus ret = vlVaSyncSurfaceObjectLocked(drv, surf, timeout_ns);
    mtx_unlock(&drv->mutex);
-   int ret = context->decoder->fence_wait(context->decoder, fence, timeout_ns);
-   TVA_EXPORT_LOG("sync surface=%#x decoder fence=%p result=%d\n",
-                  render_target, (void *)fence, ret);
-   mtx_unlock(&context->mutex);
-   return ret ? VA_STATUS_SUCCESS : VA_STATUS_ERROR_TIMEDOUT;
+   return ret;
 }
 
 VAStatus
@@ -399,6 +491,9 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
    struct pipe_screen *pscreen;
    int i;
 
+   fprintf(stderr, "tva-va: query surface attrs config=%u list=%p count=%u\n",
+           config_id, (void *)attrib_list, num_attribs ? *num_attribs : 0);
+
    if (config_id == VA_INVALID_ID)
       return VA_STATUS_ERROR_INVALID_CONFIG;
 
@@ -407,6 +502,7 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
 
    if (!attrib_list) {
       *num_attribs = VL_VA_MAX_IMAGE_FORMATS + VASurfaceAttribCount;
+      fprintf(stderr, "tva-va: query surface attrs count=%u\n", *num_attribs);
       return VA_STATUS_SUCCESS;
    }
 
@@ -585,12 +681,15 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
    if (i > *num_attribs) {
       *num_attribs = i;
       FREE(attribs);
+      fprintf(stderr, "tva-va: query surface attrs too small need=%d\n", i);
       return VA_STATUS_ERROR_MAX_NUM_EXCEEDED;
    }
 
    *num_attribs = i;
    memcpy(attrib_list, attribs, i * sizeof(VASurfaceAttrib));
    FREE(attribs);
+
+   fprintf(stderr, "tva-va: query surface attrs success count=%d\n", i);
 
    return VA_STATUS_SUCCESS;
 }
@@ -633,6 +732,8 @@ surface_from_external_memory(VADriverContextP ctx, vlVaSurface *surface,
    res_templ.depth0 = 1;
    res_templ.array_size = 1;
    res_templ.bind = PIPE_BIND_SAMPLER_VIEW;
+   if (!util_format_is_yuv(templat->buffer_format))
+      res_templ.bind |= PIPE_BIND_RENDER_TARGET;
    res_templ.usage = PIPE_USAGE_DEFAULT;
 
    memset(&whandle, 0, sizeof(struct winsys_handle));
@@ -684,6 +785,91 @@ fail:
    return result;
 }
 
+vlVaSurface *
+surface_find_prime_producer_for_surface(vlVaDriver *drv,
+                                        vlVaSurface *import_surface)
+{
+   struct pipe_screen *pscreen = drv && drv->vscreen ?
+      drv->vscreen->pscreen : NULL;
+   struct pipe_surface *import_surfaces;
+
+   if (!drv || !pscreen || !drv->surfaces || !import_surface ||
+       !import_surface->buffer)
+      return NULL;
+
+   import_surfaces = import_surface->buffer->get_surfaces(import_surface->buffer);
+   if (!import_surfaces)
+      return NULL;
+
+   /* PRoot does not reliably implement os_same_file_description for
+    * dma-bufs.  Duplicated dma-buf descriptors still share device/inode. */
+   for (unsigned import_plane = 0; import_plane < VL_MAX_SURFACES;
+        import_plane++) {
+      struct pipe_resource *import_resource = import_surfaces[import_plane].texture;
+      if (!import_resource)
+         continue;
+
+      struct winsys_handle import_handle;
+      memset(&import_handle, 0, sizeof(import_handle));
+      import_handle.type = WINSYS_HANDLE_TYPE_FD;
+      if (!pscreen->resource_get_handle(pscreen, drv->pipe, import_resource,
+                                        &import_handle, 0))
+         continue;
+
+      struct stat import_stat;
+      bool import_stat_valid = fstat(import_handle.handle, &import_stat) == 0;
+
+      set_foreach(drv->surfaces, entry) {
+         vlVaSurface *candidate = (vlVaSurface *)entry->key;
+         if (!candidate || candidate == import_surface ||
+             !candidate->buffer)
+            continue;
+
+         struct pipe_surface *candidate_surfaces =
+            candidate->buffer->get_surfaces(candidate->buffer);
+         if (!candidate_surfaces)
+            continue;
+
+         for (unsigned candidate_plane = 0; candidate_plane < VL_MAX_SURFACES;
+              candidate_plane++) {
+            struct pipe_resource *candidate_resource =
+               candidate_surfaces[candidate_plane].texture;
+            if (!candidate_resource)
+               continue;
+
+            struct winsys_handle candidate_handle;
+            memset(&candidate_handle, 0, sizeof(candidate_handle));
+            candidate_handle.type = WINSYS_HANDLE_TYPE_FD;
+            if (!pscreen->resource_get_handle(pscreen, drv->pipe,
+                                              candidate_resource,
+                                              &candidate_handle, 0))
+               continue;
+
+            struct stat candidate_stat;
+            bool match = import_stat_valid &&
+                         fstat(candidate_handle.handle, &candidate_stat) == 0 &&
+                         import_stat.st_dev == candidate_stat.st_dev &&
+                         import_stat.st_ino == candidate_stat.st_ino;
+            close(candidate_handle.handle);
+            if (match) {
+               close(import_handle.handle);
+               if (getenv("DMD_VA_PROBE"))
+                  fprintf(stderr, "tva-va: prime producer matched import=%p "
+                          "producer=%p plane=%u fence=%p ctx=%p\n",
+                          (void *)import_surface, (void *)candidate,
+                          candidate_plane, (void *)candidate->fence,
+                          (void *)candidate->ctx);
+               return candidate;
+            }
+         }
+      }
+
+      close(import_handle.handle);
+   }
+
+   return NULL;
+}
+
 static VAStatus
 surface_from_prime(VADriverContextP ctx, vlVaSurface *surface,
                    VADRMPRIMESurfaceDescriptor *desc, int mem_type,
@@ -701,6 +887,30 @@ surface_from_prime(VADriverContextP ctx, vlVaSurface *surface,
    num_format_planes = util_format_get_num_planes(templat->buffer_format);
    pscreen = VL_VA_PSCREEN(ctx);
    drv = VL_VA_DRIVER(ctx);
+
+   if (getenv("DMD_VA_PROBE")) {
+      fprintf(stderr, "tva-va: import prime surface=%p type=%#x desc=%p "
+              "fourcc=%#x size=%ux%u objects=%u layers=%u\n",
+              (void *)surface, mem_type, (void *)desc,
+              desc ? desc->fourcc : 0, desc ? desc->width : 0,
+              desc ? desc->height : 0, desc ? desc->num_objects : 0,
+              desc ? desc->num_layers : 0);
+      if (desc) {
+         for (unsigned i = 0; i < desc->num_objects; i++)
+            fprintf(stderr, "tva-va: import prime object[%u] fd=%d size=%u mod=%#llx\n",
+                    i, desc->objects[i].fd, desc->objects[i].size,
+                    (unsigned long long)desc->objects[i].drm_format_modifier);
+         for (unsigned i = 0; i < desc->num_layers; i++) {
+            fprintf(stderr, "tva-va: import prime layer[%u] fmt=%#x planes=%u\n",
+                    i, desc->layers[i].drm_format, desc->layers[i].num_planes);
+            for (unsigned j = 0; j < desc->layers[i].num_planes; j++)
+               fprintf(stderr, "tva-va: import prime layer[%u].plane[%u] obj=%u "
+                       "pitch=%u offset=%u\n", i, j,
+                       desc->layers[i].object_index[j],
+                       desc->layers[i].pitch[j], desc->layers[i].offset[j]);
+         }
+      }
+   }
 
    if (!desc || desc->num_layers >= 4 ||desc->num_objects == 0)
       return VA_STATUS_ERROR_INVALID_PARAMETER;
@@ -745,6 +955,8 @@ surface_from_prime(VADriverContextP ctx, vlVaSurface *surface,
    res_templ.depth0 = 1;
    res_templ.array_size = 1;
    res_templ.bind = PIPE_BIND_SAMPLER_VIEW;
+   if (!util_format_is_yuv(templat->buffer_format))
+      res_templ.bind |= PIPE_BIND_RENDER_TARGET;
    res_templ.usage = PIPE_USAGE_DEFAULT;
    res_templ.format = templat->buffer_format;
 
@@ -800,10 +1012,17 @@ surface_from_prime(VADriverContextP ctx, vlVaSurface *surface,
    }
 
    surface->buffer->contiguous_planes = true;
+   surface->is_prime_import = true;
    for (uint32_t i = 1; i < desc->num_objects; i++) {
       if (os_same_file_description(desc->objects[0].fd, desc->objects[i].fd) != 0)
          surface->buffer->contiguous_planes = false;
    }
+
+   surface->sync_surface = surface_find_prime_producer_for_surface(drv, surface);
+   surface->prime_fence = surface->sync_surface ? surface->sync_surface->fence : NULL;
+   if (getenv("DMD_VA_PROBE"))
+      fprintf(stderr, "tva-va: prime import producer=%p fence=%p\n",
+              (void *)surface->sync_surface, (void *)surface->prime_fence);
 
    return VA_STATUS_SUCCESS;
 
@@ -862,6 +1081,13 @@ vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface,
    struct pipe_surface *surfaces;
    unsigned i;
 
+   fprintf(stderr, "tva-va: allocate surface=%p format=%d size=%ux%u modifiers=%u\n",
+           (void *)surface,
+           surface ? surface->templat.buffer_format : -1,
+           surface ? surface->templat.width : 0,
+           surface ? surface->templat.height : 0,
+           modifiers_count);
+
    if (modifiers_count > 0) {
       if (!drv->pipe->create_video_buffer_with_modifiers)
          return VA_STATUS_ERROR_ATTR_NOT_SUPPORTED;
@@ -873,7 +1099,13 @@ vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface,
       surface->buffer = drv->pipe->create_video_buffer(drv->pipe, &surface->templat);
    }
    if (!surface->buffer)
+   {
+      fprintf(stderr, "tva-va: surface allocation failed\n");
       return VA_STATUS_ERROR_ALLOCATION_FAILED;
+   }
+
+   fprintf(stderr, "tva-va: surface allocation ready buffer=%p\n",
+           (void *)surface->buffer);
 
    /* The termux-va bridge fills every plane before exporting a decoded
     * surface.  Avoid submitting the generic Gallium clear for these linear
@@ -920,6 +1152,7 @@ vlVaGetSurfaceBuffer(vlVaDriver *drv, vlVaSurface *surface)
    if (surface->buffer)
       return surface->buffer;
    vlVaHandleSurfaceAllocate(drv, surface, NULL, 0);
+   fprintf(stderr, "tva-va: get surface buffer=%p\n", (void *)surface->buffer);
    return surface->buffer;
 }
 
@@ -1010,6 +1243,9 @@ vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format,
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
+
+   fprintf(stderr, "tva-va: create surfaces format=%#x size=%ux%u count=%u attrs=%u\n",
+           format, width, height, num_surfaces, num_attribs);
 
    if (!(width && height))
       return VA_STATUS_ERROR_INVALID_IMAGE_FORMAT;
@@ -1107,6 +1343,13 @@ vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format,
       default:
          return VA_STATUS_ERROR_ATTR_NOT_SUPPORTED;
       }
+   }
+
+   if (getenv("DMD_VA_PROBE")) {
+      fprintf(stderr, "tva-va: surface attrs resolved type=%#x expected=%#x "
+              "prime=%p ext=%p modifiers=%u bind=%#x\n", memory_type,
+              expected_fourcc, (void *)prime_desc, (void *)memory_attribute,
+              modifiers_count, templat.bind);
    }
 
    switch (memory_type) {
@@ -1222,6 +1465,7 @@ vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format,
          vaStatus = VA_STATUS_ERROR_ALLOCATION_FAILED;
          goto destroy_surf;
       }
+      _mesa_set_add(drv->surfaces, surf);
    }
 
    if (memory_type != VA_SURFACE_ATTRIB_MEM_TYPE_VA)
@@ -1325,7 +1569,7 @@ vlVaExportSurfaceHandle(VADriverContextP ctx,
    /* VA clients such as FFmpeg export surfaces before importing them into
     * another API.  Make the bridge's staged frame copy visible before a
     * read-capable DMA-BUF export; WRITE_ONLY exports are destinations. */
-   if (!(flags & VA_EXPORT_SURFACE_WRITE_ONLY)) {
+   if (!(flags & VA_EXPORT_SURFACE_WRITE_ONLY) && !vl_va_export_no_wait()) {
       ret = _vlVaSyncSurface(ctx, surface_id, VA_TIMEOUT_INFINITE);
       if (ret != VA_STATUS_SUCCESS)
          return ret;

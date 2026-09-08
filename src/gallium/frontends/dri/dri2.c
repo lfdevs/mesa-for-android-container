@@ -997,9 +997,24 @@ dri_create_image(struct dri_screen *screen,
    struct pipe_resource templ;
    unsigned tex_usage = 0;
    unsigned count = _count;
+   int image_format = format;
 
-   if (!map)
+   /* Planar GBM formats use their Gallium alias as the create-image input,
+    * while the DRI mapping table only carries the DRM FourCC. */
+   if (!map && format == PIPE_FORMAT_R8_G8B8_420_UNORM) {
+      map = &r8_g8b8_mapping;
+      image_format = PIPE_FORMAT_NV12;
+   }
+
+   if (getenv("DMD_VA_LOG") && format == PIPE_FORMAT_R8_G8B8_420_UNORM)
+      fprintf(stderr, "tva-dri create image format=%d map=%p size=%dx%d\n", format,
+              (void *) map, width, height);
+
+   if (!map) {
+      if (getenv("DMD_VA_LOG"))
+         fprintf(stderr, "tva-dri create image has no format mapping\\n");
       return NULL;
+   }
 
    if (!pscreen->resource_create_with_modifiers && count > 0)
       return NULL;
@@ -1017,8 +1032,12 @@ dri_create_image(struct dri_screen *screen,
                                     PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SAMPLER_VIEW_SUBOPTIMAL))
       tex_usage |= PIPE_BIND_SAMPLER_VIEW;
 
-   if (!tex_usage)
+   if (!tex_usage) {
+      if (getenv("DMD_VA_LOG") && format == PIPE_FORMAT_R8_G8B8_420_UNORM)
+         fprintf(stderr, "tva-dri create image format unsupported pipe=%u\n",
+                 map->pipe_format);
       return NULL;
+   }
 
    if (use & __DRI_IMAGE_USE_SCANOUT)
       tex_usage |= PIPE_BIND_SCANOUT;
@@ -1050,24 +1069,66 @@ dri_create_image(struct dri_screen *screen,
    templ.depth0 = 1;
    templ.array_size = 1;
 
-   if (modifiers)
+   if (map->nplanes > 1) {
+      struct pipe_resource *next = NULL;
+
+      /* Planar GBM allocations are represented by one resource per plane.
+       * The resources may use separate dma-bufs; GBM exposes them through
+       * the per-plane handle accessors. */
+      for (int plane = map->nplanes - 1; plane >= 0; plane--) {
+         struct pipe_resource plane_templ = templ;
+
+         if (map->planes[plane].dri_format == __DRI_IMAGE_FORMAT_NONE) {
+            pipe_resource_reference(&next, NULL);
+            FREE(img);
+            return NULL;
+         }
+
+         plane_templ.format = map->planes[plane].dri_format;
+         plane_templ.width0 = width >> map->planes[plane].width_shift;
+         plane_templ.height0 = height >> map->planes[plane].height_shift;
+         plane_templ.next = next;
+
+         struct pipe_resource *resource;
+         if (modifiers)
+            resource = pscreen->resource_create_with_modifiers(pscreen,
+                                                               &plane_templ,
+                                                               modifiers,
+                                                               count);
+         else
+            resource = pscreen->resource_create(pscreen, &plane_templ);
+
+         if (!resource) {
+            pipe_resource_reference(&next, NULL);
+            FREE(img);
+            return NULL;
+         }
+
+         next = resource;
+      }
+      img->texture = next;
+   } else if (modifiers) {
       img->texture =
          screen->base.screen
             ->resource_create_with_modifiers(screen->base.screen,
                                              &templ,
                                              modifiers,
                                              count);
-   else
+   } else {
       img->texture =
          screen->base.screen->resource_create(screen->base.screen, &templ);
+   }
    if (!img->texture) {
+      if (getenv("DMD_VA_LOG") && format == PIPE_FORMAT_R8_G8B8_420_UNORM)
+         fprintf(stderr, "tva-dri create image resource allocation failed pipe=%u\n",
+                 map->pipe_format);
       FREE(img);
       return NULL;
    }
 
    img->level = 0;
    img->layer = 0;
-   img->dri_format = format;
+   img->dri_format = image_format;
    img->dri_fourcc = map->dri_fourcc;
    img->use = use;
    img->in_fence_fd = -1;

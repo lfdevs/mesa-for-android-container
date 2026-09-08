@@ -91,6 +91,7 @@
 #include "util/u_memory.h"
 #include "util/u_video.h"
 #include "vl/vl_video_buffer.h"
+#include "vl/vl_compositor_proc.h"
 #include "vl/vl_winsys.h"
 
 #include "tva_client.h"
@@ -187,6 +188,37 @@ tva_screen_get_video_param(struct pipe_screen *screen,
                            enum pipe_video_entrypoint entrypoint,
                            enum pipe_video_cap param)
 {
+    if (entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING) {
+        switch (param) {
+        case PIPE_VIDEO_CAP_SUPPORTED:
+        case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
+            return 1;
+        case PIPE_VIDEO_CAP_MIN_WIDTH:
+        case PIPE_VIDEO_CAP_MIN_HEIGHT:
+        case PIPE_VIDEO_CAP_VPP_MIN_INPUT_WIDTH:
+        case PIPE_VIDEO_CAP_VPP_MIN_INPUT_HEIGHT:
+        case PIPE_VIDEO_CAP_VPP_MIN_OUTPUT_WIDTH:
+        case PIPE_VIDEO_CAP_VPP_MIN_OUTPUT_HEIGHT:
+            return 1;
+        case PIPE_VIDEO_CAP_MAX_WIDTH:
+        case PIPE_VIDEO_CAP_VPP_MAX_INPUT_WIDTH:
+        case PIPE_VIDEO_CAP_VPP_MAX_OUTPUT_WIDTH:
+            return 8192;
+        case PIPE_VIDEO_CAP_MAX_HEIGHT:
+        case PIPE_VIDEO_CAP_VPP_MAX_INPUT_HEIGHT:
+        case PIPE_VIDEO_CAP_VPP_MAX_OUTPUT_HEIGHT:
+            return 4320;
+        case PIPE_VIDEO_CAP_VPP_ORIENTATION_MODES:
+            return PIPE_VIDEO_VPP_ORIENTATION_DEFAULT;
+        case PIPE_VIDEO_CAP_VPP_BLEND_MODES:
+            return PIPE_VIDEO_VPP_BLEND_MODE_NONE;
+        case PIPE_VIDEO_CAP_SUPPORTS_CONTIGUOUS_PLANES_MAP:
+            return 0;
+        default:
+            return 0;
+        }
+    }
+
     if ((entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM ||
          entrypoint == PIPE_VIDEO_ENTRYPOINT_UNKNOWN) &&
         param == PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE &&
@@ -229,6 +261,28 @@ tva_screen_is_video_format_supported(struct pipe_screen *screen,
                                      enum pipe_video_profile profile,
                                      enum pipe_video_entrypoint entrypoint)
 {
+    if (entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING) {
+        /* Chromium's Linux VAAPI path uses VideoProc as a fallback when the
+         * decoded NV12 surface cannot be rendered directly.  The bridge has
+         * no hardware VPP, but the Gallium compositor can convert the linear
+         * NV12 resources to the packed RGB surfaces used by the X11 ANGLE
+         * path. */
+        switch (format) {
+        case PIPE_FORMAT_NV12:
+        case PIPE_FORMAT_R8G8B8A8_UNORM:
+        case PIPE_FORMAT_B8G8R8A8_UNORM:
+        case PIPE_FORMAT_R8G8B8X8_UNORM:
+        case PIPE_FORMAT_B8G8R8X8_UNORM:
+        case PIPE_FORMAT_A8R8G8B8_UNORM:
+            break;
+        default:
+            return false;
+        }
+        return vl_video_buffer_is_format_supported(screen, format,
+                                                   PIPE_VIDEO_PROFILE_UNKNOWN,
+                                                   entrypoint);
+    }
+
     if (entrypoint != PIPE_VIDEO_ENTRYPOINT_BITSTREAM ||
         !tva_profile_supported(profile))
         return false;
@@ -257,6 +311,7 @@ struct tva_pending {
     bool ready;                   /* staged frame available */
     bool failed;                  /* session error: fence must not hang */
     bool copied;                  /* staging already written into the target */
+    bool resource_notified;       /* external write notification delivered */
     bool drop_on_fence_destroy;   /* target was reused before this output */
     unsigned waiters;              /* fence_wait callers holding this entry */
     struct pipe_resource *resources[2]; /* owned until the entry is reaped */
@@ -516,6 +571,21 @@ tva_detach_fence_locked(struct tva_fence *fence, bool fail)
 static bool
 tva_copy_frame(struct tva_codec *c, struct tva_pending *p);
 
+/* Notify the driver after a frame has been written into the retained
+ * resources.  The reader thread cannot call pipe_screen callbacks, so direct
+ * copies are notified by fence_wait on the application thread. */
+static void
+tva_notify_frame_resources(struct tva_codec *c, struct tva_pending *p)
+{
+    if (!c || !p || p->resource_notified || !p->copied || !c->pipe ||
+        !c->pipe->screen->resource_changed)
+        return;
+
+    c->pipe->screen->resource_changed(c->pipe->screen, p->resources[0]);
+    c->pipe->screen->resource_changed(c->pipe->screen, p->resources[1]);
+    p->resource_notified = true;
+}
+
 /* Caller must hold pend_mutex.  A pending entry is reclaimable only after its
  * frame has been staged and no fence waiter is still using it.  The copy is
  * deliberately performed here, on the application thread; the reader thread
@@ -527,12 +597,13 @@ tva_pend_retire_oldest_locked(struct tva_codec *c)
     if (!p || p->waiters || !p->ready)
         return 0;
 
-    if (!p->failed && !p->copied && p->staging) {
+   if (!p->failed && !p->copied && p->staging) {
         p->copied = tva_copy_frame(c, p);
         TVA_TRACE("retire copy unit=%u result=%d", p->unit_seq, p->copied);
         if (!p->copied)
             p->failed = true;
     }
+    tva_notify_frame_resources(c, p);
     if (!p->copied && !p->failed)
         return -1;
 
@@ -679,18 +750,29 @@ tva_av1_fence_destroy_wait_ms(void)
     return (unsigned)value;
 }
 
+#if defined(__linux__)
+static bool tva_drm_render_node_present(void);
+#endif
+
 static bool
 tva_cpu_copy_enabled(void)
 {
     const char *e = getenv("DMD_VA_CPU_COPY");
-    if (e && *e && (strcmp(e, "0") == 0 || strcmp(e, "false") == 0 ||
-                    strcmp(e, "off") == 0))
-        return false;
+    if (e && *e)
+        return !(strcmp(e, "0") == 0 || strcmp(e, "false") == 0 ||
+                 strcmp(e, "off") == 0);
 
-    /* The Chrome GPU process sanitizes TERMUX_VA_* from its inherited
-     * environment, so backend-based autodetection is not reliable here.  The
-     * bridge is only used for decoder output resources; use the cache-safe CPU
-     * handoff by default and retain DMD_VA_CPU_COPY=0 as an escape hatch. */
+    /* GPU uploads through imported KGSL dma-bufs are not reliably visible to
+     * the consumer in a PRoot container, which has no DRM render node.  Use a
+     * direct CPU copy there so the dma-buf exporter can complete the handoff;
+     * DMD_VA_CPU_COPY=0 remains available for explicit GPU-upload diagnostics. */
+#if defined(__linux__)
+    const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
+    if ((!backend || !*backend || !strcmp(backend, "auto") ||
+         !strcmp(backend, "kgsl")) && access("/dev/kgsl-3d0", R_OK) == 0 &&
+        !tva_drm_render_node_present())
+        return true;
+#endif
     return true;
 }
 
@@ -1330,12 +1412,13 @@ tva_copy_frame(struct tva_codec *c, struct tva_pending *p)
     if (!tva_copy_plane(pipe, p->resources[0], p->staging + y_offset,
                         w, h, (unsigned)p->stride))
         return false;
-    if (!tva_copy_plane(pipe, p->resources[1], p->staging + uv_offset,
+   if (!tva_copy_plane(pipe, p->resources[1], p->staging + uv_offset,
                         uv_w, uv_h, (unsigned)p->stride))
-        return false;
-    if (!cpu_copy && !tva_flush_copy(pipe))
-        return false;
-    tva_probe_resource(pipe, p->resources[0], w);
+      return false;
+   if (!cpu_copy && !tva_flush_copy(pipe))
+      return false;
+
+   tva_probe_resource(pipe, p->resources[0], w);
     tva_probe_resource(pipe, p->resources[1], uv_w * 2);
     TVA_TRACE("copy frame complete unit=%u duration=%.3f ms",
               p->unit_seq,
@@ -1387,6 +1470,12 @@ tva_reader_thread(void *param)
 
         TVA_TRACE("reader frame unit=%u size=%zu slot=%d", f.unit_seq,
                   f.size, f.shm_slot);
+        if (getenv("DMD_VA_PROBE") && f.data && f.size >= 1920u * 1088u) {
+            size_t center = 540u * 1920u + 960u;
+            fprintf(stderr, "tva: reader probe unit=%u y0=%02x ycenter=%02x uv0=%02x %02x\n",
+                    f.unit_seq, f.data[0], f.data[center],
+                    f.data[1920u * 1088u], f.data[1920u * 1088u + 1]);
+        }
 
         /* Match the frame to a pending picture by unit index.  Unknown
          * indices fall back to the oldest waiting entry for old peers. */
@@ -3249,6 +3338,7 @@ tva_codec_fence_wait(struct pipe_video_codec *codec,
         if (!p->copied)
             p->failed = true;
     }
+    tva_notify_frame_resources(c, p);
     if (p->failed)
         ret = 0;
     p->waiters--;
@@ -3352,12 +3442,20 @@ static struct pipe_video_buffer *
 tva_pipe_create_video_buffer(struct pipe_context *context,
                              const struct pipe_video_buffer *templat)
 {
+    fprintf(stderr, "tva: create video buffer format=%d size=%ux%u bind=%#x\n",
+            templat ? templat->buffer_format : -1,
+            templat ? templat->width : 0, templat ? templat->height : 0,
+            templat ? templat->bind : 0);
 #if defined(__linux__)
     if (tva_contiguous_dmabuf_enabled()) {
         struct pipe_video_buffer *buffer =
             tva_create_contiguous_video_buffer(context, templat);
         if (buffer)
+        {
+            fprintf(stderr, "tva: contiguous video buffer ready\n");
             return buffer;
+        }
+        fprintf(stderr, "tva: contiguous video buffer failed\n");
         if (getenv("DMD_VA_LOG"))
             fprintf(stderr, "tva: contiguous NV12 allocation failed; "
                     "falling back to separate plane resources\n");
@@ -3369,7 +3467,10 @@ tva_pipe_create_video_buffer(struct pipe_context *context,
      * shadow allocation. */
     struct pipe_video_buffer bridge_templ = *templat;
     bridge_templ.bind |= PIPE_BIND_SHARED | PIPE_BIND_LINEAR;
-    return vl_video_buffer_create(context, &bridge_templ);
+    struct pipe_video_buffer *buffer =
+        vl_video_buffer_create(context, &bridge_templ);
+    fprintf(stderr, "tva: separate video buffer %s\n", buffer ? "ready" : "failed");
+    return buffer;
 }
 
 static struct pipe_video_buffer *
@@ -3387,13 +3488,27 @@ static struct pipe_video_codec *
 tva_pipe_create_video_codec(struct pipe_context *context,
                             const struct pipe_video_codec *templat)
 {
+    fprintf(stderr, "tva: create codec profile=%d entrypoint=%d size=%ux%u\n",
+            templat ? templat->profile : -1,
+            templat ? templat->entrypoint : -1,
+            templat ? templat->width : 0, templat ? templat->height : 0);
+    if (templat->entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING)
+        return vl_compositor_create_proc(context, false);
+
     if (templat->entrypoint != PIPE_VIDEO_ENTRYPOINT_BITSTREAM ||
         !tva_profile_supported(templat->profile))
+    {
+        fprintf(stderr, "tva: reject codec profile=%d entrypoint=%d\n",
+                templat->profile, templat->entrypoint);
         return NULL;   /* no encode / unsupported profiles through the bridge */
+    }
 
     int codec_id = tva_codec_id(templat->profile);
     if (codec_id < 0)
+    {
+        fprintf(stderr, "tva: reject codec id for profile=%d\n", templat->profile);
         return NULL;
+    }
 
     unsigned pipeline_depth = tva_pipeline_depth_default;
     const char *d = getenv("TERMUX_VA_PIPELINE_DEPTH");
@@ -3410,7 +3525,10 @@ tva_pipe_create_video_codec(struct pipe_context *context,
 
     struct tva_codec *c = CALLOC_STRUCT(tva_codec);
     if (!c)
+    {
+        fprintf(stderr, "tva: codec allocation failed\n");
         return NULL;
+    }
 
     struct tva_session_config cfg;
     tva_session_config_defaults(&cfg);

@@ -50,8 +50,13 @@ x11_dri3_open(xcb_connection_t *conn,
    const xcb_query_extension_reply_t *extension;
 
    const char *env = getenv("MESA_LOADER_DRIVER_OVERRIDE");
-   if (env && !strcmp(env, "kgsl"))
-      return open("/dev/kgsl-3d0", O_RDWR);
+   const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
+   if ((env && !strcmp(env, "kgsl")) ||
+       (backend && !strcmp(backend, "kgsl"))) {
+      fd = open("/dev/kgsl-3d0", O_RDWR | O_CLOEXEC);
+      if (fd >= 0)
+         return fd;
+   }
 
    xcb_prefetch_extension_data(conn, &xcb_dri3_id);
    extension = xcb_get_extension_data(conn, &xcb_dri3_id);

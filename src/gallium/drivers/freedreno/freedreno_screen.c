@@ -27,6 +27,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "drm-uapi/drm_fourcc.h"
 
 #include "freedreno_fence.h"
@@ -96,8 +97,14 @@ bool fd_binning_enabled = true;
 static bool
 fd_kgsl_dmabuf_enabled(void)
 {
+   /* The PRoot/container path has no DRM render node, so applications select
+    * the KGSL backend explicitly through TERMUX_VA_GPU_BACKEND.  Honor that
+    * selection before the screen is created; enabling it from the VA bridge
+    * would be too late for ANGLE's GBM allocations. */
+   const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
    return debug_get_bool_option("FD_KGSL_ENABLE_DMABUF", false) ||
-          debug_get_bool_option("XWAYLAND_FORCE_KGSL_SURFACELESS", false);
+          debug_get_bool_option("XWAYLAND_FORCE_KGSL_SURFACELESS", false) ||
+          (backend && strcmp(backend, "kgsl") == 0);
 }
 
 static const char *
@@ -393,6 +400,13 @@ fd_init_screen_caps(struct fd_screen *screen)
    struct pipe_caps *caps = (struct pipe_caps *)&screen->base.caps;
 
    u_init_pipe_screen_caps(&screen->base, 1);
+
+   /* KGSL mappings are not CPU/GPU coherent on the Android kernels used by
+    * DRM-less containers.  Do not let upload managers keep persistent maps:
+    * they otherwise never call buffer_unmap after writing vertex and
+    * constant data, leaving no point at which the cache can be cleaned. */
+   if (screen->is_kgsl)
+      caps->buffer_map_persistent_coherent = false;
 
    /* On the kgsl stack the screen's control fd may be a display/controller fd
     * rather than the kgsl GPU fd, so drmGetCap(DRM_CAP_PRIME) cannot describe
