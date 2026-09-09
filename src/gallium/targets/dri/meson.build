@@ -75,7 +75,8 @@ if with_gallium_va
               [with_gallium_radeonsi, 'radeonsi'],
               [with_gallium_nouveau, 'nouveau'],
               [with_gallium_virgl, 'virtio_gpu'],
-              [with_gallium_d3d12_video, 'd3d12']]
+              [with_gallium_d3d12_video, 'd3d12'],
+              [with_termux_va_bridge, 'termuxva']]
     if d[0]
       name = '@0@_drv_video.@1@'.format(d[1], libname_suffix)
       va_drivers += name

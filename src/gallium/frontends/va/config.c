@@ -48,6 +48,8 @@ vlVaQueryConfigProfiles(VADriverContextP ctx, VAProfile *profile_list, int *num_
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   fprintf(stderr, "tva-va: query profiles\n");
+
    *num_profiles = 0;
 
    pscreen = VL_VA_PSCREEN(ctx);
@@ -76,6 +78,8 @@ vlVaQueryConfigEntrypoints(VADriverContextP ctx, VAProfile profile,
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
+
+   fprintf(stderr, "tva-va: query entrypoints profile=%d\n", profile);
 
    *num_entrypoints = 0;
 
@@ -620,6 +624,9 @@ vlVaCreateConfig(VADriverContextP ctx, VAProfile profile, VAEntrypoint entrypoin
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
+   fprintf(stderr, "tva-va: create config profile=%d entrypoint=%d attrs=%d\n",
+           profile, entrypoint, num_attribs);
+
    drv = VL_VA_DRIVER(ctx);
    pscreen = VL_VA_PSCREEN(ctx);
 
@@ -792,6 +799,9 @@ vlVaQueryConfigAttributes(VADriverContextP ctx, VAConfigID config_id, VAProfile 
    vlVaDriver *drv;
    vlVaConfig *config;
 
+   fprintf(stderr, "tva-va: query config attrs config=%u list=%p count=%d\n",
+           config_id, (void *)attrib_list, num_attribs ? *num_attribs : 0);
+
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
@@ -828,6 +838,9 @@ vlVaQueryConfigAttributes(VADriverContextP ctx, VAConfigID config_id, VAProfile 
    attrib_list[0].value = get_screen_supported_va_rt_formats(drv->pipe->screen,
                                                              config->profile,
                                                              config->entrypoint);
+
+   fprintf(stderr, "tva-va: query config attrs success profile=%d entrypoint=%d rt=%#x count=%d\n",
+           *profile, *entrypoint, attrib_list[0].value, *num_attribs);
 
    return VA_STATUS_SUCCESS;
 }

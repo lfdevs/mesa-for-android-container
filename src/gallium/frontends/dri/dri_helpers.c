@@ -21,6 +21,7 @@
  */
 
 #include <dlfcn.h>
+#include <inttypes.h>
 #include "drm-uapi/drm_fourcc.h"
 #include "util/u_memory.h"
 #include "pipe/p_screen.h"
@@ -742,6 +743,14 @@ dri2_get_mapping_by_format(int format)
          return &dri2_format_table[i];
    }
 
+   /* GBM passes the Gallium format for planar images because there is no
+    * legacy DRI image-format token for those formats. */
+   for (unsigned i = 0; i < ARRAY_SIZE(dri2_format_table); i++) {
+      if (dri2_format_table[i].dri_format == __DRI_IMAGE_FORMAT_NONE &&
+          dri2_format_table[i].pipe_format == format)
+         return &dri2_format_table[i];
+   }
+
    return NULL;
 }
 
@@ -838,6 +847,12 @@ dri_create_image_with_modifiers(struct dri_screen *screen,
                                  unsigned int modifiers_count,
                                  void *loaderPrivate)
 {
+   if (getenv("DMD_VA_LOG"))
+      fprintf(stderr, "tva-dri create-with-modifiers format=%u use=%#x count=%u first=%#" PRIx64 " size=%ux%u\n",
+              dri_format, dri_usage, modifiers_count,
+              modifiers && modifiers_count ? modifiers[0] : 0,
+              width, height);
+
    if (modifiers && modifiers_count > 0) {
       bool has_valid_modifier = false;
       int i;

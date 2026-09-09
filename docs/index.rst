@@ -121,6 +121,7 @@ Linux, FreeBSD, and other operating systems.
    isaspec
    rusticl
    android
+   termux-va
    macos
    Linux Kernel Drivers <https://www.kernel.org/doc/html/latest/gpu/>
 

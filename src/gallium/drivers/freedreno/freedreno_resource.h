@@ -137,6 +137,11 @@ struct fd_resource {
     */
    bool is_replacement : 1;
 
+   /* A dma-buf imported from an external producer needs one explicit cache
+    * handoff before the first GPU read after each resource_changed(). */
+   bool tva_external_sync_valid : 1;
+   bool tva_external_barrier_pending : 1;
+
    /* Uninitialized resources with UBWC format need their UBWC flag data
     * cleared before writes, as the UBWC state is read and used during
     * writes, so undefined UBWC flag data results in undefined results.

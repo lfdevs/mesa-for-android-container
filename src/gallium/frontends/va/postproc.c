@@ -28,6 +28,8 @@
 #include "util/u_handle_table.h"
 #include "util/u_memory.h"
 
+#include <stdlib.h>
+
 #include "vl/vl_defines.h"
 #include "vl/vl_video_buffer.h"
 #include "vl/vl_deint_filter.h"
@@ -450,6 +452,63 @@ vlVaHandleVAProcPipelineParameterBufferType(vlVaDriver *drv, vlVaContext *contex
    dst = vlVaGetSurfaceBuffer(drv, dst_surface);
    if (!src || !dst)
       return VA_STATUS_ERROR_INVALID_SURFACE;
+
+   if (getenv("DMD_VA_PROBE"))
+      fprintf(stderr, "tva-proc: source surface=%#x surf=%p ctx=%p decoder=%p "
+              "fence=%p pipe=%p dst_surface=%p dst_ctx=%p\n",
+              param->surface, (void *)src_surface, (void *)src_surface->ctx,
+              src_surface->ctx ? (void *)src_surface->ctx->decoder : NULL,
+              (void *)src_surface->fence, (void *)src_surface->pipe_fence,
+              (void *)dst_surface, (void *)dst_surface->ctx);
+
+   /* The termux-va decoder publishes frames asynchronously from a reader
+    * thread.  Gallium's compositor does not consume pipe_vpp_desc::in_fence,
+    * so wait for the source surface before sampling it.  Without this wait a
+    * decode+VPP submission can render the cleared (green) contents of a
+    * recycled NV12 surface. */
+   /* PRIME imports do not carry the decoder's VA fence.  Resolve the
+    * producer from the shared dma-buf just before sampling it, and wait only
+    * on that producer.  This avoids blocking PRIME creation before Chromium
+    * has filled its decode pipeline. */
+   vlVaSurface *producer = NULL;
+   uint64_t sync_timeout = VA_TIMEOUT_INFINITE;
+   /* The decoder and VPP calls are made on Chromium's single VA thread.
+    * Waiting indefinitely for a producer fence here can deadlock that same
+    * thread before it submits the next temporal unit.  Keep the diagnostic
+    * no-wait mode consistent for both the public vaSyncSurface entry point
+    * and this internal VPP synchronization path. */
+   if (vlVaSurfaceNoWait())
+      sync_timeout = 0;
+   if (src_surface->is_prime_import) {
+      if (src_surface->sync_surface &&
+          src_surface->prime_fence &&
+          src_surface->sync_surface->fence == src_surface->prime_fence) {
+         producer = src_surface->sync_surface;
+      } else if (!src_surface->sync_surface) {
+         /* No producer was visible at import time.  Retry only in that case;
+         * if the snapshot became stale, the dma-buf already belongs to an
+         * older frame and waiting on the replacement fence would deadlock. */
+         producer = surface_find_prime_producer_for_surface(drv, src_surface);
+         /* A producer found only at sampling time may still be waiting for
+          * the decoder pipeline to accept more input.  Do not block the
+          * application thread on that unverified generation: a later VPP
+          * submission will retry and copy it once the fence is ready. */
+         if (producer)
+            sync_timeout = 0;
+      }
+   }
+   VAStatus sync_status = vlVaSyncSurfaceObjectLocked(
+      drv, producer ? producer : src_surface, sync_timeout);
+   if (sync_timeout == 0 && sync_status == VA_STATUS_ERROR_TIMEDOUT)
+      sync_status = VA_STATUS_SUCCESS;
+   if (getenv("DMD_VA_PROBE"))
+      fprintf(stderr, "tva-proc: source sync status=%d surf=%p producer=%p "
+              "ctx=%p fence=%p\n",
+              sync_status, (void *)src_surface, (void *)producer,
+              (void *)src_surface->ctx,
+              (void *)src_surface->fence);
+   if (sync_status != VA_STATUS_SUCCESS)
+      return sync_status;
 
    for (i = 0; i < param->num_filters; i++) {
       vlVaBuffer *buf = handle_table_get(drv->htab, param->filters[i]);

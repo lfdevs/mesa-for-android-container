@@ -14,7 +14,12 @@
 #include "util/u_memory.h"
 #include "util/u_string.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+
 #include "freedreno_dev_info.h"
+#include "fd6_barrier.h"
 #include "fd6_emit.h"
 #include "fd6_resource.h"
 #include "fd6_screen.h"
@@ -561,6 +566,21 @@ fd6_sampler_view_update(struct fd_context *ctx,
                            ctx->screen->info->props.has_z24uint_s8uint);
       memcpy(so->descriptor, view.descriptor, sizeof(so->descriptor));
    }
+
+   if (getenv("DMD_VA_PROBE") &&
+       (format == PIPE_FORMAT_R8_UNORM ||
+        format == PIPE_FORMAT_B8G8R8A8_UNORM)) {
+      fprintf(stderr,
+              "tva-fd sampler res=%p shared=%d fmt=%s bo=%u iova=%#llx "
+              "layout=%#x pitch=%u size=%llu desc=%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",
+              (void *)prsc, rsc->b.is_shared, util_format_short_name(format),
+              fd_bo_handle(rsc->bo), (unsigned long long)fd_bo_get_iova(rsc->bo),
+              rsc->layout.slices[0].offset, rsc->layout.pitch0,
+              (unsigned long long)rsc->layout.size,
+              so->descriptor[0], so->descriptor[1], so->descriptor[2],
+              so->descriptor[3], so->descriptor[4], so->descriptor[5],
+              so->descriptor[6], so->descriptor[7]);
+   }
 }
 
 template <chip CHIP>
@@ -817,6 +837,93 @@ fd6_texture_state(struct fd_context *ctx, mesa_shader_stage type)
    struct fd6_texture_state *state = NULL;
    struct fd6_texture_key key;
 
+   /* EGL/DRI dma-buf imports are shared with an external producer (the
+    * termux-va bridge).  The producer can update the BO without touching this
+    * context's resource sequence number or submitting a Gallium batch.  Make
+    * the consumer invalidate its texture cache immediately before the draw;
+    * this is deliberately keyed to shared resources so ordinary textures do
+    * not pay the extra barrier. */
+   bool shared_texture = false;
+   for (unsigned i = 0; i < tex->num_textures; i++) {
+      if (tex->textures[i] &&
+          fd_resource(tex->textures[i]->texture)->b.is_shared) {
+         shared_texture = true;
+         break;
+      }
+   }
+   if (getenv("DMD_VA_PROBE") && tex->num_textures) {
+      for (unsigned i = 0; i < tex->num_textures; i++) {
+         if (!tex->textures[i])
+            continue;
+         struct fd_resource *rsc =
+            fd_resource(tex->textures[i]->texture);
+         fprintf(stderr, "tva-fd texture state stage=%d slot=%u res=%p "
+                 "shared=%d bo=%u format=%s\n", type, i,
+                 (void *)tex->textures[i]->texture, rsc->b.is_shared,
+                 rsc->bo ? fd_bo_handle(rsc->bo) : 0,
+                 util_format_short_name(tex->textures[i]->format));
+      }
+   }
+   const char *bo_sync_env = getenv("DMD_VA_BO_SYNC");
+   const bool bo_sync = !bo_sync_env ||
+                        (strcmp(bo_sync_env, "0") != 0 &&
+                         strcmp(bo_sync_env, "false") != 0 &&
+                         strcmp(bo_sync_env, "off") != 0);
+   const char *sync_every_env = getenv("DMD_VA_SYNC_EVERY_DRAW");
+   const bool sync_every_draw = sync_every_env &&
+                                (strcmp(sync_every_env, "1") == 0 ||
+                                 strcmp(sync_every_env, "true") == 0 ||
+                                 strcmp(sync_every_env, "on") == 0);
+   bool external_barrier = false;
+   if (shared_texture || getenv("DMD_VA_SYNC_ALL") || sync_every_draw) {
+      for (unsigned i = 0; i < tex->num_textures; i++) {
+         if (!tex->textures[i])
+            continue;
+
+         struct fd_resource *rsc =
+            fd_resource(tex->textures[i]->texture);
+         if (!rsc->b.is_shared && !getenv("DMD_VA_SYNC_ALL") &&
+             !sync_every_draw)
+            continue;
+
+         fd_resource_lock(rsc);
+         const bool need_handoff = sync_every_draw ||
+                                   !rsc->tva_external_sync_valid;
+         const bool need_barrier = need_handoff ||
+                                   rsc->tva_external_barrier_pending;
+         if (need_barrier)
+            rsc->tva_external_barrier_pending = false;
+         fd_resource_unlock(rsc);
+         external_barrier |= need_barrier;
+         if (!need_handoff)
+            continue;
+
+         int ret = bo_sync ? fd_bo_sync_to_gpu(rsc->bo) : 0;
+         if (ret == 0) {
+            fd_resource_lock(rsc);
+            rsc->tva_external_sync_valid = true;
+            fd_resource_unlock(rsc);
+         } else if (getenv("DMD_VA_LOG")) {
+            fprintf(stderr, "tva-fd GPUOBJ_SYNC failed res=%p bo=%p errno=%d\n",
+                    (void *)rsc, (void *)rsc->bo, errno);
+         }
+      }
+
+      if (external_barrier) {
+         const unsigned external_flushes = FD6_INVALIDATE_CACHE |
+                                           FD6_FLUSH_CACHE |
+                                           FD6_WAIT_MEM_WRITES;
+         if (ctx->batch)
+            ctx->batch->barrier |= external_flushes;
+         if (ctx->batch_nondraw)
+            ctx->batch_nondraw->barrier |= external_flushes;
+         if (getenv("DMD_VA_LOG"))
+            fprintf(stderr, "tva-fd shared texture stage=%d batch=%p barrier=%#x\n",
+                    type, (void *)ctx->batch,
+                    ctx->batch ? ctx->batch->barrier : 0);
+      }
+   }
+
    if (unlikely(fd6_ctx->tex_cache_needs_invalidate))
       handle_invalidates<CHIP>(ctx);
 
@@ -905,6 +1012,19 @@ fd6_rebind_resource(struct fd_context *ctx, struct fd_resource *rsc) assert_dt
       return;
 
    struct fd6_context *fd6_ctx = fd6_context(ctx);
+
+   /* A dma-buf may have been written by another GPU/CPU context without a
+    * BO rebind.  Rebuilding the sampler state is not enough: invalidate the
+    * consumer-side texture cache before the next draw that uses this
+    * resource.  The barrier is attached to whichever batch is active; the
+    * normal state emission path will consume it before issuing the draw. */
+   const unsigned external_flushes = FD6_INVALIDATE_CACHE |
+                                     FD6_FLUSH_CACHE |
+                                     FD6_WAIT_MEM_WRITES;
+   if (ctx->batch)
+      ctx->batch->barrier |= external_flushes;
+   if (ctx->batch_nondraw)
+      ctx->batch_nondraw->barrier |= external_flushes;
 
    hash_table_foreach (fd6_ctx->tex_cache, entry) {
       struct fd6_texture_state *state = (struct fd6_texture_state *)entry->data;
