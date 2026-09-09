@@ -66,6 +66,7 @@ jobs:
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
             -Dgallium-va=enabled \
             -Dtermux-va-bridge=enabled \
+            -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
@@ -169,6 +170,7 @@ jobs:
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
             -Dgallium-va=enabled \
             -Dtermux-va-bridge=enabled \
+            -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
@@ -277,6 +279,7 @@ jobs:
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
             -Dgallium-va=enabled \
             -Dtermux-va-bridge=enabled \
+            -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
@@ -383,6 +386,7 @@ jobs:
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
             -Dgallium-va=enabled \
             -Dtermux-va-bridge=enabled \
+            -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
@@ -504,6 +508,7 @@ jobs:
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
             -Dgallium-va=enabled \
             -Dtermux-va-bridge=enabled \
+            -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
@@ -610,6 +615,7 @@ jobs:
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
             -Dgallium-va=enabled \
             -Dtermux-va-bridge=enabled \
+            -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
@@ -716,6 +722,7 @@ jobs:
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
             -Dgallium-va=enabled \
             -Dtermux-va-bridge=enabled \
+            -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
@@ -835,6 +842,7 @@ jobs:
             -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
             -Dgallium-va=enabled \
             -Dtermux-va-bridge=enabled \
+            -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
             -Dvulkan-drivers=freedreno \
@@ -942,6 +950,7 @@ jobs:
                 -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
                 -Dgallium-va=enabled \
                 -Dtermux-va-bridge=enabled \
+                -Dtermux-va-wayland-shim=enabled \
                 -Dvideo-codecs=all \
                 -Dgallium-mediafoundation=disabled \
                 -Dvulkan-drivers=freedreno \

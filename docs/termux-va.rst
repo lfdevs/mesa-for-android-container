@@ -22,7 +22,9 @@ Build with ``-Dgallium-va=enabled -Dtermux-va-bridge=enabled`` and at
 least one of ``h264dec``, ``h265dec``, ``vp9dec`` in ``video-codecs``
 (for example ``-Dvideo-codecs=all``).  The megadriver is additionally
 exposed as ``termuxva_drv_video.so`` so libva can select it with
-``LIBVA_DRIVER_NAME=termuxva``.
+``LIBVA_DRIVER_NAME=termuxva``.  Native Wayland Chromium support also
+requires ``-Dtermux-va-wayland-shim=enabled``; this installs the
+process-local DRM compatibility shim described below.
 
 Activation
 ----------
@@ -67,12 +69,30 @@ pixmap importer currently accepts only one dma-buf for this format.  Override
 this choice with ``DMD_VA_CONTIGUOUS_DMABUF`` or
 ``TERMUX_VA_CONTIGUOUS_DMABUF`` when needed.
 
-Chromium's native Wayland Ozone backend still requires a DRM render node for
-its GPU process, independently of VA-API.  On a DRM-less PRoot desktop, run
-Chromium through XWayland (``--ozone-platform=x11`` with the XWayland
-``DISPLAY``) and set ``--hardware-video-device-path=/dev/kgsl-3d0``.  The
-standard libva DRM backend also rejects a KGSL fd; use a libva build that
-recognizes the KGSL bridge environment or an equivalent compatibility shim.
+Chromium's native Wayland Ozone backend normally requires a DRM render node
+for its GPU process, independently of VA-API.  For a DRM-less PRoot desktop,
+enable ``-Dtermux-va-wayland-shim=enabled`` and load the installed
+``libtva_drm_shim_wayland.so`` into Chromium with ``LD_PRELOAD``.  The shim
+maps Chromium's DRM discovery calls to ``/dev/kgsl-3d0``; it does not replace
+the Mesa KGSL backend or create a DRM device for other applications.  Launch
+Chromium with the native Wayland platform, ``--render-node-override=/dev/kgsl-3d0``
+and ``--hardware-video-device-path=/dev/kgsl-3d0``:
+
+.. code-block:: sh
+
+   export WAYLAND_DISPLAY=wayland-0
+   export XDG_RUNTIME_DIR=/run/user/$(id -u)
+   export LIBVA_DRIVER_NAME=termuxva
+   export TERMUX_VA_BRIDGE=1
+   export TERMUX_VA_GPU_BACKEND=kgsl
+   export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libtva_drm_shim_wayland.so
+   google-chrome --ozone-platform=wayland --no-sandbox --use-gl=angle \
+     --use-angle=gles --render-node-override=/dev/kgsl-3d0 \
+     --hardware-video-device-path=/dev/kgsl-3d0 \
+     --enable-features=VaapiIgnoreDriverChecks,AcceleratedVideoDecoder,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL
+
+The standard libva DRM backend also rejects a KGSL fd; use this Mesa build's
+bridge driver or an equivalent KGSL-aware compatibility layer.
 
 Data path
 ---------
