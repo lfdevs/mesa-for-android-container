@@ -116,6 +116,13 @@ option(
 )
 
 option(
+  'termux-va-wayland-shim',
+  type : 'feature',
+  value : 'disabled',
+  description : 'build the LD_PRELOAD DRM compatibility shim for Chromium Wayland in DRM-less KGSL PRoot containers',
+)
+
+option(
   'gallium-mediafoundation',
   type : 'feature',
   deprecated: {'true': 'enabled', 'false': 'disabled'},
