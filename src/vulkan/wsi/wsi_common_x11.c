@@ -503,7 +503,9 @@ static const VkFormat formats[] = {
 };
 
 static const VkPresentModeKHR present_modes[] = {
+#ifndef __TERMUX__
    VK_PRESENT_MODE_IMMEDIATE_KHR,
+#endif
    VK_PRESENT_MODE_MAILBOX_KHR,
    VK_PRESENT_MODE_FIFO_KHR,
    VK_PRESENT_MODE_FIFO_RELAXED_KHR,
