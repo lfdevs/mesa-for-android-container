@@ -17,7 +17,7 @@
  * system rather the build target.
  */
 
-#if defined(__ANDROID__) || defined(ANDROID)
+#if defined(__ANDROID__) || defined(ANDROID) || defined __TERMUX__
 
 #include <cutils/native_handle.h>
 #if ANDROID_API_LEVEL < 28
