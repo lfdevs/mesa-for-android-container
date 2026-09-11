@@ -39,6 +39,7 @@
 #include "vk_sync.h"
 #include "vk_sync_dummy.h"
 #include "vk_util.h"
+#include "../wrapper/wrapper_log.h"
 
 #include <assert.h>
 #include <time.h>
@@ -63,6 +64,7 @@ static const struct debug_control debug_control[] = {
    { "dxgi",         WSI_DEBUG_DXGI },
    { "nowlts",       WSI_DEBUG_NOWLTS },
    { "blit",         WSI_DEBUG_BLIT },
+   { "forcesync",    WSI_DEBUG_FORCESYNC },
    { NULL, },
 };
 
@@ -92,11 +94,13 @@ wsi_device_init(struct wsi_device *wsi,
    wsi->pdevice = pdevice;
    wsi->supports_scanout = true;
    wsi->sw = device_options->sw_device || (WSI_DEBUG & WSI_DEBUG_SW);
+   wsi->forcesync = (WSI_DEBUG & WSI_DEBUG_FORCESYNC) != 0;
    wsi->wants_linear = (WSI_DEBUG & WSI_DEBUG_LINEAR) != 0;
    wsi->x11.extra_xwayland_image = device_options->extra_xwayland_image;
    wsi->wayland.disable_timestamps = (WSI_DEBUG & WSI_DEBUG_NOWLTS) != 0;
    wsi->emulate_24as32 = device_options->emulate_24as32;
-   wsi->needs_blit = (WSI_DEBUG & WSI_DEBUG_BLIT) != 0;
+   int wrapper_blit = getenv("WRAPPER_BLIT") && atoi(getenv("WRAPPER_BLIT"));
+   wsi->needs_blit = ((WSI_DEBUG & WSI_DEBUG_BLIT) != 0) || wrapper_blit;
 #define WSI_GET_CB(func) \
    PFN_vk##func func = (PFN_vk##func)proc_addr(pdevice, "vk" #func)
    WSI_GET_CB(GetPhysicalDeviceExternalSemaphoreProperties);
@@ -115,19 +119,16 @@ wsi_device_init(struct wsi_device *wsi,
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
       .pNext = &wsi->pci_bus_info,
    };
-   VkPhysicalDeviceProperties2 pdp2 = {
+   wsi->properties2 = (VkPhysicalDeviceProperties2) {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
       .pNext = &pddp,
    };
-   GetPhysicalDeviceProperties2(pdevice, &pdp2);
+   GetPhysicalDeviceProperties2(pdevice, &wsi->properties2);
 
-   if (pddp.driverID == VK_DRIVER_ID_ARM_PROPRIETARY)
-      wsi->needs_blit = true;
-
-   wsi->maxImageDimension2D = pdp2.properties.limits.maxImageDimension2D;
-   assert(pdp2.properties.limits.optimalBufferCopyRowPitchAlignment <= UINT32_MAX);
+   wsi->maxImageDimension2D = wsi->properties2.properties.limits.maxImageDimension2D;
+   assert(wsi->properties2.properties.limits.optimalBufferCopyRowPitchAlignment <= UINT32_MAX);
    wsi->optimalBufferCopyRowPitchAlignment =
-      pdp2.properties.limits.optimalBufferCopyRowPitchAlignment;
+      wsi->properties2.properties.limits.optimalBufferCopyRowPitchAlignment;
    wsi->override_present_mode = VK_PRESENT_MODE_MAX_ENUM_KHR;
 
    GetPhysicalDeviceMemoryProperties(pdevice, &wsi->memory_props);
@@ -207,6 +208,7 @@ wsi_device_init(struct wsi_device *wsi,
    WSI_GET_CB(BeginCommandBuffer);
    WSI_GET_CB(CmdPipelineBarrier);
    WSI_GET_CB(CmdCopyImage);
+   WSI_GET_CB(CmdBlitImage);
    WSI_GET_CB(CmdCopyImageToBuffer);
    WSI_GET_CB(CmdResetQueryPool);
    WSI_GET_CB(ResetQueryPoolEXT);
@@ -428,8 +430,8 @@ get_blit_type(const struct wsi_device *wsi,
          WSI_SWAPCHAIN_BUFFER_BLIT : WSI_SWAPCHAIN_NO_BLIT;
    }
 #ifdef __TERMUX__
-   case WSI_IMAGE_TYPE_AHB: {
-      return wsi_get_ahardware_buffer_blit_type(wsi, params, device);
+   case WSI_IMAGE_TYPE_ANDROID: {
+      return wsi_get_android_blit_type(wsi, params, device);
    }
 #endif
 #ifdef HAVE_LIBDRM
@@ -483,8 +485,8 @@ configure_image(const struct wsi_swapchain *chain,
       return wsi_configure_cpu_image(chain, pCreateInfo, cpu_params, info);
    }
 #ifdef __TERMUX__
-   case WSI_IMAGE_TYPE_AHB: {
-      return wsi_configure_ahardware_buffer_image(chain, pCreateInfo, params, info);
+   case WSI_IMAGE_TYPE_ANDROID: {
+      return wsi_configure_android_image(chain, pCreateInfo, params, info);
    }
 #endif
 #ifdef HAVE_LIBDRM
@@ -925,19 +927,34 @@ wsi_create_image(const struct wsi_swapchain *chain,
       image->explicit_sync[i].fd = -1;
 #endif
 
+#ifdef __TERMUX__
+   if (info->ahardware_buffer_desc && AHardwareBuffer_allocate(info->ahardware_buffer_desc,
+                                &image->ahardware_buffer) != 0)
+   {
+      WRAPPER_LOG(error, "Failed to allocate ahardware buffer");
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+#endif
    result = wsi->CreateImage(chain->device, &info->create,
                              &chain->alloc, &image->image);
-   if (result != VK_SUCCESS)
+
+   if (result != VK_SUCCESS) {
+      WRAPPER_LOG(error, "Failed to create image, res %d", result);
       goto fail;
+   }
 
    result = info->create_mem(chain, info, image);
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS) {
+      WRAPPER_LOG(error, "Failed to create image mem, res %d", result);
       goto fail;
+   }
 
    result = wsi->BindImageMemory(chain->device, image->image,
                                  image->memory, 0);
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS) {
+      WRAPPER_LOG(error, "Failed to bind image memory, res %d", result);
       goto fail;
+   }
 
    if (info->finish_create) {
       result = info->finish_create(chain, info, image);
@@ -2935,10 +2952,9 @@ wsi_common_queue_present(const struct wsi_device *wsi,
 #endif
       }
 
-      if (wsi->sw) {
+      if (wsi->sw || wsi->forcesync)
          wsi->WaitForFences(vk_device_to_handle(dev),
                             1, &swapchain->fences[image_index], true, ~0ull);
-      }
 
       const VkPresentRegionKHR *region = NULL;
       if (regions && regions->pRegions)

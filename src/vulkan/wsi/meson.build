@@ -10,7 +10,7 @@ if dep_libdrm.found()
 endif
 
 if with_wrapper_vk
-  files_vulkan_wsi += files('wsi_common_ahardware_buffer.c')
+  files_vulkan_wsi += files('wsi_common_android.c')
 endif
 
 if with_platform_x11
