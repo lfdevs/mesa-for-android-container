@@ -70,16 +70,67 @@ wrapper_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 
 VkResult enumerate_physical_device(struct vk_instance *_instance)
 {
-   struct wrapper_instance *instance = (struct wrapper_instance *)_instance;
-   VkPhysicalDevice physical_devices[16];
-   uint32_t physical_device_count = 16;
+   struct wrapper_instance *instance = container_of(_instance, struct wrapper_instance, vk);
+   VkPhysicalDevice *physical_devices = NULL;  /* Will be allocated after we know the count */
+   uint32_t physical_device_count = 0;  /* Will be set after first call */
    VkResult result;
+
+   /* Direct output to make sure we can see this */
+   fprintf(stderr, "WRAPPER: Entering enumerate_physical_device function\n");
+   fflush(stderr);
+
+   if (!instance->dispatch_table.EnumeratePhysicalDevices) {
+      free(physical_devices);  /* This will be safe since physical_devices is NULL at this point */
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
+   /* First call with NULL to get the actual count */
+   uint32_t actual_count = 0;
+   result = instance->dispatch_table.EnumeratePhysicalDevices(
+      instance->dispatch_handle, &actual_count, NULL);
+
+   if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
+      free(physical_devices);  /* This will be safe since physical_devices is NULL at this point */
+      return result;
+   }
+
+   /* Allocate the physical devices array based on the actual count */
+   if (actual_count > 0) {
+      physical_devices = malloc(sizeof(VkPhysicalDevice) * actual_count);
+      if (!physical_devices) {
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+      physical_device_count = actual_count;
+   }
+
+   /* Direct output before the call that crashes */
+   fprintf(stderr, "WRAPPER: About to call EnumeratePhysicalDevices\n");
+   fflush(stderr);
 
    result = instance->dispatch_table.EnumeratePhysicalDevices(
       instance->dispatch_handle, &physical_device_count, physical_devices);
 
-   if (result != VK_SUCCESS)
+   if (result == VK_INCOMPLETE) {
+      /* Try again with a larger count if we got VK_INCOMPLETE */
+      uint32_t larger_count = physical_device_count * 2;
+
+      /* Reallocate the array with the larger size */
+      VkPhysicalDevice *larger_array = realloc(physical_devices, sizeof(VkPhysicalDevice) * larger_count);
+      if (!larger_array) {
+         free(physical_devices);
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      }
+      physical_devices = larger_array;
+      physical_device_count = larger_count;
+
+      result = instance->dispatch_table.EnumeratePhysicalDevices(
+         instance->dispatch_handle, &physical_device_count, physical_devices);
+   }
+
+   if (result != VK_SUCCESS) {
+      free(physical_devices);
       return result;
+   }
 
    for (int i = 0; i < physical_device_count; i++) {
       PFN_vkGetInstanceProcAddr get_instance_proc_addr;
