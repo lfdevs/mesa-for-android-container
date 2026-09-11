@@ -552,7 +552,6 @@ static uint64_t fence_sequence;
 
 static void
 _wsi_display_cleanup_state(struct wsi_display_swapchain *chain);
-
 #ifdef __ANDROID__
 static void thread_signal_handler (int signum) {
    pthread_exit (0);
@@ -2120,7 +2119,7 @@ wsi_display_wait_thread(void *data)
       .events = POLLIN
    };
 
-#ifndef __ANDROID__
+#if !defined __ANDROID__ && !defined __TERMUX__
    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 #endif
    for (;;) {
@@ -2161,7 +2160,7 @@ wsi_display_stop_wait_thread(struct wsi_display *wsi)
 
    mtx_lock(&wsi->wait_mutex);
    if (wsi->wait_thread) {
-#ifndef __ANDROID__
+#if !defined __ANDROID__ && !defined __TERMUX__
       pthread_cancel(wsi->wait_thread);
 #else
       pthread_kill(wsi->wait_thread, SIGUSR2);
@@ -3818,7 +3817,7 @@ wsi_display_finish_wsi(struct wsi_device *wsi_device,
       wsi_display_stop_wait_thread(wsi);
 
       if (wsi->hotplug_thread) {
-#ifndef __ANDROID__
+#if !defined __ANDROID__ && !defined __TERMUX__
          pthread_cancel(wsi->hotplug_thread);
 #else
          pthread_kill(wsi->hotplug_thread, SIGUSR2);

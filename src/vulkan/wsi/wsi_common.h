@@ -60,6 +60,8 @@ struct wsi_device {
 
    VkPhysicalDevice pdevice;
    VkPhysicalDeviceMemoryProperties memory_props;
+   VkPhysicalDeviceProperties2 properties2;
+
    uint32_t queue_family_count;
    uint64_t queue_supports_blit;
    uint64_t queue_supports_timestamps;
@@ -97,6 +99,7 @@ struct wsi_device {
    uint32_t optimalBufferCopyRowPitchAlignment;
    VkPresentModeKHR override_present_mode;
    bool force_bgra8_unorm_first;
+   bool force_rgba8_unorm_first;
 
    /* Cached result for wsi_drm_check_dma_buf_sync_file_import_export(). */
    uint32_t cached_sync_file_import_export_result;
@@ -164,8 +167,8 @@ struct wsi_device {
 
 
    bool sw;
+   bool forcesync;
 
-   bool wants_ahardware_buffer;
    bool needs_blit;
 
    /* Set to true if the implementation is ok with linear WSI images. */
@@ -218,6 +221,7 @@ struct wsi_device {
    WSI_CB(BeginCommandBuffer);
    WSI_CB(CmdPipelineBarrier);
    WSI_CB(CmdCopyImage);
+   WSI_CB(CmdBlitImage);
    WSI_CB(CmdCopyImageToBuffer);
    WSI_CB(CmdResetQueryPool);
    WSI_CB(ResetQueryPoolEXT);
@@ -268,6 +272,8 @@ struct wsi_device {
 #undef WSI_CB
 
     struct wsi_interface *                  wsi[VK_ICD_WSI_PLATFORM_MAX];
+
+    const char *engine_name;
 };
 
 typedef PFN_vkVoidFunction (VKAPI_PTR *WSI_FN_GetPhysicalDeviceProcAddr)(VkPhysicalDevice physicalDevice, const char* pName);

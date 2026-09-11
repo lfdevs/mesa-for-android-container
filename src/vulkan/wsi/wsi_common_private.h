@@ -42,6 +42,7 @@ struct wsi_swapchain;
 #define WSI_DEBUG_DXGI        (1ull << 4)
 #define WSI_DEBUG_NOWLTS      (1ull << 5)
 #define WSI_DEBUG_BLIT        (1ull << 8)
+#define WSI_DEBUG_FORCESYNC   (1ull << 9)
 
 extern uint64_t WSI_DEBUG;
 
@@ -51,6 +52,7 @@ enum wsi_image_type {
    WSI_IMAGE_TYPE_DXGI,
    WSI_IMAGE_TYPE_METAL,
    WSI_IMAGE_TYPE_AHB,
+   WSI_IMAGE_TYPE_ANDROID,
 };
 
 struct wsi_base_image_params {
@@ -624,11 +626,11 @@ wsi_metal_configure_image(const struct wsi_swapchain *chain,
 #endif /* defined(VK_USE_PLATFORM_METAL_EXT) */
 
 enum wsi_swapchain_blit_type
-wsi_get_ahardware_buffer_blit_type(const struct wsi_device *wsi,
-                      const struct wsi_base_image_params *params,
-                                   VkDevice device);
+wsi_get_android_blit_type(const struct wsi_device *wsi,
+                          const struct wsi_base_image_params *params,
+                          VkDevice device);
 
-VkResult wsi_configure_ahardware_buffer_image(
+VkResult wsi_configure_android_image(
    const struct wsi_swapchain *chain,
    const VkSwapchainCreateInfoKHR *pCreateInfo,
    const struct wsi_base_image_params *params,
