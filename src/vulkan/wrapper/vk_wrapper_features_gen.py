@@ -50,6 +50,23 @@ RENAMED_FEATURES = {
     ('CooperativeMatrixFeaturesNV', 'cooperativeMatrixRobustBufferAccess'): 'cooperativeMatrixRobustBufferAccessNV',
 
     ('DeviceGeneratedCommandsFeaturesNV', 'deviceGeneratedCommands'): 'deviceGeneratedCommandsNV',
+
+    # Vulkan XML keeps extension and KHR/NV aliases as separate feature
+    # structures even when they expose the same feature bit.
+    ('OpacityMicromapFeaturesEXT', 'micromap'): 'micromap',
+    ('OpacityMicromapFeaturesKHR', 'micromap'): 'micromap',
+    ('FaultFeaturesEXT', 'deviceFault'): 'deviceFault',
+    ('FaultFeaturesEXT', 'deviceFaultVendorBinary'): 'deviceFaultVendorBinary',
+    ('FaultFeaturesKHR', 'deviceFault'): 'deviceFault',
+    ('FaultFeaturesKHR', 'deviceFaultVendorBinary'): 'deviceFaultVendorBinary',
+    ('RayTracingInvocationReorderFeaturesEXT', 'rayTracingInvocationReorder'): 'rayTracingInvocationReorder',
+    ('RayTracingInvocationReorderFeaturesNV', 'rayTracingInvocationReorder'): 'rayTracingInvocationReorder',
+    ('CooperativeMatrix2FeaturesNV', 'cooperativeMatrixReductions'): 'cooperativeMatrixReductions',
+    ('CooperativeMatrix2FeaturesNV', 'cooperativeMatrixConversions'): 'cooperativeMatrixConversions',
+    ('CooperativeMatrix2FeaturesNV', 'cooperativeMatrixPerElementOperations'): 'cooperativeMatrixPerElementOperations',
+    ('CooperativeMatrixMaintenance1FeaturesEXT', 'cooperativeMatrixReductions'): 'cooperativeMatrixReductions',
+    ('CooperativeMatrixMaintenance1FeaturesEXT', 'cooperativeMatrixConversions'): 'cooperativeMatrixConversions',
+    ('CooperativeMatrixMaintenance1FeaturesEXT', 'cooperativeMatrixPerElementOperations'): 'cooperativeMatrixPerElementOperations',
 }
 
 KNOWN_ALIASES = [

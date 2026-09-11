@@ -6,6 +6,7 @@
 
 #include <android/hardware_buffer.h>
 #include <vndk/hardware_buffer.h>
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <linux/dma-heap.h>

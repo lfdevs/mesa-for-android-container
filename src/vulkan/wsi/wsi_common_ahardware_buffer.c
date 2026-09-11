@@ -1,5 +1,6 @@
 #include "wsi_common.h"
 #include "wsi_common_private.h"
+#include "util/macros.h"
 #include "vk_log.h"
 
 #include <android/hardware_buffer.h>
@@ -282,7 +283,7 @@ to_ahardware_buffer_format(VkFormat format) {
    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
       return AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM;
    default:
-      unreachable("unsupported format");
+      UNREACHABLE("unsupported format");
    }
 }
 
