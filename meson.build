@@ -1707,11 +1707,9 @@ endforeach
 functions_to_detect = {
   'strtof': '',
   'mkostemp': '',
-  'memfd_create': '#include <sys/mman.h>',
   'random_r': '',
   'flock': '',
   'strtok_r': '',
-  'getrandom': '#include <sys/random.h>',
   'qsort_s': '',
   'posix_fallocate': '',
   'secure_getenv': '',

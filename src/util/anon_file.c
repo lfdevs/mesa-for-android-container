@@ -118,6 +118,10 @@ get_or_create_user_temp_dir(void) {
     int n;
 
     env = os_get_option("XDG_RUNTIME_DIR");
+#ifdef __TERMUX__
+    if (!env || env[0] == '\0')
+        env = "@TERMUX_PREFIX@/tmp";
+#endif
     if (env && env[0] != '\0') {
         n = asprintf(&buf, "%s", env);
         if (n < 0)
