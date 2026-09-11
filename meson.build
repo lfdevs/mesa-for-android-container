@@ -1121,7 +1121,7 @@ with_android_stub = get_option('android-stub')
 if with_wrapper_vk
   with_android_stub = true
 endif
-need_android_stub = with_platform_android or with_gfxstream_emulated_android
+need_android_stub = with_platform_android or with_gfxstream_emulated_android or with_wrapper_vk
 if with_android_stub and not need_android_stub
   error('`-D android-stub=true` makes no sense without `-D platforms=android` or emulated Android')
 endif
