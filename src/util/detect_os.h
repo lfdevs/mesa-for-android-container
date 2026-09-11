@@ -24,7 +24,7 @@
  * Android defines __linux__, so DETECT_OS_LINUX and DETECT_OS_POSIX will
  * also be defined.
  */
-#if defined(__ANDROID__)
+#if 0
 #define DETECT_OS_ANDROID 1
 #endif
 
