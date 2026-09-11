@@ -553,6 +553,12 @@ static uint64_t fence_sequence;
 static void
 _wsi_display_cleanup_state(struct wsi_display_swapchain *chain);
 
+#ifdef __ANDROID__
+static void thread_signal_handler (int signum) {
+   pthread_exit (0);
+}
+#endif
+
 ICD_DEFINE_NONDISP_HANDLE_CASTS(wsi_display_mode, VkDisplayModeKHR)
 ICD_DEFINE_NONDISP_HANDLE_CASTS(wsi_display_connector, VkDisplayKHR)
 
@@ -2114,7 +2120,9 @@ wsi_display_wait_thread(void *data)
       .events = POLLIN
    };
 
+#ifndef __ANDROID__
    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+#endif
    for (;;) {
       int ret = poll(&pollfd, 1, -1);
       if (ret > 0) {
@@ -2142,9 +2150,22 @@ wsi_display_start_wait_thread(struct wsi_display *wsi)
 static void
 wsi_display_stop_wait_thread(struct wsi_display *wsi)
 {
+#ifdef __ANDROID__
+   struct sigaction actions;
+   memset (&actions, 0, sizeof (actions));
+   sigemptyset (&actions.sa_mask);
+   actions.sa_flags = 0;
+   actions.sa_handler = thread_signal_handler;
+   sigaction (SIGUSR2, &actions, NULL);
+#endif
+
    mtx_lock(&wsi->wait_mutex);
    if (wsi->wait_thread) {
+#ifndef __ANDROID__
       pthread_cancel(wsi->wait_thread);
+#else
+      pthread_kill(wsi->wait_thread, SIGUSR2);
+#endif
       pthread_join(wsi->wait_thread, NULL);
       wsi->wait_thread = 0;
    }
@@ -3621,7 +3642,9 @@ udev_event_listener_thread(void *data)
 
    int udev_fd = udev_monitor_get_fd(mon);
 
+#ifndef __ANDROID__
    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+#endif
 
    for (;;) {
       nfds_t nfds = 1;
@@ -3779,6 +3802,15 @@ wsi_display_finish_wsi(struct wsi_device *wsi_device,
    struct wsi_display *wsi =
       (struct wsi_display *) wsi_device->wsi[VK_ICD_WSI_PLATFORM_DISPLAY];
 
+#ifdef __ANDROID__
+   struct sigaction actions;
+   memset (&actions, 0, sizeof (actions));
+   sigemptyset (&actions.sa_mask);
+   actions.sa_flags = 0;
+   actions.sa_handler = thread_signal_handler;
+   sigaction (SIGUSR2, &actions, NULL);
+#endif
+
    if (wsi) {
       wsi_for_each_connector(connector, wsi)
          wsi_display_free_connector(wsi, connector);
@@ -3786,7 +3818,11 @@ wsi_display_finish_wsi(struct wsi_device *wsi_device,
       wsi_display_stop_wait_thread(wsi);
 
       if (wsi->hotplug_thread) {
+#ifndef __ANDROID__
          pthread_cancel(wsi->hotplug_thread);
+#else
+         pthread_kill(wsi->hotplug_thread, SIGUSR2);
+#endif
          pthread_join(wsi->hotplug_thread, NULL);
       }
 
