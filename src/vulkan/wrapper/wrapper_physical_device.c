@@ -10,6 +10,8 @@
 #include "wsi_common.h"
 #include "util/os_misc.h"
 
+#include <fcntl.h>
+
 static VkResult
 wrapper_setup_device_extensions(struct wrapper_physical_device *pdevice) {
    struct vk_device_extension_table *exts = &pdevice->vk.supported_extensions;
@@ -286,8 +288,8 @@ wrapper_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
    pdevice->dispatch_table.GetPhysicalDeviceProperties2(
       pdevice->dispatch_handle, pProperties);
 
-   vk_foreach_struct(prop, pProperties->pNext) {
-      switch (prop->sType) {
+   vk_foreach_struct(sType, prop, pProperties->pNext) {
+      switch (sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_PROPERTIES_EXT:
       {
          VkPhysicalDeviceMapMemoryPlacedPropertiesEXT *placed_prop =
