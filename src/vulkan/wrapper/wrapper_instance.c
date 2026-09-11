@@ -1,17 +1,11 @@
 #include "wrapper_private.h"
+#include "wrapper_log.h"
+#include "graphicsenv_hook.hpp"
 #include "wrapper_entrypoints.h"
 #include "vk_alloc.h"
 #include "vk_common_entrypoints.h"
 #include "vk_dispatch_table.h"
 #include "vk_extensions.h"
-
-uint64_t WRAPPER_DEBUG;
-
-static const struct debug_control debug_control[] = {
-   { "placed",       WRAPPER_MAP_MEMORY_PLACED },
-   { "bc",           WRAPPER_BC },
-   { NULL, },
-};
 
 const struct vk_instance_extension_table wrapper_instance_extensions = {
    .KHR_get_surface_capabilities2 = true,
@@ -41,12 +35,23 @@ const struct vk_instance_extension_table wrapper_instance_extensions = {
    .EXT_headless_surface = true,
 };
 
+static const char *layers[] = {
+   "VK_LAYER_KHRONOS_validation"
+};
+
+
 static void *vulkan_library_handle;
 static PFN_vkCreateInstance create_instance;
 static PFN_vkGetInstanceProcAddr get_instance_proc_addr;
 static PFN_vkEnumerateInstanceVersion enumerate_instance_version;
 static PFN_vkEnumerateInstanceExtensionProperties enumerate_instance_extension_properties;
+static PFN_vkEnumerateInstanceLayerProperties enumerate_instance_layer_properties;
+static PFN_vkCreateDebugUtilsMessengerEXT create_debug_utils_messenger;
+static PFN_vkDestroyDebugUtilsMessengerEXT destroy_debug_utils_messenger;
+VkDebugUtilsMessengerEXT debugUtilsMessenger;
 static struct vk_instance_extension_table *supported_instance_extensions;
+
+bool has_intercepted_layer_paths = false;
 
 #ifdef __LP64__
 #define DEFAULT_VULKAN_PATH "/system/lib64/libvulkan.so"
@@ -56,17 +61,57 @@ static struct vk_instance_extension_table *supported_instance_extensions;
 
 #include <dlfcn.h>
 
+static void init_debug_messenger(VkInstance instance)
+{
+  create_debug_utils_messenger = (PFN_vkCreateDebugUtilsMessengerEXT)get_instance_proc_addr(instance, "vkCreateDebugUtilsMessengerEXT");
+  destroy_debug_utils_messenger = (PFN_vkDestroyDebugUtilsMessengerEXT)get_instance_proc_addr(instance, "vkDestroyDebugUtilsMessengerEXT");
+
+  if (create_debug_utils_messenger && destroy_debug_utils_messenger) {
+     WRAPPER_LOG(info, "Creating debug messenger");
+     VkDebugUtilsMessengerCreateInfoEXT messengerInfo;
+     const VkDebugUtilsMessageSeverityFlagsEXT kSeveritiesToLog =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+
+     const VkDebugUtilsMessageTypeFlagsEXT kMessagesToLog =
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+
+     messengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+     messengerInfo.pNext = NULL;
+     messengerInfo.flags = 0;
+     messengerInfo.messageSeverity = kSeveritiesToLog;
+     messengerInfo.messageType = kMessagesToLog;
+     messengerInfo.pfnUserCallback = &wrapper_debug_utils_messenger;
+     messengerInfo.pUserData = NULL;
+
+     create_debug_utils_messenger(instance, &messengerInfo, NULL, &debugUtilsMessenger);
+   }
+
+}
+
+static void *get_vulkan_handle()
+{
+   init_wrapper_logging();
+
+   if (WRAPPER_LOG_LEVEL(validation)) {
+      has_intercepted_layer_paths = set_layer_paths();
+   }
+
+   const char *path = getenv("WRAPPER_VULKAN_PATH");
+   return dlopen(path ? path : DEFAULT_VULKAN_PATH, RTLD_NOW | RTLD_LOCAL);
+}
+
+
 static bool vulkan_library_init()
 {
    if (vulkan_library_handle)
       return true;
 
-   WRAPPER_DEBUG = parse_debug_string(getenv("WRAPPER_DEBUG"),
-                                      debug_control);
-
-   const char *env = getenv("WRAPPER_VULKAN_PATH");
-   vulkan_library_handle = dlopen(env ? env : DEFAULT_VULKAN_PATH,
-                                  RTLD_LOCAL | RTLD_NOW);
+   vulkan_library_handle = get_vulkan_handle();
 
    if (vulkan_library_handle) {
       create_instance = dlsym(vulkan_library_handle, "vkCreateInstance");
@@ -76,6 +121,8 @@ static bool vulkan_library_init()
                                          "vkEnumerateInstanceVersion");
       enumerate_instance_extension_properties =
          dlsym(vulkan_library_handle, "vkEnumerateInstanceExtensionProperties");
+      enumerate_instance_layer_properties =
+         dlsym(vulkan_library_handle, "vkEnumerateInstanceLayerProperties");
    }
    else {
       fprintf(stderr, "%s", dlerror());
@@ -120,10 +167,7 @@ static VkResult wrapper_vulkan_init()
       supported_instance_extensions->extensions[idx] = true;
    }
 
-   /* Block extensions that don't work. */
    supported_instance_extensions->EXT_debug_utils = false;
-   supported_instance_extensions->EXT_debug_report = false;
-   supported_instance_extensions->KHR_device_group_creation = false;
 
    return VK_SUCCESS;
 }
@@ -162,11 +206,11 @@ set_wrapper_required_extensions(const struct vk_instance *instance,
    uint32_t count = *enable_extension_count;
 #define REQUIRED_EXTENSION(name) \
    assert (count < VK_INSTANCE_EXTENSION_COUNT); \
-   if (!instance->enabled_extensions.name && \
-       supported_instance_extensions->name) { \
+   if (supported_instance_extensions->name) { \
       enable_extensions[count++] = "VK_" #name; \
    }
    REQUIRED_EXTENSION(KHR_get_physical_device_properties2);
+   REQUIRED_EXTENSION(KHR_surface);
    REQUIRED_EXTENSION(KHR_external_fence_capabilities);
    REQUIRED_EXTENSION(KHR_external_memory_capabilities);
    REQUIRED_EXTENSION(KHR_external_semaphore_capabilities);
@@ -206,6 +250,7 @@ wrapper_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                              pAllocator ? pAllocator : vk_default_allocator());
 
    if (result != VK_SUCCESS) {
+      WRAPPER_LOG(error, "Failed to init instance, res %d", result);
       vk_free2(vk_default_allocator(), pAllocator, instance);
       return vk_error(NULL, result);
    }
@@ -234,19 +279,60 @@ wrapper_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
       wrapper_application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
       wrapper_application_info.pApplicationName = "wrapper";
       wrapper_application_info.pEngineName = "wrapper";
+      enumerate_instance_version(&wrapper_application_info.apiVersion);
    }
-   enumerate_instance_version(&wrapper_application_info.apiVersion);
+
    wrapper_create_info.pApplicationInfo = &wrapper_application_info;
+
+   if (WRAPPER_LOG_LEVEL(validation)) {
+      if (!has_intercepted_layer_paths)
+         return vk_error(NULL, VK_ERROR_LAYER_NOT_PRESENT);
+
+      uint32_t layer_count = 0;
+      enumerate_instance_layer_properties(&layer_count, NULL);
+
+      if (layer_count == 0) {
+        WRAPPER_LOG(error, "Failed to find Vulkan Validation layer");
+	return vk_error(NULL, VK_ERROR_LAYER_NOT_PRESENT);
+      }
+
+      VkLayerProperties layer_props[layer_count];
+      enumerate_instance_layer_properties(&layer_count, layer_props);
+
+      for (int i = 0; i < layer_count; i++) {
+         if (!strcmp(layer_props[i].layerName, layers[0])) {
+            wrapper_create_info.enabledLayerCount = 1;
+            wrapper_create_info.ppEnabledLayerNames = layers;
+            const VkBool32 settings_validate_best_practices_arm = VK_TRUE;
+            const VkLayerSettingEXT layer_settings[] = {
+               {layers[0], "validate_best_practices_arm", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &settings_validate_best_practices_arm},
+               {layers[0], "validate_best_practices", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &settings_validate_best_practices_arm}
+            };
+            VkLayerSettingsCreateInfoEXT layer_settings_info = {
+               VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT, NULL, 2, layer_settings,
+            };
+            layer_settings_info.pNext = wrapper_create_info.pNext;
+            wrapper_create_info.pNext = &layer_settings_info;
+         }
+      }
+   }
+
    wrapper_create_info.enabledExtensionCount = wrapper_enable_extension_count;
    wrapper_create_info.ppEnabledExtensionNames = wrapper_enable_extensions;
 
    result = create_instance(&wrapper_create_info, pAllocator,
                             &instance->dispatch_handle);
    if (result != VK_SUCCESS) {
+      WRAPPER_LOG(error, "Failed driver createInstance, res %d", result);
       vk_instance_finish(&instance->vk);
       vk_free2(vk_default_allocator(), pAllocator, instance);
       return vk_error(NULL, result);
    }
+
+   if (WRAPPER_LOG_LEVEL(validation)) {
+      init_debug_messenger(instance->dispatch_handle);
+   }
+
    vk_instance_dispatch_table_load(&instance->dispatch_table,
                                    get_instance_proc_addr,
                                    instance->dispatch_handle);
@@ -261,10 +347,12 @@ wrapper_DestroyInstance(VkInstance _instance,
                         const VkAllocationCallbacks *pAllocator)
 {
    VK_FROM_HANDLE(wrapper_instance, instance, _instance);
+
+   if (destroy_debug_utils_messenger)
+      destroy_debug_utils_messenger(instance->dispatch_handle, debugUtilsMessenger, pAllocator);
+
    instance->dispatch_table.DestroyInstance(instance->dispatch_handle,
                                             pAllocator);
-   vk_instance_finish(&instance->vk);
-   vk_free2(&instance->vk.alloc, pAllocator, instance);
 }
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL

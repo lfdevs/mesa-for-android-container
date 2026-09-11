@@ -162,6 +162,8 @@ vk_device_init(struct vk_device *device,
                const VkDeviceCreateInfo *pCreateInfo,
                const VkAllocationCallbacks *alloc)
 {
+   VkResult result;
+
    memset(device, 0, sizeof(*device));
    vk_object_base_init(device, &device->base, VK_OBJECT_TYPE_DEVICE);
    if (alloc != NULL)
@@ -207,12 +209,7 @@ vk_device_init(struct vk_device *device,
       device->enabled_extensions.extensions[idx] = true;
    }
 
-   VkResult result =
-      vk_physical_device_check_device_features(physical_device,
-                                               pCreateInfo);
-   if (result != VK_SUCCESS)
-      return result;
-
+   /* Unconditionally enable all features, we disable the unsupported ones in our driver directly */
    collect_enabled_features(device, pCreateInfo);
 
    p_atomic_set(&device->private_data_next_index, 0);

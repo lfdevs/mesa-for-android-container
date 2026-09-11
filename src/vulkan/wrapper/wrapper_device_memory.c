@@ -1,4 +1,5 @@
 #include "wrapper_private.h"
+#include "wrapper_log.h"
 #include "wrapper_entrypoints.h"
 #include "vk_common_entrypoints.h"
 #include "util/os_file.h"
@@ -108,8 +109,10 @@ wrapper_allocate_memory_dmaheap(struct wrapper_device *device,
       device->dispatch_handle, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
          *out_fd, &memory_fd_props);
 
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS) {
+      WRAPPER_LOG(error, "Failed to get memory fd properties, res %d", result);
       return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+   }
 
    import_fd_info = (VkImportMemoryFdInfoKHR) {
       .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
@@ -130,55 +133,59 @@ wrapper_allocate_memory_dmaheap(struct wrapper_device *device,
       device->dispatch_handle, &allocate_info,
          pAllocator, pMemory);
 
-   if (result != VK_SUCCESS && import_fd_info.fd != -1)
+   if (result != VK_SUCCESS && import_fd_info.fd != -1) {
+      WRAPPER_LOG(error, "Failed to import dmaheap memory, res %d", result);
       close(import_fd_info.fd);
+   }
 
    return result;
 }
 
 static VkResult
-wrapper_allocate_memory_dmabuf(struct wrapper_device *device,
-                               const VkMemoryAllocateInfo* pAllocateInfo,
-                               const VkAllocationCallbacks* pAllocator,
-                               VkDeviceMemory* pMemory,
-                               int *out_fd) {
-   VkExportMemoryAllocateInfo export_memory_info;
-   VkMemoryAllocateInfo allocate_info;
+wrapper_allocate_memory_opaque_fd(struct wrapper_device *device,
+								  const VkMemoryAllocateInfo *pAllocateInfo,
+								  const VkAllocationCallbacks *pAllocator,
+								  VkDeviceMemory *pMemory,
+								  int *out_fd)
+{
    VkResult result;
+   VkMemoryAllocateInfo allocate_info;
 
-   export_memory_info = (VkExportMemoryAllocateInfo) {
+   VkExportMemoryAllocateInfo export_memory_info = {
       .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
-      .pNext = pAllocateInfo->pNext,
-      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+      .pNext = NULL,
+      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
    };
+
    allocate_info = *pAllocateInfo;
    allocate_info.pNext = &export_memory_info;
 
    result = device->dispatch_table.AllocateMemory(device->dispatch_handle,
-                                                  &allocate_info,
-                                                  pAllocator,
-                                                  pMemory);
-   if (result != VK_SUCCESS)
+												  &allocate_info,
+												  pAllocator,
+												  pMemory);
+
+   if (result != VK_SUCCESS) {
+      WRAPPER_LOG(error, "Failed to allocate opaque fd memory, res %d", result);
       return result;
+   }
 
-   result = device->dispatch_table.GetMemoryFdKHR(
-      device->dispatch_handle,
-      &(VkMemoryGetFdInfoKHR) {
-         .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
-         .memory = *pMemory,
-         .handleType =
-            VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-      },
-      out_fd);
+   VkMemoryGetFdInfoKHR get_memory_fd = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
+      .pNext = NULL,
+      .memory = *pMemory,
+      .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+   };
 
-   if (result != VK_SUCCESS)
-      return result;
+   result = device->dispatch_table.GetMemoryFdKHR(device->dispatch_handle,
+							    &get_memory_fd,
+							    out_fd);
 
-   if (lseek(*out_fd, 0, SEEK_SET) ||
-       lseek(*out_fd, 0, SEEK_END) < pAllocateInfo->allocationSize)
+   if (result != VK_SUCCESS || *out_fd < 0) {
+      WRAPPER_LOG(error, "Failed to get opaque fd");
       return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+   }
 
-   lseek(*out_fd, 0, SEEK_SET);
    return VK_SUCCESS;
 }
 
@@ -190,7 +197,9 @@ wrapper_allocate_memory_ahardware_buffer(struct wrapper_device *device,
                                          AHardwareBuffer **pAHardwareBuffer) {
    VkExportMemoryAllocateInfo export_memory_info;
    VkMemoryAllocateInfo allocate_info;
+   const VkMemoryDedicatedAllocateInfo *memory_dedicated_info = NULL;
    VkResult result;
+
 
    export_memory_info = (VkExportMemoryAllocateInfo) {
       .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
@@ -198,15 +207,25 @@ wrapper_allocate_memory_ahardware_buffer(struct wrapper_device *device,
       .handleTypes =
          VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
    };
+
+   memory_dedicated_info = vk_find_struct_const(pAllocateInfo->pNext, MEMORY_DEDICATED_ALLOCATE_INFO);
+
    allocate_info = *pAllocateInfo;
    allocate_info.pNext = &export_memory_info;
+
+   if (memory_dedicated_info && memory_dedicated_info->image != VK_NULL_HANDLE) {
+      WRAPPER_LOG(info, "VkMemoryDedicatedInfo struct with a non NULL image detected, patching allocationSize");
+      allocate_info.allocationSize = 0;
+   }
 
    result = device->dispatch_table.AllocateMemory(device->dispatch_handle,
                                                   &allocate_info,
                                                   pAllocator,
                                                   pMemory);
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS) {
+      WRAPPER_LOG(error, "Failed to allocate ahb memory, res %d", result);
       return result;
+   }
 
    result = device->dispatch_table.GetMemoryAndroidHardwareBufferANDROID(
       device->dispatch_handle,
@@ -217,11 +236,15 @@ wrapper_allocate_memory_ahardware_buffer(struct wrapper_device *device,
       },
       pAHardwareBuffer);
 
-   if (result != VK_SUCCESS)
+   if (result != VK_SUCCESS) {
+      WRAPPER_LOG(error, "Failed to import ahb, res %d", result);
       return result;
-   
-   if (AHardwareBuffer_getNativeHandle(*pAHardwareBuffer) == NULL)
+   }
+
+   if (AHardwareBuffer_getNativeHandle(*pAHardwareBuffer) == NULL) {
+      WRAPPER_LOG(error, "Invalid native handle");
       return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+   }
 
    return VK_SUCCESS;
 }
@@ -233,9 +256,9 @@ wrapper_device_memory_reset(struct wrapper_device_memory *mem) {
       AHardwareBuffer_release(mem->ahardware_buffer);
       mem->ahardware_buffer = NULL;
    }
-   if (mem->dmabuf_fd != -1) {
-      close(mem->dmabuf_fd);
-      mem->dmabuf_fd = -1;
+   if (mem->fd != -1) {
+      close(mem->fd);
+      mem->fd = -1;
    }
    if (mem->map_address && mem->map_size) {
       munmap(mem->map_address, mem->map_size);
@@ -259,7 +282,7 @@ wrapper_device_memory_create(struct wrapper_device *device,
    if (*out_mem == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-   (*out_mem)->dmabuf_fd = -1;
+   (*out_mem)->fd = -1;
    (*out_mem)->device = device;
    (*out_mem)->alloc = alloc ? alloc : &device->vk.alloc;
    list_add(&(*out_mem)->link, &device->device_memory_list);
@@ -320,6 +343,8 @@ wrapper_AllocateMemory(VkDevice _device,
    if (vk_find_struct_const(pAllocateInfo, EXPORT_MEMORY_ALLOCATE_INFO))
       goto fallback;
 
+   WRAPPER_LOG(info, "Emulating vkAllocateMemory");
+
    simple_mtx_lock(&device->resource_mutex);
 
    result = wrapper_device_memory_create(device, pAllocator, &mem);
@@ -328,22 +353,41 @@ wrapper_AllocateMemory(VkDevice _device,
       goto out;
    }
 
-   result = wrapper_allocate_memory_dmabuf(device, pAllocateInfo,
-      pAllocator, &mem->dispatch_handle, &mem->dmabuf_fd);
-
-   if (result != VK_SUCCESS) {
-      wrapper_device_memory_reset(mem);
-      result = wrapper_allocate_memory_dmaheap(device,
-         pAllocateInfo, pAllocator, &mem->dispatch_handle, &mem->dmabuf_fd);
-   }
-
-   if (result != VK_SUCCESS) {
-      wrapper_device_memory_reset(mem);
+   if (strstr(device->physical->resource_type, "ahb")) {
+      WRAPPER_LOG(info, "Using AHardwareBuffer memory backend");
       result = wrapper_allocate_memory_ahardware_buffer(device,
          pAllocateInfo, pAllocator, &mem->dispatch_handle, &mem->ahardware_buffer);
    }
+   else if (strstr(device->physical->resource_type, "dmabuf")) {
+      WRAPPER_LOG(info, "Using DMABUF memory backend");
+      result = wrapper_allocate_memory_dmaheap(device,
+         pAllocateInfo, pAllocator, &mem->dispatch_handle, &mem->fd);
+   }
+   else if (strstr(device->physical->resource_type, "opaque")) {
+      WRAPPER_LOG(info, "Using opaque fd memory backend");
+      result = wrapper_allocate_memory_opaque_fd(device,
+         pAllocateInfo, pAllocator, &mem->dispatch_handle, &mem->fd);
+   }
+   else {
+      WRAPPER_LOG(info, "Using auto memory backend");
+      result = wrapper_allocate_memory_dmaheap(device,
+         pAllocateInfo, pAllocator, &mem->dispatch_handle, &mem->fd);
+
+      if (result != VK_SUCCESS) {
+         wrapper_device_memory_reset(mem);
+         result = wrapper_allocate_memory_ahardware_buffer(device,
+            pAllocateInfo, pAllocator, &mem->dispatch_handle, &mem->ahardware_buffer);
+      }
+
+      if (result != VK_SUCCESS) {
+         wrapper_device_memory_reset(mem);
+         result = wrapper_allocate_memory_opaque_fd(device,
+            pAllocateInfo, pAllocator, &mem->dispatch_handle, &mem->fd);
+      }
+   }
 
    if (result != VK_SUCCESS) {
+      WRAPPER_LOG(error, "Failed to allocate memory, res %d", result);
       wrapper_device_memory_destroy(mem);
       vk_error(device, result);
    } else {
@@ -383,6 +427,7 @@ wrapper_MapMemory2KHR(VkDevice _device,
                       void** ppData)
 {
    VK_FROM_HANDLE(wrapper_device, device, _device);
+   VkResult result;
    const VkMemoryMapPlacedInfoEXT *placed_info = NULL;
    struct wrapper_device_memory *mem;
    int fd;
@@ -392,62 +437,71 @@ wrapper_MapMemory2KHR(VkDevice _device,
          MEMORY_MAP_PLACED_INFO_EXT);
 
    mem = wrapper_device_memory_from_handle(device, pMemoryMapInfo->memory);
-   if (!placed_info || !mem)
+   if (!placed_info || !mem) {
       return device->dispatch_table.MapMemory(device->dispatch_handle,
          pMemoryMapInfo->memory, pMemoryMapInfo->offset, pMemoryMapInfo->size,
             0, ppData);
+   }
+
+   WRAPPER_LOG(info, "Emulating vkMapMemory2KHR");
+
+   simple_mtx_lock(&device->resource_mutex);
 
    if (mem->map_address) {
       if (placed_info->pPlacedAddress != mem->map_address) {
-         return VK_ERROR_MEMORY_MAP_FAILED;
+         WRAPPER_LOG(error, "Placed address/mapped address mismatch");
+         result = VK_ERROR_MEMORY_MAP_FAILED;
+         goto fail;
       } else {
-         *ppData = (char *)mem->map_address
-            + pMemoryMapInfo->offset;
-         return VK_SUCCESS;
+         goto out;
       }
    }
-   assert(mem->dmabuf_fd >= 0 || mem->ahardware_buffer != NULL);
+   assert(mem->fd >= 0 || mem->ahardware_buffer != NULL);
 
    if (mem->ahardware_buffer) {
       const native_handle_t *handle;
-      const int *handle_fds;
 
       handle = AHardwareBuffer_getNativeHandle(mem->ahardware_buffer);
-      handle_fds = &handle->data[0];
-
-      int idx;
-      for (idx = 0; idx < handle->numFds; idx++) {
-         size_t size = lseek(handle_fds[idx], 0, SEEK_END);
-         if (size >= mem->alloc_size) {
-            break;
-         }
-      }
-      assert(idx < handle->numFds);
-      fd = handle_fds[idx];
-   } else {
-      fd = mem->dmabuf_fd;
+      fd = handle->data[0];
+   }
+   else {
+      fd = mem->fd;
    }
 
-   if (pMemoryMapInfo->size == VK_WHOLE_SIZE)
+   if (pMemoryMapInfo->size == VK_WHOLE_SIZE) {
+      int res = lseek(fd, 0, SEEK_END);
+      if (res < 0) {
+         WRAPPER_LOG(error, "Failed lseek for file descriptor %d", fd);
+         result = VK_ERROR_MEMORY_MAP_FAILED;
+         goto fail;
+      }
       mem->map_size = mem->alloc_size > 0 ?
-         mem->alloc_size : lseek(fd, 0, SEEK_END);
+         mem->alloc_size : res;
+   }
    else
       mem->map_size = pMemoryMapInfo->size;
+
+   WRAPPER_LOG(info, "Mapping memory %p, address %p size %zu\n", pMemoryMapInfo->memory, placed_info->pPlacedAddress, mem->map_size);
 
    mem->map_address = mmap(placed_info->pPlacedAddress,
       mem->map_size, PROT_READ | PROT_WRITE,
          MAP_SHARED | MAP_FIXED, fd, 0);
 
    if (mem->map_address == MAP_FAILED) {
+      WRAPPER_LOG(error, "mmap failed: error %d", errno);
       mem->map_address = NULL;
       mem->map_size = 0;
-      fprintf(stderr, "%s: mmap failed\n", __func__);
-      return vk_error(device, VK_ERROR_MEMORY_MAP_FAILED);
+      result = VK_ERROR_MEMORY_MAP_FAILED;
+      goto fail;
    }
 
-   *ppData = (char *)mem->map_address + pMemoryMapInfo->offset;
-
-   return VK_SUCCESS;
+   out:
+      simple_mtx_unlock(&device->resource_mutex);
+      *ppData = (char *)mem->map_address + pMemoryMapInfo->offset;
+      return VK_SUCCESS;
+   fail:
+      simple_mtx_unlock(&device->resource_mutex);
+      return result;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -469,11 +523,13 @@ wrapper_UnmapMemory2KHR(VkDevice _device,
       return VK_SUCCESS;
    }
 
+   WRAPPER_LOG(info, "Emulating vkUnmapMemory2KHR");
+
    if (pMemoryUnmapInfo->flags & VK_MEMORY_UNMAP_RESERVE_BIT_EXT) {
       mem->map_address = mmap(mem->map_address, mem->map_size,
          PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
       if (mem->map_address == MAP_FAILED) {
-         fprintf(stderr, "Failed to replace mapping with reserved memory");
+         WRAPPER_LOG(error, "Failed to replace mapping with reserved memory");
          return vk_error(device, VK_ERROR_MEMORY_MAP_FAILED);
       }
    } else {

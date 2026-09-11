@@ -71,6 +71,9 @@ wrapper_files = files(
   'wrapper_device.c',
   'wrapper_device_memory.c',
   'wrapper_instance.c',
+  'graphicsenv_hook.cpp',
+  'spirv_patcher.cpp',
+  'wrapper_bcdec.c',
   'wrapper_log.c',
   'wrapper_physical_device.c',
 )
