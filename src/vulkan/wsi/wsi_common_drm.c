@@ -53,7 +53,13 @@ wsi_dma_buf_export_sync_file(int dma_buf_fd, int *sync_file_fd)
    };
    int ret = drmIoctl(dma_buf_fd, DMA_BUF_IOCTL_EXPORT_SYNC_FILE, &export);
    if (ret) {
-      if (errno == ENOTTY || errno == EBADF || errno == ENOSYS) {
+      /* Android kernels commonly deny DMA-BUF sync-file ioctls to an
+       * untrusted application even when the ioctl is present.  Treat that
+       * the same as an unavailable kernel feature so WSI can fall back to
+       * implicit synchronization instead of reporting an allocation error.
+       */
+      if (errno == EACCES || errno == EPERM || errno == ENOTTY ||
+          errno == EBADF || errno == ENOSYS || errno == EOPNOTSUPP) {
          return VK_ERROR_FEATURE_NOT_PRESENT;
       } else {
          mesa_loge("MESA: failed to export sync file '%s'", strerror(errno));
@@ -75,7 +81,8 @@ wsi_dma_buf_import_sync_file(int dma_buf_fd, int sync_file_fd)
    };
    int ret = drmIoctl(dma_buf_fd, DMA_BUF_IOCTL_IMPORT_SYNC_FILE, &import);
    if (ret) {
-      if (errno == ENOTTY || errno == EBADF || errno == ENOSYS) {
+      if (errno == EACCES || errno == EPERM || errno == ENOTTY ||
+          errno == EBADF || errno == ENOSYS || errno == EOPNOTSUPP) {
          return VK_ERROR_FEATURE_NOT_PRESENT;
       } else {
          mesa_loge("MESA: failed to import sync file '%s'", strerror(errno));
