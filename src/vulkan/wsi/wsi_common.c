@@ -3276,6 +3276,9 @@ wsi_create_buffer_blit_context(const struct wsi_swapchain *chain,
 static void
 wsi_label_cmd_buffer(const struct wsi_device *wsi, VkDevice device, VkCommandBuffer cmd_buffer, const char *name)
 {
+   if (!wsi->SetDebugUtilsObjectNameEXT)
+      return;
+
    VkDebugUtilsObjectNameInfoEXT name_info = {
       .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
       .pNext = NULL,
