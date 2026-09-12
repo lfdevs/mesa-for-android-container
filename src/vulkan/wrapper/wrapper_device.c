@@ -112,6 +112,7 @@ wrapper_append_required_extensions(const struct vk_device *device,
    REQUIRED_EXTENSION(EXT_queue_family_foreign);
    REQUIRED_EXTENSION(KHR_maintenance1)
    REQUIRED_EXTENSION(KHR_maintenance2)
+   REQUIRED_EXTENSION(KHR_synchronization2)
    REQUIRED_EXTENSION(KHR_image_format_list)
    REQUIRED_EXTENSION(KHR_swapchain);
    REQUIRED_EXTENSION(KHR_timeline_semaphore);
