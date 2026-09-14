@@ -3203,15 +3203,17 @@ drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *im
          assert((int)surface->src_rgb[5].extent.width > 0);
       }
 
+      uint16_t hdisplay = mode->hdisplay / 2;
+
       for (int i = 0; i < 2; i++) { // for each eye
          VkRect2D dst_r = surface->dst_rgb[RED_L + i];
          VkRect2D dst_g = surface->dst_rgb[GREEN_L + i];
          VkRect2D dst_b = surface->dst_rgb[BLUE_L + i];
          if (i & 1) {
             // per screen coordinates for dst
-            dst_r.offset.x -= 2160;
-            dst_g.offset.x -= 2160;
-            dst_b.offset.x -= 2160;
+            dst_r.offset.x -= hdisplay;
+            dst_g.offset.x -= hdisplay;
+            dst_b.offset.x -= hdisplay;
          }
 
          VkRect2D src_r = surface->src_rgb[RED_L + i];
@@ -3233,7 +3235,7 @@ drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *im
          // because of 2, the goal should be to split src_unpack into equal halves to minimize double fetching
          // this just splits across the left/right mixers (as if the combined mixer feature wasn't used)
 
-         uint32_t mid_x = 1080;
+         uint32_t mid_x = hdisplay/2;
 
          uint32_t phase_step_r, phase_init_r;
          uint32_t phase_step_g, phase_init_g;
@@ -3280,7 +3282,7 @@ drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *im
          }
 
          if (rotation_value & DRM_MODE_REFLECT_X) {
-            unsigned k = i ? 2160*3 : 2160;
+            unsigned k = i ? hdisplay*3 : hdisplay;
             cac[i].src_unpack.x = k - (cac[i].src_unpack.x + cac[i].src_unpack.w);
             cac[i+2].src_unpack.x = k - (cac[i+2].src_unpack.x + cac[i+2].src_unpack.w);
          }
