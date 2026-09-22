@@ -150,13 +150,38 @@ static int tva_dbg_seq;
  * video formats before the bridge receives the request. */
 
 static bool
+tva_option_enabled(const char *name)
+{
+    const char *value = os_get_option(name);
+
+    return value && *value &&
+           (strcmp(value, "1") == 0 || strcmp(value, "true") == 0 ||
+            strcmp(value, "on") == 0);
+}
+
+static bool
+tva_avc_disabled(void)
+{
+    return tva_option_enabled("TERMUX_VA_DISABLE_AVC") ||
+           tva_option_enabled("TERMUX_VA_DISABLE_H264");
+}
+
+static bool
+tva_hevc_disabled(void)
+{
+    return tva_option_enabled("TERMUX_VA_DISABLE_HEVC");
+}
+
+static bool
+tva_vp9_disabled(void)
+{
+    return tva_option_enabled("TERMUX_VA_DISABLE_VP9");
+}
+
+static bool
 tva_av1_disabled(void)
 {
-    const char *disable = os_get_option("TERMUX_VA_DISABLE_AV1");
-
-    return disable && *disable &&
-           (strcmp(disable, "1") == 0 || strcmp(disable, "true") == 0 ||
-            strcmp(disable, "on") == 0);
+    return tva_option_enabled("TERMUX_VA_DISABLE_AV1");
 }
 
 static bool
@@ -166,9 +191,11 @@ tva_profile_supported(enum pipe_video_profile profile)
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
+        return !tva_avc_disabled();
     case PIPE_VIDEO_PROFILE_HEVC_MAIN:
+        return !tva_hevc_disabled();
     case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
-        return true;
+        return !tva_vp9_disabled();
     case PIPE_VIDEO_PROFILE_AV1_MAIN:
         return !tva_av1_disabled();
     default:
