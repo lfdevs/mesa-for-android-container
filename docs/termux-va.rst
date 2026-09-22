@@ -40,12 +40,16 @@ like an unmodified one until activation:
 When the bridge is active but the daemon is unreachable, driver init
 fails cleanly and applications fall back to software decoding.
 
-``TERMUX_VA_DISABLE_AV1=1`` suppresses the AV1 Main profile while leaving
-H.264, HEVC, and VP9 available through the bridge.  Use it when Android has no
-hardware AV1 decoder and MediaCodec would select a software component such as
-``c2.android.av1-dav1d.decoder`` or ``OMX.google.*``.  This avoids advertising
-software decoding through VA-API and lets applications use their native AV1
-software fallback without the bridge's transport and presentation overhead.
+The bridge can selectively hide hardware decode profiles from libva.  Set
+``TERMUX_VA_DISABLE_AVC=1`` (or the compatibility alias
+``TERMUX_VA_DISABLE_H264=1``) to disable H.264/AVC, or set
+``TERMUX_VA_DISABLE_HEVC=1``, ``TERMUX_VA_DISABLE_VP9=1``, or
+``TERMUX_VA_DISABLE_AV1=1`` for the corresponding codec.  The values ``1``,
+``true``, and ``on`` enable a switch.  A hidden profile is not advertised by
+VA-API, so applications can use their native software decoder instead of
+sending that format through the bridge.  This is useful when Android's
+MediaCodec exposes only a software component for a format, or when a codec
+needs to be disabled for compatibility testing.
 
 Socket location
 ---------------

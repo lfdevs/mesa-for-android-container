@@ -1445,6 +1445,26 @@ decode).  See :doc:`termux-va`.
    - ``drm``: use stock loader selection only.
    - ``sw``: use llvmpipe only; no GPU is needed for the CPU frame-copy paths.
 
+.. envvar:: TERMUX_VA_DISABLE_AVC
+
+   set to ``1``, ``true`` or ``on`` to hide the H.264/AVC profiles from
+   libva.  ``TERMUX_VA_DISABLE_H264`` is accepted as a compatibility alias.
+
+.. envvar:: TERMUX_VA_DISABLE_HEVC
+
+   set to ``1``, ``true`` or ``on`` to hide the HEVC Main profile from libva.
+
+.. envvar:: TERMUX_VA_DISABLE_VP9
+
+   set to ``1``, ``true`` or ``on`` to hide the VP9 Profile 0 profile from
+   libva.
+
+.. envvar:: TERMUX_VA_DISABLE_AV1
+
+   set to ``1``, ``true`` or ``on`` to hide the AV1 Main profile from libva.
+   This is useful when Android exposes only a software MediaCodec component
+   for AV1, so applications can use their native software decoder instead.
+
 .. envvar:: DMD_WANT_SHM
 
    set to ``0`` to disable the memfd shared-memory frame transport
