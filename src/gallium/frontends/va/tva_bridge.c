@@ -2755,14 +2755,18 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
                 if (!c->h264_pps_defaults_valid) {
                     /* VA-API does not preserve the slice override flag, so
                      * the per-picture list lengths cannot be used as PPS
-                     * defaults.  Use the fixed DPB size exposed by VA-API;
-                     * changing the synthetic PPS while decoding makes
-                     * Qualcomm MediaCodec reset and eventually lose output. */
-                    unsigned default_refs = c->base.max_references
-                                            ? MIN2(c->base.max_references, 16) - 1
-                                            : 0;
-                    c->h264_pps_l0_default = default_refs;
-                    c->h264_pps_l1_default = default_refs;
+                     * defaults.  The DPB size is also not the same thing as
+                     * the PPS active-list defaults: Bilibili and Chromium
+                     * streams commonly use two L0 references and no L1
+                     * references while advertising a larger DPB.  Keep a
+                     * conservative, stable default instead of emitting a
+                     * six-reference PPS that Qualcomm MediaCodec rejects
+                     * when a slice relies on the original PPS default. */
+                    unsigned default_l0 = c->base.max_references
+                                          ? MIN2(c->base.max_references, 3) - 1
+                                          : 0;
+                    c->h264_pps_l0_default = default_l0;
+                    c->h264_pps_l1_default = 0;
                     c->h264_pps_defaults_valid = true;
                 }
                 size_t sps_rbsp_len = tva_build_h264_sps(c->base.profile,
