@@ -150,6 +150,16 @@ static int tva_dbg_seq;
  * video formats before the bridge receives the request. */
 
 static bool
+tva_av1_disabled(void)
+{
+    const char *disable = os_get_option("TERMUX_VA_DISABLE_AV1");
+
+    return disable && *disable &&
+           (strcmp(disable, "1") == 0 || strcmp(disable, "true") == 0 ||
+            strcmp(disable, "on") == 0);
+}
+
+static bool
 tva_profile_supported(enum pipe_video_profile profile)
 {
     switch (profile) {
@@ -158,8 +168,9 @@ tva_profile_supported(enum pipe_video_profile profile)
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
     case PIPE_VIDEO_PROFILE_HEVC_MAIN:
     case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
-    case PIPE_VIDEO_PROFILE_AV1_MAIN:
         return true;
+    case PIPE_VIDEO_PROFILE_AV1_MAIN:
+        return !tva_av1_disabled();
     default:
         return false;
     }

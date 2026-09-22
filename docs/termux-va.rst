@@ -13,7 +13,7 @@ placed in the shared tmp directory, and a bridge on the container side.
 The daemon lives in the `termux-va` repository; the wire protocol is
 byte-compatible with droidspaces-media-decode protocol v3.
 
-Supported codecs: H.264 (Constrained Baseline / Main / High) and VP9 Profile 0, outputting NV12 progressive frames. HEVC parsing is present in the frontend, but VPS/SPS/PPS synthesis is not complete, so HEVC is not advertised yet. Profiles are advertised to libva through the underlying screen; encode and other codecs are not provided.
+Supported codecs: H.264 (Constrained Baseline / Main / High), HEVC Main, VP9 Profile 0, and AV1 Main, outputting NV12 progressive frames. Profiles are advertised to libva through the underlying screen; encode and other codecs are not provided.
 
 Building
 --------
@@ -39,6 +39,13 @@ like an unmodified one until activation:
 
 When the bridge is active but the daemon is unreachable, driver init
 fails cleanly and applications fall back to software decoding.
+
+``TERMUX_VA_DISABLE_AV1=1`` suppresses the AV1 Main profile while leaving
+H.264, HEVC, and VP9 available through the bridge.  Use it when Android has no
+hardware AV1 decoder and MediaCodec would select a software component such as
+``c2.android.av1-dav1d.decoder`` or ``OMX.google.*``.  This avoids advertising
+software decoding through VA-API and lets applications use their native AV1
+software fallback without the bridge's transport and presentation overhead.
 
 Socket location
 ---------------
