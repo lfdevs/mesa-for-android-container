@@ -96,6 +96,35 @@ fill_fake_drm_version(struct drm_version *version)
       memcpy(version->name, "kgsl", 4);
 }
 
+/* GBM probes a render node with DRM_IOCTL_GET_CAP before it creates a
+ * native-pixmap buffer.  KGSL is not a DRM device and returns ENOTTY for this
+ * request, but the Mesa KGSL driver already provides the actual allocation
+ * path.  Report only the capability answers needed by the userspace probe;
+ * do not claim PRIME or modifier support that KGSL cannot provide. */
+static bool
+fill_fake_drm_cap(struct drm_get_cap *cap)
+{
+   if (!cap)
+      return false;
+
+   switch (cap->capability) {
+   case DRM_CAP_TIMESTAMP_MONOTONIC:
+      cap->value = 1;
+      break;
+   case DRM_CAP_PRIME:
+      cap->value = DRM_PRIME_CAP_IMPORT | DRM_PRIME_CAP_EXPORT;
+      break;
+   case DRM_CAP_DUMB_BUFFER:
+   case DRM_CAP_ADDFB2_MODIFIERS:
+      cap->value = 0;
+      break;
+   default:
+      cap->value = 0;
+      break;
+   }
+   return true;
+}
+
 /* Chromium's Wayland Ozone code issues this ioctl directly instead of going
  * through libdrm.  KGSL is not a DRM device, so provide only the version
  * response needed by its render-node handle validation. */
@@ -109,11 +138,25 @@ ioctl(int fd, tva_ioctl_request_t request, ...)
    void *arg = va_arg(ap, void *);
    va_end(ap);
 
+   if (getenv("TERMUX_VA_DRM_SHIM_LOG") && is_kgsl_fd(fd))
+      fprintf(stderr, "tva-drm-shim: ioctl fd=%d request=0x%lx arg=%p\n",
+              fd, (unsigned long)request, arg);
+
    if (is_kgsl_fd(fd) &&
        request == (tva_ioctl_request_t) DRM_IOCTL_VERSION && arg) {
       fill_fake_drm_version(arg);
       if (getenv("TERMUX_VA_DRM_SHIM_LOG"))
          fprintf(stderr, "tva-drm-shim: ioctl DRM_IOCTL_VERSION fd=%d\n", fd);
+      return 0;
+   }
+
+   if (is_kgsl_fd(fd) &&
+       request == (tva_ioctl_request_t) DRM_IOCTL_GET_CAP && arg &&
+       fill_fake_drm_cap(arg)) {
+      if (getenv("TERMUX_VA_DRM_SHIM_LOG"))
+         fprintf(stderr, "tva-drm-shim: ioctl DRM_IOCTL_GET_CAP fd=%d cap=%llu value=%llu\n",
+                 fd, (unsigned long long)((struct drm_get_cap *)arg)->capability,
+                 (unsigned long long)((struct drm_get_cap *)arg)->value);
       return 0;
    }
 
@@ -148,8 +191,24 @@ int
 drmIoctl(int fd, unsigned long request, void *arg)
 {
    init_real();
+   if (getenv("TERMUX_VA_DRM_SHIM_LOG") && is_kgsl_fd(fd))
+      fprintf(stderr, "tva-drm-shim: drmIoctl fd=%d request=0x%lx arg=%p\n",
+              fd, request, arg);
+   if (getenv("TERMUX_VA_DRM_SHIM_LOG") && is_kgsl_fd(fd) &&
+       request == DRM_IOCTL_GET_CAP)
+      fprintf(stderr, "tva-drm-shim: GET_CAP matched expected=0x%lx\n",
+              (unsigned long)DRM_IOCTL_GET_CAP);
    if (is_kgsl_fd(fd) && request == DRM_IOCTL_VERSION && arg) {
       fill_fake_drm_version(arg);
+      return 0;
+   }
+
+   if (is_kgsl_fd(fd) && request == DRM_IOCTL_GET_CAP && arg &&
+       fill_fake_drm_cap(arg)) {
+      if (getenv("TERMUX_VA_DRM_SHIM_LOG"))
+         fprintf(stderr, "tva-drm-shim: drmIoctl GET_CAP cap=%llu value=%llu\n",
+                 (unsigned long long)((struct drm_get_cap *)arg)->capability,
+                 (unsigned long long)((struct drm_get_cap *)arg)->value);
       return 0;
    }
 
