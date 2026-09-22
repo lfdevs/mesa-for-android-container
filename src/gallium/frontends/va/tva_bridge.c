@@ -3216,25 +3216,43 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
             last_vcl = pending && pending->unit_seq ? pending->unit_seq :
                        (uint32_t)(c->next_unit + 1);
     } else {
-        /* VP9 (no-start-code codec): one whole frame */
-        TVA_TRACE("sending whole frame, len=%zu", c->acc_len);
-        struct tva_fence *fence = CALLOC_STRUCT(tva_fence);
-        if (!fence)
-            return -1;
-        mtx_lock(&c->pend_mutex);
-        pending = tva_pend_reserve_locked(c, (uint32_t)(c->next_unit + 1),
-                                          target, fence);
-        mtx_unlock(&c->pend_mutex);
-        if (!pending) {
-            FREE(fence);
+        /* Chromium splits VP9 superframes into individual pictures.  Hidden
+         * reference pictures must reach MediaCodec, but they do not produce
+         * an output buffer.  Reserving a pending entry for them would leave a
+         * permanent hole in the queue and eventually exhaust it. */
+        const struct pipe_vp9_picture_desc *vp9 =
+            (const struct pipe_vp9_picture_desc *)picture;
+        const bool show_frame = !vp9 ||
+            vp9->picture_parameter.pic_fields.show_frame;
+        if (c->next_unit >= UINT32_MAX) {
+            debug_printf("tva: VP9 input unit sequence exhausted\n");
             c->acc_len = 0;
+            tva_mark_broken(c);
             return -1;
+        }
+        const uint32_t unit_seq = (uint32_t)c->next_unit + 1;
+        struct tva_fence *fence = NULL;
+        if (show_frame) {
+            fence = CALLOC_STRUCT(tva_fence);
+            if (!fence)
+                return -1;
+            mtx_lock(&c->pend_mutex);
+            pending = tva_pend_reserve_locked(c, unit_seq, target, fence);
+            mtx_unlock(&c->pend_mutex);
+            if (!pending) {
+                FREE(fence);
+                c->acc_len = 0;
+                return -1;
+            }
         }
         if (picture && picture->out_fence) {
             if (*picture->out_fence)
                 tva_codec_destroy_fence(codec, *picture->out_fence);
-            *picture->out_fence = (struct pipe_fence_handle *)fence;
+            *picture->out_fence = show_frame
+                ? (struct pipe_fence_handle *)fence : NULL;
         }
+        TVA_TRACE("sending whole VP9 frame, len=%zu unit=%u show=%d",
+                  c->acc_len, unit_seq, show_frame);
         int r = tva_session_send_unit(c->sess, c->acc, c->acc_len);
         if (r != TVA_OK) {
             debug_printf("tva: send_unit failed: %s\n",
@@ -3245,11 +3263,8 @@ tva_codec_end_frame(struct pipe_video_codec *codec,
             return -1;
         }
         c->next_unit++;
-        last_vcl = (uint32_t)c->next_unit;
-        mtx_lock(&c->pend_mutex);
-        if (pending)
-            pending->unit_seq = last_vcl;
-        mtx_unlock(&c->pend_mutex);
+        if (show_frame)
+            last_vcl = unit_seq;
     }
 
     if (!last_vcl) {
