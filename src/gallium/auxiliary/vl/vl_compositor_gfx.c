@@ -26,6 +26,7 @@
  **************************************************************************/
 
 #include <assert.h>
+#include <stdlib.h>
 
 #include "util/compiler.h"
 #include "pipe/p_context.h"
@@ -417,8 +418,16 @@ create_frag_shader_rgba(struct vl_compositor *c)
    /*
     * fragment = tex(tc, sampler)
     */
-   ureg_TEX(shader, texel, TGSI_TEXTURE_2D, tc, sampler);
-   ureg_MUL(shader, fragment, ureg_src(texel), color);
+   if (getenv("DMD_VA_PROBE")) {
+      /* Temporary diagnostic: exercise the complete draw path without a
+       * texture fetch.  A non-zero target proves that the failure is in
+       * source visibility or texture sampling rather than framebuffer setup.
+       */
+      ureg_MOV(shader, fragment, ureg_imm4f(shader, 1.0f, 0.0f, 0.0f, 1.0f));
+   } else {
+      ureg_TEX(shader, texel, TGSI_TEXTURE_2D, tc, sampler);
+      ureg_MUL(shader, fragment, ureg_src(texel), color);
+   }
    ureg_END(shader);
 
    return ureg_create_shader_and_destroy(shader, c->pipe);
@@ -596,6 +605,7 @@ static void
 gen_vertex_data(struct vl_compositor *c, struct vl_compositor_state *s, struct u_rect *dirty, struct pipe_resource **releasebuf)
 {
    struct vertex2f *vb;
+   struct vertex2f *base;
    unsigned i;
 
    assert(c);
@@ -607,6 +617,7 @@ gen_vertex_data(struct vl_compositor *c, struct vl_compositor_state *s, struct u
                   &c->vertex_buf.buffer_offset, &c->vertex_buf.buffer.resource,
                   releasebuf,
                   (void **)&vb);
+   base = vb;
 
    for (i = 0; i < VL_COMPOSITOR_MAX_LAYERS; i++) {
       if (s->used_layers & (1 << i)) {
@@ -636,6 +647,15 @@ gen_vertex_data(struct vl_compositor *c, struct vl_compositor_state *s, struct u
          }
       }
    }
+
+   if (getenv("DMD_VA_PROBE") && (s->used_layers & 1))
+      fprintf(stderr, "tva-vl layer dst=%g,%g-%g,%g vp=%g,%g+%g,%g vertices p0=%g,%g p1=%g,%g p2=%g,%g p3=%g,%g\n",
+              s->layers[0].dst.tl.x, s->layers[0].dst.tl.y,
+              s->layers[0].dst.br.x, s->layers[0].dst.br.y,
+              s->layers[0].viewport.scale[0], s->layers[0].viewport.scale[1],
+              s->layers[0].viewport.translate[0], s->layers[0].viewport.translate[1],
+              base[0].x, base[0].y, base[5].x, base[5].y,
+              base[10].x, base[10].y, base[15].x, base[15].y);
 
    u_upload_unmap(c->pipe->stream_uploader);
 }
@@ -683,7 +703,11 @@ draw_layers(struct vl_compositor *c, struct vl_compositor_state *s, struct u_rec
          c->pipe->set_sampler_views(c->pipe, MESA_SHADER_FRAGMENT, 0,
                                     num_sampler_views, 0, samplers);
 
-         util_draw_arrays(c->pipe, MESA_PRIM_QUADS, vb_index * 4, 4);
+         /* Freedreno's hardware primitive table does not implement
+          * MESA_PRIM_QUADS (it maps to DI_PT_NONE).  A triangle fan keeps
+          * both triangles wound consistently on Adreno while retaining the
+          * four-vertex compositor layout. */
+         util_draw_arrays(c->pipe, MESA_PRIM_TRIANGLE_FAN, vb_index * 4, 4);
          vb_index++;
 
          if (dirty) {
@@ -730,6 +754,13 @@ vl_compositor_gfx_render(struct vl_compositor_state *s,
                                    0, 0, c->fb_state.width, c->fb_state.height, false);
       dirty_area->x0 = dirty_area->y0 = VL_COMPOSITOR_MAX_DIRTY;
       dirty_area->x1 = dirty_area->y1 = VL_COMPOSITOR_MIN_DIRTY;
+   }
+
+   if (getenv("DMD_VA_CLEAR_BEFORE_DRAW")) {
+      union pipe_color_union color = { .f = { 0.0f, 1.0f, 0.0f, 1.0f } };
+      c->pipe->clear_render_target(c->pipe, dst_surface, &color,
+                                   0, 0, c->fb_state.width,
+                                   c->fb_state.height, false);
    }
 
    c->pipe->set_framebuffer_state(c->pipe, &c->fb_state);

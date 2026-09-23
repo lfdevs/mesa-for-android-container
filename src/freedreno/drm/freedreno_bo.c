@@ -268,6 +268,24 @@ fd_bo_from_dmabuf(struct fd_device *dev, int fd)
    return dev->funcs->bo_from_dmabuf(dev, fd);
 }
 
+int
+fd_bo_sync_to_gpu(struct fd_bo *bo)
+{
+   if (!bo)
+      return 0;
+
+   /* Uploaders commonly suballocate small command, vertex, and constant
+    * buffers from a KGSL heap block.  The suballocation has no kernel handle
+    * of its own, so synchronize the real backing BO instead. */
+   if (suballoc_bo(bo))
+      bo = fd_bo_heap_block(bo);
+
+   if (!bo->funcs->sync_to_gpu)
+      return 0;
+
+   return bo->funcs->sync_to_gpu(bo);
+}
+
 struct fd_bo *
 fd_bo_from_name(struct fd_device *dev, uint32_t name)
 {
@@ -844,4 +862,3 @@ fd_bo_state(struct fd_bo *bo)
 
    return FD_BO_STATE_BUSY;
 }
-

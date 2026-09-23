@@ -61,6 +61,9 @@ endif
 if with_gallium_or_lvp or with_gbm or with_platform_wayland or with_platform_x11
   subdir('loader')
 endif
+if with_termux_va_wayland_shim
+  subdir('termux-va')
+endif
 subdir('compiler')
 if with_poly
   subdir('poly')

@@ -26,6 +26,9 @@
 #include "tu_lrz.h"
 #include "tu_tracepoints.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+
 static const VkOffset2D blt_no_coord = { ~0, ~0 };
 
 /* The helpers below quantize floats to match shader export behavior and avoid
@@ -2693,6 +2696,29 @@ tu_copy_buffer_to_image(struct tu_cmd_buffer *cmd,
    uint32_t pitch = src_width * block_size;
    uint32_t layer_size = src_height * pitch;
 
+   if (getenv("TU_KGSL_DEBUG_COPY")) {
+      fprintf(stderr,
+              "tu upload fmt=%d aspect=%#x srcfmt=%d dstfmt=%d img=%llu "
+              "extent=%ux%u off=%d,%d src_iova=%#llx img_iova=%#llx "
+              "img_size=%llu row=%u height=%u boff=%llu\n",
+              dst_image->vk.format, info->imageSubresource.aspectMask,
+              src_format, dst_format,
+              (unsigned long long)dst_image->total_size,
+              extent.width, extent.height, offset.x, offset.y,
+              (unsigned long long)vk_buffer_address(&src_buffer->vk,
+                                                    info->bufferOffset),
+              (unsigned long long)dst_image->iova,
+              (unsigned long long)dst_image->total_size,
+              info->bufferRowLength, info->bufferImageHeight,
+              (unsigned long long)info->bufferOffset);
+      if (src_buffer->bo->map) {
+         const uint8_t *p = (const uint8_t *)src_buffer->bo->map +
+                            info->bufferOffset;
+         fprintf(stderr, "tu upload src bytes=%02x %02x %02x %02x %02x %02x %02x %02x\n",
+                 p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+      }
+   }
+
    ops->setup(cmd, cs, src_format, dst_format,
               info->imageSubresource.aspectMask, blit_param, false, dst_image->layout[0].ubwc,
               (VkSampleCountFlagBits) dst_image->layout[0].nr_samples,
@@ -2899,7 +2925,10 @@ tu_copy_image_to_buffer(struct tu_cmd_buffer *cmd,
 
    /* note: could use "R8_UNORM" when no UBWC */
    unsigned blit_param = 0;
-   if (dst_format == PIPE_FORMAT_Y8_UNORM) {
+   if (dst_format == PIPE_FORMAT_Y8_UNORM ||
+       (getenv("TU_KGSL_FORCE_R3D_COPY") &&
+        (dst_format == PIPE_FORMAT_R8_UNORM ||
+         dst_format == PIPE_FORMAT_R8G8_UNORM))) {
       ops = &r3d_ops<CHIP>;
       blit_param = R3D_COPY;
    }
@@ -2915,6 +2944,29 @@ tu_copy_image_to_buffer(struct tu_cmd_buffer *cmd,
    uint32_t pitch = dst_width * block_size;
    uint32_t layer_size = pitch * dst_height;
 
+   if (getenv("TU_KGSL_DEBUG_COPY")) {
+      unsigned plane = tu6_plane_index(src_image->vk.format,
+                                       info->imageSubresource.aspectMask);
+      const struct fdl_layout *layout = &src_image->layout[plane];
+      fprintf(stderr,
+              "tu copy fmt=%d aspect=%#x plane=%u srcfmt=%d dstfmt=%d "
+              "img=%llu extent=%ux%u off=%d,%d layout=%ux%u pitch=%u "
+              "layer=%llu iova=%#llx dst_iova=%#llx dst_size=%llu "
+              "row=%u height=%u boff=%llu ops=%s\n",
+              src_image->vk.format, info->imageSubresource.aspectMask, plane,
+              src_format, dst_format, (unsigned long long)src_image->total_size,
+              extent.width, extent.height, offset.x, offset.y,
+              layout->width0, layout->height0, fdl_pitch(layout, 0),
+              (unsigned long long)fdl_layer_stride(layout, 0),
+              (unsigned long long)src_image->iova,
+              (unsigned long long)vk_buffer_address(&dst_buffer->vk,
+                                                    info->bufferOffset),
+              (unsigned long long)dst_buffer->bo->size,
+              info->bufferRowLength, info->bufferImageHeight,
+              (unsigned long long)info->bufferOffset,
+              ops == &r3d_ops<CHIP> ? "r3d" : "r2d");
+   }
+
    handle_buffer_unaligned_store<CHIP>(cmd,
                                        vk_buffer_address(&dst_buffer->vk, info->bufferOffset),
                                        layer_size * layers, unaligned_store);
@@ -2925,6 +2977,15 @@ tu_copy_image_to_buffer(struct tu_cmd_buffer *cmd,
    struct fdl6_view src;
    tu_image_view_copy<CHIP>(&src, src_image, src_format,
                             &info->imageSubresource, offset.z);
+
+   if (getenv("TU_KGSL_DEBUG_COPY")) {
+      fprintf(stderr,
+              "tu copy view base=%#llx off=%u pitch=%u layer=%u size=%ux%u "
+              "format=%d ubwc=%d\n",
+              (unsigned long long)src.base_addr, src.offset, src.pitch,
+              src.layer_size, src.width, src.height, src.format,
+              src.ubwc_enabled);
+   }
 
    for (uint32_t i = 0; i < layers; i++) {
       ops->src(cmd, cs, &src, i, VK_FILTER_NEAREST, dst_format);

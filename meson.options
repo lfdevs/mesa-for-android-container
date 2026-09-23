@@ -109,6 +109,20 @@ option(
 )
 
 option(
+  'termux-va-bridge',
+  type : 'feature',
+  value : 'auto',
+  description : 'build the termux-va bridge into the VA frontend (VA decode forwarded over a Unix socket to the Termux termux-va daemon; runtime-gated by the TERMUX_VA_* environment variables)',
+)
+
+option(
+  'termux-va-wayland-shim',
+  type : 'feature',
+  value : 'disabled',
+  description : 'build the LD_PRELOAD DRM compatibility shim for Chromium Wayland in DRM-less KGSL PRoot containers',
+)
+
+option(
   'gallium-mediafoundation',
   type : 'feature',
   deprecated: {'true': 'enabled', 'false': 'disabled'},

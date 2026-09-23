@@ -316,6 +316,7 @@ int fd_bo_get_name(struct fd_bo *bo, uint32_t *name);
 uint32_t fd_bo_handle(struct fd_bo *bo);
 int fd_bo_dmabuf_drm(struct fd_bo *bo);
 int fd_bo_dmabuf(struct fd_bo *bo);
+int fd_bo_sync_to_gpu(struct fd_bo *bo);
 uint32_t fd_bo_size(struct fd_bo *bo);
 void *fd_bo_map(struct fd_bo *bo);
 void fd_bo_upload(struct fd_bo *bo, void *src, unsigned off, unsigned len);
