@@ -28,6 +28,7 @@
 #include <xf86drm.h>
 
 static const char *const kgsl_path = "/dev/kgsl-3d0";
+static const char *const mali_path = "/dev/mali0";
 
 #if defined(__GLIBC__) || defined(__BIONIC__)
 typedef unsigned long tva_ioctl_request_t;
@@ -54,6 +55,23 @@ static char *(*real_drmGetRenderDeviceNameFromFd)(int);
 static char *(*real_drmGetPrimaryDeviceNameFromFd)(int);
 
 static bool is_kgsl_fd(int fd);
+static bool is_mali_fd(int fd);
+
+static const char *
+compat_device_path_for_fd(int fd)
+{
+   if (is_kgsl_fd(fd))
+      return kgsl_path;
+   if (is_mali_fd(fd))
+      return mali_path;
+   return NULL;
+}
+
+static const char *
+compat_driver_name_for_fd(int fd)
+{
+   return is_mali_fd(fd) ? "mali" : "kgsl";
+}
 
 static void
 init_real(void)
@@ -82,7 +100,7 @@ init_real(void)
 }
 
 static void
-fill_fake_drm_version(struct drm_version *version)
+fill_fake_drm_version(struct drm_version *version, const char *name)
 {
    int name_capacity = version->name_len;
 
@@ -93,14 +111,14 @@ fill_fake_drm_version(struct drm_version *version)
    version->date_len = 0;
    version->desc_len = 0;
    if (version->name && name_capacity >= 4)
-      memcpy(version->name, "kgsl", 4);
+      memcpy(version->name, name, 4);
 }
 
 /* GBM probes a render node with DRM_IOCTL_GET_CAP before it creates a
- * native-pixmap buffer.  KGSL is not a DRM device and returns ENOTTY for this
- * request, but the Mesa KGSL driver already provides the actual allocation
- * path.  Report only the capability answers needed by the userspace probe;
- * do not claim PRIME or modifier support that KGSL cannot provide. */
+ * native-pixmap buffer.  KGSL and Mali are not DRM devices and return ENOTTY
+ * for this request, but Mesa's KGSL driver already provides the actual
+ * allocation path.  Report only the capability answers needed by the
+ * userspace probe; do not claim modifier support. */
 static bool
 fill_fake_drm_cap(struct drm_get_cap *cap)
 {
@@ -126,8 +144,8 @@ fill_fake_drm_cap(struct drm_get_cap *cap)
 }
 
 /* Chromium's Wayland Ozone code issues this ioctl directly instead of going
- * through libdrm.  KGSL is not a DRM device, so provide only the version
- * response needed by its render-node handle validation. */
+ * through libdrm.  Neither KGSL nor Mali is a DRM device, so provide only the
+ * version response needed by render-node handle validation. */
 int
 ioctl(int fd, tva_ioctl_request_t request, ...)
 {
@@ -138,24 +156,27 @@ ioctl(int fd, tva_ioctl_request_t request, ...)
    void *arg = va_arg(ap, void *);
    va_end(ap);
 
-   if (getenv("TERMUX_VA_DRM_SHIM_LOG") && is_kgsl_fd(fd))
+   const char *device_path = compat_device_path_for_fd(fd);
+   if (getenv("TERMUX_VA_DRM_SHIM_LOG") && device_path)
       fprintf(stderr, "tva-drm-shim: ioctl fd=%d request=0x%lx arg=%p\n",
               fd, (unsigned long)request, arg);
 
-   if (is_kgsl_fd(fd) &&
+   if (device_path &&
        request == (tva_ioctl_request_t) DRM_IOCTL_VERSION && arg) {
-      fill_fake_drm_version(arg);
+      fill_fake_drm_version(arg, compat_driver_name_for_fd(fd));
       if (getenv("TERMUX_VA_DRM_SHIM_LOG"))
-         fprintf(stderr, "tva-drm-shim: ioctl DRM_IOCTL_VERSION fd=%d\n", fd);
+         fprintf(stderr, "tva-drm-shim: ioctl DRM_IOCTL_VERSION fd=%d device=%s\n",
+                 fd, device_path);
       return 0;
    }
 
-   if (is_kgsl_fd(fd) &&
+   if (device_path &&
        request == (tva_ioctl_request_t) DRM_IOCTL_GET_CAP && arg &&
        fill_fake_drm_cap(arg)) {
       if (getenv("TERMUX_VA_DRM_SHIM_LOG"))
-         fprintf(stderr, "tva-drm-shim: ioctl DRM_IOCTL_GET_CAP fd=%d cap=%llu value=%llu\n",
-                 fd, (unsigned long long)((struct drm_get_cap *)arg)->capability,
+         fprintf(stderr, "tva-drm-shim: ioctl DRM_IOCTL_GET_CAP fd=%d device=%s cap=%llu value=%llu\n",
+                 fd, device_path,
+                 (unsigned long long)((struct drm_get_cap *)arg)->capability,
                  (unsigned long long)((struct drm_get_cap *)arg)->value);
       return 0;
    }
@@ -187,23 +208,46 @@ is_kgsl_dev(dev_t dev)
    return stat(kgsl_path, &st) == 0 && st.st_rdev == dev;
 }
 
+/* Mali is accepted only when an application explicitly opens /dev/mali0
+ * (for example through --hardware-video-device-path).  Keep it out of
+ * drmGetDevices2 so it cannot be selected as the graphics render node; the
+ * termux-va llvmpipe backend uses this fd only to initialize libva. */
+static bool
+is_mali_fd(int fd)
+{
+   struct stat fd_st;
+   struct stat mali_st;
+
+   return fstat(fd, &fd_st) == 0 && stat(mali_path, &mali_st) == 0 &&
+          S_ISCHR(fd_st.st_mode) && fd_st.st_rdev == mali_st.st_rdev;
+}
+
+static bool
+is_mali_dev(dev_t dev)
+{
+   struct stat st;
+
+   return stat(mali_path, &st) == 0 && st.st_rdev == dev;
+}
+
 int
 drmIoctl(int fd, unsigned long request, void *arg)
 {
    init_real();
-   if (getenv("TERMUX_VA_DRM_SHIM_LOG") && is_kgsl_fd(fd))
+   const char *device_path = compat_device_path_for_fd(fd);
+   if (getenv("TERMUX_VA_DRM_SHIM_LOG") && device_path)
       fprintf(stderr, "tva-drm-shim: drmIoctl fd=%d request=0x%lx arg=%p\n",
               fd, request, arg);
-   if (getenv("TERMUX_VA_DRM_SHIM_LOG") && is_kgsl_fd(fd) &&
+   if (getenv("TERMUX_VA_DRM_SHIM_LOG") && device_path &&
        request == DRM_IOCTL_GET_CAP)
       fprintf(stderr, "tva-drm-shim: GET_CAP matched expected=0x%lx\n",
               (unsigned long)DRM_IOCTL_GET_CAP);
-   if (is_kgsl_fd(fd) && request == DRM_IOCTL_VERSION && arg) {
-      fill_fake_drm_version(arg);
+   if (device_path && request == DRM_IOCTL_VERSION && arg) {
+      fill_fake_drm_version(arg, compat_driver_name_for_fd(fd));
       return 0;
    }
 
-   if (is_kgsl_fd(fd) && request == DRM_IOCTL_GET_CAP && arg &&
+   if (device_path && request == DRM_IOCTL_GET_CAP && arg &&
        fill_fake_drm_cap(arg)) {
       if (getenv("TERMUX_VA_DRM_SHIM_LOG"))
          fprintf(stderr, "tva-drm-shim: drmIoctl GET_CAP cap=%llu value=%llu\n",
@@ -220,7 +264,7 @@ drmIoctl(int fd, unsigned long request, void *arg)
 }
 
 static drmDevicePtr
-make_fake_device(void)
+make_fake_device(const char *node_path)
 {
    drmDevicePtr device = calloc(1, sizeof(*device));
    if (!device)
@@ -232,14 +276,14 @@ make_fake_device(void)
    if (!device->nodes || !device->businfo.pci || !device->deviceinfo.pci)
       goto fail;
 
-   device->nodes[DRM_NODE_RENDER] = strdup(kgsl_path);
-   device->nodes[DRM_NODE_PRIMARY] = strdup(kgsl_path);
+   device->nodes[DRM_NODE_RENDER] = strdup(node_path);
+   device->nodes[DRM_NODE_PRIMARY] = strdup(node_path);
    if (!device->nodes[DRM_NODE_RENDER] || !device->nodes[DRM_NODE_PRIMARY])
       goto fail;
 
    /* Chromium's VA-API discovery currently filters out non-PCI devices.
-    * Keep the KGSL path while presenting the same neutral PCI identity that
-    * the container's ANGLE setup uses. */
+    * Present a neutral PCI identity for the opened KGSL/Mali node; this is
+    * only compatibility metadata and does not make either node a DRM device. */
    device->businfo.pci->domain = 0;
    device->businfo.pci->bus = 0;
    device->businfo.pci->dev = 0;
@@ -266,7 +310,8 @@ static bool
 is_fake_device(drmDevicePtr device)
 {
    return device && device->nodes && device->nodes[DRM_NODE_RENDER] &&
-          strcmp(device->nodes[DRM_NODE_RENDER], kgsl_path) == 0;
+          (strcmp(device->nodes[DRM_NODE_RENDER], kgsl_path) == 0 ||
+           strcmp(device->nodes[DRM_NODE_RENDER], mali_path) == 0);
 }
 
 static void
@@ -286,18 +331,18 @@ free_fake_device(drmDevicePtr device)
 }
 
 static int
-fake_device_result(drmDevicePtr *out)
+fake_device_result(drmDevicePtr *out, const char *node_path)
 {
    if (!out)
       return -EINVAL;
 
-   *out = make_fake_device();
+   *out = make_fake_device(node_path);
    if (!*out)
       return -ENOMEM;
 
    if (getenv("TERMUX_VA_DRM_SHIM_LOG"))
       fprintf(stderr, "tva-drm-shim: exposing %s as DRM render node\n",
-              kgsl_path);
+              node_path);
    return 0;
 }
 
@@ -327,7 +372,7 @@ drmGetDevices2(uint32_t flags, drmDevicePtr devices[], int max_devices)
    if (max_devices < 1)
       return 0;
 
-   devices[0] = make_fake_device();
+   devices[0] = make_fake_device(kgsl_path);
    return devices[0] ? 1 : -ENOMEM;
 }
 
@@ -370,7 +415,9 @@ drmGetDeviceFromDevId(dev_t dev_id, uint32_t flags, drmDevicePtr *device)
 {
    init_real();
    if (is_kgsl_dev(dev_id))
-      return fake_device_result(device);
+      return fake_device_result(device, kgsl_path);
+   if (is_mali_dev(dev_id))
+      return fake_device_result(device, mali_path);
    if (real_drmGetDeviceFromDevId)
       return real_drmGetDeviceFromDevId(dev_id, flags, device);
    errno = ENOSYS;
@@ -381,7 +428,7 @@ int
 drmGetNodeTypeFromDevId(dev_t dev_id)
 {
    init_real();
-   if (is_kgsl_dev(dev_id))
+   if (is_kgsl_dev(dev_id) || is_mali_dev(dev_id))
       return DRM_NODE_RENDER;
    if (real_drmGetNodeTypeFromDevId)
       return real_drmGetNodeTypeFromDevId(dev_id);
@@ -394,7 +441,9 @@ drmGetDevice2(int fd, uint32_t flags, drmDevicePtr *device)
 {
    init_real();
    if (is_kgsl_fd(fd))
-      return fake_device_result(device);
+      return fake_device_result(device, kgsl_path);
+   if (is_mali_fd(fd))
+      return fake_device_result(device, mali_path);
    if (real_drmGetDevice2)
       return real_drmGetDevice2(fd, flags, device);
    errno = ENOSYS;
@@ -411,7 +460,7 @@ int
 drmGetNodeTypeFromFd(int fd)
 {
    init_real();
-   if (is_kgsl_fd(fd))
+   if (is_kgsl_fd(fd) || is_mali_fd(fd))
       return DRM_NODE_RENDER;
    if (real_drmGetNodeTypeFromFd)
       return real_drmGetNodeTypeFromFd(fd);
@@ -422,7 +471,8 @@ drmGetNodeTypeFromFd(int fd)
 static char *
 device_name(int fd)
 {
-   return is_kgsl_fd(fd) ? strdup(kgsl_path) : NULL;
+   const char *path = compat_device_path_for_fd(fd);
+   return path ? strdup(path) : NULL;
 }
 
 char *
@@ -465,7 +515,8 @@ drmVersionPtr
 drmGetVersion(int fd)
 {
    init_real();
-   if (!is_kgsl_fd(fd))
+   const char *device_path = compat_device_path_for_fd(fd);
+   if (!device_path)
       return real_drmGetVersion ? real_drmGetVersion(fd) : NULL;
 
    drmVersionPtr version = calloc(1, sizeof(*version));
@@ -474,7 +525,7 @@ drmGetVersion(int fd)
 
    version->version_major = 1;
    version->name_len = 4;
-   version->name = strdup("kgsl");
+   version->name = strdup(compat_driver_name_for_fd(fd));
    if (!version->name) {
       free(version);
       return NULL;
@@ -487,7 +538,8 @@ drmFreeVersion(drmVersionPtr version)
 {
    init_real();
    if (version && version->name && version->name_len == 4 &&
-       memcmp(version->name, "kgsl", 4) == 0) {
+       (memcmp(version->name, "kgsl", 4) == 0 ||
+        memcmp(version->name, "mali", 4) == 0)) {
       free(version->name);
       free(version);
       return;
