@@ -78,6 +78,10 @@
 #include "x11_dri3.h"
 #include "loader_dri_helper.h"
 #include "util/u_debug.h"
+
+/* Keep the private GLX frontend tied to the DRI bridge structure ABI. */
+const char hdmi_los_mesa_glx_bridge_abi[]
+   __attribute__((used, retain)) = LOADER_DRI3_SHM_BRIDGE_ABI;
 #include "dri_util.h"
 
 static struct dri3_drawable *

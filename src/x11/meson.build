@@ -23,3 +23,20 @@ libloader_x11 = static_library(
   ],
   build_by_default : false,
 )
+
+if with_tests and freedreno_kmds.contains('kgsl') and (
+    with_dri_platform == 'drm' or with_dri_platform == 'pseudo-drm')
+  test(
+    'kgsl_device_selection',
+    executable(
+      'kgsl_device_selection_test',
+      'tests/kgsl_device_selection_test.c',
+      include_directories : [inc_loader_x11],
+      dependencies : [
+        idep_mesautil, dep_xcb, dep_xcb_dri3, dep_xcb_present, dep_xcb_xfixes,
+      ],
+      link_with : libloader_x11,
+    ),
+    suite : ['x11'],
+  )
+endif

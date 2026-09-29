@@ -170,6 +170,7 @@ struct fd_device *fd_device_ref(struct fd_device *dev);
 void fd_device_purge(struct fd_device *dev);
 void fd_device_del(struct fd_device *dev);
 int fd_device_fd(struct fd_device *dev);
+int fd_device_control_fd(struct fd_device *dev);
 
 enum fd_version {
    FD_VERSION_MADVISE = 1,             /* kernel supports madvise */

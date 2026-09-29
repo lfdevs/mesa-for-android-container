@@ -844,4 +844,3 @@ fd_bo_state(struct fd_bo *bo)
 
    return FD_BO_STATE_BUSY;
 }
-

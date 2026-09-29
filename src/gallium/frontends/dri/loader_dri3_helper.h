@@ -25,11 +25,13 @@
 #define LOADER_DRI3_HEADER_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <xcb/xcb.h>
 #include <xcb/dri3.h>
 #include <xcb/present.h>
+#include <xcb/shm.h>
 
 #include <GL/gl.h>
 #include "mesa_interface.h"
@@ -52,6 +54,7 @@ struct loader_dri3_buffer {
     *           while creating screen in dri3_create_screen() function.
     */
    struct dri_image   *linear_buffer;
+   bool         needs_present_blit;
 
    /* Synchronization between the client and X server is done using an
     * xshmfence that is mapped into an X server SyncFence. This lets the
@@ -82,6 +85,7 @@ struct loader_dri3_buffer {
    uint32_t     flags;
    uint32_t     width, height;
    uint64_t     last_swap;
+
 };
 
 
@@ -100,6 +104,17 @@ loader_dri3_pixmap_buf_id(enum loader_dri3_buffer_type buffer_type)
 
 struct loader_dri3_drawable;
 struct loader_dri3_present_sync;
+
+#define LOADER_DRI3_SHM_BRIDGE_SLOTS 3
+#define LOADER_DRI3_SHM_BRIDGE_ABI "HDMI_LOS_MESA_BRIDGE_ABI=5"
+
+struct loader_dri3_shm_bridge_slot {
+   xcb_shm_seg_t seg;
+   void *map;
+   size_t size;
+   uint32_t stride;
+   bool busy;
+};
 
 struct loader_dri3_vtable {
    void (*set_drawable_size)(struct loader_dri3_drawable *, int, int);
@@ -176,6 +191,22 @@ struct loader_dri3_drawable {
    bool block_on_depleted_buffers;
    bool queries_buffer_age;
    bool present_sync_checked;
+   bool shm_bridge;
+   bool shadow_present;
+   bool shm_bridge_stats;
+   xcb_connection_t *shm_bridge_conn;
+   xcb_gcontext_t shm_bridge_gc;
+   xcb_present_event_t shm_bridge_present_eid;
+   xcb_special_event_t *shm_bridge_present_event;
+   struct loader_dri3_shm_bridge_slot
+      shm_bridge_slots[LOADER_DRI3_SHM_BRIDGE_SLOTS];
+   uint32_t shm_bridge_next_slot;
+   uint32_t shm_bridge_present_serial;
+   uint64_t shm_bridge_msc;
+   uint64_t shm_bridge_frames;
+   uint64_t shm_bridge_bytes;
+   uint64_t shm_bridge_waits;
+   int64_t shm_bridge_stats_started_ns;
    int swap_interval;
 
    struct loader_dri3_present_sync *present_sync;
