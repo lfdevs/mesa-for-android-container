@@ -46,6 +46,7 @@
 #include "util/macros.h"
 #include "util/u_atomic.h"
 #include "util/u_queue.h"
+#include "util/u_debug.h"
 #include "util/simple_mtx.h"
 #include "drm-uapi/drm_fourcc.h"
 #include "dri_screen.h"
@@ -1279,8 +1280,15 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
    if (!draw->have_back || draw->type == LOADER_DRI3_DRAWABLE_PIXMAP)
       return ret;
 
+   /* Xwayland's KGSL surfaceless asynchronous Present path can retain a
+    * pixmap while its copy/release sequence is pending.  Supplying a second
+    * XSync wait fence there can exhaust the DRI3 back-buffer pool before the
+    * idle notification is processed.  Synchronous swaps still need the
+    * native-fence bridge.
+    */
    if (draw->type == LOADER_DRI3_DRAWABLE_WINDOW &&
        draw->present_sync &&
+       draw->swap_interval != 0 &&
        draw->vtable->flush_drawable_with_fence_fd) {
       render_fence_fd =
          draw->vtable->flush_drawable_with_fence_fd(draw, flush_flags);
@@ -1821,11 +1829,12 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
    if (!ret)
       buffer->modifier = DRM_FORMAT_MOD_INVALID;
 
-   /* Android's dma-buf implementation may lack sync-file import/export even
-    * though DRI3 buffer sharing itself works.  In that case Present needs an
-    * explicit render-completion fence.
+   /* Some Android/Xwayland combinations cannot consume the XSync wait fence
+    * reliably.  Keep an escape hatch for those sessions while retaining the
+    * explicit bridge by default on other platforms.
     */
-   dri3_present_sync_init(draw, buffer_fds[0]);
+   if (!debug_get_bool_option("MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE", false))
+      dri3_present_sync_init(draw, buffer_fds[0]);
 
    if (draw->dri_screen_render_gpu != draw->dri_screen_display_gpu &&
        draw->dri_screen_display_gpu && linear_buffer_display_gpu) {
