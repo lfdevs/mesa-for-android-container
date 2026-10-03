@@ -115,9 +115,16 @@ panvk_AllocateMemory(VkDevice _device,
           (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT))
          bo_flags |= PAN_KMOD_BO_FLAG_WB_MMAP;
 
+      /* A placed map aliases the BO at a caller-chosen address; on kbase
+       * only shareable (dma-buf backed) BOs can be mapped twice. */
+      bool shareable =
+         can_be_exported ||
+         (device->vk.enabled_features.memoryMapPlaced &&
+          (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
+
       bo_flags = panvk_device_adjust_bo_flags(device, bo_flags);
       mem->bo = pan_kmod_bo_alloc(device->kmod.dev,
-                                  can_be_exported ? NULL : device->kmod.vm,
+                                  shareable ? NULL : device->kmod.vm,
                                   pAllocateInfo->allocationSize, bo_flags);
       if (!mem->bo) {
          result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
