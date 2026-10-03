@@ -110,6 +110,13 @@ struct panvk_rendering_state {
     * inherited context, and the primary command buffer needs to know. */
    bool invalidate_inherited_ctx;
 
+   /* Attachment-less secondary: rasterizationSamples of its first draw, the
+    * count the primary has to give the inherited context. A secondary is one
+    * CS stream, it cannot change the context in the middle: later draws with
+    * another count set vmr_mixed. */
+   uint8_t vmr_samples;
+   bool vmr_mixed;
+
    /* True if the last render pass was suspended. */
    bool suspended;
 
