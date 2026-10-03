@@ -15,7 +15,7 @@
 #include "util/macros.h"
 #include "vulkan/vulkan_core.h"
 
-#define PANVK_GPU_PRERAST_ABI_VERSION 9
+#define PANVK_GPU_PRERAST_ABI_VERSION 10
 #define PANVK_GPU_PRERAST_MAX_EXECUTION_BYTES (256ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_VS_REGION_END (32ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_GS_INDEX_OFFSET PANVK_GPU_PRERAST_VS_REGION_END
@@ -190,6 +190,10 @@ struct panvk_gpu_prerast_shader {
    bool passthrough_vs_compiled;
    bool polygon_compiled;
    bool has_side_effects;
+   /* Clip slot that carries the per-viewport scissor planes when this VS/TES
+    * is the last pre-raster stage and writes ViewportIndex. 0 if not.
+    */
+   uint8_t vp_scissor_loc;
 };
 
 struct panvk_gpu_prerast_gs_params {

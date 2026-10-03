@@ -340,6 +340,33 @@ main(void)
             buf.h.run_count == 0);
    }
 
+   /* VS draw: two instances of two points, instance k reads records at
+    * 2 * k. Ids 0..3 pick viewports 0, 1, 1, 0.
+    */
+   {
+      uint32_t idx[] = {0, 1};
+      const uint32_t vps[] = {0, 1, 1, 0};
+
+      for (uint32_t i = 0; i < 4; i++)
+         put_vp(rec, 20 + i, vps[i]);
+      memset(out, 0xa5, 64 * sizeof(uint32_t));
+      memset(&buf, 0xa5, sizeof(buf));
+      for (uint32_t i = 0; i < 2; i++)
+         idx[i] += 20;
+      panlib_vp_runs_n(idx, 2, rec, STRIDE, outs, 4, MESA_PRIM_POINTS, 0, 64,
+                       8, out, &buf.h, 2, 2);
+      CHECK(!buf.h.overflow && buf.h.index_count == 4 && buf.h.run_count == 3);
+      CHECK(out[0] == 20 && out[1] == 21 && out[2] == 22 && out[3] == 23);
+      CHECK(buf.r[0].viewport == 0 && buf.r[0].index_count == 1);
+      CHECK(buf.r[1].viewport == 1 && buf.r[1].first_index == 1 &&
+            buf.r[1].index_count == 2);
+      CHECK(buf.r[2].viewport == 0 && buf.r[2].first_index == 3);
+      /* the instance offset must not wrap */
+      panlib_vp_runs_n(idx, 2, rec, STRIDE, outs, 4, MESA_PRIM_POINTS, 0, 64,
+                       8, out, &buf.h, 2, 0xffffffffu);
+      CHECK(buf.h.overflow == 1 && buf.h.run_count == 0);
+   }
+
    free(rec);
    printf("vp_runs ok\n");
    return 0;

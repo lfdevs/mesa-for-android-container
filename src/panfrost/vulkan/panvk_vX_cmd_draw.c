@@ -1063,7 +1063,9 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
          panvk_prerast_viewport_shader(&cmdbuf->state.gfx);
       if (pshader) {
          const struct panvk_shader_variant *pt =
-            &pshader->variants[PANVK_GS_VARIANT_PASSTHROUGH];
+            pshader == cmdbuf->state.gfx.gs.shader
+               ? &pshader->variants[PANVK_GS_VARIANT_PASSTHROUGH]
+               : &pshader->variants[PANVK_VS_VARIANT_GPU_PASSTHROUGH];
          BITSET_AND(dirty_shader_sysvals, dirty_sysvals, pt->fau.used_sysvals);
          if (!BITSET_IS_EMPTY(dirty_shader_sysvals))
             gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);

@@ -80,7 +80,9 @@ panvk_per_arch(gpu_prerast_can_lower)(
                      panvk_gpu_prerast_has_xfb(gs ? &gs->gpu_prerast.xfb
                                                   : &shader->xfb);
     const bool side_effects = PAN_ARCH < 13 && shader->has_side_effects;
-    if (!(PANVK_DEBUG(GPU_PRERAST) || poly || gs || xfb || side_effects) ||
+    const bool vp_select = !gs && shader->vp_scissor_loc;
+    if (!(PANVK_DEBUG(GPU_PRERAST) || poly || gs || xfb || side_effects ||
+          vp_select) ||
         (PAN_ARCH >= 13 && !gs && !poly && !xfb && shader->has_side_effects) ||
         !shader->lowered_vs_compiled || !shader->passthrough_vs_compiled ||
         (poly && !shader->polygon_compiled) ||

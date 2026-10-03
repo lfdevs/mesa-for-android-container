@@ -1214,6 +1214,82 @@ panvk_gpu_prerast_passthrough_nir(const nir_shader *source, uint64_t outputs,
    return b.shader;
 }
 
+/* Passthrough for a VS or TES that writes ViewportIndex. Same job as the GS
+ * passthrough: transform the clip position with the selected viewport, store
+ * the per-viewport scissor planes in scissor_loc, and keep the index itself
+ * out of the HW varyings (it shares the layer byte). The draw that uses it
+ * is split into per-viewport runs on the CPU-recorded command stream.
+ */
+static nir_shader *
+panvk_gpu_prerast_vs_vp_passthrough_nir(
+   const nir_shader *source, uint64_t outputs,
+   const struct panvk_gpu_prerast_out_types *t, uint8_t scissor_loc)
+{
+   nir_builder b = nir_builder_init_simple_shader(
+      MESA_SHADER_VERTEX, source->options, "panvk_gpu_prerast_vs_vp_passthrough");
+   nir_def *base = load_sysval(&b, graphics, 64, gpu_prerast_records);
+   nir_def *params = load_sysval(&b, graphics, 64, gpu_prerast_params);
+   nir_def *stride = nir_u2u64(
+      &b, nir_imm_int(&b, ALIGN_POT(util_bitcount64(outputs) * 16, 16)));
+   nir_def *verts = nir_load_global(
+      &b, 1, 32,
+      nir_iadd_imm(&b, params,
+                   offsetof(struct panvk_gpu_prerast_params, vertex_count)),
+      .align_mul = 4);
+   nir_def *linear = nir_iadd(&b, nir_load_vertex_id(&b),
+                              nir_imul(&b, nir_load_instance_id(&b), verts));
+   nir_def *record =
+      nir_iadd(&b, base, nir_imul(&b, nir_u2u64(&b, linear), stride));
+
+   unsigned vp_slot =
+      util_bitcount64(outputs & BITFIELD64_MASK(VARYING_SLOT_VIEWPORT));
+   nir_def *vp_index = nir_load_global(
+      &b, 1, 32, nir_iadd_imm(&b, record, vp_slot * 16), .align_mul = 4);
+
+   unsigned idx = 0;
+   nir_def *planes = NULL;
+   u_foreach_bit64(location, outputs) {
+      unsigned slot = util_bitcount64(outputs & BITFIELD64_MASK(location));
+      if (location == VARYING_SLOT_VIEWPORT)
+         continue;
+      unsigned ncomp = 4;
+      nir_alu_type type = t->type[location] ? t->type[location]
+                                            : nir_type_float32;
+      switch (location) {
+      case VARYING_SLOT_PSIZ:
+         ncomp = 1;
+         type = nir_type_float32;
+         break;
+      case VARYING_SLOT_LAYER:
+      case VARYING_SLOT_PRIMITIVE_ID:
+         ncomp = 1;
+         type = nir_type_int32;
+         break;
+      default:
+         break;
+      }
+      nir_def *value = nir_load_global(
+         &b, ncomp, 32, nir_iadd_imm(&b, record, slot * 16), .align_mul = 4);
+      if (location == VARYING_SLOT_POS) {
+         struct panvk_prerast_xform xf =
+            panvk_prerast_viewport_xform(&b, value, vp_index);
+         value = xf.screen;
+         planes = xf.planes;
+         type = nir_type_float32;
+         ncomp = 4;
+      }
+      nir_store_output(&b, value, nir_imm_int(&b, 0), .base = idx++,
+                       .write_mask = BITFIELD_MASK(ncomp), .src_type = type,
+                       .io_semantics = {.location = location, .num_slots = 1});
+   }
+
+   panvk_prerast_store_clip(&b, planes, scissor_loc, idx++);
+   b.shader->info.outputs_written =
+      (outputs & ~VARYING_BIT_VIEWPORT) | BITFIELD64_BIT(scissor_loc);
+   b.shader->num_outputs = idx;
+   return b.shader;
+}
+
 static nir_def *
 panvk_gpu_prerast_vs_is_restart(nir_builder *b)
 {
@@ -3259,8 +3335,19 @@ panvk_compile_shader(struct panvk_device *dev,
          (dev->vk.enabled_features.fillModeNonSolid &&
           (dyn_polygon_mode ||
            state->rs->polygon_mode != VK_POLYGON_MODE_FILL));
+      /* ViewportIndex from the last pre-raster stage selects the viewport,
+       * which only the gpu_prerast passthrough can do.
+       */
+      const bool last_raster_stage =
+         !(info->next_stage_mask & (VK_SHADER_STAGE_GEOMETRY_BIT |
+                                    VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT));
+      const bool writes_vp =
+         last_raster_stage &&
+         (info->nir->info.outputs_written & VARYING_BIT_VIEWPORT) &&
+         (info->nir->info.outputs_written & VARYING_BIT_POS);
       const enum panvk_vs_variant last_variant =
-         want_prerast ? PANVK_VS_VARIANT_GPU_PASSTHROUGH : PANVK_VS_VARIANT_HW;
+         (want_prerast || writes_vp) ? PANVK_VS_VARIANT_GPU_PASSTHROUGH
+                                     : PANVK_VS_VARIANT_HW;
       struct panvk_gpu_prerast_out_types out_types = {0};
 #else
       const enum panvk_vs_variant last_variant = PANVK_VS_VARIANT_HW;
@@ -3273,13 +3360,21 @@ panvk_compile_shader(struct panvk_device *dev,
           */
 #if PAN_ARCH >= 10
          const bool clone_nir = true;
-         nir_shader *nir = v == PANVK_VS_VARIANT_GPU_PASSTHROUGH
-                              ? panvk_gpu_prerast_passthrough_nir(
-                                   info->nir,
-                                   shader->gpu_prerast.io.outputs_written,
-                                   &out_types,
-                                   &shader->gpu_prerast.io.varyings)
-                              : nir_shader_clone(NULL, info->nir);
+         const uint64_t pt_outputs = shader->gpu_prerast.io.outputs_written;
+         const uint8_t vp_loc =
+            v == PANVK_VS_VARIANT_GPU_PASSTHROUGH && writes_vp &&
+            (pt_outputs & VARYING_BIT_VIEWPORT)
+               ? panvk_prerast_scissor_slot(pt_outputs & ~VARYING_BIT_VIEWPORT)
+               : 0;
+         nir_shader *nir =
+            vp_loc ? panvk_gpu_prerast_vs_vp_passthrough_nir(
+                        info->nir, pt_outputs, &out_types, vp_loc)
+            : v == PANVK_VS_VARIANT_GPU_PASSTHROUGH
+               ? panvk_gpu_prerast_passthrough_nir(
+                    info->nir, pt_outputs, &out_types,
+                    &shader->gpu_prerast.io.varyings)
+               : nir_shader_clone(NULL, info->nir);
+         struct pan_varying_layout vp_layout;
 #else
          const bool clone_nir = (v != last_variant);
          nir_shader *nir =
@@ -3395,8 +3490,15 @@ panvk_compile_shader(struct panvk_device *dev,
          }
 
 #if PAN_ARCH >= 10
-         if (v == PANVK_VS_VARIANT_GPU_PASSTHROUGH)
+         if (vp_loc) {
+            shader->gpu_prerast.vp_scissor_loc = vp_loc;
+            pan_varying_collect_formats(&vp_layout, nir, inputs.gpu_id);
+            pan_build_varying_layout_compact(&vp_layout, nir, inputs.gpu_id);
+            inputs.varying_layout = &vp_layout;
+            inputs.skip_viewport_transform = true;
+         } else if (v == PANVK_VS_VARIANT_GPU_PASSTHROUGH) {
             inputs.varying_layout = &shader->gpu_prerast.io.varyings;
+         }
 #endif
 
          if (v == PANVK_VS_VARIANT_HW
@@ -3419,6 +3521,7 @@ panvk_compile_shader(struct panvk_device *dev,
             shader->gpu_prerast.lowered_vs_compiled = true;
          if (result == VK_SUCCESS && v == PANVK_VS_VARIANT_GPU_PASSTHROUGH)
             shader->gpu_prerast.passthrough_vs_compiled = true;
+         inputs.skip_viewport_transform = false;
 #endif
 
          /* If we cloned, it's our job to clean up */
@@ -3815,6 +3918,19 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
          /* The last geometry stage before the FS will always have a HW vertex
           * shader variant. Geometry's first vertex variant is the passthrough.
           */
+#if PAN_ARCH >= 10
+         /* A VS/TES that selects a viewport is drawn through its
+          * passthrough, whose layout carries the scissor planes.
+          */
+         if (prev_shader->vk.stage != MESA_SHADER_GEOMETRY &&
+             prev_shader->gpu_prerast.vp_scissor_loc) {
+            scissor_loc = prev_shader->gpu_prerast.vp_scissor_loc;
+            vs_varying_layout =
+               &prev_shader->variants[PANVK_VS_VARIANT_GPU_PASSTHROUGH]
+                   .info.varyings.formats;
+            pan_varying_layout_require_layout(vs_varying_layout);
+         } else
+#endif
          panvk_shader_foreach_variant(prev_shader, variant) {
             if (variant->info.stage == MESA_SHADER_VERTEX) {
                vs_varying_layout = &variant->info.varyings.formats;

@@ -262,13 +262,21 @@ struct panvk_cmd_graphics_state {
 };
 
 #if PAN_ARCH >= 10
-/* Geometry shader whose passthrough selects a viewport, or NULL. */
+/* Last pre-raster stage whose passthrough selects a viewport (GS, else
+ * TES, else VS), or NULL.
+ */
 static inline const struct panvk_shader *
 panvk_prerast_viewport_shader(const struct panvk_cmd_graphics_state *gfx)
 {
    const struct panvk_shader *gs = gfx->gs.shader;
 
-   return gs && gs->gpu_prerast.gs.scissor_clip_loc ? gs : NULL;
+   if (gs)
+      return gs->gpu_prerast.gs.scissor_clip_loc ? gs : NULL;
+
+   const struct panvk_shader *last =
+      gfx->tes.shader ? gfx->tes.shader : gfx->vs.shader;
+
+   return last && last->gpu_prerast.vp_scissor_loc ? last : NULL;
 }
 #endif
 
