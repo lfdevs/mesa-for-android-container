@@ -5237,21 +5237,15 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
       cmdbuf->state.gfx.vs.shader = tes;
       gfx_state_set_dirty(cmdbuf, VS);
       gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
-      /* Same predicate as the compute loop. panvk_cmd_draw does not see it:
-       * this draw is not PATCHES, and skipping the whole loop would leave
-       * the compute side waiting on the free sync.
+      /* The draw launches are predicated by conditional rendering themselves.
+       * Only they may be skipped: the state emission in front of them runs
+       * once per record, and the loop must still hand the arenas back.
        */
-      {
-         struct cs_index pred = gpu_prerast_load_flag(vt, pass_mem.gpu);
-
-         cs_if(vt, MALI_CS_CONDITION_NEQUAL, pred) {
-            if (nested)
-               gpu_prerast_draw_generated(cmdbuf, &raster, prerast_arena,
-                                          poly_mode, vp_launch);
-            else
-               panvk_cmd_draw(cmdbuf, raster);
-         }
-      }
+      if (nested)
+         gpu_prerast_draw_generated(cmdbuf, &raster, prerast_arena, poly_mode,
+                                    vp_launch);
+      else
+         panvk_cmd_draw(cmdbuf, raster);
       cmdbuf->state.gfx.vs.shader = vs;
       gfx_state_set_dirty(cmdbuf, VS);
       gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
