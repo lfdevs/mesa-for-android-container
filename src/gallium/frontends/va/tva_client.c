@@ -870,6 +870,37 @@ int tva_session_send_unit(struct tva_session *s, const void *data, size_t len)
     return TVA_OK;
 }
 
+int tva_session_send_raw_frame(struct tva_session *s, const void *data,
+                               size_t len)
+{
+    if (!s)
+        return TVA_ERR_INVAL;
+    if (!data || len == 0)
+        return sess_err(s, TVA_ERR_INVAL, "empty raw frame", 0);
+    if (len > TVA_MAX_UNIT_BYTES)
+        return sess_err(s, TVA_ERR_TOOBIG,
+                        "raw frame exceeds the daemon's 8MB cap", 0);
+    if (s->fd < 0)
+        return sess_err(s, TVA_ERR_STATE, "session has no live connection", 0);
+    if (s->tx_broken)
+        return sess_err(s, TVA_ERR_STATE,
+                        "uplink corrupted (earlier send interrupted); rebuild the session", 0);
+
+    uint32_t be = htonl((uint32_t)len);
+    int r = send_exact(s, &be, 4, s->io_timeout_ms);
+    if (r != TVA_OK) {
+        s->tx_broken = 1;
+        return r;
+    }
+    r = send_exact(s, data, len, s->io_timeout_ms);
+    if (r != TVA_OK) {
+        s->tx_broken = 1;
+        return r;
+    }
+    s->units_sent++;
+    return TVA_OK;
+}
+
 static int ensure_rbuf(struct tva_session *s, size_t need)
 {
     if (s->rbuf_size >= need)
@@ -882,6 +913,46 @@ static int ensure_rbuf(struct tva_session *s, size_t need)
         return sess_err(s, TVA_ERR_NOMEM, "failed to grow the receive buffer", 0);
     s->rbuf = nb;
     s->rbuf_size = ns;
+    return TVA_OK;
+}
+
+int tva_session_receive_packet(struct tva_session *s, void *data,
+                               size_t capacity, size_t *size,
+                               uint32_t *flags, uint32_t *pts)
+{
+    if (!s || !data || !size)
+        return TVA_ERR_INVAL;
+    if (s->fd < 0)
+        return sess_err(s, TVA_ERR_STATE, "session has no live connection", 0);
+
+    uint32_t hdr[3];
+    int r = recv_exact(s, hdr, sizeof(hdr), s->io_timeout_ms,
+                       s->io_timeout_ms);
+    if (r != TVA_OK)
+        return r;
+
+    uint32_t packet_size = ntohl(hdr[0]);
+    uint32_t packet_flags = ntohl(hdr[1]);
+    uint32_t packet_pts = ntohl(hdr[2]);
+    if (!packet_size || packet_size > TVA_MAX_FRAME_BYTES)
+        return sess_err(s, TVA_ERR_PROTOCOL,
+                        "encoded packet has an unreasonable size", 0);
+    if (packet_size > capacity)
+        return sess_err(s, TVA_ERR_TOOBIG,
+                        "encoded packet does not fit the destination", 0);
+
+    r = recv_exact(s, data, packet_size, s->io_timeout_ms,
+                   s->io_timeout_ms);
+    if (r == TVA_EOS)
+        return sess_err(s, TVA_ERR_PROTOCOL, "encoded packet truncated", 0);
+    if (r != TVA_OK)
+        return r;
+
+    *size = packet_size;
+    if (flags)
+        *flags = packet_flags;
+    if (pts)
+        *pts = packet_pts;
     return TVA_OK;
 }
 

@@ -225,6 +225,18 @@ void tva_session_destroy(struct tva_session *s);
  */
 int tva_session_send_unit(struct tva_session *s, const void *data, size_t len);
 
+/* Encoder input uses the same length-prefixed uplink framing, but contains a
+ * packed NV12 frame rather than codec Annex-B data. */
+int tva_session_send_raw_frame(struct tva_session *s, const void *data,
+                               size_t len);
+
+/* Receive one encoded access unit from an encoder session.  The output is
+ * copied into caller-provided storage because the decoder receive buffer is
+ * owned by the session and is not exposed to the encode path. */
+int tva_session_receive_packet(struct tva_session *s, void *data,
+                               size_t capacity, size_t *size,
+                               uint32_t *flags, uint32_t *pts);
+
 /*
  * Take back a frame.  SHM mode returns the slot; inline mode releases the
  * receive buffer.  Unconditional calls are safe (NULL or released is a

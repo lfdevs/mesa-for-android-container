@@ -203,6 +203,20 @@ tva_profile_supported(enum pipe_video_profile profile)
     }
 }
 
+static bool
+tva_encode_profile_supported(enum pipe_video_profile profile)
+{
+    switch (profile) {
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
+    case PIPE_VIDEO_PROFILE_HEVC_MAIN:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static int
 tva_codec_id(enum pipe_video_profile profile)
 {
@@ -215,6 +229,19 @@ tva_codec_id(enum pipe_video_profile profile)
         return CODEC_VP9;
     case PIPE_VIDEO_FORMAT_AV1:
         return CODEC_AV1;
+    default:
+        return -1;
+    }
+}
+
+static int
+tva_encode_codec_id(enum pipe_video_profile profile)
+{
+    switch (u_reduce_video_profile(profile)) {
+    case PIPE_VIDEO_FORMAT_MPEG4_AVC:
+        return CODEC_H264_ENC;
+    case PIPE_VIDEO_FORMAT_HEVC:
+        return CODEC_HEVC_ENC;
     default:
         return -1;
     }
@@ -262,6 +289,41 @@ tva_screen_get_video_param(struct pipe_screen *screen,
         param == PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE &&
         (profile == PIPE_VIDEO_PROFILE_UNKNOWN || tva_profile_supported(profile)))
         return 1;
+
+    if (entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE &&
+        tva_encode_profile_supported(profile)) {
+        switch (param) {
+        case PIPE_VIDEO_CAP_SUPPORTED:
+            return 1;
+        case PIPE_VIDEO_CAP_MIN_WIDTH:
+        case PIPE_VIDEO_CAP_MIN_HEIGHT:
+            return 128;
+        case PIPE_VIDEO_CAP_MAX_WIDTH:
+            return 4096;
+        case PIPE_VIDEO_CAP_MAX_HEIGHT:
+            return 2176;
+        case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
+            return 1;
+        case PIPE_VIDEO_CAP_ENC_MAX_SLICES_PER_FRAME:
+            return 1;
+        case PIPE_VIDEO_CAP_ENC_SLICES_STRUCTURE:
+            return PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE;
+        case PIPE_VIDEO_CAP_ENC_MAX_REFERENCES_PER_FRAME:
+            return 1;
+        case PIPE_VIDEO_CAP_ENC_MAX_DPB_CAPACITY:
+            return 1;
+        case PIPE_VIDEO_CAP_ENC_SURFACE_ALIGNMENT:
+            return 2;
+        case PIPE_VIDEO_CAP_ENC_H264_SUPPORTS_CABAC_ENCODE:
+            return profile != PIPE_VIDEO_PROFILE_HEVC_MAIN;
+        case PIPE_VIDEO_CAP_ENC_INTRA_REFRESH:
+            return 1;
+        case PIPE_VIDEO_CAP_ENC_SUPPORTS_FEEDBACK_METADATA:
+            return 0;
+        default:
+            return 0;
+        }
+    }
 
     if (entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM &&
         tva_profile_supported(profile)) {
@@ -321,8 +383,13 @@ tva_screen_is_video_format_supported(struct pipe_screen *screen,
                                                    entrypoint);
     }
 
+    if (entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE &&
+        tva_encode_profile_supported(profile))
+        return format == PIPE_FORMAT_NV12;
+
     if (entrypoint != PIPE_VIDEO_ENTRYPOINT_BITSTREAM ||
-        !tva_profile_supported(profile))
+        (profile != PIPE_VIDEO_PROFILE_UNKNOWN &&
+         !tva_profile_supported(profile)))
         return false;
     if (format != PIPE_FORMAT_NV12)
         return false;
@@ -405,6 +472,10 @@ struct tva_av1_frame {
 
 struct tva_codec {
     struct pipe_video_codec base;
+
+    bool encoder;
+    uint8_t *encode_packet;
+    size_t encode_packet_cap;
 
     struct pipe_context *pipe;    /* real context, for resource writes */
 
@@ -2091,6 +2162,153 @@ static void
 tva_codec_destroy_fence(struct pipe_video_codec *codec,
                         struct pipe_fence_handle *fence_handle);
 
+static int
+tva_encode_copy_source(struct tva_codec *c, struct pipe_video_buffer *source,
+                       uint8_t **out, size_t *out_len)
+{
+    if (!c || !c->pipe || !source || !out || !out_len ||
+        source->buffer_format != PIPE_FORMAT_NV12)
+        return -1;
+
+    unsigned width = source->width;
+    unsigned height = source->height;
+    unsigned uv_height = (height + 1) / 2;
+    if (!width || !height || height > SIZE_MAX / width)
+        return -1;
+    size_t y_size = (size_t)width * height;
+    size_t uv_size = (size_t)width * uv_height;
+    if (y_size > SIZE_MAX - uv_size)
+        return -1;
+    size_t total = y_size + uv_size;
+    uint8_t *packed = malloc(total);
+    if (!packed)
+        return -1;
+
+    struct pipe_resource *res[4] = {0};
+    source->get_resources(source, res);
+    if (!res[0] || !res[1]) {
+        free(packed);
+        return -1;
+    }
+
+    struct pipe_box box;
+    struct pipe_transfer *transfer = NULL;
+    memset(&box, 0, sizeof(box));
+    box.width = res[0]->width0;
+    box.height = res[0]->height0;
+    box.depth = 1;
+    uint8_t *src = c->pipe->texture_map(c->pipe, res[0], 0,
+                                        PIPE_MAP_READ, &box, &transfer);
+    if (!src || !transfer) {
+        free(packed);
+        return -1;
+    }
+    unsigned y_row = width;
+    if (transfer->stride < y_row) {
+        c->pipe->texture_unmap(c->pipe, transfer);
+        free(packed);
+        return -1;
+    }
+    for (unsigned y = 0; y < height; y++)
+        memcpy(packed + (size_t)y * y_row,
+               src + (size_t)y * transfer->stride, y_row);
+    c->pipe->texture_unmap(c->pipe, transfer);
+
+    memset(&box, 0, sizeof(box));
+    box.width = res[1]->width0;
+    box.height = res[1]->height0;
+    box.depth = 1;
+    transfer = NULL;
+    src = c->pipe->texture_map(c->pipe, res[1], 0, PIPE_MAP_READ,
+                               &box, &transfer);
+    if (!src || !transfer || transfer->stride < width) {
+        if (transfer)
+            c->pipe->texture_unmap(c->pipe, transfer);
+        free(packed);
+        return -1;
+    }
+    for (unsigned y = 0; y < uv_height; y++)
+        memcpy(packed + y_size + (size_t)y * width,
+               src + (size_t)y * transfer->stride, width);
+    c->pipe->texture_unmap(c->pipe, transfer);
+
+    *out = packed;
+    *out_len = total;
+    return 0;
+}
+
+static int
+tva_encode_write_destination(struct tva_codec *c, struct pipe_resource *dest,
+                              const uint8_t *data, size_t len)
+{
+    if (!c || !c->pipe || !dest || !data || !len || dest->target != PIPE_BUFFER ||
+        len > dest->width0)
+        return -1;
+    struct pipe_box box;
+    memset(&box, 0, sizeof(box));
+    box.width = dest->width0;
+    box.height = 1;
+    box.depth = 1;
+    struct pipe_transfer *transfer = NULL;
+    uint8_t *dst = c->pipe->buffer_map(c->pipe, dest, 0, PIPE_MAP_WRITE,
+                                       &box, &transfer);
+    if (!dst || !transfer)
+        return -1;
+    memcpy(dst, data, len);
+    c->pipe->buffer_unmap(c->pipe, transfer);
+    return 0;
+}
+
+static void
+tva_codec_get_feedback(struct pipe_video_codec *codec, void *feedback,
+                       unsigned *size,
+                       struct pipe_enc_feedback_metadata *metadata)
+{
+    if (size)
+        *size = (unsigned)(uintptr_t)feedback;
+    if (metadata)
+        memset(metadata, 0, sizeof(*metadata));
+}
+
+static void
+tva_codec_encode_bitstream(struct pipe_video_codec *codec,
+                           struct pipe_video_buffer *source,
+                           struct pipe_resource *destination,
+                           void **feedback)
+{
+    struct tva_codec *c = tva_codec(codec);
+    uint8_t *raw = NULL;
+    size_t raw_len = 0, encoded_len = 0;
+    uint32_t flags = 0, pts = 0;
+
+    if (!c->sess || tva_encode_copy_source(c, source, &raw, &raw_len) < 0)
+        goto fail;
+    if (tva_session_send_raw_frame(c->sess, raw, raw_len) != TVA_OK)
+        goto fail;
+    if (!c->encode_packet) {
+        c->encode_packet_cap = TVA_MAX_UNIT_BYTES;
+        c->encode_packet = malloc(c->encode_packet_cap);
+    }
+    if (!c->encode_packet ||
+        tva_session_receive_packet(c->sess, c->encode_packet,
+                                   c->encode_packet_cap, &encoded_len,
+                                   &flags, &pts) != TVA_OK)
+        goto fail;
+    if (tva_encode_write_destination(c, destination, c->encode_packet,
+                                     encoded_len) < 0)
+        goto fail;
+    if (feedback)
+        *feedback = (void *)(uintptr_t)encoded_len;
+    free(raw);
+    return;
+
+fail:
+    free(raw);
+    if (feedback)
+        *feedback = (void *)(uintptr_t)0;
+    tva_mark_broken(c);
+}
+
 static void
 tva_codec_begin_frame(struct pipe_video_codec *codec,
                       struct pipe_video_buffer *target,
@@ -3462,6 +3680,7 @@ tva_codec_destroy(struct pipe_video_codec *codec)
     u_cnd_monotonic_destroy(&c->pend_cond);
     TVA_TRACE("codec destroy: %llu units, %llu frames", (unsigned long long)c->next_unit, (unsigned long long)c->frames_done);
     tva_session_destroy(c->sess);
+    free(c->encode_packet);
     free(c->csd);
     free(c->acc);
     FREE(c);
@@ -3524,15 +3743,18 @@ tva_pipe_create_video_codec(struct pipe_context *context,
     if (templat->entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING)
         return vl_compositor_create_proc(context, false);
 
-    if (templat->entrypoint != PIPE_VIDEO_ENTRYPOINT_BITSTREAM ||
-        !tva_profile_supported(templat->profile))
+    bool encoder = templat->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE;
+    if ((!encoder && templat->entrypoint != PIPE_VIDEO_ENTRYPOINT_BITSTREAM) ||
+        (encoder ? !tva_encode_profile_supported(templat->profile)
+                 : !tva_profile_supported(templat->profile)))
     {
         fprintf(stderr, "tva: reject codec profile=%d entrypoint=%d\n",
                 templat->profile, templat->entrypoint);
         return NULL;   /* no encode / unsupported profiles through the bridge */
     }
 
-    int codec_id = tva_codec_id(templat->profile);
+    int codec_id = encoder ? tva_encode_codec_id(templat->profile)
+                           : tva_codec_id(templat->profile);
     if (codec_id < 0)
     {
         fprintf(stderr, "tva: reject codec id for profile=%d\n", templat->profile);
@@ -3567,7 +3789,7 @@ tva_pipe_create_video_codec(struct pipe_context *context,
     /* SHM zero-copy on by default; DMD_WANT_SHM=0 disables (legacy name
      * kept on purpose) */
     const char *shm = getenv("DMD_WANT_SHM");
-    cfg.want_shm = !(shm && !strcmp(shm, "0"));
+    cfg.want_shm = !encoder && !(shm && !strcmp(shm, "0"));
     if (cfg.want_shm && pipeline_depth > SHM_SLOTS)
         pipeline_depth = SHM_SLOTS;
 
@@ -3601,7 +3823,7 @@ tva_pipe_create_video_codec(struct pipe_context *context,
         FREE(c);
         return NULL;
     }
-    if (thrd_create(&c->reader, tva_reader_thread, c) == thrd_success)
+    if (!encoder && thrd_create(&c->reader, tva_reader_thread, c) == thrd_success)
         c->reader_started = true;
 
     c->base.context = context;
@@ -3611,17 +3833,20 @@ tva_pipe_create_video_codec(struct pipe_context *context,
     c->base.width = templat->width;
     c->base.height = templat->height;
     c->base.max_references = templat->max_references;
+    c->encoder = encoder;
     c->base.destroy = tva_codec_destroy;
     c->base.begin_frame = tva_codec_begin_frame;
     c->base.decode_macroblock = NULL;
-    c->base.decode_bitstream = tva_codec_decode_bitstream;
+    c->base.decode_bitstream = encoder ? NULL : tva_codec_decode_bitstream;
+    c->base.encode_bitstream = encoder ? tva_codec_encode_bitstream : NULL;
     c->base.end_frame = tva_codec_end_frame;
     c->base.flush = tva_codec_flush;
-    c->base.get_feedback = NULL;
+    c->base.get_feedback = encoder ? tva_codec_get_feedback : NULL;
     c->base.fence_wait = tva_codec_fence_wait;
     c->base.destroy_fence = tva_codec_destroy_fence;
 
-    TVA_TRACE("codec ready pipeline=%u strict=%d hidden=%d synthetic=%d inline=%d shm=%d",
+    TVA_TRACE("codec ready encoder=%d pipeline=%u strict=%d hidden=%d synthetic=%d inline=%d shm=%d",
+              encoder,
               c->pipeline_depth, c->strict_pending,
               tva_av1_output_hidden(), tva_av1_synthetic_show_existing(),
               tva_av1_inline_show_existing(), cfg.want_shm);

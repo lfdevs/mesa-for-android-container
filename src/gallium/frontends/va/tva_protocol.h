@@ -90,8 +90,24 @@ typedef enum {
     CODEC_VP9  = 2,
     CODEC_VP8  = 3,
     CODEC_AV1  = 4,   /* AV1 Main decode */
+    /* Encoder sessions use separate ids so the v3 six-word handshake stays
+     * byte-compatible with existing decoder clients.  The payload framing is
+     * raw NV12 in and an encoded access unit out. */
+    CODEC_H264_ENC = 5,
+    CODEC_HEVC_ENC = 6,
     CODEC_MAX
 } CodecId;
+
+static inline int codec_is_encoder(int codec)
+{
+    return codec == CODEC_H264_ENC || codec == CODEC_HEVC_ENC;
+}
+
+static inline int codec_base_id(int codec)
+{
+    return codec == CODEC_H264_ENC ? CODEC_H264 :
+           codec == CODEC_HEVC_ENC ? CODEC_HEVC : codec;
+}
 
 /*
  * Frame return transport requested in the handshake and granted in the
