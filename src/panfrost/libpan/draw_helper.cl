@@ -321,6 +321,179 @@ panlib_tess_draw(global struct panlib_tess_draw *t, global uint32_t *c_invs,
       atomic_fetch_add((global atomic_uint *)prims_generated, count / vpp);
 }
 
+/* Chunked non-tessellated gpu_prerast draws, see struct panlib_chunk_draw.
+ * src_draw is the Vk[Indexed]DrawIndirectCommand of the API draw.
+ */
+KERNEL(1)
+panlib_chunk_setup(global struct panlib_chunk_draw *c,
+                   constant uint32_t *src_draw,
+                   constant uint32_t *count_buffer, uint32_t draw_index)
+{
+   bool live = !count_buffer || draw_index < count_buffer[0];
+
+   for (uint32_t i = 0; i < 5; i++)
+      c->in_draw[i] = live && (i < 4 || c->indexed) ? src_draw[i] : 0;
+
+   c->next_inst = 0;
+   c->next_vertex = 0;
+   c->prims_done = 0;
+   c->prim_base = 0;
+   c->more = 0;
+}
+
+/* A restart index, or an index past the buffer: both end a strip. */
+static bool
+chunk_ends_strip(global struct panlib_chunk_draw *c, uint32_t pos)
+{
+   uint64_t at = (uint64_t)c->in_draw[2] + pos;
+
+   if (at >= c->index_count_el)
+      return true;
+
+   uintptr_t addr = (uintptr_t)(c->index_buffer + at * c->index_size);
+
+   if (c->index_size == 4)
+      return *(global uint32_t *)addr == UINT32_MAX;
+   else if (c->index_size == 2)
+      return *(global uint16_t *)addr == 0xffff;
+   else
+      return *(global uint8_t *)addr == 0xff;
+}
+
+/* Plans the next chunk: whole instances when an instance fits max_verts, else
+ * a vertex window of one instance. A strip window ends at its last restart
+ * index, or is cut mid-strip when it holds none, repeating the strip's
+ * overlap in the next one. c->draw is the chunk to lower, chunk_vertex and
+ * chunk_instance the start of the chunk the VS adds to its invocation IDs.
+ */
+KERNEL(1)
+panlib_chunk_step(global struct panlib_chunk_draw *c)
+{
+   uint32_t align, overlap, div;
+   panlib_chunk_topology(c->prim, &align, &overlap, &div);
+
+   enum mesa_prim prim = c->prim;
+   const uint32_t verts = c->in_draw[0], insts = c->in_draw[1];
+   const uint32_t inst = c->next_inst;
+   const bool strips = c->restart && overlap;
+
+   for (uint32_t i = 0; i < 5; i++)
+      c->draw[i] = c->in_draw[i];
+   c->draw[0] = 0;
+   c->draw[1] = 0;
+   c->chunk_vertex = 0;
+   c->chunk_instance = 0;
+   c->more = 0;
+
+   if (!verts || inst >= insts)
+      return;
+
+   uint32_t n_verts, n_insts = 1, first = 0, prims = 0;
+
+   if (verts <= c->max_verts) {
+      n_verts = verts;
+      n_insts = min(max(c->max_verts / verts, 1u), insts - inst);
+      n_insts = min(n_insts, PANLIB_CHUNK_MAX_INSTANCES);
+      if (strips) {
+         uint32_t run = 0;
+
+         for (uint32_t j = 0; j < verts; j++) {
+            if (chunk_ends_strip(c, j)) {
+               prims += u_decomposed_prims_for_vertices(prim, run);
+               run = 0;
+            } else {
+               run++;
+            }
+         }
+         prims += u_decomposed_prims_for_vertices(prim, run);
+      } else {
+         prims = u_decomposed_prims_for_vertices(prim, verts);
+      }
+
+      c->prim_base = 0;
+      c->prims_done = 0;
+      c->next_inst = inst + n_insts;
+      c->next_vertex = 0;
+   } else {
+      const uint32_t step =
+         c->max_verts > overlap ? (c->max_verts - overlap) / align * align : 0;
+      uint32_t i = c->next_vertex, next;
+      bool done;
+
+      if (!step) {
+         c->next_inst = insts;
+         return;
+      }
+
+      if (strips) {
+         while (i < verts && chunk_ends_strip(c, i))
+            i++;
+      }
+
+      if (i >= verts) {
+         c->next_inst = inst + 1;
+         c->next_vertex = 0;
+         c->prims_done = 0;
+         c->more = c->next_inst < insts;
+         return;
+      }
+
+      if (strips) {
+         const uint32_t window = min(c->max_verts, verts - i);
+         uint32_t last = UINT32_MAX, run = 0;
+
+         for (uint32_t j = i; j < i + window; j++) {
+            if (chunk_ends_strip(c, j)) {
+               prims += u_decomposed_prims_for_vertices(prim, run);
+               run = 0;
+               last = j;
+            } else {
+               run++;
+            }
+         }
+
+         if (last != UINT32_MAX) {
+            n_verts = last - i;
+            next = last + 1;
+         } else {
+            n_verts = i + window >= verts ? window : step + overlap;
+            next = i + window >= verts ? verts : i + step;
+            prims = u_decomposed_prims_for_vertices(prim, n_verts);
+         }
+         done = next >= verts;
+      } else {
+         n_verts = min(step + overlap, verts - i);
+         next = i + step;
+         prims = u_decomposed_prims_for_vertices(prim, n_verts);
+         done = next + overlap >= verts;
+      }
+
+      first = i;
+      c->prim_base = c->prims_done;
+      c->prims_done += prims;
+      c->next_vertex = next;
+      if (done) {
+         c->next_inst = inst + 1;
+         c->next_vertex = 0;
+         c->prims_done = 0;
+      }
+   }
+
+   c->draw[0] = n_verts;
+   c->draw[1] = n_insts;
+   if (c->indexed)
+      c->draw[2] += first;
+   else
+      c->chunk_vertex = first;
+   c->chunk_instance = inst;
+   c->more = c->next_inst < insts;
+
+   if (c->prims_generated) {
+      atomic_fetch_add((global atomic_uint *)(uintptr_t)c->prims_generated,
+                       prims * n_insts * c->view_count);
+   }
+}
+
 #define XFB_WG 256
 
 static uint32_t

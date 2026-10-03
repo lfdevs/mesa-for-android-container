@@ -3648,6 +3648,10 @@ static bool gpu_prerast_vp_prepare(struct panvk_cmd_buffer *cmdbuf,
                                    uint64_t arena,
                                    const struct panvk_draw_info *source,
                                    struct panlib_vp_runs_launch_args *args);
+static bool gpu_prerast_chunk_wanted(const struct panvk_cmd_buffer *cmdbuf,
+                                     const struct panvk_draw_info *draw);
+static void gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
+                                   const struct panvk_draw_info *draw);
 
 static void
 gpu_prerast_wait_compute(struct panvk_cmd_buffer *cmdbuf)
@@ -4278,9 +4282,20 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    const struct panvk_shader *shader = cmdbuf->state.gfx.vs.shader;
-   if (!panvk_per_arch(gpu_prerast_can_lower)(cmdbuf, source,
+   /* The chunk loop has no per-draw capacity, only the shaders matter. */
+   const bool chunked = gpu_prerast_chunk_wanted(cmdbuf, source);
+   struct panvk_draw_info probe = *source;
+   if (chunked && !probe.indirect.buffer_dev_addr)
+      probe.vertex.count = probe.instance.count = 1;
+
+   if (!panvk_per_arch(gpu_prerast_can_lower)(cmdbuf, &probe,
                                                &shader->gpu_prerast))
       return false;
+
+   if (chunked) {
+      gpu_prerast_chunk_loop(cmdbuf, source);
+      return true;
+   }
 
    uint64_t arena = panvk_priv_mem_dev_addr(dev->gpu_prerast_arena);
    uint64_t records = arena + PANVK_GPU_PRERAST_RECORD_OFFSET;
@@ -5296,18 +5311,278 @@ gpu_prerast_wanted(const struct panvk_cmd_buffer *cmdbuf,
            cmdbuf->state.gfx.vs.shader->gpu_prerast.has_side_effects);
 }
 
+/* Vertices of one draw the arena holds. */
+static uint32_t
+gpu_prerast_max_verts(const struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
+   const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
+   uint32_t max_verts =
+      panvk_gpu_prerast_record_capacity(vs->gpu_prerast.io.record_stride);
+
+   if (gs)
+      max_verts = MIN2(max_verts,
+                       panvk_gpu_prerast_gs_cap_slots(&gs->gpu_prerast.gs) /
+                          gs->gpu_prerast.gs.invocations);
+   return max_verts;
+}
+
+/* Topologies panlib_chunk_step can cut by vertex range. Fans and the rest
+ * need a first-vertex input in the kernels first.
+ */
+static bool
+gpu_prerast_chunkable(enum mesa_prim prim)
+{
+   switch (prim) {
+   case MESA_PRIM_POINTS:
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return true;
+   default:
+      return false;
+   }
+}
+
+/* Indirect draws have no vertex count when recording, and strips with
+ * primitive restart need the restart positions to be cut: both run as a GPU
+ * chunk loop.
+ */
+static bool
+gpu_prerast_chunk_wanted(const struct panvk_cmd_buffer *cmdbuf,
+                         const struct panvk_draw_info *draw)
+{
+   uint32_t align, overlap, div;
+   const uint32_t max_verts = gpu_prerast_max_verts(cmdbuf);
+
+   if (!gpu_prerast_chunkable(draw->prim))
+      return false;
+
+   panlib_chunk_topology(draw->prim, &align, &overlap, &div);
+   if (max_verts < overlap + align)
+      return false;
+
+   if (draw->indirect.buffer_dev_addr)
+      return true;
+
+   if (draw->instance.count > PANLIB_CHUNK_MAX_INSTANCES)
+      return true;
+
+   if ((uint64_t)draw->vertex.count * draw->instance.count <= max_verts)
+      return false;
+
+   /* Instance windows and restart strips are planned on the GPU. */
+   return draw->instance.count > 1 ||
+          (overlap && draw->index.index_size && draw->index.restart_enable);
+}
+
+/* One CS loop on the compute queue and one on the vertex/tiler queue, like
+ * gpu_prerast_tess(). Each compute iteration plans a chunk of the draw with
+ * panlib_chunk_step(), lowers it into the arena and publishes it through the
+ * tessellation ready/free syncs, the vertex/tiler iteration draws it. The loop
+ * runs until the kernels say every vertex is done: no chunk is dropped.
+ */
+static void
+gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
+                       const struct panvk_draw_info *draw)
+{
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
+   const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
+   const bool indirect = draw->indirect.buffer_dev_addr != 0;
+   const bool indexed = draw->index.index_size != 0;
+   const uint64_t arena = panvk_priv_mem_dev_addr(dev->gpu_prerast_arena);
+
+   struct pan_ptr cd =
+      panvk_cmd_alloc_dev_mem(cmdbuf, desc, sizeof(struct panlib_chunk_draw), 16);
+   /* Direct draws have no app buffer to read the counts from. */
+   struct pan_ptr direct = {0};
+   if (!indirect)
+      direct = panvk_cmd_alloc_dev_mem(cmdbuf, desc, 8 * sizeof(uint32_t), 16);
+   if (!cd.gpu || (!indirect && !direct.gpu)) {
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      return;
+   }
+
+#define CD(f) (cd.gpu + offsetof(struct panlib_chunk_draw, f))
+   struct panlib_chunk_draw *c = cd.cpu;
+   memset(c, 0, sizeof(*c));
+   c->index_buffer = draw->index.buffer_dev_addr;
+   c->prims_generated = gs ? 0 : cmdbuf->state.gfx.prims_generated_query.ptr;
+   c->indexed = indexed;
+   c->max_verts = gpu_prerast_max_verts(cmdbuf);
+   c->prim = draw->prim;
+   c->restart = indexed && draw->index.restart_enable;
+   c->index_size = draw->index.index_size;
+   c->index_count_el =
+      indexed ? draw->index.buffer_size / draw->index.index_size : 0;
+   c->view_count = cmdbuf->state.gfx.render.view_mask
+                      ? util_bitcount(cmdbuf->state.gfx.render.view_mask)
+                      : 1;
+
+   uint64_t src = draw->indirect.buffer_dev_addr;
+   if (!indirect) {
+      uint32_t *rec = direct.cpu;
+
+      rec[0] = draw->vertex.count;
+      rec[1] = draw->instance.count;
+      if (indexed) {
+         rec[2] = draw->index.offset;
+         rec[3] = draw->vertex.base;
+         rec[4] = draw->instance.base;
+      } else {
+         rec[2] = draw->vertex.base;
+         rec[3] = draw->instance.base;
+         rec[4] = 0;
+      }
+      src = direct.gpu;
+   }
+
+   /* What the lowering kernels see: an indirect draw that is one chunk of
+    * the API draw. The chunk start is added to the VS invocation IDs, so
+    * the base vertex and base instance stay the API ones.
+    */
+   struct panvk_draw_info chunk = *draw;
+   chunk.indirect.buffer_dev_addr = CD(draw);
+   chunk.indirect.count_buffer_dev_addr = 0;
+   chunk.indirect.draw_count = 1;
+   chunk.indirect.stride = 5 * sizeof(uint32_t);
+   chunk.vertex.count = 0;
+   chunk.instance.count = 0;
+   chunk.pstats_counted = true;
+   chunk.prims_generated_counted = true;
+   chunk.gpu_prerast_prim_base = 0;
+
+   const enum panvk_gpu_prerast_poly_mode poly_mode =
+      gs ? PANVK_GPU_PRERAST_POLY_NONE
+         : panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, &chunk);
+   const bool xfb = gpu_prerast_xfb_active(cmdbuf);
+
+   /* The run list is built once per chunk by the compute loop below. */
+   struct panlib_vp_runs_launch_args vp_args;
+   const struct panlib_vp_runs_launch_args *vp_launch = NULL;
+   if (gpu_prerast_vp_prepare(cmdbuf, arena, &chunk, &vp_args))
+      vp_launch = &vp_args;
+   else if (PAN_ARCH < 12 && panvk_prerast_viewport_shader(&cmdbuf->state.gfx) &&
+            (gs || poly_mode == PANVK_GPU_PRERAST_POLY_NONE))
+      return;
+
+   struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
+   struct cs_builder *vt =
+      panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER);
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+   /* The descriptor patch adds to the attribute offsets, so it can only run
+    * once: the chunks keep the API base instance.
+    */
+   if (indirect)
+      patch_vs_attribs(cmdbuf, draw, PANVK_SUBQUEUE_COMPUTE);
+   gpu_prerast_acquire_arena(cmdbuf, arena);
+
+   panlib_chunk_setup(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, cd.gpu, src,
+                      indirect ? draw->indirect.count_buffer_dev_addr : 0,
+                      indirect ? draw->indirect.draw_index : 0);
+   cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+
+   /* No C-level exit from a cs_while body, it would leave the block open.
+    * Allocation failures are recorded on the command buffer instead. */
+   bool ok = true;
+   cs_while(b, MALI_CS_CONDITION_ALWAYS, cs_undef()) {
+      gpu_prerast_sync32_take(cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+                              PANVK_QUEUE_TESS_FREE_SYNC_OFFSET);
+
+      panlib_chunk_step(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, cd.gpu);
+      cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+
+      ok &= gpu_prerast_vs(cmdbuf, &chunk, vs, arena, poly_mode, false,
+                           PANVK_CSF_BARRIER_WAIT, CD(chunk_vertex));
+      cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+
+      if (gs) {
+         ok &= gpu_prerast_gs_run(
+            cmdbuf, &chunk, arena, arena + PANVK_GPU_PRERAST_RECORD_OFFSET,
+            arena + PANVK_GPU_PRERAST_INDEX_OFFSET, CD(prim_base),
+            PANVK_CSF_BARRIER_WAIT);
+         cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+      }
+      if (xfb) {
+         gpu_prerast_xfb(cmdbuf, &chunk, arena, PANLIB_BARRIER_NONE);
+         cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+      }
+      if (vp_launch) {
+         struct panvk_precomp_ctx vp_ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+         panlib_vp_runs_launch_struct(&vp_ctx, panlib_1d(1),
+                                      PANLIB_BARRIER_NONE, *vp_launch);
+         cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+      }
+
+      /* Hand "more" to the vertex/tiler CS with a CS store, not the kernel's
+       * store, so it is ordered by the ready sync below.
+       */
+      struct cs_index flag = gpu_prerast_load_flag(b, CD(more));
+      cs_store32(b, flag, cs_scratch_reg64(b, 2),
+                 offsetof(struct panlib_chunk_draw, more_vt) -
+                    offsetof(struct panlib_chunk_draw, more));
+      cs_flush_stores(b);
+
+      gpu_prerast_sync32_give(cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+                              PANVK_QUEUE_TESS_READY_SYNC_OFFSET);
+      cs_loop_conditional_break(b, __loop, MALI_CS_CONDITION_EQUAL,
+                                gpu_prerast_load_flag(b, CD(more)));
+   }
+
+   /* Vertex/tiler queue: draw each chunk once the compute side published it,
+    * then give the arena back for the next one.
+    */
+   if (!inherits_render_ctx(cmdbuf))
+      ok &= get_render_ctx(cmdbuf) == VK_SUCCESS;
+
+   cs_while(vt, MALI_CS_CONDITION_ALWAYS, cs_undef()) {
+      gpu_prerast_sync32_take(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER,
+                              PANVK_QUEUE_TESS_READY_SYNC_OFFSET);
+
+      /* Rasterizer discard needs no raster draw: the chunks only feed XFB and
+       * the queries, and thousands of them would exhaust the tiler heap.
+       */
+      if (!cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable)
+         gpu_prerast_draw_generated(cmdbuf, &chunk, arena, poly_mode,
+                                    vp_launch);
+
+      /* Read "more" before giving the arena back, the next compute
+       * iteration rewrites it.
+       */
+      cs_wait_slots(vt, dev->csf.sb.all_iters_mask);
+      struct cs_index more = gpu_prerast_load_flag(vt, CD(more_vt));
+      struct cs_index more_keep = cs_scratch_reg32(vt, 4);
+      cs_add_imm32(vt, more_keep, more, 0);
+      gpu_prerast_sync32_give(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER,
+                              PANVK_QUEUE_TESS_FREE_SYNC_OFFSET);
+      cs_loop_conditional_break(vt, __loop, MALI_CS_CONDITION_EQUAL,
+                                more_keep);
+   }
+#undef CD
+
+   gpu_prerast_release_arena(cmdbuf, arena);
+
+   if (!ok)
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+}
+
 /* Returns true if the draw was split into draws that fit the arena. */
 static bool
 gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
                   const struct panvk_draw_info *draw)
 {
-   const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
-   const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
    struct panvk_draw_info chunk = *draw;
 
-   /* ponytail: indirect draws are lowered one at a time, and the arena caps
-    * in the kernels truncate an indirect draw that exceeds them. A CS loop
-    * over GPU-side chunks is the upgrade path if that shows up.
+   /* A single indirect draw is chunked on the GPU, see
+    * gpu_prerast_chunk_loop().
     */
    if (draw->indirect.buffer_dev_addr) {
       if (draw->indirect.draw_count <= 1)
@@ -5322,12 +5597,7 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
       return true;
    }
 
-   uint32_t max_verts =
-      panvk_gpu_prerast_record_capacity(vs->gpu_prerast.io.record_stride);
-   if (gs)
-      max_verts = MIN2(max_verts,
-                       panvk_gpu_prerast_gs_cap_slots(&gs->gpu_prerast.gs) /
-                          gs->gpu_prerast.gs.invocations);
+   const uint32_t max_verts = gpu_prerast_max_verts(cmdbuf);
 
    /* Tessellation chunks on the GPU, see gpu_prerast_tess(). */
    if (draw->prim == MESA_PRIM_PATCHES)
@@ -5347,34 +5617,9 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
       return true;
    }
 
-   switch (draw->prim) {
-   case MESA_PRIM_POINTS:
-      break;
-   case MESA_PRIM_LINES:
-      align = prim_div = 2;
-      break;
-   case MESA_PRIM_TRIANGLES:
-      align = prim_div = 3;
-      break;
-   case MESA_PRIM_LINES_ADJACENCY:
-      align = prim_div = 4;
-      break;
-   case MESA_PRIM_TRIANGLES_ADJACENCY:
-      align = prim_div = 6;
-      break;
-   case MESA_PRIM_LINE_STRIP:
-      overlap = 1;
-      break;
-   case MESA_PRIM_LINE_STRIP_ADJACENCY:
-      overlap = 3;
-      break;
-   case MESA_PRIM_TRIANGLE_STRIP:
-      align = overlap = 2;
-      break;
-   default:
-      /* ponytail: fans and triangle strips with adjacency are not split by
-       * vertex range, the kernels need a first-vertex/strip-end input for
-       * that.
+   if (!gpu_prerast_chunkable(draw->prim)) {
+      /* ponytail: fans are not split by vertex range, the kernels need a
+       * first-vertex input for that.
        */
       if (!gpu_prerast_needed(cmdbuf, draw))
          return false;
@@ -5382,18 +5627,22 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
       return true;
    }
 
+   panlib_chunk_topology(draw->prim, &align, &overlap, &prim_div);
+
    const uint32_t step =
       max_verts > overlap ? (max_verts - overlap) / align * align : 0;
-   /* ponytail: restart segments would straddle chunks, a restart-aware split
-    * needs the segment starts, which live in the index buffer.
-    */
-   if (!step || (overlap && draw->index.index_size &&
-                 draw->index.restart_enable)) {
+   if (!step) {
       if (!gpu_prerast_needed(cmdbuf, draw))
          return false;
       gpu_prerast_unhandled("vertex count over the arena capacity");
       return true;
    }
+
+   /* Restart indices cut the strips where the index buffer says, the chunk
+    * loop finds them on the GPU.
+    */
+   if (overlap && draw->index.index_size && draw->index.restart_enable)
+      return false;
 
    chunk.instance.count = 1;
    for (uint32_t inst = 0; inst < draw->instance.count; inst++) {
