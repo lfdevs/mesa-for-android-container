@@ -29,6 +29,9 @@
 
 extern const struct vk_device_shader_ops panvk_per_arch(device_shader_ops);
 
+struct panvk_device;
+VkResult panvk_per_arch(create_depth_bounds_fs)(struct panvk_device *dev);
+
 #define MAX_RTS 8
 #define MAX_VS_ATTRIBS 16
 
@@ -152,6 +155,13 @@ struct panvk_graphics_sysvals {
          float x, y, z;
       } scale, offset;
    } viewport;
+
+   /* Depth bounds test, read by the FS lowering in panvk_vX_shader.c. */
+   struct {
+      float bounds[2];
+      uint32_t enable;
+      uint32_t samples;
+   } ds;
 
    struct {
 #if PAN_ARCH < 9
@@ -408,6 +418,9 @@ struct panvk_shader_variant {
          uint32_t tile_image_color_read;
          bool tile_image_z_read;
          bool tile_image_s_read;
+         bool depth_bounds;
+         /* device->depth_bounds_fs: only needed while the test is on. */
+         bool depth_bounds_only;
       } fs;
    };
 

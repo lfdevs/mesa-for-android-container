@@ -814,6 +814,10 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    if (result != VK_SUCCESS)
       goto err_free_draw_ctx;
 
+   result = panvk_per_arch(create_depth_bounds_fs)(device);
+   if (result != VK_SUCCESS)
+      goto err_finish_queues;
+
    for (unsigned i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
       const VkDeviceQueueCreateInfo *queue_create =
          &pCreateInfo->pQueueCreateInfos[i];
@@ -847,6 +851,8 @@ err_finish_queues:
    vk_foreach_queue_safe(queue, &device->vk)
       panvk_queue_destroy(queue);
 
+   if (device->depth_bounds_fs)
+      vk_shader_destroy(&device->vk, &device->depth_bounds_fs->vk, NULL);
    panvk_meta_cleanup(device);
 
 err_free_draw_ctx:
@@ -908,6 +914,8 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
 #if PAN_ARCH >= 10 && PAN_ARCH < 14
    panvk_per_arch(device_draw_context_cleanup)(device);
 #endif
+   if (device->depth_bounds_fs)
+      vk_shader_destroy(&device->vk, &device->depth_bounds_fs->vk, NULL);
    panvk_meta_cleanup(device);
    vk_pipeline_cache_destroy(device->vk.mem_cache, NULL);
    pan_kmod_bo_put(device->sparse_mem.blackhole);

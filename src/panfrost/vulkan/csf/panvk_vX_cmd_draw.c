@@ -2610,6 +2610,12 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
    bool shader_modifies_coverage = false;
    uint8_t rt_mask = cmdbuf->state.gfx.render.bound_attachments &
                      MESA_VK_RP_ATTACHMENT_ANY_COLOR_BITS;
+   /* Must match the ds.enable sysval in cmd_prepare_draw_sysvals. */
+   bool z_read = fs && (z_attachment_read(fs, &dyns->ial) ||
+                        (fs->fs.depth_bounds &&
+                         dyns->ds.depth.bounds_test.enable &&
+                         (cmdbuf->state.gfx.render.bound_attachments &
+                          MESA_VK_RP_ATTACHMENT_DEPTH_BIT)));
 
    if (fs) {
       out->rt_written = color_attachment_written_mask(fs, &dyns->cal);
@@ -2637,8 +2643,7 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
          enum pan_earlyzs_zs_tilebuf_read zs_read =
             PAN_EARLYZS_ZS_TILEBUF_NOT_READ;
 
-         if (z_attachment_read(fs, &dyns->ial) ||
-             s_attachment_read(fs, &dyns->ial)) {
+         if (z_read || s_attachment_read(fs, &dyns->ial)) {
             if (writes_z || writes_s || PAN_ARCH != 10)
                zs_read = PAN_EARLYZS_ZS_TILEBUF_READ_NO_OPT;
             else
@@ -2740,7 +2745,7 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
       cfg.write_mask = out->rt_written;
 #if PAN_ARCH >= 11
       if (fs) {
-         cfg.no_shader_depth_read = !z_attachment_read(fs, &dyns->ial);
+         cfg.no_shader_depth_read = !z_read;
          cfg.no_shader_stencil_read = !s_attachment_read(fs, &dyns->ial);
       }
 #endif
@@ -2810,7 +2815,9 @@ prepare_dcd(struct panvk_cmd_buffer *cmdbuf,
       panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER);
    bool dcd2_dirty = fs_user_dirty(cmdbuf) ||
                      dyn_gfx_state_dirty(cmdbuf, INPUT_ATTACHMENT_MAP) ||
-                     dyn_gfx_state_dirty(cmdbuf, COLOR_ATTACHMENT_MAP);
+                     dyn_gfx_state_dirty(cmdbuf, COLOR_ATTACHMENT_MAP) ||
+                     dyn_gfx_state_dirty(cmdbuf, DS_DEPTH_BOUNDS_TEST_ENABLE) ||
+                     gfx_state_dirty(cmdbuf, RENDER_STATE);
 #if PAN_ARCH >= 13
    dcd2_dirty |= dyn_gfx_state_dirty(cmdbuf, MS_ALPHA_TO_COVERAGE_ENABLE) ||
                  dyn_gfx_state_dirty(cmdbuf, DS_DEPTH_TEST_ENABLE) ||

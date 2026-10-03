@@ -406,6 +406,11 @@ fs_required(const struct panvk_cmd_graphics_state *state,
    if (rs->rasterizer_discard_enable || !fs_info)
       return false;
 
+   if (fs->fs.depth_bounds_only)
+      return dyn_state->ds.depth.bounds_test.enable &&
+             (state->render.bound_attachments &
+              MESA_VK_RP_ATTACHMENT_DEPTH_BIT);
+
    /* If we generally have side effects */
    if (fs_info->fs.sidefx)
       return true;
@@ -464,7 +469,9 @@ cached_fs_required(ASSERTED const struct panvk_cmd_graphics_state *state,
     dyn_gfx_state_dirty(cmdbuf, CB_ATTACHMENT_COUNT) ||                        \
     dyn_gfx_state_dirty(cmdbuf, CB_COLOR_WRITE_ENABLES) ||                     \
     dyn_gfx_state_dirty(cmdbuf, CB_WRITE_MASKS) ||                             \
-    dyn_gfx_state_dirty(cmdbuf, MS_ALPHA_TO_COVERAGE_ENABLE))
+    dyn_gfx_state_dirty(cmdbuf, MS_ALPHA_TO_COVERAGE_ENABLE) ||               \
+    dyn_gfx_state_dirty(cmdbuf, DS_DEPTH_BOUNDS_TEST_ENABLE) ||               \
+    gfx_state_dirty(cmdbuf, RENDER_STATE))
 
 /* After a draw, all dirty flags are cleared except the FS dirty flag which
  * needs to be set again if the draw didn't use the fragment shader. */

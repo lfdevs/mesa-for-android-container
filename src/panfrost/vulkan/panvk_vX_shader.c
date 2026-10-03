@@ -2331,6 +2331,101 @@ panvk_gpu_prerast_gs_passthrough_nir(const nir_shader_compiler_options *options,
 #undef GS_PARAM
 #endif
 
+#if PAN_ARCH >= 10
+/* The FS tests the depth bounds against the tile-resident depth. Lowered
+ * whenever the test may be on: statically enabled, or dynamic.
+ */
+static bool
+panvk_depth_bounds_lowered(const struct vk_features *features,
+                           const struct vk_graphics_pipeline_state *state)
+{
+   if (!features->depthBounds)
+      return false;
+   if (!state)
+      return true;
+   return state->ds &&
+          (BITSET_TEST(state->dynamic,
+                       MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE) ||
+           state->ds->depth.bounds_test.enable);
+}
+
+/* Clears the SampleMask bit of every sample whose stored depth is
+ * outside [min, max]. The draw makes the depth read and the late ZS update
+ * effective only while the test is enabled (see build_dcd_flags).
+ */
+static void
+panvk_lower_depth_bounds(nir_shader *nir)
+{
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_builder b = nir_builder_at(nir_before_impl(impl));
+
+   nir_variable *app_mask = nir_find_variable_with_location(
+      nir, nir_var_shader_out, FRAG_RESULT_SAMPLE_MASK);
+   nir_variable *mask_out = nir_variable_create(
+      nir, nir_var_shader_out,
+      app_mask ? app_mask->type : glsl_array_type(glsl_int_type(), 1, 0),
+      "gl_SampleMask");
+   mask_out->data.location = FRAG_RESULT_SAMPLE_MASK;
+
+   nir_def *mask = nir_imm_int(&b, ~0);
+   if (app_mask) {
+      /* The app mask becomes a temporary ANDed into the final mask. */
+      app_mask->data.mode = nir_var_shader_temp;
+      nir_fixup_deref_modes(nir);
+      b.cursor = nir_after_impl(impl);
+      mask = nir_load_array_var_imm(&b, app_mask, 0);
+   }
+   b.cursor = nir_after_impl(impl);
+
+   nir_variable *pass = nir_local_variable_create(impl, glsl_uint_type(),
+                                                  "db_pass");
+   nir_variable *idx = nir_local_variable_create(impl, glsl_uint_type(),
+                                                 "db_sample");
+   nir_store_var(&b, pass, nir_imm_int(&b, ~0), 1);
+   nir_def *bounds = load_sysval(&b, graphics, 32, ds.bounds);
+   nir_def *enable = load_sysval(&b, graphics, 32, ds.enable);
+   nir_push_if(&b, nir_ine_imm(&b, enable, 0));
+   {
+      /* The sample index must be uniform: LD_TILE returns wrong depths when
+       * lanes pass different sample indices (seen on G615 at pixels split
+       * between two triangles).
+       */
+      nir_def *samples = load_sysval(&b, graphics, 32, ds.samples);
+      nir_store_var(&b, idx, nir_imm_int(&b, 0), 1);
+      nir_push_loop(&b);
+      {
+         nir_def *s = nir_load_var(&b, idx);
+         nir_break_if(&b, nir_uge(&b, s, samples));
+         nir_store_var(&b, idx, nir_iadd_imm(&b, s, 1), 1);
+         nir_def *bit = nir_ishl(&b, nir_imm_int(&b, 1), s);
+
+         nir_io_semantics sem = {.location = FRAG_RESULT_DEPTH,
+                                 .num_slots = 1};
+         nir_def *z = nir_load_tile_pan(
+            &b, 1, 32, pan_nir_tile_location_sample(&b, FRAG_RESULT_DEPTH, s),
+            pan_nir_tile_default_coverage(&b), nir_imm_int(&b, 0),
+            .dest_type = nir_type_float32, .access = 0, .io_semantics = sem);
+         nir_def *fail =
+            nir_ior(&b, nir_flt(&b, z, nir_channel(&b, bounds, 0)),
+                    nir_flt(&b, nir_channel(&b, bounds, 1), z));
+         nir_def *p = nir_load_var(&b, pass);
+         nir_store_var(&b, pass,
+                       nir_bcsel(&b, fail, nir_iand(&b, p, nir_inot(&b, bit)),
+                                 p),
+                       1);
+      }
+      nir_pop_loop(&b, NULL);
+   }
+   nir_pop_if(&b, NULL);
+
+   nir_store_array_var_imm(&b, mask_out, 0,
+                           nir_iand(&b, mask, nir_load_var(&b, pass)), 1);
+
+   nir->info.outputs_written |= BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK);
+   nir_progress(true, impl, nir_metadata_none);
+}
+#endif
+
 static void
 panvk_hash_state(struct vk_physical_device *device,
                  const struct vk_graphics_pipeline_state *state,
@@ -2366,6 +2461,8 @@ panvk_hash_state(struct vk_physical_device *device,
          _mesa_blake3_update(&blake3_ctx, state->ial, sizeof(*state->ial));
 
 #if PAN_ARCH >= 10
+      bool depth_bounds = panvk_depth_bounds_lowered(enabled_features, state);
+      _mesa_blake3_update(&blake3_ctx, &depth_bounds, sizeof(depth_bounds));
       bool non_solid = (stages & VK_SHADER_STAGE_VERTEX_BIT) && state->rs &&
                        state->rs->polygon_mode != VK_POLYGON_MODE_FILL;
       _mesa_blake3_update(&blake3_ctx, &non_solid, sizeof(non_solid));
@@ -3732,6 +3829,13 @@ panvk_compile_shader(struct panvk_device *dev,
                &variant->fs.tile_image_z_read,
                &variant->fs.tile_image_s_read);
 
+#if PAN_ARCH >= 10
+      if (panvk_depth_bounds_lowered(&dev->vk.enabled_features, state)) {
+         panvk_lower_depth_bounds(nir);
+         variant->fs.depth_bounds = true;
+      }
+#endif
+
       /* Lower input intrinsics for fragment shaders early to get the max
        * number of varying loads, as this number is required during descriptor
        * lowering for v9+.
@@ -4104,6 +4208,8 @@ panvk_deserialize_shader_variant(struct vk_device *vk_dev,
                       sizeof(shader->fs.tile_image_z_read));
       blob_copy_bytes(blob, &shader->fs.tile_image_s_read,
                       sizeof(shader->fs.tile_image_s_read));
+      blob_copy_bytes(blob, &shader->fs.depth_bounds,
+                      sizeof(shader->fs.depth_bounds));
       break;
 
    default:
@@ -4271,6 +4377,8 @@ panvk_shader_serialize_variant(struct vk_device *vk_dev,
                        sizeof(shader->fs.tile_image_z_read));
       blob_write_bytes(blob, &shader->fs.tile_image_s_read,
                        sizeof(shader->fs.tile_image_s_read));
+      blob_write_bytes(blob, &shader->fs.depth_bounds,
+                       sizeof(shader->fs.depth_bounds));
       break;
 
    default:
@@ -4721,6 +4829,38 @@ static const struct vk_shader_ops panvk_shader_ops = {
       panvk_shader_get_executable_internal_representations,
 };
 
+VkResult
+panvk_per_arch(create_depth_bounds_fs)(struct panvk_device *dev)
+{
+#if PAN_ARCH >= 10
+   if (!dev->vk.enabled_features.depthBounds)
+      return VK_SUCCESS;
+
+   nir_builder b = nir_builder_init_simple_shader(
+      MESA_SHADER_FRAGMENT,
+      panvk_get_nir_options(dev->vk.physical, MESA_SHADER_FRAGMENT, NULL),
+      "panvk-depth-bounds-fs");
+   b.shader->info.internal = true;
+
+   const struct vk_pipeline_robustness_state rs = {0};
+   struct vk_shader_compile_info info = {
+      .stage = MESA_SHADER_FRAGMENT,
+      .nir = b.shader,
+      .robustness = &rs,
+   };
+   struct vk_shader *shader;
+   VkResult result = panvk_compile_shaders(&dev->vk, 1, &info, NULL,
+                                           &dev->vk.enabled_features, NULL,
+                                           &shader);
+   if (result != VK_SUCCESS)
+      return result;
+
+   dev->depth_bounds_fs = container_of(shader, struct panvk_shader, vk);
+   dev->depth_bounds_fs->variants[0].fs.depth_bounds_only = true;
+#endif
+   return VK_SUCCESS;
+}
+
 static void
 panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stage,
                       struct panvk_shader *shader)
@@ -4741,6 +4881,8 @@ panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stag
       }
       break;
    case MESA_SHADER_FRAGMENT:
+      if (!shader)
+         shader = to_panvk_device(cmd->vk.base.device)->depth_bounds_fs;
       if (cmd->state.gfx.fs.shader != shader) {
          cmd->state.gfx.fs.shader = shader;
          gfx_state_set_dirty(cmd, FS);

@@ -81,6 +81,9 @@ struct panvk_device {
 
    struct vk_meta_device meta;
 
+   /* Bound in place of a missing FS so the depth bounds test still runs. */
+   struct panvk_shader *depth_bounds_fs;
+
    struct {
       struct panvk_pool rw;
       struct panvk_pool rw_nc;

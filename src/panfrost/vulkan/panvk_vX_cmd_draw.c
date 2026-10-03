@@ -1009,6 +1009,24 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
 
 #if PAN_ARCH >= 10
    panvk_upload_prerast_viewports(cmdbuf, dirty_sysvals);
+
+   {
+      const struct vk_depth_stencil_state *dss =
+         &cmdbuf->vk.dynamic_graphics_state.ds;
+      const bool db_enable =
+         dss->depth.bounds_test.enable &&
+         (cmdbuf->state.gfx.render.bound_attachments &
+          MESA_VK_RP_ATTACHMENT_DEPTH_BIT);
+
+      set_gfx_sysval(cmdbuf, dirty_sysvals, ds.bounds[0],
+                     dss->depth.bounds_test.min);
+      set_gfx_sysval(cmdbuf, dirty_sysvals, ds.bounds[1],
+                     dss->depth.bounds_test.max);
+      set_gfx_sysval(cmdbuf, dirty_sysvals, ds.enable, (uint32_t)db_enable);
+      set_gfx_sysval(
+         cmdbuf, dirty_sysvals, ds.samples,
+         MAX2(cmdbuf->vk.dynamic_graphics_state.ms.rasterization_samples, 1));
+   }
 #endif
 
    if (dyn_gfx_state_dirty(cmdbuf, INPUT_ATTACHMENT_MAP))
