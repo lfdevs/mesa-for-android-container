@@ -795,6 +795,22 @@ loader_get_driver_for_fd(int fd)
       const char *override = os_get_option("MESA_LOADER_DRIVER_OVERRIDE");
       if (override && strlen(override))
          return strdup(override);
+
+      /* A PRoot Android container can expose KGSL without a DRM node.  The
+       * explicit bridge backend is the equivalent of
+       * MESA_LOADER_DRIVER_OVERRIDE=kgsl for that device, but keep the
+       * selection limited to an actual KGSL descriptor so unrelated DRM
+       * fds are still inferred normally. */
+      const char *backend = os_get_option("TERMUX_VA_GPU_BACKEND");
+      if (backend && !strcmp(backend, "kgsl")) {
+#ifdef __linux__
+         struct stat fd_stat, kgsl_stat;
+         if (fstat(fd, &fd_stat) == 0 &&
+             stat("/dev/kgsl-3d0", &kgsl_stat) == 0 &&
+             fd_stat.st_rdev == kgsl_stat.st_rdev)
+            return strdup("kgsl");
+#endif
+      }
    }
 
 #if defined(USE_DRICONF)
