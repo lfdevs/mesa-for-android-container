@@ -12,6 +12,7 @@
 #include "poly/cl/tessellator.h"
 #include "draw_helper.h"
 #include "poly/geometry.h"
+#include "draw_helper_vp.h"
 #include "tess_draw.h"
 #include "libpan_xfb.h"
 
@@ -595,6 +596,8 @@ panlib_xfb_byte_count_draw(constant uint32_t *counter, uint32_t counter_offset,
    draw[2] = 0;
    draw[3] = first_instance;
 }
+
+#include "vp_runs.cl"
 
 #elif PAN_ARCH < 9
 

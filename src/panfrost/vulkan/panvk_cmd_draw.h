@@ -522,6 +522,8 @@ struct panvk_draw_info {
 
    enum mesa_prim prim;
    bool gpu_prerast_generated;
+   /* INDEX_COUNT and INDEX_OFFSET were loaded from a GPU run header. */
+   bool index_sr_set;
    /* Already counted by a pipeline statistics query (split chunks). */
    bool pstats_counted;
    /* The primitives generated query was updated by the tessellation kernels. */
