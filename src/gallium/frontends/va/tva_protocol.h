@@ -22,15 +22,16 @@
  * License, Version 2.0.  It has been MODIFIED for the termux-va project and
  * relicensed under the GNU General Public License version 3:
  *   - protocol constants extracted from the daemon/client inline defines
- *     into this shared header (values unchanged, wire format unchanged),
+ *     into this shared header (decoder values and wire format unchanged),
  *   - default socket name changed from decode.sock to termux-va.sock,
  *   - XFER_TCP renamed to XFER_INLINE (wire value 0 unchanged; the transport
  *     is always a path-based Unix socket in termux-va, TCP was removed).
  *
- * Protocol compatibility statement: the wire format stays byte-compatible
- * with droidspaces-media-decode protocol v3 (HELLO_MAGIC 0x444D4400) so the
- * upstream regression tools (tools/test_decode.py, dmd-probe) can be reused
- * unchanged.
+ * Protocol compatibility statement: decoder handshakes and payloads stay
+ * byte-compatible with droidspaces-media-decode protocol v3
+ * (HELLO_MAGIC 0x444D4400), so the upstream regression tools
+ * (tools/test_decode.py, dmd-probe) can be reused unchanged. Encoder-only
+ * bitrate and frame-rate words are an appended termux-va extension.
  */
 #ifndef TVA_PROTOCOL_H
 #define TVA_PROTOCOL_H
@@ -56,8 +57,11 @@ extern "C" {
 /* --------------------------------------------------------------- handshake */
 
 /*
- * Magic of the 24-byte big-endian handshake request
+ * Magic of the big-endian handshake request. Decoder sessions use the
+ * original 24-byte form:
  *   [u32 magic][u32 version][u32 codec][u32 width][u32 height][u32 xfer]
+ * Encoder sessions append the target bitrate and input frame rate:
+ *   [... base fields][u32 bitrate][u32 fps_num][u32 fps_den]
  *
  * Kept identical to upstream droidspaces-media-decode ("DMD\0") so the
  * upstream protocol v3 regression tools work unchanged.  A legal NALU

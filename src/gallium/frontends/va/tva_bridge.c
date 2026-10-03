@@ -476,6 +476,9 @@ struct tva_codec {
     struct pipe_video_codec base;
 
     bool encoder;
+    uint32_t encode_bitrate;
+    uint32_t encode_fps_num;
+    uint32_t encode_fps_den;
     uint8_t *encode_packet;
     size_t encode_packet_cap;
 
@@ -2245,6 +2248,108 @@ tva_encode_copy_source(struct tva_codec *c, struct pipe_video_buffer *source,
     return 0;
 }
 
+static uint32_t
+tva_encode_picture_bitrate(const struct tva_codec *c,
+                           const struct pipe_picture_desc *picture)
+{
+    if (!c || !picture)
+        return 0;
+
+    switch (u_reduce_video_profile(c->base.profile)) {
+    case PIPE_VIDEO_FORMAT_MPEG4_AVC: {
+        const struct pipe_h264_enc_picture_desc *h264 =
+            (const struct pipe_h264_enc_picture_desc *)picture;
+        for (unsigned i = 0; i < ARRAY_SIZE(h264->rate_ctrl); i++)
+            if (h264->rate_ctrl[i].target_bitrate)
+                return h264->rate_ctrl[i].target_bitrate;
+        break;
+    }
+    case PIPE_VIDEO_FORMAT_HEVC: {
+        const struct pipe_h265_enc_picture_desc *h265 =
+            (const struct pipe_h265_enc_picture_desc *)picture;
+        for (unsigned i = 0; i < ARRAY_SIZE(h265->rc); i++)
+            if (h265->rc[i].target_bitrate)
+                return h265->rc[i].target_bitrate;
+        break;
+    }
+    default:
+        break;
+    }
+    return 0;
+}
+
+static void
+tva_encode_picture_rate(const struct tva_codec *c,
+                        const struct pipe_picture_desc *picture,
+                        uint32_t *num, uint32_t *den)
+{
+    if (!c || !picture || !num || !den)
+        return;
+
+    switch (u_reduce_video_profile(c->base.profile)) {
+    case PIPE_VIDEO_FORMAT_MPEG4_AVC: {
+        const struct pipe_h264_enc_picture_desc *h264 =
+            (const struct pipe_h264_enc_picture_desc *)picture;
+        for (unsigned i = 0; i < ARRAY_SIZE(h264->rate_ctrl); i++) {
+            if (h264->rate_ctrl[i].frame_rate_num &&
+                h264->rate_ctrl[i].frame_rate_den) {
+                *num = h264->rate_ctrl[i].frame_rate_num;
+                *den = h264->rate_ctrl[i].frame_rate_den;
+                return;
+            }
+        }
+        break;
+    }
+    case PIPE_VIDEO_FORMAT_HEVC: {
+        const struct pipe_h265_enc_picture_desc *h265 =
+            (const struct pipe_h265_enc_picture_desc *)picture;
+        for (unsigned i = 0; i < ARRAY_SIZE(h265->rc); i++) {
+            if (h265->rc[i].frame_rate_num && h265->rc[i].frame_rate_den) {
+                *num = h265->rc[i].frame_rate_num;
+                *den = h265->rc[i].frame_rate_den;
+                return;
+            }
+        }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static int
+tva_encoder_ensure_session(struct tva_codec *c)
+{
+    if (!c || !c->encoder)
+        return -1;
+    if (c->sess)
+        return 0;
+
+    struct tva_session_config cfg;
+    tva_session_config_defaults(&cfg);
+    cfg.codec = tva_encode_codec_id(c->base.profile);
+    cfg.width = c->base.width;
+    cfg.height = c->base.height;
+    cfg.bitrate = c->encode_bitrate;
+    cfg.fps_num = c->encode_fps_num;
+    cfg.fps_den = c->encode_fps_den;
+    cfg.want_shm = 0;
+    if (cfg.codec < 0)
+        return -1;
+
+    struct tva_error err;
+    memset(&err, 0, sizeof(err));
+    c->sess = tva_session_create(&cfg, &err);
+    if (!c->sess) {
+        debug_printf("tva: encoder session create failed: %s\n",
+                     err.msg[0] ? err.msg : "unknown error");
+        return -1;
+    }
+    TVA_TRACE("encoder session ready codec=%d %ux%u bitrate=%u",
+              cfg.codec, cfg.width, cfg.height, cfg.bitrate);
+    return 0;
+}
+
 static int
 tva_encode_write_destination(struct tva_codec *c, struct pipe_resource *dest,
                               const uint8_t *data, size_t len)
@@ -2289,7 +2394,8 @@ tva_codec_encode_bitstream(struct pipe_video_codec *codec,
     size_t raw_len = 0, encoded_len = 0;
     uint32_t flags = 0, pts = 0;
 
-    if (!c->sess || tva_encode_copy_source(c, source, &raw, &raw_len) < 0)
+    if (tva_encoder_ensure_session(c) < 0 ||
+        tva_encode_copy_source(c, source, &raw, &raw_len) < 0)
         goto fail;
     if (tva_session_send_raw_frame(c->sess, raw, raw_len) != TVA_OK)
         goto fail;
@@ -2347,6 +2453,14 @@ tva_codec_begin_frame(struct pipe_video_codec *codec,
             TVA_TRACE("encode input fence wait failed");
             tva_mark_broken(c);
         }
+    }
+
+    if (c->encoder && picture) {
+        uint32_t bitrate = tva_encode_picture_bitrate(c, picture);
+        if (bitrate)
+            c->encode_bitrate = bitrate;
+        tva_encode_picture_rate(c, picture, &c->encode_fps_num,
+                                &c->encode_fps_den);
     }
 
     /* begin_frame is emitted once before the first slice data by the
@@ -3832,13 +3946,15 @@ tva_pipe_create_video_codec(struct pipe_context *context,
     memset(&err, 0, sizeof(err));
 
     tva_dbg_seq++;
-    TVA_TRACE("session create codec=%d %dx%d", codec_id, templat->width, templat->height);
-    c->sess = tva_session_create(&cfg, &err);
-    if (!c->sess) {
-        debug_printf("tva: session create failed: %s\n",
-                     err.msg[0] ? err.msg : "unknown error (set DMD_VA_LOG=1)");
-        FREE(c);
-        return NULL;
+    if (!encoder) {
+        TVA_TRACE("session create codec=%d %dx%d", codec_id, templat->width, templat->height);
+        c->sess = tva_session_create(&cfg, &err);
+        if (!c->sess) {
+            debug_printf("tva: session create failed: %s\n",
+                         err.msg[0] ? err.msg : "unknown error (set DMD_VA_LOG=1)");
+            FREE(c);
+            return NULL;
+        }
     }
 
     c->pipe = context;

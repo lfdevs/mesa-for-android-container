@@ -488,10 +488,12 @@ static int unix_connect(struct tva_session *s, const char *path,
 }
 
 /*
- * Handshake.  The request is exactly 24 bytes, all big-endian:
+ * Handshake.  Decoder requests are 24 bytes, all big-endian:
  *   [4B magic][4B version][4B codec][4B width][4B height][4B xfer]
- * The daemon reads 4 bytes of magic first, then the remaining 20 - the
- * request must be written in one piece.  This client sends version 3.
+ * Encoder requests append [4B target bitrate][4B fps numerator][4B fps
+ * denominator].  The daemon reads 4 bytes of magic first, then the remaining
+ * fields; write the request in one piece.
+ * This client sends version 3.
  *
  * The response is at least 12 bytes: [status][actual xfer][namelen].  With
  * v3 and status==0, bit31 of namelen marks 16 extra bytes of endpoint
@@ -504,7 +506,7 @@ static int do_handshake(struct tva_session *s,
                         uint32_t use_version,
                         struct tva_error *err)
 {
-    uint32_t hello[6];
+    uint32_t hello[9];
     hello[0] = htonl(HELLO_MAGIC);
     hello[1] = htonl(use_version);
     hello[2] = htonl((uint32_t)cfg->codec);
@@ -512,8 +514,13 @@ static int do_handshake(struct tva_session *s,
     hello[4] = htonl((uint32_t)cfg->height);
     hello[5] = htonl(cfg->want_shm ? (uint32_t)XFER_SHM
                                    : (uint32_t)XFER_INLINE);
+    hello[6] = htonl(cfg->bitrate);
+    hello[7] = htonl(cfg->fps_num);
+    hello[8] = htonl(cfg->fps_den);
 
-    if (send_exact(s, hello, sizeof(hello), s->io_timeout_ms) != TVA_OK) {
+    size_t hello_size = codec_is_encoder(cfg->codec) ? sizeof(hello) :
+                                                        sizeof(hello[0]) * 6;
+    if (send_exact(s, hello, hello_size, s->io_timeout_ms) != TVA_OK) {
         if (err)
             *err = s->err;
         return -1;

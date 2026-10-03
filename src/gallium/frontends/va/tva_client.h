@@ -100,6 +100,9 @@ struct tva_session_config {
     int      codec;             /* CODEC_* from tva_protocol.h */
     int      width;             /* 96..8192 */
     int      height;            /* 96..4320 */
+    uint32_t bitrate;           /* encoder target, bits per second; 0 = default */
+    uint32_t fps_num;            /* encoder input frame rate; 0 = 30/1 */
+    uint32_t fps_den;
     int      want_shm;          /* non-0 = request SHM (daemon may downgrade) */
     int      connect_timeout_ms;/* <=0 = TVA_DEF_CONNECT_MS */
     int      io_timeout_ms;     /* <=0 = TVA_DEF_IO_MS */
