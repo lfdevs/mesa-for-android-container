@@ -55,6 +55,22 @@
 #include "vk_render_pass.h"
 #include "poly/geometry.h"
 
+/* kbase validates the firmware heap statistics on every tiler OOM event and
+ * terminates the queue group when frag_end > vt_end ("Invalid Heap
+ * statistics provided by firmware"), which surfaces as DEVICE_LOST.  On
+ * kbase, emit only VERTEX_TILER_STARTED: vt_end and frag_end then stay 0,
+ * nr_in_flight = vt_start keeps the grow path valid, and the heap is
+ * recycled wholesale by the queue's heap renewal instead of
+ * FINISH_FRAGMENT/FRAGMENT_COMPLETED. */
+static bool
+cmdbuf_skips_gpu_heap_ops(const struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(cmdbuf->vk.base.device->physical);
+
+   return phys_dev->kbase_node_path[0] != '\0';
+}
+
 static bool
 render_needs_zs_crc_ext(struct panvk_cmd_buffer *cmdbuf)
 {
@@ -6600,7 +6616,8 @@ flush_tiling(struct panvk_cmd_buffer *cmdbuf)
                 offsetof(struct panvk_cs_subqueue_context, syncobjs));
 
    cs_move64_to(b, add_val, 1);
-   cs_vt_end(b, cs_defer_indirect());
+   if (!cmdbuf_skips_gpu_heap_ops(cmdbuf))
+      cs_vt_end(b, cs_defer_indirect());
    panvk_instr_sync64_add(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER, true,
                           MALI_CS_SYNC_SCOPE_CSG, add_val, sync_addr,
                           cs_defer_indirect());
@@ -6617,7 +6634,8 @@ flush_tiling(struct panvk_cmd_buffer *cmdbuf)
    cs_move64_to(b, add_val, 1);
 
    cs_match_iter_sb(b, x, iter_sb, cmp_scratch) {
-      cs_vt_end(b, cs_defer(SB_WAIT_ITER(x), SB_ID(DEFERRED_SYNC)));
+      if (!cmdbuf_skips_gpu_heap_ops(cmdbuf))
+         cs_vt_end(b, cs_defer(SB_WAIT_ITER(x), SB_ID(DEFERRED_SYNC)));
       panvk_instr_sync64_add(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER, true,
                              MALI_CS_SYNC_SCOPE_CSG, add_val, sync_addr,
                              cs_defer(SB_WAIT_ITER(x), SB_ID(DEFERRED_SYNC)));
@@ -7029,7 +7047,9 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
          cs_defer(SB_WAIT_ITER(sb_upd_ctx.cur_sb), SB_ITER(sb_upd_ctx.next_sb));
 #endif
 
-      if (td_count == 1) {
+      if (cmdbuf_skips_gpu_heap_ops(cmdbuf)) {
+         /* Heap chunks are reclaimed by the queue's heap renewal. */
+      } else if (td_count == 1) {
          cs_load_to(b, completed, cur_tiler, BITFIELD_MASK(4), 40);
          cs_finish_fragment(b, true, completed_top, completed_bottom, async);
       } else if (td_count > 1) {
