@@ -201,6 +201,36 @@ panvk_per_arch(device_init_poly_heap)(struct panvk_device *dev)
    return result;
 #endif
 }
+static void
+panvk_device_cleanup_tls(struct panvk_device *dev)
+{
+   util_dynarray_foreach(&dev->tls.bos, struct panvk_priv_bo *, bo)
+      panvk_priv_bo_unref(*bo);
+   util_dynarray_fini(&dev->tls.bos);
+   simple_mtx_destroy(&dev->tls.lock);
+}
+
+#if PAN_ARCH >= 10
+/* Only GS, tessellation, XFB, polygon-mode and VS-store draws touch the
+ * gpu_prerast arenas, and many apps (DXVK D3D9 games) never issue one.  Let
+ * the kernel back them on GPU fault where it can, instead of committing and
+ * zeroing 160 MiB per VkDevice up front.  The CPU only writes the header. */
+static struct panvk_priv_mem
+alloc_gpu_prerast_arena(struct panvk_device *dev, uint64_t size)
+{
+   uint32_t flags =
+      panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP) |
+      (dev->kmod.dev->props.supported_bo_flags &
+       PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT);
+   struct panvk_priv_bo *bo;
+
+   if (panvk_priv_bo_create(dev, size, flags, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE,
+                            &bo) != VK_SUCCESS)
+      return (struct panvk_priv_mem){0};
+
+   return (struct panvk_priv_mem){.bo = (uintptr_t)bo};
+}
+#endif
 
 static VkResult
 panvk_meta_cmd_bind_map_buffer(struct vk_command_buffer *cmd,
@@ -676,6 +706,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    simple_mtx_init(&device->as.lock, mtx_plain);
 
    panvk_device_init_mempools(device);
+   simple_mtx_init(&device->tls.lock, mtx_plain);
+   util_dynarray_init(&device->tls.bos, NULL);
 
 #if PAN_ARCH >= 10
    if (PANVK_DEBUG(GPU_PRERAST) || device->vk.enabled_features.fillModeNonSolid ||
@@ -683,12 +715,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
        device->vk.enabled_features.transformFeedback ||
        device->vk.enabled_features.shaderOutputViewportIndex ||
        device->vk.enabled_features.vertexPipelineStoresAndAtomics) {
-      device->gpu_prerast_arena = panvk_pool_alloc_mem(
-         &device->mempools.rw,
-         (struct panvk_pool_alloc_info){
-            .size = PANVK_GPU_PRERAST_ARENA_SIZE,
-            .alignment = 4096,
-         });
+      device->gpu_prerast_arena =
+         alloc_gpu_prerast_arena(device, PANVK_GPU_PRERAST_ARENA_SIZE);
       if (!panvk_priv_mem_check_alloc(device->gpu_prerast_arena)) {
          result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
          goto err_free_priv_bos;
@@ -699,12 +727,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       }
    }
    if (device->vk.enabled_features.tessellationShader) {
-      device->gpu_prerast_tess_arena = panvk_pool_alloc_mem(
-         &device->mempools.rw,
-         (struct panvk_pool_alloc_info){
-            .size = PANVK_GPU_PRERAST_TESS_ARENA_SIZE,
-            .alignment = 4096,
-         });
+      device->gpu_prerast_tess_arena =
+         alloc_gpu_prerast_arena(device, PANVK_GPU_PRERAST_TESS_ARENA_SIZE);
       if (!panvk_priv_mem_check_alloc(device->gpu_prerast_tess_arena)) {
          result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
          goto err_free_priv_bos;
@@ -864,6 +888,7 @@ err_free_mem_cache:
 err_free_precomp:
    panvk_precomp_cleanup(device);
 err_free_priv_bos:
+   panvk_device_cleanup_tls(device);
    panvk_priv_bo_unref(device->gpu_prerast_syncs);
    panvk_pool_free_mem(&device->gpu_prerast_tess_arena);
    panvk_pool_free_mem(&device->gpu_prerast_arena);
@@ -930,6 +955,7 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
    panvk_priv_bo_unref(device->tiler_heap);
    panvk_priv_bo_unref(device->sample_positions);
    panvk_priv_bo_unref(device->indirect_varying_buffer);
+   panvk_device_cleanup_tls(device);
    panvk_priv_bo_unref(device->gpu_prerast_syncs);
    panvk_pool_free_mem(&device->gpu_prerast_tess_arena);
    panvk_pool_free_mem(&device->gpu_prerast_arena);

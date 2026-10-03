@@ -81,6 +81,48 @@ panvk_per_arch(kbase_mark_progress)(
    cs_flush_stores(b);
 }
 
+/* Mali indexes TLS by (core, thread slot), so concurrent jobs from any
+ * command buffer can share one region sized for the largest per-thread
+ * stack, exactly like the subqueues of one command buffer already do.
+ * Per-command-buffer TLS kept ~84 MiB per DXVK command list alive in Need
+ * for Speed Most Wanted (1.7 GiB, then Android killed apps).
+ * ponytail: outgrown BOs live until device destroy (<= 2x the peak size);
+ * refcount them per command buffer if that ever matters. */
+static uint64_t
+get_device_tls(struct panvk_cmd_buffer *cmdbuf, uint64_t size)
+{
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   uint64_t addr = 0;
+
+   simple_mtx_lock(&dev->tls.lock);
+   struct panvk_priv_bo *cur =
+      util_dynarray_num_elements(&dev->tls.bos, struct panvk_priv_bo *)
+         ? util_dynarray_top(&dev->tls.bos, struct panvk_priv_bo *)
+         : NULL;
+
+   if (!cur || pan_kmod_bo_size(cur->bo) < size) {
+      struct panvk_priv_bo *bo;
+      if (panvk_priv_bo_create(
+             dev, size,
+             panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_NO_MMAP),
+             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo) == VK_SUCCESS) {
+         util_dynarray_append(&dev->tls.bos, bo);
+         cur = bo;
+      } else {
+         cur = NULL;
+      }
+   }
+
+   if (cur)
+      addr = cur->addr.dev;
+   simple_mtx_unlock(&dev->tls.lock);
+
+   if (!addr)
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+
+   return addr;
+}
+
 static void
 emit_tls(struct panvk_cmd_buffer *cmdbuf)
 {
@@ -95,8 +137,7 @@ emit_tls(struct panvk_cmd_buffer *cmdbuf)
       unsigned size = pan_get_total_stack_size(cmdbuf->state.tls.info.tls.size,
                                                thread_tls_alloc, core_id_range);
 
-      cmdbuf->state.tls.info.tls.ptr =
-         panvk_cmd_alloc_dev_mem(cmdbuf, tls, size, 4096).gpu;
+      cmdbuf->state.tls.info.tls.ptr = get_device_tls(cmdbuf, size);
    }
 
    assert(!cmdbuf->state.tls.info.wls.size);

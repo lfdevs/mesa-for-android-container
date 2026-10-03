@@ -1709,10 +1709,14 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
    uint64_t alloc_gpu_va;
 
    if (kmod_flags & PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT) {
-      /* Growable region: nothing committed up-front, grown in 2 MB
-       * increments on GPU page fault (matches panfork's heap setup). */
-      commit_pages = 0;
+      /* Growable region: grown in 2 MB increments on GPU page fault
+       * (matches panfork's heap setup).  A CPU-mapped BO gets the first
+       * increment committed so the CPU can write a header; CPU access past
+       * the committed pages faults, so only the GPU may touch the rest. */
       extension = (2 * 1024 * 1024) / page_size;
+      commit_pages = (kmod_flags & PAN_KMOD_BO_FLAG_NO_MMAP)
+                        ? 0
+                        : MIN2(extension, va_pages);
    }
 
    if (kbase_dev->is_csf &&

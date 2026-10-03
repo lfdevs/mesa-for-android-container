@@ -27,6 +27,7 @@
 #include "util/perf/u_trace.h"
 
 #include "util/simple_mtx.h"
+#include "util/u_dynarray.h"
 #include "util/u_call_once.h"
 #include "util/u_printf.h"
 #include "util/vma.h"
@@ -119,6 +120,14 @@ struct panvk_device {
    struct panvk_priv_mem gpu_prerast_tess_arena;
    /* struct panvk_gpu_prerast_syncs */
    struct panvk_priv_bo *gpu_prerast_syncs;
+
+   /* Device-wide thread local storage shared by all command buffers. The
+    * last BO is the current one; outgrown ones stay alive for command
+    * buffers that still point at them. */
+   struct {
+      simple_mtx_t lock;
+      struct util_dynarray bos;
+   } tls;
 
    struct {
       bool initialized;
