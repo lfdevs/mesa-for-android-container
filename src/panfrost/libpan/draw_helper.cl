@@ -360,15 +360,77 @@ chunk_ends_strip(global struct panlib_chunk_draw *c, uint32_t pos)
       return *(global uint8_t *)addr == 0xff;
 }
 
+#define CHUNK_WG 256
+
+struct chunk_scan {
+   /* Last restart index, UINT32_MAX if none. */
+   uint32_t last;
+   /* Primitives of the strips that a restart index ends. */
+   uint32_t closed;
+   /* Vertices after the last restart index. */
+   uint32_t run;
+};
+
+/* Scans the vertices [start, start + len) for restart indices with the whole
+ * workgroup: one window holds up to max_verts indices. Every invocation calls
+ * it with the same arguments and gets the same result.
+ */
+static struct chunk_scan
+chunk_scan(global struct panlib_chunk_draw *c, enum mesa_prim prim,
+           uint32_t start, uint32_t len, local uint32_t *tmp)
+{
+   const uint32_t tid = cl_local_id.x;
+   const uint32_t seg = (len + CHUNK_WG - 1) / CHUNK_WG;
+   const uint32_t b = min(tid * seg, len), e = min(b + seg, len);
+   uint32_t last = UINT32_MAX, lead = 0, inner = 0, run = 0;
+
+   for (uint32_t j = b; j < e; j++) {
+      if (chunk_ends_strip(c, start + j)) {
+         if (last == UINT32_MAX)
+            lead = run;
+         else
+            inner += u_decomposed_prims_for_vertices(prim, run);
+         last = j;
+         run = 0;
+      } else {
+         run++;
+      }
+   }
+
+   tmp[tid] = last;
+   tmp[CHUNK_WG + tid] = lead;
+   tmp[2 * CHUNK_WG + tid] = inner;
+   tmp[3 * CHUNK_WG + tid] = run;
+   barrier(CLK_LOCAL_MEM_FENCE);
+
+   struct chunk_scan r = {UINT32_MAX, 0, 0};
+   for (uint32_t t = 0; t < CHUNK_WG; t++) {
+      if (tmp[t] == UINT32_MAX) {
+         r.run += tmp[3 * CHUNK_WG + t];
+      } else {
+         r.closed += u_decomposed_prims_for_vertices(
+                        prim, r.run + tmp[CHUNK_WG + t]) +
+                     tmp[2 * CHUNK_WG + t];
+         r.run = tmp[3 * CHUNK_WG + t];
+         r.last = start + tmp[t];
+      }
+   }
+   barrier(CLK_LOCAL_MEM_FENCE);
+   return r;
+}
+
 /* Plans the next chunk: whole instances when an instance fits max_verts, else
  * a vertex window of one instance. A strip window ends at its last restart
  * index, or is cut mid-strip when it holds none, repeating the strip's
  * overlap in the next one. c->draw is the chunk to lower, chunk_vertex and
  * chunk_instance the start of the chunk the VS adds to its invocation IDs.
+ *
+ * The restart scan runs on the whole workgroup, the rest on invocation 0.
  */
-KERNEL(1)
+KERNEL(CHUNK_WG)
 panlib_chunk_step(global struct panlib_chunk_draw *c)
 {
+   local uint32_t tmp[4 * CHUNK_WG];
    uint32_t align, overlap, div;
    panlib_chunk_topology(c->prim, &align, &overlap, &div);
 
@@ -376,6 +438,27 @@ panlib_chunk_step(global struct panlib_chunk_draw *c)
    const uint32_t verts = c->in_draw[0], insts = c->in_draw[1];
    const uint32_t inst = c->next_inst;
    const bool strips = c->restart && overlap;
+   const uint32_t step =
+      c->max_verts > overlap ? (c->max_verts - overlap) / align * align : 0;
+   uint32_t i = c->next_vertex;
+
+   /* Every invocation has read c: invocation 0 may write it from here on. */
+   barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
+
+   struct chunk_scan sc = {UINT32_MAX, 0, 0};
+   if (strips && verts && inst < insts) {
+      if (verts <= c->max_verts) {
+         sc = chunk_scan(c, prim, 0, verts, tmp);
+      } else if (step) {
+         while (i < verts && chunk_ends_strip(c, i))
+            i++;
+         if (i < verts)
+            sc = chunk_scan(c, prim, i, min(c->max_verts, verts - i), tmp);
+      }
+   }
+
+   if (cl_local_id.x != 0)
+      return;
 
    for (uint32_t i = 0; i < 5; i++)
       c->draw[i] = c->in_draw[i];
@@ -395,17 +478,7 @@ panlib_chunk_step(global struct panlib_chunk_draw *c)
       n_insts = min(max(c->max_verts / verts, 1u), insts - inst);
       n_insts = min(n_insts, PANLIB_CHUNK_MAX_INSTANCES);
       if (strips) {
-         uint32_t run = 0;
-
-         for (uint32_t j = 0; j < verts; j++) {
-            if (chunk_ends_strip(c, j)) {
-               prims += u_decomposed_prims_for_vertices(prim, run);
-               run = 0;
-            } else {
-               run++;
-            }
-         }
-         prims += u_decomposed_prims_for_vertices(prim, run);
+         prims = sc.closed + u_decomposed_prims_for_vertices(prim, sc.run);
       } else {
          prims = u_decomposed_prims_for_vertices(prim, verts);
       }
@@ -415,9 +488,7 @@ panlib_chunk_step(global struct panlib_chunk_draw *c)
       c->next_inst = inst + n_insts;
       c->next_vertex = 0;
    } else {
-      const uint32_t step =
-         c->max_verts > overlap ? (c->max_verts - overlap) / align * align : 0;
-      uint32_t i = c->next_vertex, next;
+      uint32_t next;
       bool done;
 
       if (!step) {
@@ -425,11 +496,7 @@ panlib_chunk_step(global struct panlib_chunk_draw *c)
          return;
       }
 
-      if (strips) {
-         while (i < verts && chunk_ends_strip(c, i))
-            i++;
-      }
-
+      /* i skipped the restart indices in front of the window above. */
       if (i >= verts) {
          c->next_inst = inst + 1;
          c->next_vertex = 0;
@@ -440,21 +507,11 @@ panlib_chunk_step(global struct panlib_chunk_draw *c)
 
       if (strips) {
          const uint32_t window = min(c->max_verts, verts - i);
-         uint32_t last = UINT32_MAX, run = 0;
 
-         for (uint32_t j = i; j < i + window; j++) {
-            if (chunk_ends_strip(c, j)) {
-               prims += u_decomposed_prims_for_vertices(prim, run);
-               run = 0;
-               last = j;
-            } else {
-               run++;
-            }
-         }
-
-         if (last != UINT32_MAX) {
-            n_verts = last - i;
-            next = last + 1;
+         prims = sc.closed;
+         if (sc.last != UINT32_MAX) {
+            n_verts = sc.last - i;
+            next = sc.last + 1;
          } else {
             n_verts = i + window >= verts ? window : step + overlap;
             next = i + window >= verts ? verts : i + step;
