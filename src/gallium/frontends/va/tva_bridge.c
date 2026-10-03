@@ -103,6 +103,7 @@
  * may temporarily grow beyond this threshold while a decoder reorders output,
  * but each SHM slot is released immediately after staging. */
 #define DMD_PIPELINE_DEPTH_MAX 32
+#define TVA_FENCE_MAGIC 0x54564146u
 static unsigned tva_pipeline_depth_default = 6;
 
 /* ----------------------------------------------------------- activation */
@@ -434,6 +435,7 @@ struct tva_pending {
 };
 
 struct tva_fence {
+    uint32_t magic;
     struct tva_codec *codec;
     struct tva_pending *slot;
     bool failed;           /* the associated pending entry was abandoned */
@@ -797,6 +799,7 @@ tva_pend_reserve_locked(struct tva_codec *c, uint32_t unit_seq,
     }
     p->fence = fence;
     if (fence) {
+        fence->magic = TVA_FENCE_MAGIC;
         fence->codec = c;
         fence->slot = p;
     }
@@ -2163,6 +2166,11 @@ tva_codec_destroy_fence(struct pipe_video_codec *codec,
                         struct pipe_fence_handle *fence_handle);
 
 static int
+tva_codec_fence_wait(struct pipe_video_codec *codec,
+                     struct pipe_fence_handle *fence_handle,
+                     uint64_t timeout);
+
+static int
 tva_encode_copy_source(struct tva_codec *c, struct pipe_video_buffer *source,
                        uint8_t **out, size_t *out_len)
 {
@@ -2314,9 +2322,36 @@ tva_codec_begin_frame(struct pipe_video_codec *codec,
                       struct pipe_video_buffer *target,
                       struct pipe_picture_desc *picture)
 {
+    struct tva_codec *c = tva_codec(codec);
+
+    /* VAAPI passes the producer fence when an encoded frame consumes a
+     * decoded surface.  The bridge reads the NV12 resources on the CPU, so
+     * it must wait explicitly; there is no GPU submission that would carry
+     * this dependency for us. */
+    if (c->encoder && picture && picture->in_fence) {
+        struct tva_fence *fence = (struct tva_fence *)picture->in_fence;
+        bool ready;
+        if (fence->magic == TVA_FENCE_MAGIC && fence->codec) {
+            ready = tva_codec_fence_wait(&fence->codec->base,
+                                         picture->in_fence, UINT64_MAX);
+        } else {
+            ready = c->pipe->screen->fence_finish(c->pipe->screen, c->pipe,
+                                                   picture->in_fence,
+                                                   UINT64_MAX);
+        }
+        TVA_TRACE("encode input fence=%p kind=%s ready=%d",
+                  (void *)picture->in_fence,
+                  fence->magic == TVA_FENCE_MAGIC ? "tva" : "pipe",
+                  ready);
+        if (!ready) {
+            TVA_TRACE("encode input fence wait failed");
+            tva_mark_broken(c);
+        }
+    }
+
     /* begin_frame is emitted once before the first slice data by the
      * frontend; the bridge delimits pictures via end_frame instead. */
-    (void)codec; (void)target; (void)picture;
+    (void)target;
 }
 
 static void

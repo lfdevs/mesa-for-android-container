@@ -48,7 +48,6 @@
 #include <stdlib.h>
 #include <string.h>
 #ifndef _WIN32
-#include <dirent.h>
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
@@ -86,35 +85,7 @@ vlVaSurfaceNoWait(void)
    if (e && (e[0] == '0' || e[0] == 'n' || e[0] == 'N'))
       return false;
 
-#ifndef _WIN32
-   /* Chromium's PRoot VA path has no DRM render node.  A blocking producer
-    * wait there prevents the same VA thread from submitting the next input
-    * unit, so use the bridge's asynchronous handoff.  Chroot keeps the
-    * normal fence wait when a render node is available. */
-   const char *bridge = getenv("TERMUX_VA_BRIDGE");
-   const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
-   if (!bridge || !(bridge[0] == '1' || bridge[0] == 'y' || bridge[0] == 'Y') ||
-       !backend || strcmp(backend, "kgsl") != 0 ||
-       access("/dev/kgsl-3d0", R_OK) != 0)
-      return false;
-
-   DIR *dir = opendir("/dev/dri");
-   if (!dir)
-      return true;
-
-   bool render_node = false;
-   struct dirent *entry;
-   while ((entry = readdir(dir))) {
-      if (strncmp(entry->d_name, "renderD", 7) == 0) {
-         render_node = true;
-         break;
-      }
-   }
-   closedir(dir);
-   return !render_node;
-#else
    return false;
-#endif
 }
 
 #define TVA_EXPORT_LOG(...) do { \
