@@ -97,6 +97,8 @@ struct panvk_rendering_state {
 #if PAN_ARCH < 9
       uint32_t bo_count;
       struct pan_kmod_bo *bos[(MAX_RTS * PANVK_MAX_PLANES) + 2];
+#endif
+#if PAN_ARCH < 10
       bool needs_load;
       bool needs_store;
 #endif

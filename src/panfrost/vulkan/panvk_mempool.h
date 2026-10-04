@@ -107,6 +107,8 @@ panvk_pool_num_bos(struct panvk_pool *pool)
 
 void panvk_pool_get_bo_handles(struct panvk_pool *pool, uint32_t *handles);
 
+void panvk_pool_get_bos(struct panvk_pool *pool, struct pan_kmod_bo **bos);
+
 void panvk_pool_flush_maps(struct panvk_pool *pool);
 void panvk_pool_invalidate_maps(struct panvk_pool *pool);
 

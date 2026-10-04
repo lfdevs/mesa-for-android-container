@@ -1504,3 +1504,65 @@ panlib_draw_index_minmax_search_helper(global uint8_t *index_buffer_ptr,
    atomic_fetch_max(max_ptr, local_max);
 }
 #endif
+
+#if PAN_ARCH == 9
+KERNEL(1)
+panlib_v9_draw_indirect_patch(global uint32_t *cmd, global uint8_t *job,
+                              uint64_t index_base,
+                              global uint32_t *first_vertex_sysval,
+                              global uint32_t *base_instance_sysval,
+                              uint32_t index_size)
+{
+   const bool indexed = index_size != 0;
+   const uint32_t count = cmd[0];
+   const uint32_t instance_count = cmd[1];
+   const uint32_t first_index = indexed ? cmd[2] : 0;
+   const int32_t vertex_base = indexed ? (int32_t)cmd[3] : (int32_t)cmd[2];
+   const uint32_t first_instance = indexed ? cmd[4] : cmd[3];
+   const bool null_job = count == 0 || instance_count == 0;
+
+   global struct mali_job_header_packed *hdr =
+      (global struct mali_job_header_packed *)job;
+   pan_unpack(hdr, JOB_HEADER, unpacked_hdr)
+      ;
+   pan_pack(hdr, JOB_HEADER, cfg) {
+      memcpy(&cfg, &unpacked_hdr, sizeof(cfg));
+      cfg.type = null_job ? MALI_JOB_TYPE_NULL : MALI_JOB_TYPE_MALLOC_VERTEX;
+   }
+
+   if (null_job)
+      return;
+
+   global struct mali_primitive_packed *prim =
+      (global struct mali_primitive_packed *)(job +
+         pan_section_offset(MALLOC_VERTEX_JOB, PRIMITIVE));
+   pan_unpack(prim, PRIMITIVE, unpacked_prim)
+      ;
+   pan_pack(prim, PRIMITIVE, cfg) {
+      memcpy(&cfg, &unpacked_prim, sizeof(cfg));
+      cfg.index_count = count;
+      cfg.base_vertex_offset = vertex_base;
+   }
+
+   global struct mali_count_packed *ic =
+      (global struct mali_count_packed *)(job +
+         pan_section_offset(MALLOC_VERTEX_JOB, INSTANCE_COUNT));
+   pan_pack(ic, COUNT, cfg) {
+      cfg.count = instance_count;
+   }
+
+   if (indexed) {
+      global struct mali_indices_packed *ind =
+         (global struct mali_indices_packed *)(job +
+            pan_section_offset(MALLOC_VERTEX_JOB, INDICES));
+      pan_pack(ind, INDICES, cfg) {
+         cfg.address = index_base + (uint64_t)first_index * index_size;
+      }
+   }
+
+   if (first_vertex_sysval)
+      *first_vertex_sysval = vertex_base;
+   if (base_instance_sysval)
+      *base_instance_sysval = first_instance;
+}
+#endif

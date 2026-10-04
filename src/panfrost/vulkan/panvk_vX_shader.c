@@ -3471,8 +3471,8 @@ panvk_compile_shader(struct panvk_device *dev,
             clone_nir ? nir_shader_clone(NULL, info->nir) : info->nir;
 #endif
 
-         bool gpu_lower = false;
 #if PAN_ARCH >= 10
+         bool gpu_lower = false;
          gpu_lower = v == PANVK_VS_VARIANT_GPU_LOWERED;
          if (gpu_lower) {
             nir_assign_io_var_locations(nir, nir_var_shader_out);

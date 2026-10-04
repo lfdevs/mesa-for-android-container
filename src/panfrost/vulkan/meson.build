@@ -86,7 +86,7 @@ fifthgen_archs = [12, 13, 14]
 fifthgen_inc_dir = ['fifthgen']
 fifthgen_files = []
 
-jm_archs = [6, 7]
+jm_archs = [6, 7, 9]
 jm_inc_dir = ['jm']
 jm_files = [
   'jm/panvk_vX_cmd_buffer.c',
@@ -143,7 +143,7 @@ common_per_arch_files = [
   sha1_h,
 ]
 
-foreach arch : [6, 7, 10, 11, 12, 13, 14]
+foreach arch : [6, 7, 9, 10, 11, 12, 13, 14]
   per_arch_files = common_per_arch_files
   inc_panvk_per_arch = []
 

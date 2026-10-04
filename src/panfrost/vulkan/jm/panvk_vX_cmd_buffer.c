@@ -9,6 +9,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "../../lib/pan_trace_gate.h"
 #include "genxml/gen_macros.h"
 
 #include "panvk_buffer.h"
@@ -35,6 +36,17 @@
 #include "vk_descriptor_update_template.h"
 #include "vk_format.h"
 
+/* ---- PANVK_TRACE gate: debug fprintf(stderr) only when PANVK_TRACE=1 ---- */
+#include <stdio.h>
+#include <stdlib.h>
+#ifdef PANVK_TRACE_BUILD
+static inline int panvk_trace_on_(void) { static int v = -1; if (v < 0) { const char *e = getenv("PANVK_TRACE"); v = (e && e[0] == '1'); } return v; }
+#else
+#define panvk_trace_on_() 0
+#endif
+#define fprintf(f, ...) (((f) == stderr && !panvk_trace_on_()) ? 0 : fprintf(f, __VA_ARGS__))
+/* ---- end gate ---- */
+
 static VkResult
 panvk_cmd_prepare_fragment_job(struct panvk_cmd_buffer *cmdbuf, uint64_t fbd)
 {
@@ -45,12 +57,23 @@ panvk_cmd_prepare_fragment_job(struct panvk_cmd_buffer *cmdbuf, uint64_t fbd)
    if (!job_ptr.gpu)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
+   (void)0;
+   int minx = fb->tiling_area_px.min_x;
+   int miny = fb->tiling_area_px.min_y;
+   int maxx = fb->tiling_area_px.max_x;
+   int maxy = fb->tiling_area_px.max_y;
+   if (maxx <= minx)
+      maxx = minx + 1;
+   if (maxy <= miny)
+      maxy = miny + 1;
+   if (fb->width_px <= 1 || fb->height_px <= 1) {
+      (void)0;
+   }
    pan_section_pack(job_ptr.cpu, FRAGMENT_JOB, PAYLOAD, payload) {
-      assert(pan_fb_bbox_is_valid(fb->tiling_area_px));
-      payload.bound_min_x = fb->tiling_area_px.min_x >> MALI_TILE_SHIFT;
-      payload.bound_min_y = fb->tiling_area_px.min_y >> MALI_TILE_SHIFT;
-      payload.bound_max_x = fb->tiling_area_px.max_x >> MALI_TILE_SHIFT;
-      payload.bound_max_y = fb->tiling_area_px.max_y >> MALI_TILE_SHIFT;
+      payload.bound_min_x = minx >> MALI_TILE_SHIFT;
+      payload.bound_min_y = miny >> MALI_TILE_SHIFT;
+      payload.bound_max_x = maxx >> MALI_TILE_SHIFT;
+      payload.bound_max_y = maxy >> MALI_TILE_SHIFT;
 
       payload.framebuffer = fbd;
    }
@@ -192,6 +215,8 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
          };
          tagged_fbd_ptr |= GENX(pan_emit_fb_desc)(&fbd_info, &fb_descs);
 
+         /* fontatlas8: no FBD hex dump */
+
          result = panvk_cmd_prepare_fragment_job(cmdbuf, tagged_fbd_ptr);
          if (result != VK_SUCCESS)
             break;
@@ -225,9 +250,13 @@ panvk_per_arch(cmd_alloc_fb_desc)(struct panvk_cmd_buffer *cmdbuf)
    fbd_size = ALIGN_POT(fbd_size, pan_alignment(RENDER_TARGET)) +
               (fb->rt_count * pan_size(RENDER_TARGET));
 
+#if PAN_ARCH != 9
+   /* TODO(v9): fb.bo_count/bos tracking not implemented for arch 9,
+    * see cmd_close_batch stub above. */
    batch->fb.bo_count = cmdbuf->state.gfx.render.fb.bo_count;
    memcpy(batch->fb.bos, cmdbuf->state.gfx.render.fb.bos,
           batch->fb.bo_count * sizeof(batch->fb.bos[0]));
+#endif /* PAN_ARCH != 9 */
 
    batch->fb.desc =
       panvk_cmd_alloc_dev_mem(cmdbuf, desc, fbd_size * batch->fb.layer_count,
@@ -250,6 +279,19 @@ panvk_per_arch(cmd_alloc_tls_desc)(struct panvk_cmd_buffer *cmdbuf, bool gfx)
    }
 
    return VK_SUCCESS;
+}
+
+/* v67b: vertex/tiler work overlaps the previous pass (PANVK_OVERLAP=0: off) */
+#include <stdlib.h>
+static __attribute__((unused)) bool
+panvk_overlap_enabled(void)
+{
+   static int on = -1;
+   if (on < 0) {
+      const char *e = getenv("PANVK_OVERLAP");
+      on = !(e && e[0] == '0');
+   }
+   return on;
 }
 
 VkResult
@@ -284,6 +326,15 @@ panvk_per_arch(cmd_prepare_tiler_context)(struct panvk_cmd_buffer *cmdbuf,
       cfg.base = dev->tiler_heap->addr.dev;
       cfg.bottom = dev->tiler_heap->addr.dev;
       cfg.top = cfg.base + cfg.size;
+      if (panvk_overlap_enabled()) { /* v67b */
+         static unsigned next_half;
+         batch->heap_half = __atomic_fetch_add(&next_half, 1, __ATOMIC_RELAXED) & 1;
+         const uint64_t half = (uint64_t)cfg.size / 2;
+         cfg.size = half;
+         cfg.base += batch->heap_half * half;
+         cfg.bottom = cfg.base;
+         cfg.top = cfg.base + half;
+      }
    }
 
    pan_pack(&batch->tiler.ctx_templ, TILER_CONTEXT, cfg) {
@@ -293,6 +344,10 @@ panvk_per_arch(cmd_prepare_tiler_context)(struct panvk_cmd_buffer *cmdbuf,
       cfg.fb_height = fb->height_px;
       cfg.heap = batch->tiler.heap_desc.gpu;
       cfg.sample_pattern = pan_sample_pattern(fb->sample_count);
+#if PAN_ARCH >= 9
+      cfg.first_provoking_vertex =
+         cmdbuf->state.gfx.render.first_provoking_vertex != U_TRISTATE_NO;
+#endif
    }
 
    memcpy(batch->tiler.heap_desc.cpu, &batch->tiler.heap_templ,

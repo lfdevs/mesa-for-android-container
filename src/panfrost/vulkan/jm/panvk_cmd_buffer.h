@@ -60,6 +60,10 @@ struct panvk_batch {
    struct pan_tls_info tlsinfo;
    unsigned wls_total_size;
    bool issued;
+   /* libpoly heap bottom reset already queued in this batch */
+   bool poly_heap_reset;
+   /* v67b: tiler heap half used by this batch */
+   unsigned heap_half;
 };
 
 enum panvk_cmd_event_op_type {

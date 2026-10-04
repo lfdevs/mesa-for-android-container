@@ -262,6 +262,18 @@ panvk_pool_get_bo_handles(struct panvk_pool *pool, uint32_t *handles)
 }
 
 void
+panvk_pool_get_bos(struct panvk_pool *pool, struct pan_kmod_bo **bos)
+{
+   unsigned idx = 0;
+
+   list_for_each_entry(struct panvk_priv_bo, bo, &pool->bos, node)
+      bos[idx++] = bo->bo;
+
+   list_for_each_entry(struct panvk_priv_bo, bo, &pool->big_bos, node)
+      bos[idx++] = bo->bo;
+}
+
+void
 panvk_pool_flush_maps(struct panvk_pool *pool)
 {
    /* Don't walk the buffers if we know the synchronization is not needed. */

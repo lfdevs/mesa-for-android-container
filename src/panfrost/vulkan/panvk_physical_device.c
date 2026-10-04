@@ -77,6 +77,7 @@
 
 PER_ARCH_FUNCS(6);
 PER_ARCH_FUNCS(7);
+PER_ARCH_FUNCS(9);
 PER_ARCH_FUNCS(10);
 PER_ARCH_FUNCS(11);
 PER_ARCH_FUNCS(12);
@@ -827,6 +828,36 @@ panvk_kbase_sync_peek(struct vk_sync *sync, void **data,
    return known;
 }
 
+int
+panvk_kbase_sync_gpu_wait_targets(
+   struct vk_sync *sync, uint64_t out[PANVK_KBASE_SYNC_TARGET_COUNT])
+{
+   if (sync->type->wait_many != kbase_cpu_sync_wait_many)
+      return 0;
+
+   struct kbase_cpu_sync *ks = container_of(sync, struct kbase_cpu_sync, sync);
+   int ret = 0;
+
+   mtx_lock(&ks->mutex);
+   if (ks->state == KBASE_CPU_SYNC_SIGNALED) {
+      ret = 1;
+   } else if (ks->state == KBASE_CPU_SYNC_PENDING ||
+              ks->state == KBASE_CPU_SYNC_WAITING) {
+      bool any = false;
+      bool has_addrs = false;
+      for (unsigned i = 0; i < PANVK_KBASE_SYNC_TARGET_COUNT; i++) {
+         any |= ks->targets[i] != 0;
+         has_addrs |= ks->target_addrs[i] != 0;
+      }
+      if (any && !has_addrs) {
+         memcpy(out, ks->targets, sizeof(ks->targets));
+         ret = 2;
+      }
+   }
+   mtx_unlock(&ks->mutex);
+   return ret;
+}
+
 static VkResult
 kbase_cpu_sync_wait_one(struct vk_device *device, struct kbase_cpu_sync *ks,
                         enum vk_sync_wait_flags wait_flags,
@@ -1416,6 +1447,7 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
       }
       break;
 
+   case 9: /* Valhall JM over kbase job atoms (jm-v9 series) */
    case 10:
    case 11:
    case 12:
