@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #if defined(__cplusplus)
@@ -14,6 +15,43 @@ extern "C" {
 struct drm_panthor_csif_info;
 
 struct pan_kmod_dev;
+struct pan_kmod_bo;
+
+struct base_external_resource {
+   uint64_t ext_resource;
+};
+
+#define BASE_JD_DEP_TYPE_DATA 1
+#define BASE_JD_DEP_TYPE_ORDER 2
+
+#define BASE_JD_REQ_FS                 (1u << 0)
+#define BASE_JD_REQ_CS                 (1u << 1)
+#define BASE_JD_REQ_T                  (1u << 2)
+#define BASE_JD_REQ_CF                 (1u << 3)
+#define BASE_JD_REQ_V                  (1u << 4)
+#define BASE_JD_REQ_EXTERNAL_RESOURCES (1u << 8)
+#define BASE_JD_REQ_ONLY_COMPUTE       (1u << 10)
+
+uint64_t kbase_kmod_job_submit(struct pan_kmod_dev *dev, uint64_t jc,
+                              uint32_t core_req, struct pan_kmod_bo **bos,
+                              uint32_t nbo,
+                              struct base_external_resource *ext_res,
+                              uint32_t next_res);
+uint64_t kbase_kmod_job_submit_dep(struct pan_kmod_dev *dev, uint64_t jc,
+                                  uint32_t core_req, struct pan_kmod_bo **bos,
+                                  uint32_t nbo, uint64_t dep0, uint8_t dep0_type,
+                                  uint64_t dep1, uint8_t dep1_type,
+                                  bool no_waiter);
+bool kbase_kmod_job_submit_retry(struct pan_kmod_dev *dev, uint64_t jc,
+                                uint32_t core_req, struct pan_kmod_bo **bos,
+                                uint32_t nbo,
+                                struct base_external_resource *ext_res,
+                                uint32_t next_res, int max_attempts);
+bool kbase_kmod_wait_atom(struct pan_kmod_dev *dev, uint64_t atom_number,
+                         int64_t timeout_ns);
+void kbase_kmod_atom_release(struct pan_kmod_dev *dev, uint64_t atom_num);
+struct pan_kmod_bo *kbase_kmod_bo_import_host(struct pan_kmod_dev *dev,
+                                            void *host_ptr, uint64_t size);
 
 /* CSF interface information for a kbase CSF device, presented in the
  * panthor uAPI layout so CSF-generic code can consume either backend.

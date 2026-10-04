@@ -42,6 +42,7 @@
 #include <sys/ioctl.h>
 #include <poll.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "util/macros.h"
@@ -66,6 +67,53 @@ const struct pan_kmod_ops kbase_kmod_ops;
 /* -------------------------------------------------------------------------
  * Internal device / BO / VM objects
  * ---------------------------------------------------------------------- */
+
+/* JM submission ported from FristOneRR-Panvk-Source (MIT) */
+
+struct base_jd_udata {
+   __u64 blob[2];
+};
+
+struct base_jd_atom {
+   __u64 jc;
+   struct base_jd_udata udata;
+   __u64 extres_list;
+   __u16 nr_extres;
+   __u8 jit_id[2];
+   struct {
+      __u8 atom_id;
+      __u8 dependency_type;
+   } pre_dep[2];
+   __u8 atom_number;
+   __u8 prio;
+   __u8 device_nr;
+   __u8 jobslot;
+   __u32 core_req;
+   __u8 renderpass_id;
+   __u8 padding[15];
+};
+
+#define BASE_JD_EVENT_DONE     0x01
+#define BASE_JD_EVENT_ERR_MASK 0x40
+
+struct base_jd_event_v2 {
+   __u32 event_code;
+   __u8 atom_number;
+   __u8 padding[3];
+   struct base_jd_udata udata;
+};
+
+#define KBASE_MAX_ATOMS 256
+
+struct kbase_atom_slot {
+   uint64_t atom_number;
+   struct pan_kmod_bo *bos[8];
+   uint32_t nbo;
+   uint32_t core_req;
+   bool completed;
+   bool errored;
+   uint32_t waiters;
+};
 
 struct kbase_kmod_dev {
    struct pan_kmod_dev base;
@@ -126,6 +174,16 @@ struct kbase_kmod_dev {
       base_kcpu_queue_id id;
       bool valid;
    } kcpu_export;
+
+   simple_mtx_t atoms_lock;
+   simple_mtx_t atoms_read_lock;
+   struct kbase_atom_slot atoms[KBASE_MAX_ATOMS];
+   uint64_t next_atom_number;
+   unsigned atom_stride;
+   uint32_t last_event_code[KBASE_MAX_ATOMS];
+   bool atom_failed[KBASE_MAX_ATOMS];
+   uint64_t last_done_atom_ctx[KBASE_MAX_ATOMS];
+   uint32_t last_done_code_ctx[KBASE_MAX_ATOMS];
 };
 
 struct kbase_kmod_vm {
@@ -1293,6 +1351,42 @@ kbase_kmod_alias_destroy(struct pan_kmod_dev *dev, uint64_t va, uint64_t size,
    munmap((void *)(uintptr_t)va, size * nents);
 }
 
+static unsigned
+kbase_probe_atom_stride(int fd)
+{
+   STATIC_ASSERT(sizeof(struct base_jd_atom) == 64);
+   STATIC_ASSERT(sizeof(struct base_jd_event_v2) == 24);
+
+   struct base_jd_atom atom = { .atom_number = 255 };
+   struct kbase_ioctl_job_submit sub = {
+      .addr = (uintptr_t)&atom,
+      .nr_atoms = 1,
+      .stride = 64,
+   };
+
+   if (ioctl(fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0)
+      return 56;
+
+   struct pollfd pfd = { .fd = fd, .events = POLLIN };
+   int ret;
+   do {
+      ret = poll(&pfd, 1, 1000);
+   } while (ret < 0 && errno == EINTR);
+
+   if (ret > 0 && (pfd.revents & POLLIN)) {
+      struct base_jd_event_v2 ev;
+      ssize_t n;
+      do {
+         n = read(fd, &ev, sizeof(ev));
+      } while (n < 0 && errno == EINTR);
+      if (n == (ssize_t)sizeof(ev) &&
+          (ev.event_code & BASE_JD_EVENT_ERR_MASK))
+         return 56;
+   }
+
+   return 64;
+}
+
 static struct pan_kmod_dev *
 kbase_kmod_dev_create(int fd, uint32_t flags,
                       UNUSED const struct pan_kmod_driver *drv_info,
@@ -1338,6 +1432,14 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
       return NULL;
    }
 
+   unsigned atom_stride = 0;
+   if (!is_csf) {
+      atom_stride = kbase_probe_atom_stride(fd);
+      struct timespec warmup_ts = { .tv_sec = 2 };
+      while (nanosleep(&warmup_ts, &warmup_ts) && errno == EINTR)
+         ;
+   }
+
    /* Map the tracking page.  The kernel requires this before any memory
     * operation. */
    void *tracking_page = mmap(NULL, 4096, PROT_NONE, MAP_SHARED, fd,
@@ -1380,6 +1482,8 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
     * automatically and this is a no-op.  Failure is not fatal for
     * enumeration, but executable allocations will fail later, so warn. */
    struct kbase_ioctl_mem_exec_init exec_init = { .va_pages = 0x100000 };
+   if (!is_csf)
+      exec_init.va_pages = 1024;
    if (ioctl(fd, KBASE_IOCTL_MEM_EXEC_INIT, &exec_init)) {
       mesa_logw("kbase: KBASE_IOCTL_MEM_EXEC_INIT failed: %s "
                 "(executable BO allocation will not work)", strerror(errno));
@@ -1421,6 +1525,11 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
    kbase_dev->kcpu.fence_fd = -1;
    simple_mtx_init(&kbase_dev->kcpu.lock, mtx_plain);
    simple_mtx_init(&kbase_dev->kcpu_export.lock, mtx_plain);
+   if (!is_csf) {
+      kbase_dev->atom_stride = atom_stride;
+      simple_mtx_init(&kbase_dev->atoms_lock, mtx_plain);
+      simple_mtx_init(&kbase_dev->atoms_read_lock, mtx_plain);
+   }
 
    if (is_csf && kbase_query_csif_info(fd, &kbase_dev->csif_info)) {
       mesa_loge("kbase: failed to query the CSF global interface");
@@ -1429,6 +1538,10 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
       kbase_dev->base.flags &= ~PAN_KMOD_DEV_FLAG_OWNS_FD;
       pan_kmod_dev_cleanup(&kbase_dev->base);
       simple_mtx_destroy(&kbase_dev->kcpu.lock);
+      if (!is_csf) {
+         simple_mtx_destroy(&kbase_dev->atoms_read_lock);
+         simple_mtx_destroy(&kbase_dev->atoms_lock);
+      }
       pan_kmod_free(allocator, kbase_dev);
       return NULL;
    }
@@ -1532,6 +1645,11 @@ kbase_kmod_dev_destroy(struct pan_kmod_dev *dev)
    }
    simple_mtx_destroy(&kbase_dev->kcpu_export.lock);
 
+   if (!kbase_dev->is_csf) {
+      simple_mtx_destroy(&kbase_dev->atoms_read_lock);
+      simple_mtx_destroy(&kbase_dev->atoms_lock);
+   }
+
    if (kbase_dev->user_reg_page)
       munmap(kbase_dev->user_reg_page, 4096);
 
@@ -1613,6 +1731,75 @@ to_kbase_mem_flags(uint32_t kmod_flags)
    }
 
    return flags;
+}
+
+struct pan_kmod_bo *
+kbase_kmod_bo_import_host(struct pan_kmod_dev *dev, void *host_ptr,
+                          uint64_t size)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   const uint64_t page_size = 4096;
+
+   if (kbase_dev->is_csf) {
+      errno = ENOTSUP;
+      return NULL;
+   }
+
+   struct kbase_kmod_bo *kbase_bo =
+      pan_kmod_dev_alloc(dev, sizeof(*kbase_bo));
+   if (!kbase_bo)
+      return NULL;
+   kbase_bo->dmabuf_fd = -1;
+
+   struct {
+      uint64_t ptr;
+      uint64_t length;
+   } user_buf = { (uintptr_t)host_ptr, size };
+
+   union kbase_ioctl_mem_import req = {
+      .in = {
+         .flags = BASE_MEM_PROT_CPU_RD | BASE_MEM_PROT_CPU_WR |
+                  BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR,
+         .phandle = (uintptr_t)&user_buf,
+         .type = BASE_MEM_IMPORT_TYPE_USER_BUFFER,
+      },
+   };
+
+   if (ioctl(dev->fd, KBASE_IOCTL_MEM_IMPORT, &req)) {
+      mesa_loge("kbase: host memory import failed: %s", strerror(errno));
+      pan_kmod_dev_free(dev, kbase_bo);
+      return NULL;
+   }
+
+   const uint64_t bo_size = req.out.va_pages * page_size;
+   kbase_bo->same_va =
+      (req.out.flags & (BASE_MEM_SAME_VA | BASE_MEM_NEED_MMAP)) != 0;
+   kbase_bo->cpu_gpu_coherent =
+      (req.out.flags & BASE_MEM_COHERENT_SYSTEM) != 0;
+
+   if (kbase_bo->same_va) {
+      kbase_bo->gpu_mapping = mmap(NULL, bo_size, PROT_READ | PROT_WRITE,
+                                   MAP_SHARED, dev->fd, req.out.gpu_va);
+      if (kbase_bo->gpu_mapping == MAP_FAILED) {
+         mesa_loge("kbase: host memory GPU mmap failed: %s", strerror(errno));
+         struct kbase_ioctl_mem_free free_req = { .gpu_addr = req.out.gpu_va };
+         ioctl(dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+         pan_kmod_dev_free(dev, kbase_bo);
+         return NULL;
+      }
+      kbase_bo->gpu_va = (uintptr_t)kbase_bo->gpu_mapping;
+   } else {
+      kbase_bo->gpu_va = req.out.gpu_va;
+   }
+
+   kbase_bo->cpu_ptr = host_ptr;
+   kbase_bo->owns_cpu_mapping = false;
+
+   uint32_t handle = p_atomic_inc_return(&kbase_dev->next_handle);
+   pan_kmod_bo_init(&kbase_bo->base, dev, NULL, bo_size,
+                    PAN_KMOD_BO_FLAG_IMPORTED, handle);
+   return &kbase_bo->base;
 }
 
 static struct pan_kmod_bo *
@@ -2302,6 +2489,373 @@ kbase_kmod_bo_set_label(UNUSED struct pan_kmod_dev *dev,
 /* -------------------------------------------------------------------------
  * ops vtable
  * ---------------------------------------------------------------------- */
+
+static struct kbase_atom_slot *
+kbase_atom_alloc_try(struct kbase_kmod_dev *kd, struct pan_kmod_bo **bos,
+                      uint32_t nbo, uint32_t core_req, bool no_waiter)
+{
+   simple_mtx_lock(&kd->atoms_lock);
+   for (unsigned attempt = 0; attempt < 255; attempt++) {
+      uint64_t num = (kd->next_atom_number++ % 255) + 1;
+      bool used = false;
+
+      for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+         if (kd->atoms[i].atom_number == num) {
+            used = true;
+            break;
+         }
+      }
+
+      if (used)
+         continue;
+
+      for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+         if (!kd->atoms[i].atom_number) {
+            struct kbase_atom_slot *s = &kd->atoms[i];
+            s->atom_number = num;
+            s->completed = s->errored = false;
+            s->waiters = no_waiter ? 0 : 1;
+            s->core_req = core_req;
+            kd->atom_failed[num] = false;
+            kd->last_event_code[num] = 0;
+            kd->last_done_atom_ctx[num] = 0;
+            kd->last_done_code_ctx[num] = 0;
+            s->nbo = MIN2(nbo, ARRAY_SIZE(s->bos));
+            for (uint32_t j = 0; j < s->nbo; j++)
+               s->bos[j] = bos[j];
+            simple_mtx_unlock(&kd->atoms_lock);
+            return s;
+         }
+      }
+   }
+
+   simple_mtx_unlock(&kd->atoms_lock);
+   return NULL;
+}
+
+static void
+kbase_atom_process_event_locked(struct kbase_kmod_dev *kd,
+                                 const struct base_jd_event_v2 *ev)
+{
+   unsigned num = ev->atom_number;
+   bool errored = ev->event_code != BASE_JD_EVENT_DONE;
+   kd->last_event_code[num] = ev->event_code;
+   kd->atom_failed[num] = errored;
+   kd->last_done_atom_ctx[num] = num;
+   kd->last_done_code_ctx[num] = ev->event_code;
+
+   for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+      if (num && kd->atoms[i].atom_number == num) {
+         struct kbase_atom_slot *s = &kd->atoms[i];
+         s->completed = true;
+         s->errored = errored;
+         if (errored)
+            mesa_loge("kbase: JM atom %u failed: event=0x%x core_req=0x%x",
+                      num, ev->event_code, s->core_req);
+         if (s->waiters == 0)
+            s->atom_number = 0;
+         return;
+      }
+   }
+
+   if (errored)
+      mesa_loge("kbase: untracked JM atom %u failed: event=0x%x",
+                num, ev->event_code);
+}
+
+static int
+kbase_drain_events(struct kbase_kmod_dev *kd, int timeout_ms)
+{
+   struct pollfd pfd = { .fd = kd->base.fd, .events = POLLIN };
+   int ret = poll(&pfd, 1, timeout_ms);
+   if (ret <= 0)
+      return ret < 0 && errno != EINTR ? -1 : 0;
+   if (!(pfd.revents & POLLIN))
+      return -1;
+
+   simple_mtx_lock(&kd->atoms_read_lock);
+   for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+      struct pollfd rfd = { .fd = kd->base.fd, .events = POLLIN };
+      ret = poll(&rfd, 1, 0);
+      if (ret <= 0) {
+         ret = ret < 0 && errno != EINTR ? -1 : 0;
+         break;
+      }
+      if (!(rfd.revents & POLLIN)) {
+         ret = -1;
+         break;
+      }
+
+      struct base_jd_event_v2 ev;
+      ssize_t n;
+      do {
+         n = read(kd->base.fd, &ev, sizeof(ev));
+      } while (n < 0 && errno == EINTR);
+      if (n != (ssize_t)sizeof(ev)) {
+         ret = -1;
+         break;
+      }
+
+      simple_mtx_lock(&kd->atoms_lock);
+      kbase_atom_process_event_locked(kd, &ev);
+      simple_mtx_unlock(&kd->atoms_lock);
+      ret = 0;
+   }
+   simple_mtx_unlock(&kd->atoms_read_lock);
+   return ret;
+}
+
+static unsigned
+kbase_reclaim_completed(struct kbase_kmod_dev *kd)
+{
+   unsigned n = 0;
+   simple_mtx_lock(&kd->atoms_lock);
+   for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+      if (kd->atoms[i].atom_number && kd->atoms[i].completed) {
+         kd->atoms[i].atom_number = 0;
+         n++;
+      }
+   }
+   simple_mtx_unlock(&kd->atoms_lock);
+   return n;
+}
+
+static struct kbase_atom_slot *
+kbase_atom_alloc(struct kbase_kmod_dev *kd, struct pan_kmod_bo **bos,
+                 uint32_t nbo, uint32_t core_req, bool no_waiter)
+{
+   for (unsigned tries = 0; tries < 10000; tries++) {
+      struct kbase_atom_slot *s =
+         kbase_atom_alloc_try(kd, bos, nbo, core_req, no_waiter);
+      if (s)
+         return s;
+      if (kbase_drain_events(kd, 0) < 0)
+         return NULL;
+      if (!kbase_reclaim_completed(kd) && kbase_drain_events(kd, 1) < 0)
+         return NULL;
+   }
+
+   mesa_loge("kbase: JM atom table is full");
+   return NULL;
+}
+
+static bool
+kbase_wait_atom(struct kbase_kmod_dev *kd, uint64_t atom_num,
+                 int64_t timeout_ns)
+{
+   if (!atom_num)
+      return true;
+   if (atom_num >= KBASE_MAX_ATOMS) {
+      errno = EINVAL;
+      return false;
+   }
+
+   int64_t deadline = timeout_ns < 0 ? -1 :
+                      os_time_get_absolute_timeout(timeout_ns);
+   if (kbase_drain_events(kd, 0) < 0)
+      return false;
+
+   for (;;) {
+      simple_mtx_lock(&kd->atoms_lock);
+      bool present = false;
+      for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+         struct kbase_atom_slot *s = &kd->atoms[i];
+         if (s->atom_number != atom_num)
+            continue;
+         present = true;
+         if (s->completed) {
+            bool ok = !s->errored;
+            if (s->waiters > 0 && --s->waiters == 0)
+               s->atom_number = 0;
+            simple_mtx_unlock(&kd->atoms_lock);
+            return ok;
+         }
+         break;
+      }
+
+      if (!present) {
+         if (kd->atom_failed[atom_num]) {
+            simple_mtx_unlock(&kd->atoms_lock);
+            return false;
+         }
+         if (kd->last_done_atom_ctx[atom_num] == atom_num) {
+            bool ok = kd->last_done_code_ctx[atom_num] == BASE_JD_EVENT_DONE;
+            simple_mtx_unlock(&kd->atoms_lock);
+            return ok;
+         }
+      }
+      simple_mtx_unlock(&kd->atoms_lock);
+
+      if (deadline >= 0 && os_time_get_nano() >= deadline)
+         return false;
+      if (kbase_drain_events(kd, 1) < 0)
+         return false;
+   }
+}
+
+uint64_t
+kbase_kmod_job_submit(struct pan_kmod_dev *dev, uint64_t jc,
+                      uint32_t core_req, struct pan_kmod_bo **bos,
+                      uint32_t nbo, struct base_external_resource *ext_res,
+                      uint32_t next_res)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   if (kd->is_csf) {
+      errno = ENOTSUP;
+      return 0;
+   }
+   if (ext_res && next_res > UINT16_MAX) {
+      errno = EINVAL;
+      return 0;
+   }
+
+   struct kbase_atom_slot *slot =
+      kbase_atom_alloc(kd, bos, nbo, core_req, false);
+   if (!slot)
+      return 0;
+
+   struct base_jd_atom atom = {
+      .jc = jc,
+      .core_req = core_req,
+      .atom_number = (uint8_t)slot->atom_number,
+   };
+   if (ext_res && next_res) {
+      atom.extres_list = (uintptr_t)ext_res;
+      atom.nr_extres = (uint16_t)next_res;
+      atom.core_req |= BASE_JD_REQ_EXTERNAL_RESOURCES;
+   }
+
+   struct kbase_ioctl_job_submit sub = {
+      .addr = (uintptr_t)&atom,
+      .nr_atoms = 1,
+      .stride = kd->atom_stride,
+   };
+   if (ioctl(dev->fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0) {
+      mesa_loge("kbase: JOB_SUBMIT failed: %s", strerror(errno));
+      simple_mtx_lock(&kd->atoms_lock);
+      slot->atom_number = 0;
+      simple_mtx_unlock(&kd->atoms_lock);
+      return 0;
+   }
+   return atom.atom_number;
+}
+
+uint64_t
+kbase_kmod_job_submit_dep(struct pan_kmod_dev *dev, uint64_t jc,
+                          uint32_t core_req, struct pan_kmod_bo **bos,
+                          uint32_t nbo, uint64_t dep0, uint8_t dep0_type,
+                          uint64_t dep1, uint8_t dep1_type, bool no_waiter)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   if (kd->is_csf) {
+      errno = ENOTSUP;
+      return 0;
+   }
+
+   struct kbase_atom_slot *slot =
+      kbase_atom_alloc(kd, bos, nbo, core_req, no_waiter);
+   if (!slot)
+      return 0;
+
+   struct base_jd_atom atom = {
+      .jc = jc,
+      .core_req = core_req,
+      .atom_number = (uint8_t)slot->atom_number,
+   };
+   uint64_t deps[2] = { dep0, dep1 };
+   uint8_t types[2] = { dep0_type, dep1_type };
+   if (deps[1] == deps[0])
+      deps[1] = 0;
+   for (unsigned i = 0; i < 2; i++) {
+      bool use = deps[i] && types[i] && deps[i] != atom.atom_number;
+      atom.pre_dep[i].atom_id = use ? (uint8_t)deps[i] : 0;
+      atom.pre_dep[i].dependency_type = use ? types[i] : 0;
+   }
+
+   struct kbase_ioctl_job_submit sub = {
+      .addr = (uintptr_t)&atom,
+      .nr_atoms = 1,
+      .stride = kd->atom_stride,
+   };
+   if (ioctl(dev->fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0) {
+      mesa_loge("kbase: JOB_SUBMIT(dep) failed: %s", strerror(errno));
+      simple_mtx_lock(&kd->atoms_lock);
+      slot->atom_number = 0;
+      simple_mtx_unlock(&kd->atoms_lock);
+      return 0;
+   }
+   return atom.atom_number;
+}
+
+void
+kbase_kmod_atom_release(struct pan_kmod_dev *dev, uint64_t atom_num)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   if (kd->is_csf) {
+      errno = ENOTSUP;
+      return;
+   }
+   if (!atom_num)
+      return;
+
+   simple_mtx_lock(&kd->atoms_lock);
+   for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+      struct kbase_atom_slot *s = &kd->atoms[i];
+      if (s->atom_number != atom_num)
+         continue;
+      if (s->waiters > 0)
+         s->waiters--;
+      if (s->waiters == 0 && s->completed)
+         s->atom_number = 0;
+      break;
+   }
+   simple_mtx_unlock(&kd->atoms_lock);
+}
+
+bool
+kbase_kmod_job_submit_retry(struct pan_kmod_dev *dev, uint64_t jc,
+                            uint32_t core_req, struct pan_kmod_bo **bos,
+                            uint32_t nbo, struct base_external_resource *ext_res,
+                            uint32_t next_res, int max_attempts)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   if (kd->is_csf) {
+      errno = ENOTSUP;
+      return false;
+   }
+
+   for (int attempt = 0; attempt < max_attempts; attempt++) {
+      uint64_t atom = kbase_kmod_job_submit(dev, jc, core_req, bos, nbo,
+                                           ext_res, next_res);
+      if (!atom)
+         return false;
+      if (kbase_kmod_wait_atom(dev, atom, -1))
+         return true;
+
+      if (attempt + 1 < max_attempts) {
+         int64_t delay_ms = 400ll * (attempt + 1);
+         struct timespec ts = {
+            .tv_sec = delay_ms / 1000,
+            .tv_nsec = (delay_ms % 1000) * 1000000,
+         };
+         while (nanosleep(&ts, &ts) && errno == EINTR)
+            ;
+      }
+   }
+   return false;
+}
+
+bool
+kbase_kmod_wait_atom(struct pan_kmod_dev *dev, uint64_t atom_number,
+                     int64_t timeout_ns)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   if (kd->is_csf) {
+      errno = ENOTSUP;
+      return false;
+   }
+   return kbase_wait_atom(kd, atom_number, timeout_ns);
+}
 
 const struct pan_kmod_ops kbase_kmod_ops = {
    .dev_create             = kbase_kmod_dev_create,
