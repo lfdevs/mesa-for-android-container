@@ -28,6 +28,10 @@
 #include "pan_format.h"
 #include "pan_props.h"
 
+#ifndef PANVK_KBASE_RELEASE
+#define PANVK_KBASE_RELEASE "dev"
+#endif
+
 /* We reserve one ubo for push constant, one for sysvals and one per-set for the
  * descriptor metadata  */
 #define RESERVED_UBO_COUNT                   6
@@ -1409,7 +1413,8 @@ panvk_per_arch(get_physical_device_properties)(
 
    snprintf(properties->driverName, VK_MAX_DRIVER_NAME_SIZE, "panvk");
    snprintf(properties->driverInfo, VK_MAX_DRIVER_INFO_SIZE,
-            "Mesa " PACKAGE_VERSION MESA_GIT_SHA1);
+            "PanVK-kbase " PANVK_KBASE_RELEASE " (Mesa " PACKAGE_VERSION
+            MESA_GIT_SHA1 ")");
 
    /* VK_EXT_physical_device_drm */
    if (device->drm.primary_rdev) {
