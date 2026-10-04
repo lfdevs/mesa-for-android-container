@@ -891,6 +891,13 @@ tva_cpu_copy_enabled(void)
     return true;
 }
 
+static bool
+tva_sw_backend_enabled(void)
+{
+    const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
+    return backend && !strcmp(backend, "sw");
+}
+
 #if defined(__linux__)
 static bool
 tva_drm_render_node_present(void)
@@ -3859,11 +3866,16 @@ tva_pipe_create_video_buffer(struct pipe_context *context,
     }
 #endif
 
-    /* Bridge surfaces are CPU-filled and may be exported to Vulkan.  Allocate
+    /* Bridge surfaces are CPU-filled and may be exported to Vulkan. Allocate
      * them as linear shared resources so KGSL does not need an export-time
-     * shadow allocation. */
+     * shadow allocation. The null llvmpipe winsys has no display-target
+     * allocator for PIPE_BIND_SHARED/LINEAR, so let it create ordinary
+     * resources when the explicit software backend is selected. */
     struct pipe_video_buffer bridge_templ = *templat;
-    bridge_templ.bind |= PIPE_BIND_SHARED | PIPE_BIND_LINEAR;
+    if (tva_sw_backend_enabled())
+        bridge_templ.bind &= ~(PIPE_BIND_SHARED | PIPE_BIND_LINEAR);
+    else
+        bridge_templ.bind |= PIPE_BIND_SHARED | PIPE_BIND_LINEAR;
     struct pipe_video_buffer *buffer =
         vl_video_buffer_create(context, &bridge_templ);
     fprintf(stderr, "tva: separate video buffer %s\n", buffer ? "ready" : "failed");
