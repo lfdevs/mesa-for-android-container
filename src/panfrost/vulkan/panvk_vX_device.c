@@ -211,17 +211,17 @@ panvk_device_cleanup_tls(struct panvk_device *dev)
 }
 
 #if PAN_ARCH >= 10
-/* Only GS, tessellation, XFB, polygon-mode and VS-store draws touch the
- * gpu_prerast arenas, and many apps (DXVK D3D9 games) never issue one.  Let
- * the kernel back them on GPU fault where it can, instead of committing and
- * zeroing 160 MiB per VkDevice up front.  The CPU only writes the header. */
+/* Commit the gpu_prerast arenas at creation.  On MediaTek kbase (CSF 1.21),
+ * GPU-fault growth loses the first gpu_prerast draw's output: PanProbe
+ * gs_viewport_depth case A drew nothing on every run; without alloc-on-fault,
+ * 6/6 runs pass.
+ * ponytail: commits 160 MiB per VkDevice enabling GS/tess/XFB features;
+ * upgrade path = KBASE_IOCTL_MEM_COMMIT on first gpu_prerast use. */
 static struct panvk_priv_mem
 alloc_gpu_prerast_arena(struct panvk_device *dev, uint64_t size)
 {
    uint32_t flags =
-      panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP) |
-      (dev->kmod.dev->props.supported_bo_flags &
-       PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT);
+      panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP);
    struct panvk_priv_bo *bo;
 
    if (panvk_priv_bo_create(dev, size, flags, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE,
