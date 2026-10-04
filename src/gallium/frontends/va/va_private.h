@@ -379,6 +379,15 @@ typedef struct {
    struct pipe_fence_handle *fence;
 } vlVaBuffer;
 
+/* Gallium has no VP9 encoder picture descriptor.  Keep the VA-API rate
+ * control values alongside the common descriptor for the termux-va bridge. */
+struct vlVaVP9EncPictureDesc {
+   struct pipe_picture_desc base;
+   uint32_t target_bitrate;
+   uint32_t frame_rate_num;
+   uint32_t frame_rate_den;
+};
+
 typedef struct vlVaContext {
    struct pipe_video_codec templat, *decoder;
    struct pipe_video_buffer *target;
@@ -394,6 +403,7 @@ typedef struct vlVaContext {
       struct pipe_h264_enc_picture_desc h264enc;
       struct pipe_h265_enc_picture_desc h265enc;
       struct pipe_av1_enc_picture_desc av1enc;
+      struct vlVaVP9EncPictureDesc vp9enc;
    } desc;
 
    struct {

@@ -212,6 +212,7 @@ tva_encode_profile_supported(enum pipe_video_profile profile)
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
     case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
     case PIPE_VIDEO_PROFILE_HEVC_MAIN:
+    case PIPE_VIDEO_PROFILE_VP9_PROFILE0:
         return true;
     default:
         return false;
@@ -243,6 +244,8 @@ tva_encode_codec_id(enum pipe_video_profile profile)
         return CODEC_H264_ENC;
     case PIPE_VIDEO_FORMAT_HEVC:
         return CODEC_HEVC_ENC;
+    case PIPE_VIDEO_FORMAT_VP9:
+        return CODEC_VP9_ENC;
     default:
         return -1;
     }
@@ -2279,6 +2282,17 @@ tva_encode_picture_bitrate(const struct tva_codec *c,
                 return h265->rc[i].target_bitrate;
         break;
     }
+    case PIPE_VIDEO_FORMAT_VP9: {
+        struct tva_vp9_enc_picture_desc {
+            struct pipe_picture_desc base;
+            uint32_t target_bitrate;
+            uint32_t frame_rate_num;
+            uint32_t frame_rate_den;
+        };
+        const struct tva_vp9_enc_picture_desc *vp9 =
+            (const struct tva_vp9_enc_picture_desc *)picture;
+        return vp9->target_bitrate;
+    }
     default:
         break;
     }
@@ -2316,6 +2330,21 @@ tva_encode_picture_rate(const struct tva_codec *c,
                 *den = h265->rc[i].frame_rate_den;
                 return;
             }
+        }
+        break;
+    }
+    case PIPE_VIDEO_FORMAT_VP9: {
+        struct tva_vp9_enc_picture_desc {
+            struct pipe_picture_desc base;
+            uint32_t target_bitrate;
+            uint32_t frame_rate_num;
+            uint32_t frame_rate_den;
+        };
+        const struct tva_vp9_enc_picture_desc *vp9 =
+            (const struct tva_vp9_enc_picture_desc *)picture;
+        if (vp9->frame_rate_num && vp9->frame_rate_den) {
+            *num = vp9->frame_rate_num;
+            *den = vp9->frame_rate_den;
         }
         break;
     }

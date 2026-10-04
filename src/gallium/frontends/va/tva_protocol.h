@@ -99,18 +99,21 @@ typedef enum {
      * raw NV12 in and an encoded access unit out. */
     CODEC_H264_ENC = 5,
     CODEC_HEVC_ENC = 6,
+    CODEC_VP9_ENC  = 7,
     CODEC_MAX
 } CodecId;
 
 static inline int codec_is_encoder(int codec)
 {
-    return codec == CODEC_H264_ENC || codec == CODEC_HEVC_ENC;
+    return codec == CODEC_H264_ENC || codec == CODEC_HEVC_ENC ||
+           codec == CODEC_VP9_ENC;
 }
 
 static inline int codec_base_id(int codec)
 {
     return codec == CODEC_H264_ENC ? CODEC_H264 :
-           codec == CODEC_HEVC_ENC ? CODEC_HEVC : codec;
+           codec == CODEC_HEVC_ENC ? CODEC_HEVC :
+           codec == CODEC_VP9_ENC ? CODEC_VP9 : codec;
 }
 
 /*

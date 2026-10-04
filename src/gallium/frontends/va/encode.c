@@ -5,6 +5,7 @@
 
 #include "pipe/p_video_codec.h"
 
+#include "util/u_handle_table.h"
 #include "util/u_video.h"
 
 #include "va_private.h"
@@ -68,6 +69,13 @@ handleVAEncMiscParameterTypeRateControl(vlVaContext *context, VAEncMiscParameter
       status = vlVaHandleVAEncMiscParameterTypeRateControlHEVC(context, misc);
       break;
 
+   case PIPE_VIDEO_FORMAT_VP9: {
+      VAEncMiscParameterRateControl *rc = (VAEncMiscParameterRateControl *)misc->data;
+      if (rc->bits_per_second)
+         context->desc.vp9enc.target_bitrate = rc->bits_per_second;
+      break;
+   }
+
 #if VA_CHECK_VERSION(1, 16, 0)
    case PIPE_VIDEO_FORMAT_AV1:
       status = vlVaHandleVAEncMiscParameterTypeRateControlAV1(context, misc);
@@ -93,6 +101,15 @@ handleVAEncMiscParameterTypeFrameRate(vlVaContext *context, VAEncMiscParameterBu
    case PIPE_VIDEO_FORMAT_HEVC:
       status = vlVaHandleVAEncMiscParameterTypeFrameRateHEVC(context, misc);
       break;
+
+   case PIPE_VIDEO_FORMAT_VP9: {
+      VAEncMiscParameterFrameRate *rate = (VAEncMiscParameterFrameRate *)misc->data;
+      uint32_t den = rate->framerate >> 16;
+      uint32_t num = rate->framerate & 0xffff;
+      context->desc.vp9enc.frame_rate_num = num;
+      context->desc.vp9enc.frame_rate_den = den ? den : 1;
+      break;
+   }
 
 #if VA_CHECK_VERSION(1, 16, 0)
    case PIPE_VIDEO_FORMAT_AV1:
@@ -140,6 +157,13 @@ handleVAEncSequenceParameterBufferType(vlVaDriver *drv, vlVaContext *context, vl
    case PIPE_VIDEO_FORMAT_HEVC:
       status = vlVaHandleVAEncSequenceParameterBufferTypeHEVC(drv, context, buf);
       break;
+
+   case PIPE_VIDEO_FORMAT_VP9: {
+      VAEncSequenceParameterBufferVP9 *vp9 = buf->data;
+      if (vp9->bits_per_second)
+         context->desc.vp9enc.target_bitrate = vp9->bits_per_second;
+      break;
+   }
 
 #if VA_CHECK_VERSION(1, 16, 0)
    case PIPE_VIDEO_FORMAT_AV1:
@@ -421,6 +445,27 @@ handleVAEncPictureParameterBufferType(vlVaDriver *drv, vlVaContext *context, vlV
       status = vlVaHandleVAEncPictureParameterBufferTypeAV1(drv, context, buf);
       break;
 #endif
+
+   case PIPE_VIDEO_FORMAT_VP9: {
+      /* The Gallium video state API has no VP9 encoder descriptor, but the
+       * VA-API picture parameters still carry the coded-buffer handle.  Keep
+       * that handle in the context so the bridge can submit the encoded
+       * packet and expose it through VAMapBuffer. */
+      VAEncPictureParameterBufferVP9 *vp9 = buf->data;
+      vlVaBuffer *coded_buf = handle_table_get(drv->htab, vp9->coded_buf);
+      if (!coded_buf)
+         return VA_STATUS_ERROR_INVALID_BUFFER;
+
+      if (!coded_buf->derived_surface.resource)
+         coded_buf->derived_surface.resource = pipe_buffer_create(
+            drv->pipe->screen, PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_STAGING,
+            MAX2(1024 * 1024, coded_buf->size));
+      if (!coded_buf->derived_surface.resource)
+         return VA_STATUS_ERROR_ALLOCATION_FAILED;
+
+      context->coded_buf = coded_buf;
+      break;
+   }
 
    default:
       break;
