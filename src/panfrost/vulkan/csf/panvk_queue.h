@@ -97,6 +97,10 @@ struct panvk_subqueue {
       uint32_t last_flush_id;
       uint64_t last_stream_addr;
 
+      /* TILER_HEAP descriptor last stored into this subqueue's context by a
+       * ring entry (see kbase_renew_tiler_heap()). */
+      uint64_t heap_desc;
+
       struct panvk_priv_mem init_cs;
       uint64_t init_stream_addr;
       uint32_t init_stream_size;
@@ -138,12 +142,13 @@ struct panvk_gpu_queue {
    uint32_t kbase_tiler_submit_count;
    uint64_t kbase_tiler_work_count;
    uint64_t kbase_gpu_waits[PANVK_SUBQUEUE_COUNT][PANVK_SUBQUEUE_COUNT];
-   /* Tiler heap context retired by the last heap renewal.  The firmware CS
-    * HEAP_SET registers keep pointing at the old context until each graphics
-    * subqueue executes its next ring entry, so the context is only
-    * destroyed once both graphics subqueues have provably re-armed HEAP_SET
-    * (their emitted-job counts passed the values recorded at retirement and
-    * the pre-renewal drain completed).  ctx == 0 means the slot is empty. */
+   /* Which of the two TILER_HEAP descriptor slots the current heap uses. */
+   uint32_t kbase_heap_slot;
+   /* Tiler heap context retired by the last heap renewal.  Ring entries
+    * emitted before the renewal keep using it (their HEAP_SET and TILER_HEAP
+    * descriptor slot), so it is only destroyed once both graphics subqueues
+    * have completed a ring entry emitted after the retirement.  ctx == 0
+    * means the slot is empty. */
    struct {
       uint64_t ctx;
       uint64_t vt_jobs;
