@@ -210,6 +210,7 @@ panlib_tess_step(global struct panlib_tess_draw *t, global uint32_t *tcs_stat)
    if (first == 0 && ppi <= t->max_patches) {
       per_inst = ppi;
       k = min(t->max_patches / ppi, t->instances - inst);
+      k = min(k, PANLIB_CHUNK_MAX_INSTANCES);
    } else {
       per_inst = min(t->max_patches, ppi - first);
       k = 1;
@@ -549,6 +550,38 @@ panlib_chunk_step(global struct panlib_chunk_draw *c)
       atomic_fetch_add((global atomic_uint *)(uintptr_t)c->prims_generated,
                        prims * n_insts * c->view_count);
    }
+}
+
+/* One chunk of a triangle fan as 32-bit indices: the hub element, then the
+ * count - 1 elements from first. Without an index buffer (index_size 0) the
+ * element numbers are the indices. Elements past the buffer read as 0.
+ */
+KERNEL(64)
+panlib_fan_chunk_indices(global uint32_t *dst, uint64_t index_buffer,
+                         uint32_t index_size, uint32_t index_count_el,
+                         uint32_t hub, uint32_t first, uint32_t count)
+{
+   uint32_t j = cl_global_id.x;
+
+   if (j >= count)
+      return;
+
+   uint32_t v = j ? first + j - 1 : hub;
+
+   if (index_size) {
+      uintptr_t addr = (uintptr_t)(index_buffer + (uint64_t)v * index_size);
+
+      if (v >= index_count_el)
+         v = 0;
+      else if (index_size == 4)
+         v = *(global uint32_t *)addr;
+      else if (index_size == 2)
+         v = *(global uint16_t *)addr;
+      else
+         v = *(global uint8_t *)addr;
+   }
+
+   dst[j] = v;
 }
 
 #define XFB_WG 256

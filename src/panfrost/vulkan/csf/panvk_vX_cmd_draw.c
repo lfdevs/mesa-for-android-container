@@ -5507,6 +5507,24 @@ gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
                       indirect ? draw->indirect.draw_index : 0);
    cs_wait_slots(b, dev->csf.sb.all_iters_mask);
 
+   /* A draw conditional rendering skips plans no vertex: no lowering, XFB or
+    * primitives generated. Both loops still run once to hand the arena over.
+    */
+   if (cmdbuf->state.cond_render.enabled ||
+       cmdbuf->state.cond_render.inherited) {
+      struct cs_index pass = gpu_prerast_cond_render_pass(cmdbuf, b);
+      struct cs_index zero = cs_scratch_reg32(b, 4);
+      struct cs_index dst = cs_scratch_reg64(b, 6);
+
+      cs_if(b, MALI_CS_CONDITION_EQUAL, pass) {
+         cs_move32_to(b, zero, 0);
+         cs_move64_to(b, dst, CD(in_draw));
+         cs_store32(b, zero, dst, 0);
+         cs_store32(b, zero, dst, 4);
+         cs_flush_stores(b);
+      }
+   }
+
    /* No C-level exit from a cs_while body, it would leave the block open.
     * Allocation failures are recorded on the command buffer instead. */
    bool ok = true;
@@ -5592,6 +5610,59 @@ gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
       vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 }
 
+/* A triangle fan over the arena, as indexed fans of the hub and the next
+ * window of vertices. Windows share one vertex, so each API triangle is drawn
+ * once with its own vertices, winding and primitive ID. The 32-bit chunk
+ * indices are built on the compute queue, before the lowered VS reads them.
+ */
+static bool
+gpu_prerast_split_fan(struct panvk_cmd_buffer *cmdbuf,
+                      const struct panvk_draw_info *draw, uint32_t max_verts)
+{
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
+   const uint32_t isz = draw->index.index_size;
+   const uint32_t win = max_verts - 1;
+   struct panvk_draw_info chunk = *draw;
+
+   /* Non-indexed: indices from 0 plus vertex.base give the same IDs. */
+   chunk.index.index_size = 4;
+   chunk.index.offset = 0;
+   chunk.index.restart_enable = false;
+   chunk.instance.count = 1;
+
+   for (uint32_t inst = 0; inst < draw->instance.count; inst++) {
+      chunk.instance.base = draw->instance.base + inst;
+      for (uint32_t s = 1; s + 1 < draw->vertex.count; s += win - 1) {
+         const uint32_t n = MIN2(win, draw->vertex.count - s);
+         struct pan_ptr ib =
+            panvk_cmd_alloc_dev_mem(cmdbuf, desc, (n + 1) * sizeof(uint32_t),
+                                    16);
+         if (!ib.gpu) {
+            vk_command_buffer_set_error(&cmdbuf->vk,
+                                        VK_ERROR_OUT_OF_DEVICE_MEMORY);
+            return true;
+         }
+
+         struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+         panlib_fan_chunk_indices(
+            &ctx, panlib_1d(DIV_ROUND_UP(n + 1, 64)), PANLIB_BARRIER_NONE,
+            ib.gpu, draw->index.buffer_dev_addr, isz,
+            isz ? draw->index.buffer_size / isz : 0,
+            isz ? draw->index.offset : 0, (isz ? draw->index.offset : 0) + s,
+            n + 1);
+         cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+
+         chunk.index.buffer_dev_addr = ib.gpu;
+         chunk.index.buffer_size = (n + 1) * sizeof(uint32_t);
+         chunk.vertex.count = n + 1;
+         chunk.gpu_prerast_prim_base = s - 1;
+         panvk_cmd_draw(cmdbuf, chunk);
+      }
+   }
+   return true;
+}
+
 /* Returns true if the draw was split into draws that fit the arena. */
 static bool
 gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
@@ -5621,12 +5692,20 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
    if (draw->prim == MESA_PRIM_PATCHES)
       return false;
 
+   /* The chunk loop caps the instances of the other topologies. */
+   const bool fan = draw->prim == MESA_PRIM_TRIANGLE_FAN;
+   const bool fan_insts =
+      fan && draw->instance.count > PANLIB_CHUNK_MAX_INSTANCES;
+
    uint32_t align = 1, overlap = 0, prim_div = 1;
-   if ((uint64_t)draw->vertex.count * draw->instance.count <= max_verts)
+   if ((uint64_t)draw->vertex.count * draw->instance.count <= max_verts &&
+       !fan_insts)
       return false;
 
    if (draw->vertex.count <= max_verts) {
-      const uint32_t step = max_verts / draw->vertex.count;
+      const uint32_t step =
+         MIN2(max_verts / draw->vertex.count,
+              fan ? PANLIB_CHUNK_MAX_INSTANCES : UINT32_MAX);
       for (uint32_t i = 0; i < draw->instance.count; i += step) {
          chunk.instance.base = draw->instance.base + i;
          chunk.instance.count = MIN2(step, draw->instance.count - i);
@@ -5635,9 +5714,14 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
       return true;
    }
 
+   if (fan && !(draw->index.index_size && draw->index.restart_enable) &&
+       max_verts >= 3)
+      return gpu_prerast_split_fan(cmdbuf, draw, max_verts);
+
    if (!gpu_prerast_chunkable(draw->prim)) {
-      /* ponytail: fans are not split by vertex range, the kernels need a
-       * first-vertex input for that.
+      /* ponytail: a restart index starts a new fan hub, which this CPU
+       * split cannot see. Indexed fans with restart over the arena are
+       * not split.
        */
       if (!gpu_prerast_needed(cmdbuf, draw))
          return false;
