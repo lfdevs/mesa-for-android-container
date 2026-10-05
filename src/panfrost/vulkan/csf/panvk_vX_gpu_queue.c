@@ -463,9 +463,11 @@ kbase_subqueue_reserve_ring(struct panvk_gpu_queue *queue,
    return VK_SUCCESS;
 }
 
-/* Two TILER_HEAP descriptors live at the start of tiler_heap.desc (the
- * geometry buffer starts at +4096). */
+/* PANVK_KBASE_HEAP_SLOTS TILER_HEAP descriptors live at the start of
+ * tiler_heap.desc (the geometry buffer starts at +4096). */
 #define KBASE_HEAP_DESC_SLOT_STRIDE 64
+static_assert(PANVK_KBASE_HEAP_SLOTS * KBASE_HEAP_DESC_SLOT_STRIDE <= 4096,
+              "heap descriptor slots overlap the geometry buffer");
 
 static uint64_t
 kbase_heap_desc_addr(const struct panvk_gpu_queue *queue)
@@ -2264,11 +2266,10 @@ cleanup_tiler(struct panvk_gpu_queue *queue)
        * any) is no longer firmware-visible and can be destroyed with the
        * current one. */
       kbase_spare_heap_finish(queue);
-      if (queue->kbase_retired_heap.ctx) {
+      for (uint32_t i = 0; i < queue->kbase_retired_heap_count; i++)
          kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev,
-                                           queue->kbase_retired_heap.ctx);
-         queue->kbase_retired_heap.ctx = 0;
-      }
+                                           queue->kbase_retired_heaps[i].ctx);
+      queue->kbase_retired_heap_count = 0;
       kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev,
                                         tiler_heap->context.dev_addr);
    } else
@@ -2287,8 +2288,8 @@ cleanup_tiler(struct panvk_gpu_queue *queue)
 }
 
 #ifdef HAVE_PAN_KMOD_KBASE
-/* Destroy the heap context retired by the previous renewal, provided every
- * graphics subqueue has completed a ring entry emitted after the retirement.
+/* Destroy the retired heap contexts, oldest first, whose graphics subqueues
+ * have completed a ring entry emitted after the retirement.
  * Each ring entry re-issues HEAP_SET (and its TILER_HEAP descriptor slot)
  * before its CALL and entries retire in order, so the firmware provably no
  * longer holds a reference to the retired context.  Destroying
@@ -2297,25 +2298,44 @@ cleanup_tiler(struct panvk_gpu_queue *queue)
  * then walks whatever now lives at the old chunk VAs as a chunk list and
  * faults on a garbage pointer (observed as an exception 0xc0 CSG fatal at a
  * wild sideband address during heavy allocation churn).  Returns false when
- * the context must stay retired for now. */
+ * every retired slot is still in use. */
 static bool
 kbase_try_destroy_retired_heap(struct panvk_gpu_queue *queue)
 {
    struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
 
-   if (!queue->kbase_retired_heap.ctx)
+   if (!queue->kbase_retired_heap_count)
       return true;
 
-   if (kbase_subqueue_seqno_cell(queue, PANVK_SUBQUEUE_VERTEX_TILER)->seqno <=
-          queue->kbase_retired_heap.vt_jobs ||
-       kbase_subqueue_seqno_cell(queue, PANVK_SUBQUEUE_FRAGMENT)->seqno <=
-          queue->kbase_retired_heap.frag_jobs)
-      return false;
+   /* The seqno cells are CPU-cached: drop stale lines before reading. */
+   kbase_cache_invalidate_range(
+      (const void *)kbase_subqueue_seqno_cell(queue, PANVK_SUBQUEUE_VERTEX_TILER),
+      kbase_seqno_stride());
+   kbase_cache_invalidate_range(
+      (const void *)kbase_subqueue_seqno_cell(queue, PANVK_SUBQUEUE_FRAGMENT),
+      kbase_seqno_stride());
 
-   kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev,
-                                     queue->kbase_retired_heap.ctx);
-   queue->kbase_retired_heap.ctx = 0;
-   return true;
+   const uint64_t vt_seqno =
+      kbase_subqueue_seqno_cell(queue, PANVK_SUBQUEUE_VERTEX_TILER)->seqno;
+   const uint64_t frag_seqno =
+      kbase_subqueue_seqno_cell(queue, PANVK_SUBQUEUE_FRAGMENT)->seqno;
+   uint32_t done = 0;
+
+   while (done < queue->kbase_retired_heap_count &&
+          vt_seqno > queue->kbase_retired_heaps[done].vt_jobs &&
+          frag_seqno > queue->kbase_retired_heaps[done].frag_jobs) {
+      kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev,
+                                        queue->kbase_retired_heaps[done].ctx);
+      done++;
+   }
+
+   queue->kbase_retired_heap_count -= done;
+   memmove(queue->kbase_retired_heaps, queue->kbase_retired_heaps + done,
+           queue->kbase_retired_heap_count *
+              sizeof(queue->kbase_retired_heaps[0]));
+
+   return queue->kbase_retired_heap_count <
+          ARRAY_SIZE(queue->kbase_retired_heaps);
 }
 
 static VkResult
@@ -2328,10 +2348,10 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
    const uint32_t max_chunks = MAX2(phys_dev->csf.tiler.max_chunks, 200);
    uint64_t new_ctx, first_chunk;
 
-   /* Hold at most one retired context: if the previous one is still
-    * firmware-visible, skip this renewal (VK_INCOMPLETE) and retry on a
-    * later graphics submission.  This also keeps the other descriptor slot
-    * free: only entries of the retired heap used it. */
+   /* Hold at most PANVK_KBASE_HEAP_SLOTS - 1 retired contexts: if they are
+    * all still firmware-visible, skip this renewal (VK_INCOMPLETE) and retry
+    * on a later graphics submission.  The next descriptor slot belonged to
+    * the oldest heap, which is destroyed by now. */
    if (!kbase_try_destroy_retired_heap(queue))
       return VK_INCOMPLETE;
 
@@ -2349,7 +2369,7 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
    uint64_t old_ctx = tiler_heap->context.dev_addr;
    tiler_heap->context.dev_addr = new_ctx;
 
-   const uint32_t slot = queue->kbase_heap_slot ^ 1;
+   const uint32_t slot = (queue->kbase_heap_slot + 1) % PANVK_KBASE_HEAP_SLOTS;
    const uint32_t slot_offset = slot * KBASE_HEAP_DESC_SLOT_STRIDE;
    panvk_priv_mem_write_desc(tiler_heap->desc, slot_offset, TILER_HEAP, cfg) {
       cfg.size = tiler_heap->chunk_size;
@@ -2360,10 +2380,11 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
    kbase_clean_priv_mem(tiler_heap->desc, slot_offset, pan_size(TILER_HEAP));
    queue->kbase_heap_slot = slot;
 
-   queue->kbase_retired_heap.ctx = old_ctx;
-   queue->kbase_retired_heap.vt_jobs =
+   uint32_t r = queue->kbase_retired_heap_count++;
+   queue->kbase_retired_heaps[r].ctx = old_ctx;
+   queue->kbase_retired_heaps[r].vt_jobs =
       queue->subqueues[PANVK_SUBQUEUE_VERTEX_TILER].kbase.emitted_jobs;
-   queue->kbase_retired_heap.frag_jobs =
+   queue->kbase_retired_heaps[r].frag_jobs =
       queue->subqueues[PANVK_SUBQUEUE_FRAGMENT].kbase.emitted_jobs;
    return VK_SUCCESS;
 }
@@ -3006,11 +3027,16 @@ panvk_queue_submit_ioctl_kbase(struct panvk_queue_submit *submit,
       if (result == VK_INCOMPLETE &&
           ((interval && queue->kbase_tiler_submit_count >= 4ull * interval) ||
            (renew_work && queue->kbase_tiler_work_count / 4 >= renew_work))) {
+         /* Only wait until the retired heap can be destroyed (the first
+          * entries emitted after its retirement completed), not for the
+          * whole backlog: a full drain stalled the submit thread 35-55 ms. */
          uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT] = {0};
-         targets[PANVK_SUBQUEUE_VERTEX_TILER] =
-            queue->subqueues[PANVK_SUBQUEUE_VERTEX_TILER].kbase.emitted_jobs;
-         targets[PANVK_SUBQUEUE_FRAGMENT] =
-            queue->subqueues[PANVK_SUBQUEUE_FRAGMENT].kbase.emitted_jobs;
+         targets[PANVK_SUBQUEUE_VERTEX_TILER] = MIN2(
+            queue->kbase_retired_heaps[0].vt_jobs + 1,
+            queue->subqueues[PANVK_SUBQUEUE_VERTEX_TILER].kbase.emitted_jobs);
+         targets[PANVK_SUBQUEUE_FRAGMENT] = MIN2(
+            queue->kbase_retired_heaps[0].frag_jobs + 1,
+            queue->subqueues[PANVK_SUBQUEUE_FRAGMENT].kbase.emitted_jobs);
          result = kbase_wait_sync_targets(queue, targets, UINT64_MAX);
          if (result != VK_SUCCESS)
             return result;

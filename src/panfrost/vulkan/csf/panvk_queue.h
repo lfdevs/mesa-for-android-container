@@ -143,18 +143,22 @@ struct panvk_gpu_queue {
    uint32_t kbase_tiler_submit_count;
    uint64_t kbase_tiler_work_count;
    uint64_t kbase_gpu_waits[PANVK_SUBQUEUE_COUNT][PANVK_SUBQUEUE_COUNT];
-   /* Which of the two TILER_HEAP descriptor slots the current heap uses. */
+   /* Which of the PANVK_KBASE_HEAP_SLOTS TILER_HEAP descriptor slots the
+    * current heap uses. */
    uint32_t kbase_heap_slot;
-   /* Tiler heap context retired by the last heap renewal.  Ring entries
-    * emitted before the renewal keep using it (their HEAP_SET and TILER_HEAP
-    * descriptor slot), so it is only destroyed once both graphics subqueues
-    * have completed a ring entry emitted after the retirement.  ctx == 0
-    * means the slot is empty. */
+   /* Tiler heap contexts retired by heap renewals, oldest first.  Ring
+    * entries emitted before a renewal keep using the retired heap (their
+    * HEAP_SET and TILER_HEAP descriptor slot), so it is only destroyed once
+    * both graphics subqueues have completed a ring entry emitted after the
+    * retirement.  Several can be in flight so renewal never has to wait for
+    * the GPU to catch up; each holds one descriptor slot. */
+#define PANVK_KBASE_HEAP_SLOTS 4
    struct {
       uint64_t ctx;
       uint64_t vt_jobs;
       uint64_t frag_jobs;
-   } kbase_retired_heap;
+   } kbase_retired_heaps[PANVK_KBASE_HEAP_SLOTS - 1];
+   uint32_t kbase_retired_heap_count;
    /* Heap context pre-created on a worker thread for the next renewal:
     * KBASE_IOCTL_CS_TILER_HEAP_INIT commits and zeroes the initial chunks,
     * which took ~7 ms per renewal on the submitting thread. */
