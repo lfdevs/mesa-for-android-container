@@ -1467,7 +1467,9 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
     * (0x100000 pages) is the kernel maximum and matches panfork; without
     * the zone, GPU_EX allocations fall back to CUSTOM_VA, so failure is
     * not fatal. */
-   struct kbase_ioctl_mem_exec_init exec_init = { .va_pages = 0x100000 };
+   struct kbase_ioctl_mem_exec_init exec_init = {
+      .va_pages = (4ull << 30) / kbase_kmod_page_size(),
+   };
    if (ioctl(fd, KBASE_IOCTL_MEM_EXEC_INIT, &exec_init)) {
       if (errno == EPERM || errno == EINVAL)
          mesa_logd("kbase: KBASE_IOCTL_MEM_EXEC_INIT: %s (zone exists or "
@@ -1486,9 +1488,9 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
     * panfork's.  Failure is non-fatal for enumeration but breaks tiler
     * heaps, so warn. */
    struct kbase_ioctl_mem_jit_init jit_init = {
-      .va_pages = 1ull << 25,
+      .va_pages = (128ull << 30) / kbase_kmod_page_size(),
       .max_allocations = 255,
-      .phys_pages = 1ull << 25,
+      .phys_pages = (128ull << 30) / kbase_kmod_page_size(),
    };
    if (ioctl(fd, KBASE_IOCTL_MEM_JIT_INIT, &jit_init)) {
       mesa_logw("kbase: KBASE_IOCTL_MEM_JIT_INIT failed: %s "
@@ -1544,10 +1546,6 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
       kbase_dev->base.flags &= ~PAN_KMOD_DEV_FLAG_OWNS_FD;
       pan_kmod_dev_cleanup(&kbase_dev->base);
       simple_mtx_destroy(&kbase_dev->kcpu.lock);
-      if (!is_csf) {
-         simple_mtx_destroy(&kbase_dev->atoms_read_lock);
-         simple_mtx_destroy(&kbase_dev->atoms_lock);
-      }
       pan_kmod_free(allocator, kbase_dev);
       return NULL;
    }
@@ -1588,6 +1586,10 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
       kbase_dev->base.flags &= ~PAN_KMOD_DEV_FLAG_OWNS_FD;
       pan_kmod_dev_cleanup(&kbase_dev->base);
       simple_mtx_destroy(&kbase_dev->kcpu.lock);
+      if (!is_csf) {
+         simple_mtx_destroy(&kbase_dev->atoms_read_lock);
+         simple_mtx_destroy(&kbase_dev->atoms_lock);
+      }
       pan_kmod_free(allocator, kbase_dev);
       return NULL;
    }
@@ -1745,7 +1747,7 @@ kbase_kmod_bo_import_host(struct pan_kmod_dev *dev, void *host_ptr,
 {
    struct kbase_kmod_dev *kbase_dev =
       container_of(dev, struct kbase_kmod_dev, base);
-   const uint64_t page_size = 4096;
+   const uint64_t page_size = kbase_kmod_page_size();
 
    if (kbase_dev->is_csf) {
       errno = ENOTSUP;
