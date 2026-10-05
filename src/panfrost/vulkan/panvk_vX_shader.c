@@ -2370,8 +2370,9 @@ panvk_depth_bounds_lowered(const struct vk_features *features,
 /* Clears the SampleMask bit of every sample whose stored depth is
  * outside [min, max]. The draw makes the depth read and the late ZS update
  * effective only while the test is enabled (see build_dcd_flags).
+ * Returns whether the app wrote SampleMask itself.
  */
-static void
+static bool
 panvk_lower_depth_bounds(nir_shader *nir)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
@@ -2441,6 +2442,7 @@ panvk_lower_depth_bounds(nir_shader *nir)
 
    nir->info.outputs_written |= BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK);
    nir_progress(true, impl, nir_metadata_none);
+   return app_mask != NULL;
 }
 #endif
 
@@ -3849,7 +3851,7 @@ panvk_compile_shader(struct panvk_device *dev,
 
 #if PAN_ARCH >= 10
       if (panvk_depth_bounds_lowered(&dev->vk.enabled_features, state)) {
-         panvk_lower_depth_bounds(nir);
+         variant->fs.depth_bounds_app_mask = panvk_lower_depth_bounds(nir);
          variant->fs.depth_bounds = true;
       }
 #endif
@@ -4228,6 +4230,8 @@ panvk_deserialize_shader_variant(struct vk_device *vk_dev,
                       sizeof(shader->fs.tile_image_s_read));
       blob_copy_bytes(blob, &shader->fs.depth_bounds,
                       sizeof(shader->fs.depth_bounds));
+      blob_copy_bytes(blob, &shader->fs.depth_bounds_app_mask,
+                      sizeof(shader->fs.depth_bounds_app_mask));
       break;
 
    default:
@@ -4397,6 +4401,8 @@ panvk_shader_serialize_variant(struct vk_device *vk_dev,
                        sizeof(shader->fs.tile_image_s_read));
       blob_write_bytes(blob, &shader->fs.depth_bounds,
                        sizeof(shader->fs.depth_bounds));
+      blob_write_bytes(blob, &shader->fs.depth_bounds_app_mask,
+                       sizeof(shader->fs.depth_bounds_app_mask));
       break;
 
    default:

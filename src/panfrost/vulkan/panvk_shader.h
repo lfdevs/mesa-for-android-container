@@ -419,6 +419,8 @@ struct panvk_shader_variant {
          bool tile_image_z_read;
          bool tile_image_s_read;
          bool depth_bounds;
+         /* The app FS wrote SampleMask itself (before the depth bounds lowering). */
+         bool depth_bounds_app_mask;
          /* device->depth_bounds_fs: only needed while the test is on. */
          bool depth_bounds_only;
       } fs;

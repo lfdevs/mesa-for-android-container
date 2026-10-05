@@ -2627,11 +2627,11 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
    uint8_t rt_mask = cmdbuf->state.gfx.render.bound_attachments &
                      MESA_VK_RP_ATTACHMENT_ANY_COLOR_BITS;
    /* Must match the ds.enable sysval in cmd_prepare_draw_sysvals. */
-   bool z_read = fs && (z_attachment_read(fs, &dyns->ial) ||
-                        (fs->fs.depth_bounds &&
-                         dyns->ds.depth.bounds_test.enable &&
-                         (cmdbuf->state.gfx.render.bound_attachments &
-                          MESA_VK_RP_ATTACHMENT_DEPTH_BIT)));
+   bool db_on = fs && fs->fs.depth_bounds &&
+                dyns->ds.depth.bounds_test.enable &&
+                (cmdbuf->state.gfx.render.bound_attachments &
+                 MESA_VK_RP_ATTACHMENT_DEPTH_BIT);
+   bool z_read = fs && (z_attachment_read(fs, &dyns->ial) || db_on);
 
    if (fs) {
       out->rt_written = color_attachment_written_mask(fs, &dyns->cal);
@@ -2692,6 +2692,18 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
          out->earlyzs =
             pan_earlyzs_get(fs->fs.earlyzs_lut, writes_zs || oq,
                             alpha_to_coverage, zs_always_passes, zs_read);
+
+         /* EarlyFragmentTests forces an early ZS update, which would let the
+          * emulated test read the fragment's own depth and keep the ZS
+          * writes of samples outside the bounds. Test early, update after
+          * the FS so it reads the old depth and its coverage gates the write.
+          * Not when the app FS discards or writes SampleMask: that must not
+          * gate ZS writes or OQ under EarlyFragmentTests (092 behaviour).
+          */
+         if (db_on && fs->info.fs.early_fragment_tests && (writes_zs || oq) &&
+             !fs->info.fs.can_discard && !fs->fs.depth_bounds_app_mask &&
+             !alpha_to_coverage)
+            out->earlyzs.update = MALI_PIXEL_KILL_FORCE_LATE;
 
          cfg.pixel_kill_operation = (enum mali_pixel_kill)out->earlyzs.kill;
          cfg.zs_update_operation = (enum mali_pixel_kill)out->earlyzs.update;
