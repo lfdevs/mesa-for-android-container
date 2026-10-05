@@ -927,7 +927,7 @@ cs_reg_perm(struct cs_builder *b, unsigned reg)
 }
 
 static void
-init_cs_builders(struct panvk_cmd_buffer *cmdbuf)
+init_cs_builder(struct panvk_cmd_buffer *cmdbuf, uint32_t i)
 {
    struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(cmdbuf->vk.base.device->physical);
@@ -941,7 +941,7 @@ init_cs_builders(struct panvk_cmd_buffer *cmdbuf)
    const struct drm_panthor_csif_info *csif_info =
       panvk_get_csif_props(dev);
 
-   for (uint32_t i = 0; i < ARRAY_SIZE(cmdbuf->state.cs); i++) {
+   {
       struct cs_builder *b = &cmdbuf->state.cs[i].builder;
       /* Lazy allocation of the root CS. */
       struct cs_buffer root_cs = {0};
@@ -976,6 +976,70 @@ init_cs_builders(struct panvk_cmd_buffer *cmdbuf)
 }
 
 static void
+init_cs_builders(struct panvk_cmd_buffer *cmdbuf)
+{
+   for (uint32_t i = 0; i < ARRAY_SIZE(cmdbuf->state.cs); i++)
+      init_cs_builder(cmdbuf, i);
+}
+
+/* A secondary cannot split the render context it inherits. An
+ * attachment-less one whose rasterizationSamples changes ends its CS segment
+ * here and the primary splits the context between the segments
+ * (CmdExecuteCommands). Must not be called inside a CS block.
+ */
+void
+panvk_per_arch(cmd_cut_vmr_segment)(struct panvk_cmd_buffer *cmdbuf)
+{
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+
+   /* The primary's context split between segments moves its sync points:
+    * the next segment must not carry relative ones across it.
+    */
+   flush_sync_points(cmdbuf);
+
+   struct panvk_vmr_segment *seg =
+      util_dynarray_grow(&cmdbuf->vmr_segs, struct panvk_vmr_segment, 1);
+   if (!seg) {
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return;
+   }
+   memset(seg, 0, sizeof(*seg));
+   seg->samples = cmdbuf->state.gfx.render.vmr_samples;
+
+   for (uint32_t i = 0; i < ARRAY_SIZE(cmdbuf->state.cs); i++) {
+      struct cs_builder *b = panvk_get_cs_builder(cmdbuf, i);
+
+      assert(!b->blocks.stack);
+      /* An empty stream just carries over to the next segment. */
+      if (cs_is_empty(b))
+         continue;
+
+      /* Like finish_cs(): the primary's code after the call does not know
+       * this stream's pending loads.
+       */
+      cs_wait_slots(b, dev->csf.sb.all_mask);
+      cs_end(b);
+      if (!cs_is_valid(b)) {
+         vk_command_buffer_set_error(&cmdbuf->vk,
+                                     VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         return;
+      }
+
+      seg->addr[i] = cs_root_chunk_gpu_addr(b);
+      seg->size[i] = cs_root_chunk_size(b);
+      seg->req_resource_mask[i] = b->req_resource_mask;
+      cs_builder_fini(b);
+      init_cs_builder(cmdbuf, i);
+   }
+
+   /* The primary's context emission runs between the segments: re-emit
+    * all the draw state in the next one.
+    */
+   vk_dynamic_graphics_state_dirty_all(&cmdbuf->vk.dynamic_graphics_state);
+   gfx_state_set_all_dirty(cmdbuf);
+}
+
+static void
 panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
                    VkCommandBufferResetFlags flags)
 {
@@ -1003,6 +1067,7 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
       cs_builder_fini(&cmdbuf->state.cs[i].builder);
 
    memset(&cmdbuf->state, 0, sizeof(cmdbuf->state));
+   util_dynarray_clear(&cmdbuf->vmr_segs);
    init_cs_builders(cmdbuf);
 }
 
@@ -1021,6 +1086,7 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
    for (uint32_t i = 0; i < ARRAY_SIZE(cmdbuf->state.cs); i++)
       cs_builder_fini(&cmdbuf->state.cs[i].builder);
 
+   util_dynarray_fini(&cmdbuf->vmr_segs);
    panvk_pool_cleanup(&cmdbuf->cs_pool);
    panvk_pool_cleanup(&cmdbuf->desc_pool);
    panvk_pool_cleanup(&cmdbuf->tls_pool);
@@ -1195,7 +1261,12 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
       primary->state.tls.info.tls.size =
          MAX2(primary->state.tls.info.tls.size,
               secondary->state.tls.info.tls.size);
-      panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(primary, secondary);
+      const struct panvk_vmr_segment *segs = secondary->vmr_segs.data;
+      const uint32_t seg_count = util_dynarray_num_elements(
+         &secondary->vmr_segs, struct panvk_vmr_segment);
+      panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(
+         primary, secondary,
+         seg_count ? segs[0].samples : secondary->state.gfx.render.vmr_samples);
 
       /* Write the conditional rendering flag into the subqueue context
        * for inherited secondaries. The secondary's draws load from this
@@ -1204,7 +1275,7 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
       if (secondary->state.cond_render.inherited) {
          for (uint32_t j = 0; j < ARRAY_SIZE(primary->state.cs); j++) {
             struct cs_builder *sec_b = panvk_get_cs_builder(secondary, j);
-            if (cs_is_empty(sec_b))
+            if (cs_is_empty(sec_b) && !seg_count)
                continue;
 
             struct cs_builder *prim_b = panvk_get_cs_builder(primary, j);
@@ -1245,6 +1316,35 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
             cs_flush_stores(prim_b);
          }
       }
+
+      /* Segments of an attachment-less secondary, each run in a context
+       * with its sample count (cmd_cut_vmr_segment). The context work
+       * moves the primary's sync points: flush them before each call.
+       */
+      for (uint32_t s = 0; s < seg_count; s++) {
+         const struct panvk_vmr_segment *seg = segs + s;
+
+         if (s > 0)
+            panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(primary, secondary,
+                                                           seg->samples);
+         flush_sync_points(primary);
+         for (uint32_t j = 0; j < ARRAY_SIZE(primary->state.cs); j++) {
+            if (!seg->size[j])
+               continue;
+
+            struct cs_builder *prim_b = panvk_get_cs_builder(primary, j);
+            struct cs_index addr = cs_scratch_reg64(prim_b, 0);
+            struct cs_index size = cs_scratch_reg32(prim_b, 2);
+            cs_move64_to(prim_b, addr, seg->addr[j]);
+            cs_move32_to(prim_b, size, seg->size[j]);
+            cs_call(prim_b, addr, size);
+            prim_b->req_resource_mask |= seg->req_resource_mask[j];
+         }
+      }
+      if (seg_count)
+         panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(
+            primary, secondary, secondary->state.gfx.render.vmr_samples);
+      flush_sync_points(primary);
 
       for (uint32_t j = 0; j < ARRAY_SIZE(primary->state.cs); j++) {
          struct cs_builder *sec_b = panvk_get_cs_builder(secondary, j);

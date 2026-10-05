@@ -3066,17 +3066,14 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf,
        */
       if (!cmdbuf->state.gfx.render.bound_attachments) {
          assert(rasterization_samples > 0);
-         /* Secondaries cannot change the context they run in, see
-          * vmr_samples. A primary can when it knows the count of its context:
-          * its own, or one it suspended and resumed. A context from another
-          * command buffer has fb->sample_count 0 and keeps its count.
+         /* A secondary cannot change the context it runs in, see
+          * vmr_track_secondary(). A primary splits its own context.
+          * Attachment-less contexts are not resumed across command buffers
+          * (CmdBeginRendering), so their count is known.
           */
-         if (cmdbuf->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
-            if (!cmdbuf->state.gfx.render.vmr_samples)
-               cmdbuf->state.gfx.render.vmr_samples = rasterization_samples;
-            else if (cmdbuf->state.gfx.render.vmr_samples !=
-                     rasterization_samples)
-               cmdbuf->state.gfx.render.vmr_mixed = true;
+         if (inherits_render_ctx(cmdbuf) &&
+             cmdbuf->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
+            /* Context count set by the primary per segment. */
          } else if (fb->sample_count != 0 &&
                     fb->sample_count != rasterization_samples) {
             result = split_render_ctx(cmdbuf);
@@ -5762,6 +5759,29 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
    return true;
 }
 
+/* A secondary cannot change the render context it inherits. An
+ * attachment-less one cuts its CS where rasterizationSamples changes and the
+ * primary runs each segment in a context with its count (CmdExecuteCommands).
+ * Called once per API draw, before anything of it is recorded.
+ */
+static void
+vmr_track_secondary(struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct vk_dynamic_graphics_state *dyns =
+      &cmdbuf->vk.dynamic_graphics_state;
+   uint8_t *vmr = &cmdbuf->state.gfx.render.vmr_samples;
+
+   if (cmdbuf->vk.level != VK_COMMAND_BUFFER_LEVEL_SECONDARY ||
+       !inherits_render_ctx(cmdbuf) ||
+       cmdbuf->state.gfx.render.bound_attachments ||
+       dyns->rs.rasterizer_discard_enable)
+      return;
+
+   if (*vmr && *vmr != dyns->ms.rasterization_samples)
+      panvk_per_arch(cmd_cut_vmr_segment)(cmdbuf);
+   *vmr = dyns->ms.rasterization_samples;
+}
+
 static void
 panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
 {
@@ -5782,6 +5802,7 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
 
    /* Count once per API draw, before gpu_prerast splits or lowers it. */
    if (!draw.gpu_prerast_generated && !draw.pstats_counted) {
+      vmr_track_secondary(cmdbuf);
       panvk_per_arch(cmd_pstats_draw)(cmdbuf, &draw);
       draw.pstats_counted = true;
    }
@@ -5851,25 +5872,21 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
 VkResult
 panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(
    struct panvk_cmd_buffer *primary,
-   struct panvk_cmd_buffer *secondary)
+   struct panvk_cmd_buffer *secondary, uint32_t sec_samples)
 {
    if (!(secondary->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT))
       return VK_SUCCESS;
 
-   /* An attachment-less secondary runs in a context with its sample count.
-    * The primary gives it one, splitting the current context when it is known
-    * to have another count (see prepare_draw). Without that the secondary's
-    * draws would run with the count of whatever the primary had.
+   /* An attachment-less secondary (segment) runs in a context with its
+    * sample count. The primary gives it one, splitting the current context
+    * when it is known to have another count (see prepare_draw). Without that
+    * the secondary's draws would run with the count of whatever the primary
+    * had.
     */
    bool new_ctx = false;
-   const uint32_t sec_samples = secondary->state.gfx.render.vmr_samples;
    if (sec_samples && !primary->state.gfx.render.bound_attachments) {
       const struct pan_fb_layout *fb = &primary->state.gfx.render.fb.layout;
 
-      if (secondary->state.gfx.render.vmr_mixed)
-         mesa_logw("panvk: secondary command buffer with several "
-                   "rasterizationSamples values, all run with %u samples",
-                   sec_samples);
       if (fb->sample_count != 0 && fb->sample_count != sec_samples) {
          VkResult result = split_render_ctx(primary);
          if (result != VK_SUCCESS)
@@ -6138,7 +6155,7 @@ panvk_per_arch(cmd_inherit_render_state)(
 
    assert(pBeginInfo->pInheritanceInfo);
    cmdbuf->state.gfx.render.vmr_samples = 0;
-   cmdbuf->state.gfx.render.vmr_mixed = false;
+   util_dynarray_clear(&cmdbuf->vmr_segs);
    char gcbiar_data[VK_GCBIARR_DATA_SIZE(MAX_RTS)];
    const VkRenderingInfo *resume_info =
       vk_get_command_buffer_inheritance_as_rendering_resume(cmdbuf->vk.level,
@@ -6321,6 +6338,13 @@ panvk_per_arch(CmdBeginRendering)(VkCommandBuffer commandBuffer,
       resuming ? state->render.fb.layout.tile_rt_alloc_B : 0;
 
    panvk_per_arch(cmd_init_render_state)(cmdbuf, pRenderingInfo);
+
+   /* An attachment-less pass ends its context when it suspends
+    * (CmdEndRendering): the sample count of a context from another command
+    * buffer is unknown here, and rasterizationSamples may differ.
+    */
+   if (!state->render.bound_attachments)
+      state->render.flags &= ~VK_RENDERING_RESUMING_BIT;
 
    if (suspended_sample_count != 0) {
       state->render.fb.layout.sample_count = suspended_sample_count;
@@ -7291,6 +7315,8 @@ split_render_ctx(struct panvk_cmd_buffer *cmdbuf)
 
    panvk_per_arch(cmd_pstats_flush_pending)(cmdbuf);
 
+   /* The next context is this command buffer's own. */
+   cmdbuf->state.gfx.render.flags &= ~VK_RENDERING_RESUMING_BIT;
    cmdbuf->state.gfx.render.oq.chain = 0;
    memset(&cmdbuf->state.gfx.render.fbds, 0,
           sizeof(cmdbuf->state.gfx.render.fbds));
@@ -7349,6 +7375,13 @@ panvk_per_arch(CmdEndRendering2KHR)(
 
          handle_deferred_queries(cmdbuf);
       }
+   } else if (!cmdbuf->state.gfx.render.bound_attachments) {
+      /* Attachment-less: end the context, the resumed pass starts its own
+       * with its own sample count (CmdBeginRendering). Nothing to preserve.
+       */
+      result = split_render_ctx(cmdbuf);
+      if (result != VK_SUCCESS)
+         return;
    } else if (!inherits_render_ctx(cmdbuf)) {
       /* If we're suspending the render pass and we didn't inherit the render
        * context, we need to emit it now, so it's available when the render pass

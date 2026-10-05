@@ -612,6 +612,19 @@ struct panvk_cmd_buffer {
 
       struct panvk_cond_render_state cond_render;
    } state;
+
+   /* Attachment-less secondary: its CS is cut where rasterizationSamples
+    * changes (cmd_cut_vmr_segment). struct panvk_vmr_segment, the finished
+    * segments; the builders hold the last one, with gfx.render.vmr_samples.
+    */
+   struct util_dynarray vmr_segs;
+};
+
+struct panvk_vmr_segment {
+   uint64_t addr[PANVK_SUBQUEUE_COUNT];
+   uint32_t size[PANVK_SUBQUEUE_COUNT];
+   uint32_t req_resource_mask[PANVK_SUBQUEUE_COUNT];
+   uint8_t samples;
 };
 
 VK_DEFINE_HANDLE_CASTS(panvk_cmd_buffer, vk.base, VkCommandBuffer,
@@ -902,7 +915,10 @@ void panvk_per_arch(add_cs_deps)(
    bool is_set_event);
 
 VkResult panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(
-   struct panvk_cmd_buffer *primary, struct panvk_cmd_buffer *secondary);
+   struct panvk_cmd_buffer *primary, struct panvk_cmd_buffer *secondary,
+   uint32_t samples);
+
+void panvk_per_arch(cmd_cut_vmr_segment)(struct panvk_cmd_buffer *cmdbuf);
 
 void panvk_per_arch(cmd_inherit_render_state)(
    struct panvk_cmd_buffer *cmdbuf, const VkCommandBufferBeginInfo *pBeginInfo);
