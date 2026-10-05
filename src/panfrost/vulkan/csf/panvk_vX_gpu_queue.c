@@ -2059,6 +2059,78 @@ destroy_group(struct panvk_gpu_queue *queue)
    assert(!ret);
 }
 
+#ifdef HAVE_PAN_KMOD_KBASE
+static void
+kbase_spare_heap_job(void *job, void *gdata, int thread_index)
+{
+   struct panvk_gpu_queue *queue = job;
+   struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
+   const struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(dev->vk.physical);
+
+   /* On failure ctx stays 0 and the renewal creates the heap itself. */
+   if (kbase_kmod_csf_tiler_heap_create(
+          dev->kmod.dev, queue->tiler_heap.chunk_size,
+          phys_dev->csf.tiler.initial_chunks,
+          MAX2(phys_dev->csf.tiler.max_chunks, 200), 65535, 0,
+          &queue->kbase_spare_heap.ctx, &queue->kbase_spare_heap.first_chunk))
+      queue->kbase_spare_heap.ctx = 0;
+}
+
+static void
+kbase_spare_heap_kick(struct panvk_gpu_queue *queue)
+{
+   if (!queue->kbase_spare_heap.enabled || queue->kbase_spare_heap.pending ||
+       queue->kbase_spare_heap.ctx)
+      return;
+
+   queue->kbase_spare_heap.pending = true;
+   util_queue_add_job(&queue->kbase_spare_heap.thread, queue,
+                      &queue->kbase_spare_heap.fence, kbase_spare_heap_job,
+                      NULL, 0);
+}
+
+/* Takes the pre-created heap context, if any (0 otherwise). */
+static uint64_t
+kbase_spare_heap_take(struct panvk_gpu_queue *queue, uint64_t *first_chunk)
+{
+   if (queue->kbase_spare_heap.pending) {
+      util_queue_fence_wait(&queue->kbase_spare_heap.fence);
+      queue->kbase_spare_heap.pending = false;
+   }
+
+   uint64_t ctx = queue->kbase_spare_heap.ctx;
+   *first_chunk = queue->kbase_spare_heap.first_chunk;
+   queue->kbase_spare_heap.ctx = 0;
+   return ctx;
+}
+
+static void
+kbase_spare_heap_init(struct panvk_gpu_queue *queue)
+{
+   util_queue_fence_init(&queue->kbase_spare_heap.fence);
+   queue->kbase_spare_heap.enabled =
+      util_queue_init(&queue->kbase_spare_heap.thread, "panvk_heap", 2, 1, 0,
+                      NULL);
+   kbase_spare_heap_kick(queue);
+}
+
+static void
+kbase_spare_heap_finish(struct panvk_gpu_queue *queue)
+{
+   struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
+   uint64_t first_chunk;
+   uint64_t ctx = kbase_spare_heap_take(queue, &first_chunk);
+
+   if (queue->kbase_spare_heap.enabled)
+      util_queue_destroy(&queue->kbase_spare_heap.thread);
+   queue->kbase_spare_heap.enabled = false;
+   util_queue_fence_destroy(&queue->kbase_spare_heap.fence);
+   if (ctx)
+      kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev, ctx);
+}
+#endif
+
 static VkResult
 init_tiler(struct panvk_gpu_queue *queue)
 {
@@ -2168,6 +2240,7 @@ init_tiler(struct panvk_gpu_queue *queue)
                 first_heap_chunk + tiler_heap->chunk_size,
                 panvk_priv_mem_dev_addr(tiler_heap->desc) + 4096,
                 panvk_priv_mem_dev_addr(tiler_heap->oom_fbd));
+      kbase_spare_heap_init(queue);
    }
 #endif
 
@@ -2190,6 +2263,7 @@ cleanup_tiler(struct panvk_gpu_queue *queue)
       /* The queue groups are terminated by now, so the retired context (if
        * any) is no longer firmware-visible and can be destroyed with the
        * current one. */
+      kbase_spare_heap_finish(queue);
       if (queue->kbase_retired_heap.ctx) {
          kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev,
                                            queue->kbase_retired_heap.ctx);
@@ -2261,13 +2335,16 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
    if (!kbase_try_destroy_retired_heap(queue))
       return VK_INCOMPLETE;
 
-   if (kbase_kmod_csf_tiler_heap_create(
+   new_ctx = kbase_spare_heap_take(queue, &first_chunk);
+   if (!new_ctx &&
+       kbase_kmod_csf_tiler_heap_create(
           dev->kmod.dev, tiler_heap->chunk_size,
           phys_dev->csf.tiler.initial_chunks, max_chunks, 65535, 0,
           &new_ctx, &first_chunk)) {
       return panvk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                           "Failed to renew the kbase tiler heap");
    }
+   kbase_spare_heap_kick(queue);
 
    uint64_t old_ctx = tiler_heap->context.dev_addr;
    tiler_heap->context.dev_addr = new_ctx;

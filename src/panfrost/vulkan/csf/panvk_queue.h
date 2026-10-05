@@ -16,6 +16,7 @@
 
 #include "panvk_device.h"
 
+#include "util/u_queue.h"
 #include "vk_queue.h"
 
 enum panvk_subqueue_id {
@@ -154,6 +155,17 @@ struct panvk_gpu_queue {
       uint64_t vt_jobs;
       uint64_t frag_jobs;
    } kbase_retired_heap;
+   /* Heap context pre-created on a worker thread for the next renewal:
+    * KBASE_IOCTL_CS_TILER_HEAP_INIT commits and zeroes the initial chunks,
+    * which took ~7 ms per renewal on the submitting thread. */
+   struct {
+      struct util_queue thread;
+      struct util_queue_fence fence;
+      bool enabled;
+      bool pending;
+      uint64_t ctx;
+      uint64_t first_chunk;
+   } kbase_spare_heap;
 #endif
 
    struct {
