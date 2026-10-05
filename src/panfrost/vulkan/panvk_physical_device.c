@@ -1357,7 +1357,22 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
 
    unsigned arch = pan_arch(device->kmod.dev->props.gpu_id);
 
+   /* Release builds drop vk_errorf text without a debug messenger; log the
+    * device facts testers' uploads need straight to the Mesa log. */
+   mesa_logi("panvk: gpu_id %#" PRIx64 " variant %#x arch v%u model %s "
+             "texture_features %#x %#x %#x %#x",
+             device->kmod.dev->props.gpu_id,
+             device->kmod.dev->props.gpu_variant, arch,
+             device->model ? device->model->name : "unknown",
+             device->kmod.dev->props.texture_features[0],
+             device->kmod.dev->props.texture_features[1],
+             device->kmod.dev->props.texture_features[2],
+             device->kmod.dev->props.texture_features[3]);
+
    if (!device->model) {
+      mesa_loge("panvk: Unknown gpu_id (%#" PRIx64 ") or variant (%#x)",
+                device->kmod.dev->props.gpu_id,
+                device->kmod.dev->props.gpu_variant);
       result = panvk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
                             "Unknown gpu_id (%#" PRIx64 ") or variant (%#x)",
                             device->kmod.dev->props.gpu_id,
@@ -1395,6 +1410,10 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
 
    device->formats.all = pan_format_table(arch);
    device->formats.blendable = pan_blendable_format_table(arch);
+
+   mesa_logi("panvk: BC emulation %s (native compressed mask %#x)",
+             panvk_bc_emul_enabled(device) ? "on" : "off",
+             pan_query_compressed_formats(&device->kmod.dev->props));
 
    unsigned core_count =
       pan_query_core_count(&device->kmod.dev->props);
