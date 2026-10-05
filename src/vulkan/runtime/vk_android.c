@@ -53,7 +53,10 @@
 #endif
 
 #include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
+#include <linux/dma-buf.h>
 
 static struct u_gralloc *_gralloc;
 
@@ -667,6 +670,109 @@ vk_common_GetSwapchainGrallocUsage2ANDROID(
    return VK_SUCCESS;
 }
 
+/* AHB the driver itself just allocated (Android WSI swapchain image, contents
+ * still undefined), set by the caller around its import on the same thread.
+ * Only this buffer may be written by the linear probe below. */
+static __thread const struct AHardwareBuffer *vk_android_owned_ahb;
+
+void
+vk_android_set_owned_ahb(const struct AHardwareBuffer *ahb)
+{
+   vk_android_owned_ahb = ahb;
+}
+
+/* No gralloc mapper is reachable: app linker namespaces (clns-N) cannot load
+ * libvndksupport or the vendor mapper on vendor API < 34. For a driver-owned
+ * single-plane 32bpp AHB with CPU read usage, prove the layout instead of
+ * guessing: write cookies at the corners and center through our own mmap of
+ * the dma-buf at y * stride * 4 + x * 4, then read them back through
+ * AHardwareBuffer_lock, whose CPU view is linear with desc.stride by API
+ * contract. A full match means the dma-buf holds linear pixels at offset 0
+ * with that pitch; anything else is refused. */
+static VkResult
+vk_android_probe_linear_ahb(struct AHardwareBuffer *ahb,
+                            const AHardwareBuffer_Desc *d,
+                            const native_handle_t *h,
+                            VkImageDrmFormatModifierExplicitCreateInfoEXT *out,
+                            VkSubresourceLayout *out_layouts, int max_planes)
+{
+   if (!ahb || ahb != vk_android_owned_ahb)
+      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+
+   const char *why = NULL;
+   const uint64_t pitch = (uint64_t)d->stride * 4;
+   off_t size = 0;
+   uint8_t *map = MAP_FAILED;
+   int lr = -1;
+   void *cpu = NULL;
+   unsigned match = 0;
+   const uint32_t xs[3] = { 0, d->width / 2, d->width - 1 };
+   const uint32_t ys[3] = { 0, d->height / 2, d->height - 1 };
+#define VK_AHB_COOKIE(i) (0x9a5c0000u ^ ((i) << 12) ^ (xs[(i) % 3] << 1) ^ ys[(i) / 3])
+
+   if (!h || h->numFds < 1 || max_planes < 1 || d->layers != 1 ||
+       !d->width || !d->height || d->stride < d->width ||
+       (d->format != AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM &&
+        d->format != AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM) ||
+       !(d->usage & AHARDWAREBUFFER_USAGE_CPU_READ_MASK)) {
+      why = "unsupported desc";
+      goto done;
+   }
+   /* First fd with a size: the one panvk_android_find_dma_buf_fd imports
+    * (Arm gralloc4 handles do not always put the dma-buf at data[0]). */
+   int fd = -1;
+   for (int i = 0; i < h->numFds && size <= 0; i++) {
+      fd = h->data[i];
+      size = fd >= 0 ? lseek(fd, 0, SEEK_END) : -1;
+   }
+   if (size <= 0 || pitch * d->height > (uint64_t)size) {
+      why = "dma-buf size";
+      goto done;
+   }
+   map = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+   if (map == MAP_FAILED) {
+      why = "mmap";
+      goto done;
+   }
+   struct dma_buf_sync sync = { DMA_BUF_SYNC_START | DMA_BUF_SYNC_WRITE };
+   ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+   for (unsigned i = 0; i < 9; i++) {
+      uint32_t cookie = VK_AHB_COOKIE(i);
+      memcpy(map + ys[i / 3] * pitch + xs[i % 3] * 4, &cookie, 4);
+   }
+   sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE;
+   ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+   munmap(map, size);
+
+   lr = AHardwareBuffer_lock(ahb, d->usage & AHARDWAREBUFFER_USAGE_CPU_READ_MASK,
+                             -1, NULL, &cpu);
+   for (unsigned i = 0; !lr && cpu && i < 9; i++) {
+      uint32_t got;
+      memcpy(&got, (uint8_t *)cpu + ys[i / 3] * pitch + xs[i % 3] * 4, 4);
+      match += got == VK_AHB_COOKIE(i);
+   }
+   if (!lr)
+      AHardwareBuffer_unlock(ahb, NULL);
+   why = match == 9 ? NULL : "cookie mismatch";
+#undef VK_AHB_COOKIE
+
+done:
+   mesa_logi("[P0A-V19-FULLPLANE] backend=cpu-linear-probe %ux%u fmt=%u stride=%u size=%lld lock_rc=%d match=%u/9 -> %s",
+             d->width, d->height, d->format, d->stride, (long long)size, lr, match,
+             why ? why : "LINEAR");
+   if (why)
+      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+
+   memset(out, 0, sizeof(*out));
+   memset(out_layouts, 0, sizeof(*out_layouts) * max_planes);
+   out->sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT;
+   out->pPlaneLayouts = out_layouts;
+   out->drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
+   out->drmFormatModifierPlaneCount = 1;
+   out_layouts[0].rowPitch = pitch;
+   return VK_SUCCESS;
+}
+
 VkResult
 vk_android_get_ahb_layout(
    struct AHardwareBuffer *ahardware_buffer,
@@ -685,8 +791,12 @@ vk_android_get_ahb_layout(
       .hal_format = description.format,
    };
 
-   return vk_gralloc_to_drm_explicit_layout(&gr_handle, out,
-                                            out_layouts, max_planes);
+   VkResult result = vk_gralloc_to_drm_explicit_layout(&gr_handle, out,
+                                                       out_layouts, max_planes);
+   if (result == VK_ERROR_INVALID_EXTERNAL_HANDLE)
+      result = vk_android_probe_linear_ahb(ahardware_buffer, &description,
+                                           handle, out, out_layouts, max_planes);
+   return result;
 }
 
 /* From the Android hardware_buffer.h header:
