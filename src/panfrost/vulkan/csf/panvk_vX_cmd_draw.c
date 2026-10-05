@@ -4370,6 +4370,16 @@ gpu_prerast_vp_runs(struct panvk_cmd_buffer *cmdbuf,
    struct cs_index caddr = cs_scratch_reg64(b, 10);
    struct cs_index left = cs_scratch_reg32(b, 12);
    struct cs_index word = cs_scratch_reg32(b, 13);
+#if PAN_ARCH < 12
+   struct cs_index z_lo = cs_sr_reg32(b, IDVS, LOW_DEPTH_CLAMP);
+   struct cs_index z_hi = cs_sr_reg32(b, IDVS, HIGH_DEPTH_CLAMP);
+#else
+   /* v12+ packs the clamp into VIEWPORT words 2/3 (Min/Max Depth), the
+    * VIEWPORT_LOW pair. prepare_vp() set words 0/1 to the framebuffer.
+    */
+   struct cs_index z_lo = cs_reg32(b, MALI_IDVS_SR_VIEWPORT_LOW);
+   struct cs_index z_hi = cs_reg32(b, MALI_IDVS_SR_VIEWPORT_LOW + 1);
+#endif
 
    cs_move64_to(b, addr, header);
    cs_load32_to(b, left, addr,
@@ -4386,7 +4396,6 @@ gpu_prerast_vp_runs(struct panvk_cmd_buffer *cmdbuf,
 
    cs_add_imm64(b, addr, addr, PANLIB_VP_RUN_HEADER_BYTES);
    cs_while(b, MALI_CS_CONDITION_GREATER, left) {
-#if PAN_ARCH < 12
       cs_load32_to(b, word, addr, offsetof(struct panlib_vp_run, viewport));
       cs_wait_slot(b, SB_ID(LS));
       cs_move64_to(b, caddr, clamps);
@@ -4398,19 +4407,15 @@ gpu_prerast_vp_runs(struct panvk_cmd_buffer *cmdbuf,
       cs_wait_slot(b, SB_ID(LS));
       /* IDVS registers are read-only outside the staging context. */
       cs_update_vt_ctx(b) {
-         cs_move32_to(b, cs_sr_reg32(b, IDVS, LOW_DEPTH_CLAMP), 0);
-         cs_add_imm32(b, cs_sr_reg32(b, IDVS, LOW_DEPTH_CLAMP), word, 0);
+         cs_move32_to(b, z_lo, 0);
+         cs_add_imm32(b, z_lo, word, 0);
       }
       cs_load32_to(b, word, caddr, offsetof(struct panlib_vp_clamp, z_max));
       cs_wait_slot(b, SB_ID(LS));
       cs_update_vt_ctx(b) {
-         cs_move32_to(b, cs_sr_reg32(b, IDVS, HIGH_DEPTH_CLAMP), 0);
-         cs_add_imm32(b, cs_sr_reg32(b, IDVS, HIGH_DEPTH_CLAMP), word, 0);
+         cs_move32_to(b, z_hi, 0);
+         cs_add_imm32(b, z_hi, word, 0);
       }
-#else
-      (void)caddr;
-      (void)clamps;
-#endif
 
       cs_load32_to(b, word, addr, offsetof(struct panlib_vp_run, first_index));
       cs_wait_slot(b, SB_ID(LS));
@@ -4500,12 +4505,6 @@ gpu_prerast_draw_generated(struct panvk_cmd_buffer *cmdbuf,
 
    const struct panvk_shader *vps =
       panvk_prerast_viewport_shader(&cmdbuf->state.gfx);
-#if PAN_ARCH >= 12
-    /* v12 packs the depth clamp into the viewport register. A run split
-     * there would change the index buffer and still clamp to viewport 0.
-     */
-    vps = NULL;
-#endif
     /* A polygon-mode draw has no run list: its passthrough still picks the
      * viewport per vertex, but depth clamp and clip use the union range.
      */
@@ -4707,9 +4706,6 @@ gpu_prerast_vp_prepare(struct panvk_cmd_buffer *cmdbuf, uint64_t arena,
                        const struct panvk_draw_info *source,
                        struct panlib_vp_runs_launch_args *args)
 {
-#if PAN_ARCH >= 12
-   return false;
-#else
    const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
    const struct panvk_shader *vps =
       panvk_prerast_viewport_shader(&cmdbuf->state.gfx);
@@ -4826,7 +4822,6 @@ gpu_prerast_vp_prepare(struct panvk_cmd_buffer *cmdbuf, uint64_t arena,
       .per_instance = per_instance,
    };
    return true;
-#endif
 }
 
 static void
@@ -5491,7 +5486,7 @@ gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
    const struct panlib_vp_runs_launch_args *vp_launch = NULL;
    if (gpu_prerast_vp_prepare(cmdbuf, arena, &chunk, &vp_args))
       vp_launch = &vp_args;
-   else if (PAN_ARCH < 12 && panvk_prerast_viewport_shader(&cmdbuf->state.gfx) &&
+   else if (panvk_prerast_viewport_shader(&cmdbuf->state.gfx) &&
             (gs || poly_mode == PANVK_GPU_PRERAST_POLY_NONE))
       return;
 
