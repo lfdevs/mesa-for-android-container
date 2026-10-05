@@ -345,7 +345,7 @@ kbase_log_subqueue_state(struct panvk_gpu_queue *queue, uint32_t subqueue,
    volatile uint32_t *stream_progress =
       (volatile uint32_t *)((volatile uint8_t *)cell +
                             KBASE_SEQNO_STREAM_PROGRESS_OFFSET);
-   const uint8_t *output_page = (uint8_t *)subq->kbase.user_io + 8192;
+   const uint8_t *output_page = (uint8_t *)subq->kbase.user_io + 2 * kbase_kmod_page_size();
    uint64_t extract =
       *(volatile uint64_t *)(output_page + CS_USER_IO_OUTPUT_CS_EXTRACT);
    uint32_t active =
@@ -436,7 +436,7 @@ kbase_subqueue_reserve_ring(struct panvk_gpu_queue *queue,
 {
    struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
    struct panvk_subqueue *subq = &queue->subqueues[subqueue];
-   const uint8_t *output_page = (uint8_t *)subq->kbase.user_io + 8192;
+   const uint8_t *output_page = (uint8_t *)subq->kbase.user_io + 2 * kbase_kmod_page_size();
    uint64_t extract = *(volatile uint64_t *)(output_page +
                                              CS_USER_IO_OUTPUT_CS_EXTRACT);
    uint32_t offset = subq->kbase.insert % KBASE_RINGBUF_SIZE;
@@ -740,7 +740,7 @@ kbase_subqueue_publish(struct panvk_gpu_queue *queue, uint32_t subqueue)
 {
    struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
    struct panvk_subqueue *subq = &queue->subqueues[subqueue];
-   uint8_t *input_page = (uint8_t *)subq->kbase.user_io + 4096;
+   uint8_t *input_page = (uint8_t *)subq->kbase.user_io + kbase_kmod_page_size();
 
    /* kbase_subqueue_emit_job() has already cleaned the CPU-written ring
     * cachelines and completed that clean with kbase_gpu_wmb().  Do not issue
@@ -754,7 +754,7 @@ kbase_subqueue_publish(struct panvk_gpu_queue *queue, uint32_t subqueue)
     * CS_ACTIVE again after ringing it; if a suspend raced the write, the
     * scheduler kick below safely resumes the group. */
    kbase_gpu_wmb();
-   uint8_t *output_page = (uint8_t *)subq->kbase.user_io + 8192;
+   uint8_t *output_page = (uint8_t *)subq->kbase.user_io + 2 * kbase_kmod_page_size();
    volatile uint32_t *active =
       (volatile uint32_t *)(output_page + CS_USER_IO_OUTPUT_CS_ACTIVE);
 
@@ -792,8 +792,8 @@ kbase_subqueue_wait_seqno(struct panvk_gpu_queue *queue, uint32_t subqueue,
    volatile uint32_t *stream_progress =
       (volatile uint32_t *)((volatile uint8_t *)cell +
                             KBASE_SEQNO_STREAM_PROGRESS_OFFSET);
-   const uint8_t *input_page = (uint8_t *)subq->kbase.user_io + 4096;
-   const uint8_t *output_page = (uint8_t *)subq->kbase.user_io + 8192;
+   const uint8_t *input_page = (uint8_t *)subq->kbase.user_io + kbase_kmod_page_size();
+   const uint8_t *output_page = (uint8_t *)subq->kbase.user_io + 2 * kbase_kmod_page_size();
    uint64_t target_insert = subq->kbase.insert;
    uint64_t seqno_addr = kbase_subqueue_seqno_dev_addr(queue, subqueue);
    int64_t start = os_time_get_nano();

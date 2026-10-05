@@ -41,6 +41,48 @@ bool kbase_kmod_supports_dmabuf(const struct pan_kmod_dev *dev);
 int kbase_kmod_csf_group_create(struct pan_kmod_dev *dev,
                                 uint32_t cs_queue_count,
                                 uint32_t *group_handle);
+
+/* kbase counts va_pages, alias lengths and mmap handle offsets in kernel
+ * (CPU) pages: 4 KiB or 16 KiB.  Cached sysconf(_SC_PAGESIZE). */
+uint64_t kbase_kmod_page_size(void);
+
+/* CSF uAPI layouts, named by ioctl size in bytes (public
+ * mali_kbase_csf_ioctl.h, r3x-r5x):
+ *  CS_QUEUE_GROUP_CREATE: 32 = _1_6 (nr 42, all CSF uAPIs),
+ *    40 = _1_18 (nr 58, 1.7+; csi_handlers 1.12+), 112 = current (nr 58,
+ *    1.19+; cs_fault_report_enable 1.25+).
+ *  CS_TILER_HEAP_INIT: 16 = _1_13 (all), 24 = + buf_desc_va (1.14+).
+ * Newer kernels keep the older layouts as compat cases, so the
+ * device-proven layout goes first and the others are tried on
+ * EINVAL/ENOTTY in the order returned. */
+static inline unsigned
+kbase_csf_group_create_layouts(unsigned major, unsigned minor,
+                               unsigned out[3])
+{
+   const unsigned v = major * 1000 + minor;
+   unsigned n = 0;
+
+   if (v >= 1025)
+      out[n++] = 112;
+   out[n++] = 32;
+   if (v >= 1019 && v < 1025)
+      out[n++] = 112;
+   if (v >= 1007)
+      out[n++] = 40;
+   return n;
+}
+
+static inline unsigned
+kbase_csf_tiler_heap_init_layouts(unsigned major, unsigned minor,
+                                  unsigned out[2])
+{
+   unsigned n = 0;
+
+   out[n++] = 16;
+   if (major * 1000 + minor >= 1014)
+      out[n++] = 24;
+   return n;
+}
 void kbase_kmod_csf_group_destroy(struct pan_kmod_dev *dev,
                                   uint32_t group_handle);
 

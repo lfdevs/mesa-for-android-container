@@ -577,6 +577,26 @@ struct kbase_ioctl_kcpu_queue_enqueue {
 #define KBASE_IOCTL_KCPU_QUEUE_ENQUEUE \
    _IOW(KBASE_IOCTL_TYPE, 47, struct kbase_ioctl_kcpu_queue_enqueue)
 
+/* Legacy 16-byte layout; uAPI 1.14+ keeps it as a compat case that passes
+ * buf_desc_va = 0. */
+union kbase_ioctl_cs_tiler_heap_init_1_13 {
+   struct {
+      __u32 chunk_size;
+      __u32 initial_chunks;
+      __u32 max_chunks;
+      __u16 target_in_flight;
+      __u8 group_id;
+      __u8 padding;
+   } in;
+   struct {
+      __u64 gpu_heap_va;
+      __u64 first_chunk_va;
+   } out;
+};
+#define KBASE_IOCTL_CS_TILER_HEAP_INIT_1_13 \
+   _IOWR(KBASE_IOCTL_TYPE, 48, union kbase_ioctl_cs_tiler_heap_init_1_13)
+
+/* uAPI 1.14+: adds the buffer descriptor VA (24 bytes). */
 union kbase_ioctl_cs_tiler_heap_init {
    struct {
       __u32 chunk_size;
@@ -585,6 +605,7 @@ union kbase_ioctl_cs_tiler_heap_init {
       __u16 target_in_flight;
       __u8 group_id;
       __u8 padding;
+      __u64 buf_desc_va;
    } in;
    struct {
       __u64 gpu_heap_va;
