@@ -2804,6 +2804,35 @@ panvk_queue_submit_init_signals(struct panvk_queue_submit *submit,
    }
 }
 
+/* If we're tracing, reset the desc ringbufs and the CS tracebufs before each
+ * submission (tracing forces synchronous submits, so nothing is in flight).
+ * Without the reset on kbase, every submit re-decoded all earlier traces:
+ * one PanProbe test wrote a 700 MB log with PANVK_DEBUG=trace. */
+static void
+reset_trace_bufs(struct panvk_gpu_queue *queue)
+{
+   if (!PANVK_DEBUG(TRACE))
+      return;
+
+   for (uint32_t i = 0; i < ARRAY_SIZE(queue->subqueues); i++) {
+      panvk_priv_mem_rmw(queue->subqueues[i].context, 0,
+                         struct panvk_cs_subqueue_context, ctx) {
+         if (ctx->render.desc_ringbuf.ptr) {
+            ctx->render.desc_ringbuf.ptr = queue->render_desc_ringbuf.addr.dev;
+            ctx->render.desc_ringbuf.pos = 0;
+         }
+
+         if (ctx->debug.tracebuf.cs)
+            ctx->debug.tracebuf.cs = queue->subqueues[i].tracebuf.addr.dev;
+      }
+#ifdef HAVE_PAN_KMOD_KBASE
+      if (gpu_queue_uses_kbase(to_panvk_device(queue->vk.base.device)))
+         kbase_clean_priv_mem(queue->subqueues[i].context, 0,
+                              sizeof(struct panvk_cs_subqueue_context));
+#endif
+   }
+}
+
 #ifdef HAVE_PAN_KMOD_KBASE
 /* Binary semaphores pending on this queue are waited for on the GPU: each
  * new ring entry SYNC_WAITs for the other subqueues' seqnos, and its own
@@ -2902,6 +2931,8 @@ panvk_queue_submit_ioctl_kbase(struct panvk_queue_submit *submit,
       if (result != VK_SUCCESS)
          return result;
    }
+
+   reset_trace_bufs(queue);
 
    /* Flush pending synchronization requests before submitting the job, to
     * make sure things are GPU-visible. */
@@ -3025,23 +3056,7 @@ panvk_queue_submit_ioctl(struct panvk_queue_submit *submit)
    struct panvk_gpu_queue *queue = submit->queue;
    int ret;
 
-   if (PANVK_DEBUG(TRACE)) {
-      /* If we're tracing, we need to reset the desc ringbufs and the CS
-       * tracebuf. */
-      for (uint32_t i = 0; i < ARRAY_SIZE(queue->subqueues); i++) {
-         panvk_priv_mem_rmw(queue->subqueues[i].context, 0,
-                            struct panvk_cs_subqueue_context, ctx) {
-            if (ctx->render.desc_ringbuf.ptr) {
-               ctx->render.desc_ringbuf.ptr =
-                  queue->render_desc_ringbuf.addr.dev;
-               ctx->render.desc_ringbuf.pos = 0;
-            }
-
-            if (ctx->debug.tracebuf.cs)
-               ctx->debug.tracebuf.cs = queue->subqueues[i].tracebuf.addr.dev;
-         }
-      }
-   }
+   reset_trace_bufs(queue);
 
    /* Flush pending synchronization requests before submitting the job, to
     * make sure things are GPU-visible. */
