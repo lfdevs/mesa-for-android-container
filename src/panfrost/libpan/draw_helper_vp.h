@@ -12,6 +12,12 @@
 #define PANLIB_VP_RUN_BYTES 12u
 #define PANLIB_VP_MAX_VIEWPORTS 16u
 #define PANLIB_VP_RESTART 0xffffffffu
+/* pack_prim_id: run index = record | (primitive ID & 0xffff) << 16. Records
+ * are capped at 65536 (PANVK_GPU_PRERAST_MAX_INVOCATIONS). Run draws have
+ * primitive restart off, so any value is a vertex.
+ */
+#define PANLIB_VP_PRIM_ID_SHIFT 16u
+#define PANLIB_VP_PACKED_RECORD_MASK 0xffffu
 #define PANLIB_VP_MAX_INPUT_INDICES (1u << 24)
 #define PANLIB_VP_MAX_OUT_INDICES (1u << 24)
 #define PANLIB_VP_MAX_RUNS ((UINT32_MAX - PANLIB_VP_RUN_HEADER_BYTES) / PANLIB_VP_RUN_BYTES)

@@ -4706,6 +4706,8 @@ gpu_prerast_vp_prepare(struct panvk_cmd_buffer *cmdbuf, uint64_t arena,
    const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
    const struct panvk_shader *vps =
       panvk_prerast_viewport_shader(&cmdbuf->state.gfx);
+   const struct panvk_shader_variant *fs =
+      panvk_shader_only_variant(get_fs(cmdbuf));
 
    if (!vps)
       return false;
@@ -4817,6 +4819,13 @@ gpu_prerast_vp_prepare(struct panvk_cmd_buffer *cmdbuf, uint64_t arena,
       .index_capacity = out_count,
       .run_capacity = run_capacity,
       .per_instance = per_instance,
+      /* A VS has no PrimitiveID output (a TES has one, see panvk_lower_tes):
+       * give the FS one that does not restart with each run.
+       */
+      .pack_prim_id = per_instance && fs &&
+                      fs->info.fs.reads_primitive_id &&
+                      !(outputs & VARYING_BIT_PRIMITIVE_ID),
+      .prim_base = source->gpu_prerast_prim_base,
    };
    return true;
 }

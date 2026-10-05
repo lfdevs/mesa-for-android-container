@@ -70,7 +70,7 @@ vp_prim(VP_CONST uint32_t *in_indices, VP_CONST uint32_t *records,
         uint32_t prim, bool provoking_last, uint32_t p, uint32_t num_prims,
         uint32_t base, uint32_t rec_base, VP_GLOBAL uint32_t *out_indices,
         VP_GLOBAL struct panlib_vp_run *runs, uint32_t *nidx, uint32_t *nrun,
-        uint32_t index_cap, uint32_t run_cap)
+        uint32_t index_cap, uint32_t run_cap, bool pack_prim_id, uint32_t pid)
 {
    uint32_t k = mesa_vertices_per_prim((enum mesa_prim)prim);
    uint32_t vtx[3];
@@ -92,10 +92,23 @@ vp_prim(VP_CONST uint32_t *in_indices, VP_CONST uint32_t *records,
       if (!vp_add_u32(in_indices[at], rec_base, &vtx[v]))
          return false;
    }
-   return vp_emit(out_indices, runs, nidx, nrun, index_cap, run_cap,
-                  vp_prim_viewport(records, record_stride, vp_slot, has_vp,
-                                   vtx[prov], count),
-                  k, vtx);
+   uint32_t vp = vp_prim_viewport(records, record_stride, vp_slot, has_vp,
+                                  vtx[prov], count);
+
+   /* The FS primitive ID restarts with each run draw: carry it in the index
+    * bits 16+ instead (PANLIB_VP_PRIM_ID_SHIFT), the passthrough VS outputs
+    * it. ponytail: 16 bits, IDs wrap past 65535; widen with a side buffer
+    * indexed by the record if an app cares.
+    */
+   if (pack_prim_id) {
+      for (uint32_t v = 0; v < k; v++) {
+         if (vtx[v] > PANLIB_VP_PACKED_RECORD_MASK)
+            return false;
+         vtx[v] |= pid << PANLIB_VP_PRIM_ID_SHIFT;
+      }
+   }
+   return vp_emit(out_indices, runs, nidx, nrun, index_cap, run_cap, vp, k,
+                  vtx);
 }
 
 /* instances > 1 repeats the index list once per instance, instance k reading
@@ -110,7 +123,8 @@ panlib_vp_runs_n(VP_CONST uint32_t *in_indices, uint32_t index_count,
                  uint32_t index_capacity, uint32_t run_capacity,
                  VP_GLOBAL uint32_t *out_indices,
                  VP_GLOBAL struct panlib_vp_run_header *header,
-                 uint32_t instances, uint32_t instance_stride)
+                 uint32_t instances, uint32_t instance_stride,
+                 uint32_t pack_prim_id, uint32_t prim_base)
 {
    bool has_vp = (outputs_written & VARYING_BIT_VIEWPORT) != 0;
    uint32_t vp_slot = util_bitcount64(outputs_written &
@@ -146,6 +160,10 @@ panlib_vp_runs_n(VP_CONST uint32_t *in_indices, uint32_t index_count,
    uint64_t rec64 = (uint64_t)inst * instance_stride;
    uint32_t rec_base = (uint32_t)rec64;
    uint32_t needle = 0;
+   /* Primitive ID: counts across restarts, restarts with each instance.
+    * prim_base is the first primitive of a CPU-split chunk (one instance).
+    */
+   uint32_t pid = prim_base;
 
    if (rec64 > UINT32_MAX - 1)
       overflow = true;
@@ -163,11 +181,12 @@ panlib_vp_runs_n(VP_CONST uint32_t *in_indices, uint32_t index_count,
       uint32_t prims =
          u_decomposed_prims_for_vertices((enum mesa_prim)prim, (int)len);
 
-      for (uint32_t p = 0; p < prims && !overflow; p++) {
+      for (uint32_t p = 0; p < prims && !overflow; p++, pid++) {
          overflow = !vp_prim(in_indices, records, record_stride, vp_slot,
                              has_vp, count, prim, prov_last, p, prims,
                              needle, rec_base, out_indices, runs, &nidx,
-                             &nrun, index_capacity, run_capacity);
+                             &nrun, index_capacity, run_capacity,
+                             pack_prim_id != 0, pid & 0xffffu);
       }
       if (!vp_add_u32(next, 1, &needle))
          overflow = true;
@@ -190,7 +209,8 @@ panlib_vp_runs(VP_CONST uint32_t *in_indices, uint32_t index_count,
 {
    panlib_vp_runs_n(in_indices, index_count, records, record_stride,
                     outputs_written, viewport_count, prim, provoking_last,
-                    index_capacity, run_capacity, out_indices, header, 1, 0);
+                    index_capacity, run_capacity, out_indices, header, 1, 0,
+                    0, 0);
 }
 
 #ifndef PANLIB_VP_HOST
@@ -204,7 +224,8 @@ panlib_vp_runs_launch(uint64_t in_indices, uint64_t records,
                      uint32_t record_stride, uint32_t viewport_count,
                      uint32_t prim, uint32_t provoking_last,
                      uint32_t index_bound, uint32_t index_capacity,
-                     uint32_t run_capacity, uint32_t per_instance)
+                     uint32_t run_capacity, uint32_t per_instance,
+                     uint32_t pack_prim_id, uint32_t prim_base)
 {
    uint32_t n = *((global const uint32_t *)counts);
    /* A VS draw: counts is {vertex count, instance count}, and instance k
@@ -224,6 +245,6 @@ panlib_vp_runs_launch(uint64_t in_indices, uint64_t records,
                     index_capacity, run_capacity,
                     (global uint32_t *)out_indices,
                     (global struct panlib_vp_run_header *)header, instances,
-                    per_instance ? n : 0);
+                    per_instance ? n : 0, pack_prim_id, prim_base);
 }
 #endif

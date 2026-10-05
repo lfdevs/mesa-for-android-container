@@ -354,7 +354,7 @@ main(void)
       for (uint32_t i = 0; i < 2; i++)
          idx[i] += 20;
       panlib_vp_runs_n(idx, 2, rec, STRIDE, outs, 4, MESA_PRIM_POINTS, 0, 64,
-                       8, out, &buf.h, 2, 2);
+                       8, out, &buf.h, 2, 2, 0, 0);
       CHECK(!buf.h.overflow && buf.h.index_count == 4 && buf.h.run_count == 3);
       CHECK(out[0] == 20 && out[1] == 21 && out[2] == 22 && out[3] == 23);
       CHECK(buf.r[0].viewport == 0 && buf.r[0].index_count == 1);
@@ -363,8 +363,37 @@ main(void)
       CHECK(buf.r[2].viewport == 0 && buf.r[2].first_index == 3);
       /* the instance offset must not wrap */
       panlib_vp_runs_n(idx, 2, rec, STRIDE, outs, 4, MESA_PRIM_POINTS, 0, 64,
-                       8, out, &buf.h, 2, 0xffffffffu);
+                       8, out, &buf.h, 2, 0xffffffffu, 0, 0);
       CHECK(buf.h.overflow == 1 && buf.h.run_count == 0);
+
+      /* pack_prim_id: the primitive ID rides in bits 16+, per instance. */
+      panlib_vp_runs_n(idx, 2, rec, STRIDE, outs, 4, MESA_PRIM_POINTS, 0, 64,
+                       8, out, &buf.h, 2, 2, 1, 0);
+      CHECK(!buf.h.overflow && buf.h.index_count == 4 && buf.h.run_count == 3);
+      CHECK(out[0] == 20 && out[1] == (21 | 1u << 16) && out[2] == 22 &&
+            out[3] == (23 | 1u << 16));
+   }
+
+   /* pack_prim_id counts across a restart, and a record past 16 bits
+    * discards the draw.
+    */
+   {
+      uint32_t idx[] = {20, PANLIB_VP_RESTART, 21};
+      panlib_vp_runs_n(idx, 3, rec, STRIDE, outs, 4, MESA_PRIM_POINTS, 0, 64,
+                       8, out, &buf.h, 1, 0, 1, 0);
+      CHECK(!buf.h.overflow && buf.h.index_count == 2);
+      CHECK(out[0] == 20 && out[1] == (21 | 1u << 16));
+
+      uint32_t big[] = {0x10000};
+      panlib_vp_runs_n(big, 1, NULL, 0, 0, 4, MESA_PRIM_POINTS, 0, 64, 8, out,
+                       &buf.h, 1, 0, 1, 0);
+      CHECK(buf.h.overflow == 1);
+
+      /* A CPU-split chunk starts at its primitive base, IDs wrap at 16 bits. */
+      uint32_t two[] = {20, 21};
+      panlib_vp_runs_n(two, 2, rec, STRIDE, outs, 4, MESA_PRIM_POINTS, 0, 64,
+                       8, out, &buf.h, 1, 0, 1, 0xffff);
+      CHECK(!buf.h.overflow && out[0] == (20 | 0xffffu << 16) && out[1] == 21);
    }
 
    free(rec);

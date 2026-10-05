@@ -22,6 +22,7 @@
 #include "panvk_shader.h"
 #if PAN_ARCH >= 10
 #include "panvk_gpu_prerast.h"
+#include "libpan/draw_helper_vp.h"
 #include "poly/nir/poly_nir.h"
 #include "libpoly.h"
 #endif
@@ -1236,7 +1237,15 @@ panvk_gpu_prerast_vs_vp_passthrough_nir(
       nir_iadd_imm(&b, params,
                    offsetof(struct panvk_gpu_prerast_params, vertex_count)),
       .align_mul = 4);
-   nir_def *linear = nir_iadd(&b, nir_load_vertex_id(&b),
+   /* A VS has no PrimitiveID output: run draws carry it in the index bits
+    * 16+ (panlib_vp_runs pack_prim_id), the record index is below. Unpacked
+    * indices are records < 65536, which only lose the meaningless ID.
+    */
+   const bool add_prim_id = !(outputs & VARYING_BIT_PRIMITIVE_ID);
+   nir_def *vid = nir_load_vertex_id(&b);
+   if (add_prim_id)
+      vid = nir_iand_imm(&b, vid, PANLIB_VP_PACKED_RECORD_MASK);
+   nir_def *linear = nir_iadd(&b, vid,
                               nir_imul(&b, nir_load_instance_id(&b), verts));
    nir_def *record =
       nir_iadd(&b, base, nir_imul(&b, nir_u2u64(&b, linear), stride));
@@ -1283,9 +1292,18 @@ panvk_gpu_prerast_vs_vp_passthrough_nir(
                        .io_semantics = {.location = location, .num_slots = 1});
    }
 
+   if (add_prim_id) {
+      nir_store_output(
+         &b, nir_ushr_imm(&b, nir_load_vertex_id(&b), PANLIB_VP_PRIM_ID_SHIFT),
+         nir_imm_int(&b, 0), .base = idx++, .write_mask = 0x1,
+         .src_type = nir_type_int32,
+         .io_semantics = {.location = VARYING_SLOT_PRIMITIVE_ID,
+                          .num_slots = 1});
+   }
    panvk_prerast_store_clip(&b, planes, scissor_loc, idx++);
    b.shader->info.outputs_written =
-      (outputs & ~VARYING_BIT_VIEWPORT) | BITFIELD64_BIT(scissor_loc);
+      (outputs & ~VARYING_BIT_VIEWPORT) | BITFIELD64_BIT(scissor_loc) |
+      (add_prim_id ? VARYING_BIT_PRIMITIVE_ID : 0);
    b.shader->num_outputs = idx;
    return b.shader;
 }
