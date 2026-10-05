@@ -51,10 +51,12 @@ panvk_event_cache_op(const void *start, size_t size, bool invalidate)
 
 /* Push the CPU write out of the cache, then on kbase ask the kernel to
  * re-evaluate CSF event waits. The signal is a no-op on other backends
- * (cs_event_signal is NULL). Returns false only when the backend reports
- * that the notification failed.
+ * (cs_event_signal is NULL). SetEvent/ResetEvent may only fail with
+ * OUT_OF_HOST/DEVICE_MEMORY, so a failed notification is not reported: the
+ * event word is already written and the CSF scheduler re-evaluates waits on
+ * its next tick or GPU event, so only the wake-up latency suffers.
  */
-static bool
+static void
 panvk_event_publish(struct panvk_device *dev, struct panvk_event *event)
 {
 #ifdef HAVE_PAN_KMOD_KBASE
@@ -67,7 +69,8 @@ panvk_event_publish(struct panvk_device *dev, struct panvk_event *event)
    }
 #endif
 
-   return pan_kmod_cs_event_signal(dev->kmod.dev) == 0;
+   /* kbase_kmod logs the failure. */
+   (void)pan_kmod_cs_event_signal(dev->kmod.dev);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -116,9 +119,8 @@ panvk_per_arch(CreateEvent)(VkDevice _device,
                               PANVK_SUBQUEUE_COUNT, sobjs) {
       memset(sobjs, 0, sizeof(struct panvk_cs_sync32) * PANVK_SUBQUEUE_COUNT);
    }
-   /* Reset state. A failed signal here still leaves a valid event; the next
-    * SetEvent reports it. */
-   (void)panvk_event_publish(device, event);
+   /* Reset state. */
+   panvk_event_publish(device, event);
 
    *pEvent = panvk_event_to_handle(event);
    return VK_SUCCESS;
@@ -188,8 +190,7 @@ panvk_per_arch(SetEvent)(VkDevice _device, VkEvent _event)
       for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++)
          syncobjs[i].seqno = 1;
    }
-   if (!panvk_event_publish(device, event))
-      return panvk_error(device, VK_ERROR_DEVICE_LOST);
+   panvk_event_publish(device, event);
 
    return VK_SUCCESS;
 }
@@ -204,8 +205,7 @@ panvk_per_arch(ResetEvent)(VkDevice _device, VkEvent _event)
                               PANVK_SUBQUEUE_COUNT, syncobjs) {
       memset(syncobjs, 0, sizeof(*syncobjs) * PANVK_SUBQUEUE_COUNT);
    }
-   if (!panvk_event_publish(device, event))
-      return panvk_error(device, VK_ERROR_DEVICE_LOST);
+   panvk_event_publish(device, event);
 
    return VK_SUCCESS;
 }
