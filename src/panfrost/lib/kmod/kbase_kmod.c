@@ -1458,6 +1458,25 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
       goto err_unmap_tracking;
    }
 
+   /* Initialise the EXEC_VA zone so that GPU-executable allocations
+    * (shader BOs) get their own zone.  Must run before JIT_INIT: JM kbase
+    * and CSF kbase before uAPI 1.9 carve EXEC_VA from the end of SAME_VA
+    * and refuse with -EPERM once JIT's CUSTOM_VA zone exists
+    * (kbase_region_tracker_init_exec checks kctx->jit_va).  CSF >= 1.9
+    * sets the zone up at context creation and this is a no-op.  4G
+    * (0x100000 pages) is the kernel maximum and matches panfork; without
+    * the zone, GPU_EX allocations fall back to CUSTOM_VA, so failure is
+    * not fatal. */
+   struct kbase_ioctl_mem_exec_init exec_init = { .va_pages = 0x100000 };
+   if (ioctl(fd, KBASE_IOCTL_MEM_EXEC_INIT, &exec_init)) {
+      if (errno == EPERM || errno == EINVAL)
+         mesa_logd("kbase: KBASE_IOCTL_MEM_EXEC_INIT: %s (zone exists or "
+                   "unsupported; GPU_EX BOs use CUSTOM_VA)", strerror(errno));
+      else
+         mesa_logw("kbase: KBASE_IOCTL_MEM_EXEC_INIT failed: %s "
+                   "(executable BO allocation may not work)", strerror(errno));
+   }
+
    /* Initialise the JIT allocator.  This must happen before any allocation
     * is made: besides setting up JIT, on 64-bit clients this is what carves
     * the CUSTOM_VA zone out of the top of the SAME_VA zone
@@ -1474,19 +1493,6 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
    if (ioctl(fd, KBASE_IOCTL_MEM_JIT_INIT, &jit_init)) {
       mesa_logw("kbase: KBASE_IOCTL_MEM_JIT_INIT failed: %s "
                 "(tiler heap creation will not work)", strerror(errno));
-   }
-
-   /* Initialise the EXEC_VA zone so that GPU-executable allocations
-    * (shader BOs) are possible.  4G of executable VA (0x100000 pages)
-    * matches what panfork uses.  On CSF uAPI >= 1.9 the zone is set up
-    * automatically and this is a no-op.  Failure is not fatal for
-    * enumeration, but executable allocations will fail later, so warn. */
-   struct kbase_ioctl_mem_exec_init exec_init = { .va_pages = 0x100000 };
-   if (!is_csf)
-      exec_init.va_pages = 1024;
-   if (ioctl(fd, KBASE_IOCTL_MEM_EXEC_INIT, &exec_init)) {
-      mesa_logw("kbase: KBASE_IOCTL_MEM_EXEC_INIT failed: %s "
-                "(executable BO allocation will not work)", strerror(errno));
    }
 
    struct kbase_kmod_dev *kbase_dev =
