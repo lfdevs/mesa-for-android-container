@@ -86,9 +86,13 @@ static const char *const wsi_x11_libs[] = {
    S(xcb_present_select_input_checked) \
    S(xcb_shm_attach) \
    S(xcb_shm_attach_checked) \
+   S(xcb_shm_attach_fd_checked) \
    S(xcb_shm_create_pixmap_checked) \
    S(xcb_shm_detach) \
    S(xcb_shm_detach_checked) \
+   S(xcb_shm_put_image) \
+   S(xcb_shm_query_version) \
+   S(xcb_shm_query_version_reply) \
    S(xcb_sync_destroy_fence) \
    S(xcb_xfixes_create_region) \
    S(xcb_xfixes_destroy_region) \
