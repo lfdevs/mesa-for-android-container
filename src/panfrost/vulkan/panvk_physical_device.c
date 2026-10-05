@@ -1839,12 +1839,26 @@ panvk_bc_emul_enabled(const struct panvk_physical_device *physical_device)
    if (PANVK_DEBUG(NO_BC_EMUL))
       return false;
 
-   const struct pan_format fmt =
-      physical_device->formats.all[PIPE_FORMAT_DXT1_RGBA];
+   /* Emulate unless every BC format is native. Some v9/v10 kbase GPUs
+    * (G57, G610) report BC1 alone; keying off BC1 disabled emulation there
+    * and left textureCompressionBC false with no usable BC format. */
+   static const enum pipe_format bc_fmts[] = {
+      PIPE_FORMAT_DXT1_RGBA,       PIPE_FORMAT_DXT3_RGBA,
+      PIPE_FORMAT_DXT5_RGBA,       PIPE_FORMAT_RGTC1_UNORM,
+      PIPE_FORMAT_RGTC1_SNORM,     PIPE_FORMAT_RGTC2_UNORM,
+      PIPE_FORMAT_RGTC2_SNORM,     PIPE_FORMAT_BPTC_RGB_FLOAT,
+      PIPE_FORMAT_BPTC_RGB_UFLOAT, PIPE_FORMAT_BPTC_RGBA_UNORM,
+   };
    uint32_t supported_compr_fmts =
       pan_query_compressed_formats(&physical_device->kmod.dev->props);
 
-   return !(BITFIELD_BIT(fmt.texfeat_bit) & supported_compr_fmts);
+   for (unsigned i = 0; i < ARRAY_SIZE(bc_fmts); i++) {
+      const struct pan_format fmt = physical_device->formats.all[bc_fmts[i]];
+      if (!fmt.hw || !(BITFIELD_BIT(fmt.texfeat_bit) & supported_compr_fmts))
+         return true;
+   }
+
+   return false;
 }
 
 static VkFormatFeatureFlags2
@@ -1856,10 +1870,8 @@ get_image_plane_format_features(struct panvk_physical_device *physical_device,
    const struct pan_format fmt = physical_device->formats.all[pfmt];
    unsigned arch = pan_arch(physical_device->kmod.dev->props.gpu_id);
 
-   if (panvk_format_is_bc(format)) {
-      if (!panvk_bc_emul_enabled(physical_device))
-         return 0;
-
+   /* Without emulation, BC formats take the native per-format path below. */
+   if (panvk_format_is_bc(format) && panvk_bc_emul_enabled(physical_device)) {
       features = VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT |
                  VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT |
                  VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT |
