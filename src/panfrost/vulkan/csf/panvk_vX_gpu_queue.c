@@ -2728,10 +2728,16 @@ panvk_queue_submit_init_signals(struct panvk_queue_submit *submit,
 }
 
 #ifdef HAVE_PAN_KMOD_KBASE
-/* Off by default: G615 query_pool.statistics_query CTS loses the device on
- * subqueue 0 with GPU waits (1-3 of 17769), never with CPU waits. */
+/* Binary semaphores pending on this queue are waited for on the GPU: each
+ * new ring entry SYNC_WAITs for the other subqueues' seqnos, and its own
+ * subqueue is already in order.  The CPU wait this replaces stalled
+ * vkQueueSubmit/vkQueuePresentKHR until the previous frame finished, so the
+ * CPU and GPU never overlapped (NFS Most Wanted: one 20 ms stall per frame).
+ * Signal targets cover every subqueue's emitted seqno, which already
+ * includes the waited-for targets, so an empty submit still signals after
+ * its waits.  PANVK_KBASE_GPU_SEMAPHORE_WAITS=0 restores the CPU waits. */
 DEBUG_GET_ONCE_BOOL_OPTION(kbase_gpu_semaphore_waits,
-                           "PANVK_KBASE_GPU_SEMAPHORE_WAITS", false)
+                           "PANVK_KBASE_GPU_SEMAPHORE_WAITS", true)
 
 static bool
 kbase_gpu_waits_disabled(void)
