@@ -56,6 +56,7 @@ panvk_can_present_on_device(VkPhysicalDevice pdevice, int fd)
 #include "panvk_entrypoints.h"
 #include "panvk_image.h"
 #include "vk_object.h"
+#include "vk_android.h"
 
 struct panvk_android_swapchain_image {
    struct wsi_image base;
@@ -305,6 +306,7 @@ panvk_android_swapchain_destroy(
    struct panvk_android_swapchain *chain = (struct panvk_android_swapchain *)swapchain;
    VK_FROM_HANDLE(vk_device, dev, swapchain->device);
 
+   vk_android_set_owned_ahb(NULL);
    for (uint32_t i = 0; i < chain->base.image_count; i++) {
       if (chain->images[i].base.image != VK_NULL_HANDLE)
          dev->dispatch_table.DestroyImage(swapchain->device, chain->images[i].base.image, pAllocator);
@@ -376,6 +378,8 @@ panvk_wsi_android_create_swapchain(
          panvk_android_swapchain_destroy(&chain->base, pAllocator);
          return VK_ERROR_INITIALIZATION_FAILED;
       }
+      /* Ours and still undefined: the no-mapper linear probe may write it. */
+      vk_android_set_owned_ahb(chain->images[i].ahb);
 
       VkExternalMemoryImageCreateInfo emici = {
          .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
@@ -451,6 +455,7 @@ panvk_wsi_android_create_swapchain(
          return result;
       }
    }
+   vk_android_set_owned_ahb(NULL);
 
    *swapchain_out = &chain->base;
    return VK_SUCCESS;
