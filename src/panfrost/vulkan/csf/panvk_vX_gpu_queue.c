@@ -1349,7 +1349,9 @@ finish_subqueue_tracing(struct panvk_gpu_queue *queue,
          pan_kmod_vm_bind(dev->kmod.vm, PAN_KMOD_VM_OP_MODE_IMMEDIATE, &op, 1);
       assert(!ret);
 
-      panvk_as_free(dev, subq->tracebuf.addr.dev, subq->tracebuf.size + pgsize);
+      if (!(dev->kmod.vm->flags & PAN_KMOD_VM_FLAG_AUTO_VA))
+         panvk_as_free(dev, subq->tracebuf.addr.dev,
+                       subq->tracebuf.size + pgsize);
    }
 
    if (subq->tracebuf.addr.host) {
@@ -1445,14 +1447,19 @@ init_subqueue_tracing(struct panvk_gpu_queue *queue,
                           "Failed to CPU map tracebuf");
    }
 
-   /* Add a guard page. */
+   /* Add a guard page.  kbase (AUTO_VA) assigns the VA itself and cannot map
+    * at a caller-chosen address, so there is no guard page there. */
    uint64_t pgsize = panvk_get_gpu_page_size(dev);
-   dev_addr = panvk_as_alloc(dev, PANVK_NO_EXEC_VA_HEAP,
-                             subq->tracebuf.size + pgsize, pgsize);
+   const bool auto_va = dev->kmod.vm->flags & PAN_KMOD_VM_FLAG_AUTO_VA;
+   dev_addr = PAN_KMOD_VM_MAP_AUTO_VA;
+   if (!auto_va) {
+      dev_addr = panvk_as_alloc(dev, PANVK_NO_EXEC_VA_HEAP,
+                                subq->tracebuf.size + pgsize, pgsize);
 
-   if (!dev_addr)
-      return panvk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                          "Failed to allocate virtual address for tracebuf");
+      if (!dev_addr)
+         return panvk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                             "Failed to allocate virtual address for tracebuf");
+   }
 
    struct pan_kmod_vm_op vm_op = {
       .type = PAN_KMOD_VM_OP_TYPE_MAP,
@@ -1471,12 +1478,14 @@ init_subqueue_tracing(struct panvk_gpu_queue *queue,
    int ret =
       pan_kmod_vm_bind(dev->kmod.vm, PAN_KMOD_VM_OP_MODE_IMMEDIATE, &vm_op, 1);
    if (ret) {
-      panvk_as_free(dev, dev_addr, subq->tracebuf.size + pgsize);
+      if (!auto_va)
+         panvk_as_free(dev, dev_addr,
+                       subq->tracebuf.size + pgsize);
       return panvk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                           "Failed to GPU map ringbuf BO");
    }
 
-   subq->tracebuf.addr.dev = dev_addr;
+   subq->tracebuf.addr.dev = auto_va ? vm_op.va.start : dev_addr;
 
    panvk_address_binding_report(dev, NULL, subq->tracebuf.addr.dev,
                                 subq->tracebuf.size,
