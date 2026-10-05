@@ -239,6 +239,10 @@ struct wsi_swapchain {
    VkSemaphore present_id_timeline;
    bool present_wait_enabled;
 
+   /* sw (CPU-presented) images: the platform's present thread waits for
+    * the per-image fence itself, so vkQueuePresentKHR need not block. */
+   bool sw_fence_wait_in_present_thread;
+
    int signal_dma_buf_from_semaphore;
    /**
     * Optional semaphore for implicit-sync swapchains.  It will be signaled by

@@ -2903,7 +2903,7 @@ wsi_common_queue_present(const struct wsi_device *wsi,
 #endif
       }
 
-      if (wsi->sw) {
+      if (wsi->sw && !swapchain->sw_fence_wait_in_present_thread) {
          wsi->WaitForFences(vk_device_to_handle(dev),
                             1, &swapchain->fences[image_index], true, ~0ull);
       }
