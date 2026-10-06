@@ -552,6 +552,87 @@ panlib_chunk_step(global struct panlib_chunk_draw *c)
    }
 }
 
+/* Strip table of a GS draw with primitive restart, for the first
+ * min(*count, cap) generated indices: out[j] is the first vertex of the
+ * strip of j, out[cap + j] the primitives of the strips before it and
+ * out[2 * cap + j] the first restart at or after j (or the count). Each
+ * GS invocation then loads its strip instead of walking the indices, which
+ * made the GS job quadratic in the strip length.
+ */
+KERNEL(CHUNK_WG)
+panlib_gs_strip_table(constant uint32_t *gen, constant uint32_t *count,
+                      uint32_t cap, uint32_t prim, global uint32_t *out)
+{
+   local uint32_t tmp[5 * CHUNK_WG];
+   const enum mesa_prim p = (enum mesa_prim)prim;
+   const uint32_t n = min(count[0], cap);
+   const uint32_t tid = cl_local_id.x;
+   const uint32_t seg = (n + CHUNK_WG - 1) / CHUNK_WG;
+   const uint32_t b = min(tid * seg, n), e = min(b + seg, n);
+   uint32_t first = UINT32_MAX, last = UINT32_MAX, lead = 0, inner = 0;
+   uint32_t run = 0;
+
+   for (uint32_t j = b; j < e; j++) {
+      if (gen[j] == 0xffffffff) {
+         if (last == UINT32_MAX) {
+            first = j;
+            lead = run;
+         } else {
+            inner += u_decomposed_prims_for_vertices(p, run);
+         }
+         last = j;
+         run = 0;
+      } else {
+         run++;
+      }
+   }
+
+   tmp[tid] = last;
+   tmp[CHUNK_WG + tid] = lead;
+   tmp[2 * CHUNK_WG + tid] = inner;
+   tmp[3 * CHUNK_WG + tid] = run;
+   tmp[4 * CHUNK_WG + tid] = first;
+   barrier(CLK_LOCAL_MEM_FENCE);
+
+   /* State at b: strip start, its run so far, primitives before it. */
+   uint32_t start = 0, before = 0;
+   run = 0;
+   for (uint32_t t = 0; t < tid; t++) {
+      if (tmp[t] == UINT32_MAX) {
+         run += tmp[3 * CHUNK_WG + t];
+      } else {
+         before += u_decomposed_prims_for_vertices(p, run + tmp[CHUNK_WG + t]) +
+                   tmp[2 * CHUNK_WG + t];
+         run = tmp[3 * CHUNK_WG + t];
+         start = tmp[t] + 1;
+      }
+   }
+   uint32_t next = n;
+   for (uint32_t t = tid + 1; t < CHUNK_WG; t++) {
+      if (tmp[4 * CHUNK_WG + t] != UINT32_MAX) {
+         next = tmp[4 * CHUNK_WG + t];
+         break;
+      }
+   }
+
+   for (uint32_t j = b; j < e; j++) {
+      out[j] = start;
+      out[cap + j] = before;
+      if (gen[j] == 0xffffffff) {
+         before += u_decomposed_prims_for_vertices(p, run);
+         run = 0;
+         start = j + 1;
+      } else {
+         run++;
+      }
+   }
+   for (uint32_t j = e; j-- > b;) {
+      if (gen[j] == 0xffffffff)
+         next = j;
+      out[2 * cap + j] = next;
+   }
+}
+
 /* One chunk of a triangle fan as 32-bit indices: the hub element, then the
  * count - 1 elements from first. Without an index buffer (index_size 0) the
  * element numbers are the indices. Elements past the buffer read as 0.

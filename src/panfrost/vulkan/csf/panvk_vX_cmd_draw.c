@@ -3922,6 +3922,7 @@ gpu_prerast_gs_run(struct panvk_cmd_buffer *cmdbuf,
    STORE_GS64(stats[3], panvk_pstats_counter_addr(
       pstats, VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT, true));
    STORE_GS64(prims_generated, cmdbuf->state.gfx.prims_generated_query.ptr);
+   STORE_GS64(strips, arena + PANVK_GPU_PRERAST_GS_STRIP_OFFSET);
 #undef STORE_GS32
 #undef STORE_GS64
 
@@ -3938,6 +3939,19 @@ gpu_prerast_gs_run(struct panvk_cmd_buffer *cmdbuf,
       cs_store32(compute, value, base, 8);
    }
    cs_flush_stores(compute);
+
+   /* Strip starts and primitive ID bases for the GS invocations, see
+    * panlib_gs_strip_table(). */
+   if (source->index.restart_enable) {
+      struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+      cs_wait_slots(compute, dev->csf.sb.all_iters_mask);
+      panlib_gs_strip_table(
+         &ctx, panlib_1d(1), PANLIB_BARRIER_NONE, vs_indices,
+         gs_params + offsetof(struct panvk_gpu_prerast_gs_params, vertex_count),
+         PANVK_GPU_PRERAST_GS_STRIP_CAP, source->prim,
+         arena + PANVK_GPU_PRERAST_GS_STRIP_OFFSET);
+   }
 
    struct panvk_dispatch_info dispatch = {
       .direct.wg_count = {source->vertex.count, source->instance.count,

@@ -2011,31 +2011,32 @@ panvk_gpu_prerast_lower_gs(nir_shader *nir,
       nir_local_variable_create(impl, glsl_uint_type(), "gs_seg");
    nir_variable *end_var =
       nir_local_variable_create(impl, glsl_uint_type(), "gs_end");
+   nir_variable *before_var =
+      nir_local_variable_create(impl, glsl_uint_type(), "gs_prims_before");
    nir_store_var(b, seg_var, nir_imm_int(b, 0), 1);
    nir_store_var(b, end_var, s.n, 1);
+   nir_store_var(b, before_var, nir_imm_int(b, 0), 1);
    nir_push_if(b, restart_en);
    {
-      nir_store_var(b, seg_var, j, 1);
-      nir_push_loop(b);
-      {
-         nir_def *sg = nir_load_var(b, seg_var);
-         nir_break_if(b, nir_ieq_imm(b, sg, 0));
-         nir_def *sm1 = nir_iadd_imm(b, sg, -1);
-         nir_break_if(b, panvk_gs_is_restart(b, restart_en, gen, sm1));
-         nir_store_var(b, seg_var, sm1, 1);
-      }
-      nir_pop_loop(b, NULL);
+      /* panlib_gs_strip_table() filled the strip of each generated index.
+       * Invocations past its capacity are not valid, any entry will do. */
+      nir_def *strips = GS_PARAM(b, p, 64, strips);
+      nir_def *jj = nir_umin(b, j, nir_imm_int(b, PANVK_GPU_PRERAST_GS_STRIP_CAP - 1));
+      nir_def *at = nir_iadd(b, strips, nir_u2u64(b, nir_imul_imm(b, jj, 4)));
+      const unsigned cap_B = PANVK_GPU_PRERAST_GS_STRIP_CAP * 4;
 
+      nir_store_var(b, seg_var, nir_load_global(b, 1, 32, at, .align_mul = 4),
+                    1);
+      nir_store_var(b, before_var,
+                    nir_load_global(b, 1, 32, nir_iadd_imm(b, at, cap_B),
+                                    .align_mul = 4),
+                    1);
       if (in_prim == MESA_PRIM_TRIANGLES_ADJACENCY) {
-         nir_store_var(b, end_var, j, 1);
-         nir_push_loop(b);
-         {
-            nir_def *e = nir_load_var(b, end_var);
-            nir_break_if(b, nir_uge(b, e, s.n));
-            nir_break_if(b, panvk_gs_is_restart(b, restart_en, gen, e));
-            nir_store_var(b, end_var, nir_iadd_imm(b, e, 1), 1);
-         }
-         nir_pop_loop(b, NULL);
+         nir_store_var(b, end_var,
+                       nir_load_global(b, 1, 32,
+                                       nir_iadd_imm(b, at, 2 * cap_B),
+                                       .align_mul = 4),
+                       1);
       }
    }
    nir_pop_if(b, NULL);
@@ -2166,40 +2167,8 @@ panvk_gpu_prerast_lower_gs(nir_shader *nir,
       }
       nir_push_else(b, NULL);
       {
-         nir_variable *before =
-            nir_local_variable_create(impl, glsl_uint_type(), "gs_prims_before");
-         nir_store_var(b, before, zero, 1);
-         nir_push_if(b, restart_en);
-         {
-            nir_variable *q =
-               nir_local_variable_create(impl, glsl_uint_type(), "gs_q");
-            nir_variable *len =
-               nir_local_variable_create(impl, glsl_uint_type(), "gs_len");
-            nir_store_var(b, q, zero, 1);
-            nir_store_var(b, len, zero, 1);
-            nir_push_loop(b);
-            {
-               nir_def *qq = nir_load_var(b, q);
-               nir_break_if(b, nir_uge(b, qq, seg));
-               nir_def *l = nir_load_var(b, len);
-               nir_push_if(b, panvk_gs_is_restart(b, restart_en, gen, qq));
-               {
-                  nir_store_var(b, before,
-                                nir_iadd(b, nir_load_var(b, before),
-                                         panvk_gs_prims_in_run(b, prim, l)),
-                                1);
-                  nir_store_var(b, len, zero, 1);
-               }
-               nir_push_else(b, NULL);
-               nir_store_var(b, len, nir_iadd_imm(b, l, 1), 1);
-               nir_pop_if(b, NULL);
-               nir_store_var(b, q, nir_iadd_imm(b, qq, 1), 1);
-            }
-            nir_pop_loop(b, NULL);
-         }
-         nir_pop_if(b, NULL);
          nir_def *ord = nir_iadd(
-            b, nir_iadd(b, nir_load_var(b, before), lp),
+            b, nir_iadd(b, nir_load_var(b, before_var), lp),
             GS_PARAM(b, p, 32, prim_id_base));
          nir_store_var(b, prim_var, ord, 1);
       }

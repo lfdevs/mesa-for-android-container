@@ -219,7 +219,19 @@ struct panvk_gpu_prerast_gs_params {
    uint64_t stats[4];
    /* 32-bit primitives generated query counter, 0 when no query is active. */
    uint64_t prims_generated;
+   /* panlib_gs_strip_table() output when primitive restart is on. */
+   uint64_t strips;
 };
+
+/* The GS strip table lives in the polygon-mode index region: a GS draw has
+ * no polygon mode pass. Three words per generated index.
+ */
+#define PANVK_GPU_PRERAST_GS_STRIP_OFFSET PANVK_GPU_PRERAST_POLY_INDEX_OFFSET
+#define PANVK_GPU_PRERAST_GS_STRIP_CAP PANVK_GPU_PRERAST_MAX_INVOCATIONS
+static_assert(PANVK_GPU_PRERAST_GS_STRIP_OFFSET +
+                    3ull * PANVK_GPU_PRERAST_GS_STRIP_CAP * sizeof(uint32_t) <=
+                 PANVK_GPU_PRERAST_RECORD_OFFSET,
+              "gpu_prerast GS strip table overlaps the VS records");
 
 static_assert(PANVK_GPU_PRERAST_GS_PARAMS_OFFSET +
                     sizeof(struct panvk_gpu_prerast_gs_params) <=
