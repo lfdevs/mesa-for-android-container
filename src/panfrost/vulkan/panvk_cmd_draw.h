@@ -340,7 +340,12 @@ panvk_viewport_z_coeffs(const struct vk_viewport_state *vp,
 
       if (dz < 0.0f)
          dz = -dz;
-      if (dz < PANVK_MIN_DEPTH_CLIP_RANGE) {
+      /* minDepth == maxDepth keeps the exact flat depth (D3D MinZ == MaxZ
+       * sky boxes and HUDs). Its window Z cannot cull clip-space Z, so such
+       * a viewport does not depth clip: inverted_depth_ranges deltazero
+       * draws its out-of-range pixels at minDepth.
+       */
+      if (dz > 0.0f && dz < PANVK_MIN_DEPTH_CLIP_RANGE) {
          float z_sign = z_min <= z_max ? 1.0f : -1.0f;
          float z_center = 0.5f * (z_max + z_min);
          float lo = 0.5f * PANVK_MIN_DEPTH_CLIP_RANGE;
