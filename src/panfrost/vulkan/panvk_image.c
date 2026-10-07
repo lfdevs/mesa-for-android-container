@@ -469,11 +469,18 @@ panvk_bc_shadow_info(const struct panvk_image *image, VkImageCreateInfo *info,
    };
 
    /* Fixed-rate AFRC on RGBA8 shadows (BC1/2/3/7) where the GPU has it.
-    * PANVK_BC_AFRC is the coding-unit size in bytes: 32 (default, 4 bits per
+    * PANVK_BC_AFRC is the coding-unit size in bytes: 32 (4 bits per
     * component, max 4-5 LSB error on real pictures), 24 or 16 (3 or 2 bits,
-    * lossier), 0 = off. R8/RG8 (BC4/BC5) stay uncompressed: at the same
-    * rate their error is 25-50 LSB, too much for normal and height maps.
-    * Cube-compatible images keep AFBC: AFRC cube sampling is untested. */
+    * lossier), 0 = off. Unset, BC1/BC2 take 24 (12 bpp): their colour is a
+    * 4-entry 565 palette and BC2 alpha is 4-bit, so 3 bits per component
+    * leave the error against the source picture unchanged (35.03 vs 35.05
+    * dB colour, BC2 alpha 31.35 vs 31.33 dB). BC1 punch-through blocks
+    * are the weak spot (alpha max 34 LSB at 32, 70 at 24, no texel crosses
+    * the 0.5 alpha-test threshold at either). BC3/BC7 keep 32: at 24 the
+    * BC3 alpha loses 0.7 dB (max 46 LSB). R8/RG8 (BC4/BC5) stay
+    * uncompressed: at the same rate their error is 25-50 LSB, too much for
+    * normal and height maps. Cube-compatible images keep AFBC: AFRC cube
+    * sampling is untested. */
    static const uint64_t afrc_mods[] = {
       DRM_FORMAT_MOD_ARM_AFRC(AFRC_FORMAT_MOD_CU_SIZE_P0(AFRC_FORMAT_MOD_CU_SIZE_16)),
       DRM_FORMAT_MOD_ARM_AFRC(AFRC_FORMAT_MOD_CU_SIZE_P0(AFRC_FORMAT_MOD_CU_SIZE_24)),
@@ -481,7 +488,9 @@ panvk_bc_shadow_info(const struct panvk_image *image, VkImageCreateInfo *info,
    };
    const struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(image->vk.base.device->physical);
-   const unsigned cu = debug_get_num_option("PANVK_BC_AFRC", 32);
+   const bool bc12 = image->vk.format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK &&
+                     image->vk.format <= VK_FORMAT_BC2_SRGB_BLOCK;
+   const unsigned cu = debug_get_num_option("PANVK_BC_AFRC", bc12 ? 24 : 32);
 
    if ((cu == 16 || cu == 24 || cu == 32) &&
        image->bc_format == VK_FORMAT_R8G8B8A8_UNORM &&
