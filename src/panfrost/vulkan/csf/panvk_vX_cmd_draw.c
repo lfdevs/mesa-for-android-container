@@ -5357,7 +5357,7 @@ gpu_prerast_wanted(const struct panvk_cmd_buffer *cmdbuf,
                    const struct panvk_draw_info *draw)
 {
    return gpu_prerast_needed(cmdbuf, draw) ||
-          (PAN_ARCH < 13 && !draw->gpu_prerast_generated &&
+          (!draw->gpu_prerast_generated &&
            cmdbuf->state.gfx.vs.shader->gpu_prerast.has_side_effects);
 }
 

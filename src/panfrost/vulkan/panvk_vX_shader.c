@@ -3415,7 +3415,7 @@ panvk_compile_shader(struct panvk_device *dev,
          BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE);
       const bool want_prerast =
          PANVK_DEBUG(GPU_PRERAST) || info->nir->xfb_info ||
-         (PAN_ARCH < 13 && info->nir->info.writes_memory) ||
+         info->nir->info.writes_memory ||
          (info->next_stage_mask & (VK_SHADER_STAGE_GEOMETRY_BIT |
                                    VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)) ||
          (dev->vk.enabled_features.fillModeNonSolid &&
