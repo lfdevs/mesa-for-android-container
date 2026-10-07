@@ -4560,8 +4560,16 @@ gpu_prerast_draw_generated(struct panvk_cmd_buffer *cmdbuf,
           * A launch here is recorded after that loop, past TESS_FREE.
           */
          if (!vp_launch) {
+            struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
             struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
 
+            /* The run builder reads the VS/GS kernel's records and counts.
+             * Its sync barrier only orders the VT queue, not this compute
+             * queue: without the wait it can run beside the producer and
+             * see a zero count, so the draw emits nothing.
+             */
+            cs_wait_slots(panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE),
+                          dev->csf.sb.all_iters_mask);
             panlib_vp_runs_launch_struct(&ctx, panlib_1d(1),
                                          PANLIB_BARRIER_CSF_SYNC, *use);
             gpu_prerast_wait_compute(cmdbuf);
