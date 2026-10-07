@@ -92,6 +92,9 @@ const struct pan_model pan_model_list[] = {
                                               MODEL_RATES_X(2, 4, 8,  32,  32, 8)),
    VALHALL_MODEL(PAN_PROD_ID(9, 2, 4), 0, "G68",    "G78", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
                                               MODEL_RATES_X(2, 4, 8,  32,  32, 8)),
+   /* G710 (kbase TODX, 0xa862): same Valhall v10 core as G610, 7-16 cores. */
+   VALHALL_MODEL(PAN_PROD_ID(10, 8, 2), 0, "G710",   "G710", MODEL_ANISO(ALL),  MODEL_TB_SIZES(32768, 16384),
+                                              MODEL_RATES_X(4, 8, 16,  64,  64, 16)),
    VALHALL_MODEL(PAN_PROD_ID(10, 8, 7), 0, "G610",   "G710", MODEL_ANISO(ALL),  MODEL_TB_SIZES(32768, 16384),
                                               MODEL_RATES_X(4, 8, 16,  64,  64, 16)),
    /* var/cvt/sfu rates might not be correct (we haven't found any detailed documentation) */
