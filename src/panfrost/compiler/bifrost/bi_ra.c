@@ -1416,7 +1416,12 @@ bi_register_allocate(bi_context *ctx)
          if (ctx->inputs->is_blend)
             UNREACHABLE("Blend shaders may not spill");
 
-         bi_spill_ssa(ctx, regs_to_use);
+         /* Spilling reserves 8 registers for its parallel copies on top of
+          * the k it is given (see reserved_size() in bi_ra_ssa.c), so
+          * k = 64 left ~87 registers of demand and LCRA had to spill the
+          * rest one RA pass at a time. Leave room for the reservation.
+          */
+         bi_spill_ssa(ctx, MAX2(regs_to_use - 8, 16));
          spill_count += bi_lower_spill(ctx, spill_count);
 
          /* By default, we use packed TLS addressing on Valhall.
