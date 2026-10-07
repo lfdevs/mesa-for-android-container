@@ -133,9 +133,11 @@ lcra_add_node_interference(struct lcra_state *l, unsigned i, unsigned cmask_i,
       return;
    }
 
-   /* Use dense arrays after adding 256 elements */
-   nodearray_orr(&l->linear[j], i, constraint_fw, 256, l->node_count);
-   nodearray_orr(&l->linear[i], j, constraint_bw, 256, l->node_count);
+   /* Keep rows sparse until they hold a quarter of the nodes, where a dense
+    * row gets smaller. The solver scans a dense row in full for every use,
+    * which dominated solving big shaders with a 256 element limit. */
+   nodearray_orr(&l->linear[j], i, constraint_fw, ~0u, l->node_count);
+   nodearray_orr(&l->linear[i], j, constraint_bw, ~0u, l->node_count);
 }
 
 /* Sorts the queued constraints into the rows: counting sort by key, then
@@ -149,8 +151,8 @@ lcra_flush_pending(struct lcra_state *l)
    unsigned n = l->node_count;
    unsigned count = util_dynarray_num_elements(l->pending, uint64_t);
    uint64_t *a = l->pending->data;
-   /* Also scratch for merging a row: sparse rows hold at most 256 keys */
-   uint64_t *b = malloc(sizeof(uint64_t) * (count + 257));
+   /* Also scratch for merging a row: sparse rows hold under n / 4 keys */
+   uint64_t *b = malloc(sizeof(uint64_t) * (count + n / 4 + 1));
    unsigned *pos = malloc(sizeof(unsigned) * (n + 1));
 
    memset(pos, 0, sizeof(unsigned) * (n + 1));
@@ -204,7 +206,7 @@ lcra_flush_pending(struct lcra_state *l)
 
       nodearray_reset(row);
 
-      if (u <= 256 && u < n / 4) {
+      if (u < n / 4) {
          row->sparse = malloc(sizeof(nodearray_sparse) * u);
          memcpy(row->sparse, b, sizeof(nodearray_sparse) * u);
          row->size = row->sparse_capacity = u;
