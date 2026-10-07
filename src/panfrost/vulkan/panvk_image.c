@@ -448,7 +448,8 @@ panvk_should_checksum(struct panvk_image *image,
  * bc_decoded. MUTABLE keeps CRC off: the decode never redraws a tile with
  * the same content, so CRC tracking would be pure overhead. */
 static void
-panvk_bc_shadow_info(const struct panvk_image *image, VkImageCreateInfo *info)
+panvk_bc_shadow_info(const struct panvk_image *image, VkImageCreateInfo *info,
+                     VkImageDrmFormatModifierListCreateInfoEXT *afrc)
 {
    *info = (VkImageCreateInfo){
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -466,6 +467,35 @@ panvk_bc_shadow_info(const struct panvk_image *image, VkImageCreateInfo *info)
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
    };
+
+   /* Fixed-rate AFRC on RGBA8 shadows (BC1/2/3/7) where the GPU has it.
+    * PANVK_BC_AFRC is the coding-unit size in bytes: 32 (default, 4 bits per
+    * component, max 4-5 LSB error on real pictures), 24 or 16 (3 or 2 bits,
+    * lossier), 0 = off. R8/RG8 (BC4/BC5) stay uncompressed: at the same
+    * rate their error is 25-50 LSB, too much for normal and height maps.
+    * Cube-compatible images keep AFBC: AFRC cube sampling is untested. */
+   static const uint64_t afrc_mods[] = {
+      DRM_FORMAT_MOD_ARM_AFRC(AFRC_FORMAT_MOD_CU_SIZE_P0(AFRC_FORMAT_MOD_CU_SIZE_16)),
+      DRM_FORMAT_MOD_ARM_AFRC(AFRC_FORMAT_MOD_CU_SIZE_P0(AFRC_FORMAT_MOD_CU_SIZE_24)),
+      DRM_FORMAT_MOD_ARM_AFRC(AFRC_FORMAT_MOD_CU_SIZE_P0(AFRC_FORMAT_MOD_CU_SIZE_32)),
+   };
+   const struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(image->vk.base.device->physical);
+   const unsigned cu = debug_get_num_option("PANVK_BC_AFRC", 32);
+
+   if ((cu == 16 || cu == 24 || cu == 32) &&
+       image->bc_format == VK_FORMAT_R8G8B8A8_UNORM &&
+       !(image->vk.create_flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) &&
+       pan_query_afrc(&phys_dev->kmod.dev->props)) {
+      *afrc = (VkImageDrmFormatModifierListCreateInfoEXT){
+         .sType =
+            VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
+         .drmFormatModifierCount = 1,
+         .pDrmFormatModifiers = &afrc_mods[cu / 8 - 2],
+      };
+      info->tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+      info->pNext = afrc;
+   }
 }
 
 static VkResult
@@ -549,9 +579,10 @@ panvk_image_init_layouts(struct panvk_image *image,
       /* Lay the decoded plane out exactly as the bc_shadow image created in
        * panvk_CreateImage() will be, after the raw blocks. */
       VkImageCreateInfo sci;
+      VkImageDrmFormatModifierListCreateInfoEXT afrc;
       struct panvk_image tmp = {0};
 
-      panvk_bc_shadow_info(image, &sci);
+      panvk_bc_shadow_info(image, &sci, &afrc);
       vk_image_init(&dev->vk, &tmp.vk, &sci);
       VkResult result = panvk_image_init(&tmp, &sci);
       vk_image_finish(&tmp.vk);
@@ -965,8 +996,9 @@ panvk_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
 
    if (image->bc_gfx) {
       VkImageCreateInfo sci;
+      VkImageDrmFormatModifierListCreateInfoEXT afrc;
 
-      panvk_bc_shadow_info(image, &sci);
+      panvk_bc_shadow_info(image, &sci, &afrc);
       result = panvk_CreateImage(device, &sci, pAllocator, &image->bc_shadow);
       if (result != VK_SUCCESS)
          goto err_destroy_image;

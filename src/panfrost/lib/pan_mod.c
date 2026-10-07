@@ -441,7 +441,7 @@ pan_mod_afrc_init_slice_layout(
        * the resource width to get the size. */
       if (!layout_constraints->strict) {
          slayout->tiled_or_linear.row_stride_B = pan_afrc_row_stride(
-            props->format, props->modifier, mip_extent_px.width);
+            props->format, props->modifier, aligned_extent_px.width);
       }
    } else {
       /* Align levels to cache-line as a performance improvement for
@@ -450,7 +450,7 @@ pan_mod_afrc_init_slice_layout(
          layout_constraints ? layout_constraints->offset_B : 0, align_mask + 1);
       slayout->tiled_or_linear.row_stride_B =
          ALIGN_POT(pan_afrc_row_stride(props->format, props->modifier,
-                                       mip_extent_px.width),
+                                       aligned_extent_px.width),
                    align_mask + 1);
    }
 
