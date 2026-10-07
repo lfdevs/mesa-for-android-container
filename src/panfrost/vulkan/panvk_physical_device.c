@@ -1206,6 +1206,28 @@ panvk_physical_device_finish(struct panvk_physical_device *device)
    vk_physical_device_finish(&device->vk);
 }
 
+/* Arm ships some GPUs of one product id under several names, picked by the
+ * shader core count (same split as panthor). Keep the "Mali-" prefix, as Arm
+ * does: apps and tests match on it. */
+static const char *
+panvk_marketing_name(const struct pan_model *model, unsigned core_count)
+{
+   switch (model->gpu_prod_id) {
+   case PAN_PROD_ID(11, 8, 2):
+      return core_count >= 10 ? "Mali-G715-Immortalis" : model->name;
+   case PAN_PROD_ID(12, 8, 0):
+      return core_count >= 10 ? "Mali-G720-Immortalis"
+             : core_count >= 6 ? model->name
+                               : "Mali-G620";
+   case PAN_PROD_ID(13, 8, 0):
+      return core_count >= 10 ? "Mali-G925-Immortalis"
+             : core_count >= 6 ? model->name
+                               : "Mali-G625";
+   default:
+      return model->name;
+   }
+}
+
 VkResult
 panvk_physical_device_init(struct panvk_physical_device *device,
                            struct panvk_instance *instance,
@@ -1266,7 +1288,9 @@ panvk_physical_device_init(struct panvk_physical_device *device,
    device->formats.all = pan_format_table(arch);
    device->formats.blendable = pan_blendable_format_table(arch);
 
-   pan_model_device_name(device->name, sizeof(device->name), device->model, core_count, "");
+   memset(device->name, 0, sizeof(device->name));
+   sprintf(device->name, "%s MC%u",
+           panvk_marketing_name(device->model, core_count), core_count);
 
    result = get_core_masks(device, instance);
    if (result != VK_SUCCESS)
@@ -1419,7 +1443,8 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
       pan_query_core_count(&device->kmod.dev->props);
 
    memset(device->name, 0, sizeof(device->name));
-   sprintf(device->name, "%s MC%u", device->model->name, core_count);
+   sprintf(device->name, "%s MC%u",
+           panvk_marketing_name(device->model, core_count), core_count);
 
    result = get_core_masks(device, instance);
    if (result != VK_SUCCESS)
