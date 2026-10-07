@@ -22,6 +22,7 @@
 struct vl_screen;
 struct pipe_context;
 struct pipe_screen;
+struct pipe_video_codec;
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +39,10 @@ extern "C" {
  *     (/tmp/termux-va/termux-va.sock)
  */
 bool tva_bridge_active(void);
+
+/* Complete AVC/HEVC decoder output before VA context teardown drops fences.
+ * Called on the application thread with drv->mutex then context->mutex held. */
+void tva_bridge_finish_decode(struct pipe_video_codec *codec);
 
 /*
  * Fill the underlying screen's NULL video capability hooks

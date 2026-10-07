@@ -1203,6 +1203,11 @@ fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
                        unsigned usage)
    assert_dt
 {
+   /* Planar DRI images store their planes in a resource chain. Match the
+    * plane selection used by resource_get_param, including FD exports. */
+   prsc = util_resource_at_index(prsc, handle->plane);
+   if (!prsc)
+      return false;
    struct fd_resource *rsc = fd_resource(prsc);
    /* Keep track of resources imported from an external handle.  The
     * is_shared bit is also set when a newly allocated resource is exported,

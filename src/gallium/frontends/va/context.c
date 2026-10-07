@@ -511,6 +511,10 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
 
    mtx_lock(&context->mutex);
 
+   /* Exported dma-bufs may outlive this context. Finish the bridge's pending
+    * CPU copies before releasing their fences and stopping its reader. */
+   tva_bridge_finish_decode(context->decoder);
+
    set_foreach(context->surfaces, entry) {
       vlVaSurface *surf = (vlVaSurface *)entry->key;
       assert(surf->ctx == context);

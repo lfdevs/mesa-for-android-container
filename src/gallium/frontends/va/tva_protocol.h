@@ -100,18 +100,26 @@ typedef enum {
     CODEC_H264_ENC = 5,
     CODEC_HEVC_ENC = 6,
     CODEC_VP9_ENC  = 7,
+    /* Explicit AVC profiles; id 5 retains the legacy device-default profile.
+     * New ids use the same nine-word encoder handshake. Old daemons reject
+     * them as unsupported instead of silently choosing another profile. */
+    CODEC_H264_BASELINE_ENC = 8,
+    CODEC_H264_MAIN_ENC     = 9,
+    CODEC_H264_HIGH_ENC     = 10,
     CODEC_MAX
 } CodecId;
 
 static inline int codec_is_encoder(int codec)
 {
     return codec == CODEC_H264_ENC || codec == CODEC_HEVC_ENC ||
-           codec == CODEC_VP9_ENC;
+           codec == CODEC_VP9_ENC || codec == CODEC_H264_BASELINE_ENC ||
+           codec == CODEC_H264_MAIN_ENC || codec == CODEC_H264_HIGH_ENC;
 }
 
 static inline int codec_base_id(int codec)
 {
-    return codec == CODEC_H264_ENC ? CODEC_H264 :
+    return (codec == CODEC_H264_ENC || codec == CODEC_H264_BASELINE_ENC ||
+            codec == CODEC_H264_MAIN_ENC || codec == CODEC_H264_HIGH_ENC) ? CODEC_H264 :
            codec == CODEC_HEVC_ENC ? CODEC_HEVC :
            codec == CODEC_VP9_ENC ? CODEC_VP9 : codec;
 }

@@ -1074,6 +1074,16 @@ dri_create_image(struct dri_screen *screen,
 
    if (map->nplanes > 1) {
       struct pipe_resource *next = NULL;
+      unsigned plane_width = width;
+      const char *backend = getenv("TERMUX_VA_GPU_BACKEND");
+
+      /* KGSL aligns the R8 and RG8 planes to 64 texels, giving chroma a
+       * 128-byte pitch alignment. Pad both allocations to that byte width
+       * so Chromium's NV12 layout validation never sees UV stride > Y
+       * stride. The DRI image keeps the application's visible dimensions. */
+      if (map->dri_fourcc == DRM_FORMAT_NV12 && backend &&
+          (!strcmp(backend, "kgsl") || !strcmp(backend, "KGSL")))
+         plane_width = align(width, 128);
 
       /* Planar GBM allocations are represented by one resource per plane.
        * The resources may use separate dma-bufs; GBM exposes them through
@@ -1088,8 +1098,10 @@ dri_create_image(struct dri_screen *screen,
          }
 
          plane_templ.format = map->planes[plane].dri_format;
-         plane_templ.width0 = width >> map->planes[plane].width_shift;
-         plane_templ.height0 = height >> map->planes[plane].height_shift;
+         plane_templ.width0 = DIV_ROUND_UP(plane_width,
+                                         1u << map->planes[plane].width_shift);
+         plane_templ.height0 = DIV_ROUND_UP(height,
+                                          1u << map->planes[plane].height_shift);
          plane_templ.next = next;
 
          struct pipe_resource *resource;

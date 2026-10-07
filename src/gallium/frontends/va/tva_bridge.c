@@ -239,9 +239,18 @@ tva_codec_id(enum pipe_video_profile profile)
 static int
 tva_encode_codec_id(enum pipe_video_profile profile)
 {
+    switch (profile) {
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_CONSTRAINED_BASELINE:
+        return CODEC_H264_BASELINE_ENC;
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
+        return CODEC_H264_MAIN_ENC;
+    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
+        return CODEC_H264_HIGH_ENC;
+    default:
+        break;
+    }
     switch (u_reduce_video_profile(profile)) {
-    case PIPE_VIDEO_FORMAT_MPEG4_AVC:
-        return CODEC_H264_ENC;
     case PIPE_VIDEO_FORMAT_HEVC:
         return CODEC_HEVC_ENC;
     case PIPE_VIDEO_FORMAT_VP9:
@@ -2354,9 +2363,9 @@ tva_encode_picture_rate(const struct tva_codec *c,
 }
 
 static int
-tva_encoder_ensure_session(struct tva_codec *c)
+tva_encoder_ensure_session(struct tva_codec *c, struct pipe_video_buffer *source)
 {
-    if (!c || !c->encoder)
+    if (!c || !c->encoder || !source || !source->width || !source->height)
         return -1;
     if (c->sess)
         return 0;
@@ -2364,8 +2373,11 @@ tva_encoder_ensure_session(struct tva_codec *c)
     struct tva_session_config cfg;
     tva_session_config_defaults(&cfg);
     cfg.codec = tva_encode_codec_id(c->base.profile);
-    cfg.width = c->base.width;
-    cfg.height = c->base.height;
+    /* VA contexts may use macroblock-aligned dimensions while imported
+     * input surfaces contain only the visible pixels. The MediaCodec input
+     * layout must match the packed NV12 frame, including its chroma offset. */
+    cfg.width = source->width;
+    cfg.height = source->height;
     cfg.bitrate = c->encode_bitrate;
     cfg.fps_num = c->encode_fps_num;
     cfg.fps_den = c->encode_fps_den;
@@ -2430,7 +2442,7 @@ tva_codec_encode_bitstream(struct pipe_video_codec *codec,
     size_t raw_len = 0, encoded_len = 0;
     uint32_t flags = 0, pts = 0;
 
-    if (tva_encoder_ensure_session(c) < 0 ||
+    if (tva_encoder_ensure_session(c, source) < 0 ||
         tva_encode_copy_source(c, source, &raw, &raw_len) < 0)
         goto fail;
     if (tva_session_send_raw_frame(c->sess, raw, raw_len) != TVA_OK)
@@ -3869,6 +3881,46 @@ tva_codec_destroy(struct pipe_video_codec *codec)
     free(c->csd);
     free(c->acc);
     FREE(c);
+}
+
+void
+tva_bridge_finish_decode(struct pipe_video_codec *codec)
+{
+    if (!codec || codec->destroy != tva_codec_destroy)
+        return;
+    struct tva_codec *c = tva_codec(codec);
+    enum pipe_video_format format = u_reduce_video_profile(codec->profile);
+    if (c->encoder || !c->sess ||
+        (format != PIPE_VIDEO_FORMAT_MPEG4_AVC && format != PIPE_VIDEO_FORMAT_HEVC))
+        return;
+
+    struct pipe_fence_handle *fences[DMD_PIPELINE_DEPTH_MAX];
+    unsigned count = 0;
+    bool drain = false;
+    mtx_lock(&c->pend_mutex);
+    for (unsigned i = 0; i < ARRAY_SIZE(c->pend); i++) {
+        struct tva_pending *p = &c->pend[i];
+        if (!p->in_use || !p->fence || p->copied || p->failed)
+            continue;
+        fences[count++] = (struct pipe_fence_handle *)p->fence;
+        drain |= !p->ready;
+    }
+    mtx_unlock(&c->pend_mutex);
+
+    /* EOS releases MediaCodec's reordered tail. No reference chain is needed
+     * after context destruction, so a reversible drain is safe here. Reader
+     * staging and all Gallium copies remain on their original threads. */
+    if (drain && tva_session_drain(c->sess) != TVA_OK) {
+        tva_mark_broken(c);
+        return;
+    }
+    const uint64_t deadline = os_time_get_nano() + 5000000000ull;
+    for (unsigned i = 0; i < count; i++) {
+        uint64_t now = os_time_get_nano();
+        uint64_t remaining = now < deadline ? deadline - now : 0;
+        int ready = tva_codec_fence_wait(codec, fences[i], remaining);
+        TVA_TRACE("decoder teardown fence=%p ready=%d", (void *)fences[i], ready);
+    }
 }
 
 static struct pipe_video_buffer *

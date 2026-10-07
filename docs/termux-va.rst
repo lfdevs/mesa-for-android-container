@@ -13,7 +13,7 @@ placed in the shared tmp directory, and a bridge on the container side.
 The daemon lives in the `termux-va` repository; the wire protocol is
 byte-compatible with droidspaces-media-decode protocol v3.
 
-Supported codecs: H.264 (Constrained Baseline / Main / High), HEVC Main, VP9 Profile 0, and AV1 Main, outputting NV12 progressive frames. Profiles are advertised to libva through the underlying screen; encode and other codecs are not provided.
+Supported decode codecs: H.264 (Constrained Baseline / Main / High), HEVC Main, VP9 Profile 0, and AV1 Main, outputting NV12 progressive frames. Encoder sessions accept NV12 input for H.264, HEVC Main, and VP9 Profile 0 when the Android device provides the corresponding MediaCodec encoder.
 
 Building
 --------
@@ -104,6 +104,36 @@ and ``--hardware-video-device-path=/dev/kgsl-3d0``:
 
 The standard libva DRM backend also rejects a KGSL fd; use this Mesa build's
 bridge driver or an equivalent KGSL-aware compatibility layer.
+
+Chromium WebCodecs encoding
+--------------------------
+
+AVC hardware encoding additionally requires ``AcceleratedVideoEncoder`` in the Chromium feature list. On Arm64 Chromium builds where hardware VBR is disabled, explicitly request ``bitrateMode: "constant"`` together with ``hardwareAcceleration: "prefer-hardware"``; WebCodecs defaults to variable bitrate and may reject that configuration before creating an encoder. Chromium's VA-API encoder does not currently expose HEVC encoding, even when libva advertises it.
+
+AVC encode profiles are forwarded explicitly to MediaCodec: Baseline uses the compatible Constrained Baseline subset, and Main and High retain their requested profiles. Update the daemon and bridge together for this support; the profile-specific codec IDs are rejected by older daemons. The daemon validates the encoded SPS and fails the session if the hardware substitutes a different profile. Legacy encoder clients using codec ID 5 retain the device-default behavior.
+
+The bridge forwards the encoder frame-rate numerator and denominator to the daemon. The daemon accepts common fractional rates such as 30000/1001 and 60000/1001, configures a floating-point MediaCodec rate when needed, and computes input timestamps without accumulated rounding drift. Chromium 154's VA-API capability query imposes a separate hard-coded 30 fps maximum and its VEA interface passes an integer frame-rate hint; these Chromium limits cannot be removed by changing Mesa. Applications such as FFmpeg can pass the exact rational rate directly.
+
+Before destroying an AVC/HEVC VA context, the bridge drains any pending decoder tail and completes its retained surface copies on the application thread. This preserves the contents of exported dma-bufs still held by WebCodecs frames after the decoder closes. Reader-thread staging and the driver/context lock order remain unchanged.
+
+On native Wayland, Chromium's Linux VA-API encoder requires NV12 native pixmaps. The compositor's linux-dmabuf feedback must advertise NV12; otherwise Chromium can allocate a shared-memory input buffer and fail its native-pixmap check. Check the compositor's feedback rather than relying only on ``vainfo`` or the ``chrome://gpu`` Video Encode status.
+
+For KWin's anland backend on DRM-less KGSL, load ``libtva_drm_shim_wayland.so`` into the compositor as well, set ``ANLAND_DRM_DEVICE=/dev/kgsl-3d0`` and ``TERMUX_VA_GPU_BACKEND=kgsl``, and unset ``ANLAND_NO_DRM_DEVICE`` before starting the Wayland session. A launcher that forces ``ANLAND_NO_DRM_DEVICE=1`` must be adjusted accordingly. Restart the compositor after installing Mesa so its advertised formats reflect the new driver. In PRoot, use a short shared runtime directory if newly created Wayland sockets are inaccessible from another container session; Chromium must use the same runtime directory as KWin.
+
+For example, configure the encoder with:
+
+.. code-block:: javascript
+
+   encoder.configure({
+     codec: "avc1.640028",
+     width: 1280,
+     height: 720,
+     bitrate: 4000000,
+     framerate: 30,
+     bitrateMode: "constant",
+     hardwareAcceleration: "prefer-hardware",
+     avc: { format: "annexb" }
+   });
 
 Data path
 ---------
