@@ -50,9 +50,19 @@ struct panvk_image {
    bool crc_safe_external;
 
    /* BCn on HW without BC texturing: planes[0] keeps the raw blocks (linear),
-    * bc_decoded holds GPU-decoded texels (linear) used by sampled views. */
+    * bc_decoded holds GPU-decoded texels used by sampled views, placed
+    * bc_decoded_offset bytes after the image base.
+    *
+    * bc_gfx: bc_decoded mirrors planes[0] of the internal colour image
+    * bc_shadow (same memory), written by a fragment decode pass, so it gets
+    * the regular modifier choice (AFBC, U-interleaved) and compact storage
+    * formats. Otherwise bc_decoded is LINEAR and written by compute. */
    bool bc_emul;
+   bool bc_gfx;
+   VkFormat bc_format;
    struct panvk_image_plane bc_decoded;
+   uint64_t bc_decoded_offset;
+   VkImage bc_shadow;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_image, vk.base, VkImage,
@@ -110,6 +120,45 @@ panvk_bc_decoded_format(VkFormat format)
    default:
       return VK_FORMAT_UNDEFINED;
    }
+}
+
+/* Storage format of the decoded plane on the fragment decode path: the
+ * narrowest renderable format that holds the decoder output. BC4/BC5 decode
+ * 8-bit endpoints to R8/RG8 (max error 0.5 LSB), BC6H UF16 to B10G11R11
+ * (6/5-bit mantissa). sRGB-ness comes from the view, not the storage. */
+static inline VkFormat
+panvk_bc_compact_format(VkFormat format, bool wide)
+{
+   switch (format) {
+   case VK_FORMAT_BC4_UNORM_BLOCK:
+      return wide ? VK_FORMAT_R16G16_UNORM : VK_FORMAT_R8_UNORM;
+   case VK_FORMAT_BC4_SNORM_BLOCK:
+      return wide ? VK_FORMAT_R16G16_SNORM : VK_FORMAT_R8_SNORM;
+   case VK_FORMAT_BC5_UNORM_BLOCK:
+      return wide ? VK_FORMAT_R16G16_UNORM : VK_FORMAT_R8G8_UNORM;
+   case VK_FORMAT_BC5_SNORM_BLOCK:
+      return wide ? VK_FORMAT_R16G16_SNORM : VK_FORMAT_R8G8_SNORM;
+   case VK_FORMAT_BC6H_UFLOAT_BLOCK:
+      return wide ? VK_FORMAT_R16G16B16A16_SFLOAT
+                  : VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+   case VK_FORMAT_BC6H_SFLOAT_BLOCK:
+      return VK_FORMAT_R16G16B16A16_SFLOAT;
+   default:
+      return VK_FORMAT_R8G8B8A8_UNORM;
+   }
+}
+
+/* Texture format for a BC view of an emulated image: the image's storage
+ * format, with the view picking sRGB or UNORM for RGBA8 storage. */
+static inline enum pipe_format
+panvk_bc_view_pfmt(const struct panvk_image *image, VkFormat view_format)
+{
+   VkFormat f = image->bc_format;
+
+   if (f == VK_FORMAT_R8G8B8A8_UNORM || f == VK_FORMAT_R8G8B8A8_SRGB)
+      f = vk_format_is_srgb(view_format) ? VK_FORMAT_R8G8B8A8_SRGB
+                                         : VK_FORMAT_R8G8B8A8_UNORM;
+   return vk_format_to_pipe_format(f);
 }
 
 static inline unsigned

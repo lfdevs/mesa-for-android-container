@@ -443,6 +443,31 @@ panvk_should_checksum(struct panvk_image *image,
    return bytes_per_pixel <= 4;
 }
 
+/* Internal colour image holding the decoded texels of a bc_gfx image. It is
+ * only ever a fragment-decode render target and a texture through
+ * bc_decoded. MUTABLE keeps CRC off: the decode never redraws a tile with
+ * the same content, so CRC tracking would be pure overhead. */
+static void
+panvk_bc_shadow_info(const struct panvk_image *image, VkImageCreateInfo *info)
+{
+   *info = (VkImageCreateInfo){
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT |
+               (image->vk.create_flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT),
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = image->bc_format,
+      .extent = image->vk.extent,
+      .mipLevels = image->vk.mip_levels,
+      .arrayLayers = image->vk.array_layers,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage =
+         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+   };
+}
+
 static VkResult
 panvk_image_init_layouts(struct panvk_image *image,
                          const VkImageCreateInfo *pCreateInfo)
@@ -520,10 +545,25 @@ panvk_image_init_layouts(struct panvk_image *image,
          plane_layout.offset_B += image->planes[plane].plane.layout.data_size_B;
    }
 
-   if (image->bc_emul) {
+   if (image->bc_gfx) {
+      /* Lay the decoded plane out exactly as the bc_shadow image created in
+       * panvk_CreateImage() will be, after the raw blocks. */
+      VkImageCreateInfo sci;
+      struct panvk_image tmp = {0};
+
+      panvk_bc_shadow_info(image, &sci);
+      vk_image_init(&dev->vk, &tmp.vk, &sci);
+      VkResult result = panvk_image_init(&tmp, &sci);
+      vk_image_finish(&tmp.vk);
+      if (result != VK_SUCCESS)
+         return result;
+
+      image->bc_decoded = tmp.planes[0];
+      image->bc_decoded.image.planes[0] = &image->bc_decoded.plane;
+      image->bc_decoded_offset = ALIGN_POT(plane_layout.offset_B, 4096);
+   } else if (image->bc_emul) {
       struct pan_image *dec = &image->bc_decoded.image;
-      enum pipe_format dec_pfmt =
-         vk_format_to_pipe_format(panvk_bc_decoded_format(image->vk.format));
+      enum pipe_format dec_pfmt = vk_format_to_pipe_format(image->bc_format);
 
       *dec = (struct pan_image){
          .props = get_pan_image_props(&image->vk, dec_pfmt, 0, false),
@@ -627,7 +667,8 @@ panvk_image_get_total_size(const struct panvk_image *image)
       size = MAX2(size, panvk_image_plane_size(image, plane));
    if (image->bc_emul) {
       const struct pan_image_layout *l = &image->bc_decoded.plane.layout;
-      size = MAX2(size, l->slices[0].offset_B + l->data_size_B);
+      size = MAX2(size, image->bc_decoded_offset + l->slices[0].offset_B +
+                           l->data_size_B);
    }
    return size;
 }
@@ -671,10 +712,22 @@ panvk_image_init(struct panvk_image *image,
 {
    /* Needs to happen early for some panvk_image_ helpers to work. */
    image->plane_count = get_plane_count(image);
-   image->bc_emul =
-      panvk_format_is_bc(image->vk.format) &&
-      panvk_bc_emul_enabled(
-         to_panvk_physical_device(image->vk.base.device->physical));
+   struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(image->vk.base.device->physical);
+   image->bc_emul = panvk_format_is_bc(image->vk.format) &&
+                    panvk_bc_emul_enabled(phys_dev);
+   /* Fragment decode needs layered rendering with gl_Layer in the FS
+    * (geometryShader, v10+) and 2D layers; 3D images stay on compute. */
+   image->bc_gfx = image->bc_emul &&
+                   pan_arch(phys_dev->kmod.dev->props.gpu_id) >= 10 &&
+                   image->vk.image_type == VK_IMAGE_TYPE_2D &&
+                   !PANVK_DEBUG(BC_COMPUTE) && !PANVK_DEBUG(NO_GS);
+   if (image->bc_emul) {
+      image->bc_format =
+         image->bc_gfx
+            ? panvk_bc_compact_format(image->vk.format, PANVK_DEBUG(BC_WIDE))
+            : panvk_bc_decoded_format(image->vk.format);
+   }
 
    /* Add any create/usage flags that might be needed for meta operations.
     * This is run before the modifier selection because some
@@ -910,6 +963,15 @@ panvk_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
        VK_IMAGE_CREATE_2_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT)
       create_ms_images(dev, image, pCreateInfo, pAllocator);
 
+   if (image->bc_gfx) {
+      VkImageCreateInfo sci;
+
+      panvk_bc_shadow_info(image, &sci);
+      result = panvk_CreateImage(device, &sci, pAllocator, &image->bc_shadow);
+      if (result != VK_SUCCESS)
+         goto err_destroy_image;
+   }
+
    *pImage = panvk_image_to_handle(image);
    return VK_SUCCESS;
 
@@ -932,6 +994,8 @@ panvk_DestroyImage(VkDevice _device, VkImage _image,
 
    if (!image)
       return;
+
+   panvk_DestroyImage(_device, image->bc_shadow, pAllocator);
 
    if (image->vk.create_flags &
        VK_IMAGE_CREATE_2_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT) {
@@ -1466,8 +1530,16 @@ panvk_image_bind(struct panvk_device *dev,
    } else {
       for (unsigned plane = 0; plane < image->plane_count; plane++)
          panvk_image_plane_bind_mem(dev, &image->planes[plane], mem, offset);
-      if (image->bc_emul)
-         panvk_image_plane_bind_mem(dev, &image->bc_decoded, mem, offset);
+      if (image->bc_emul) {
+         const uint64_t dec_offset = offset + image->bc_decoded_offset;
+
+         panvk_image_plane_bind_mem(dev, &image->bc_decoded, mem, dec_offset);
+         if (image->bc_shadow) {
+            panvk_image_plane_bind_mem(
+               dev, &panvk_image_from_handle(image->bc_shadow)->planes[0], mem,
+               dec_offset);
+         }
+      }
       panvk_image_report_binding(dev, image,
                                  VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
    }

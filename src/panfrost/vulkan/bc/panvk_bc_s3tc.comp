@@ -2,7 +2,12 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference_uvec2 : require
 
+#ifdef PANVK_BC_FS
+/* Fragment variant (-DPANVK_BC_FS -S frag): decode into a colour attachment. */
+layout(location = 0) out vec4 o_color;
+#else
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+#endif
 
 layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer InBuf {
     uint data[];
@@ -24,6 +29,8 @@ layout(push_constant) uniform Registers
     int height;
     int depth;
     int format;
+    int x0;
+    int y0;
 } registers;
 
 /* Copyright (c) 2020-2024 Hans-Kristian Arntzen
@@ -289,12 +296,20 @@ float decode_alpha_4bit(uvec2 payload, int pixel)
 void main()
 {
     int format = registers.format;
+#ifdef PANVK_BC_FS
+    /* One invocation per texel of the render area starting at (x0, y0); the
+     * layer comes from the layered rect draw. */
+    int x = int(gl_FragCoord.x) - registers.x0;
+    int y = int(gl_FragCoord.y) - registers.y0;
+    int z = gl_Layer;
+#else
     int x = int(gl_GlobalInvocationID.x);
     int y = int(gl_GlobalInvocationID.y);
     int z = int(gl_GlobalInvocationID.z);
 
     if (x >= registers.width || y >= registers.height || z >= registers.depth)
         return;
+#endif
 
     ivec2 pixel_coord = ivec2(x, y) % 4;
     int linear_pixel = 4 * pixel_coord.y + pixel_coord.x;
@@ -325,5 +340,9 @@ void main()
             decoded.a = decode_alpha_rgtc(alpha_payload, linear_pixel);
     }
 
+#ifdef PANVK_BC_FS
+    o_color = decoded;
+#else
     obuf.data[out_word + uint(x)] = packUnorm4x8(decoded);
+#endif
 }

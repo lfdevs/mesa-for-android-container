@@ -433,8 +433,7 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
       view->pview.format = panvk_image_depth_only_pfmt(image);
 
    if (image->bc_emul && panvk_format_is_bc(view->vk.view_format)) {
-      view->pview.format = vk_format_to_pipe_format(
-         panvk_bc_decoded_format(view->vk.view_format));
+      view->pview.format = panvk_bc_view_pfmt(image, view->vk.view_format);
       view->pview.planes[0] = (struct pan_image_plane_ref){
          .image = &image->bc_decoded.image,
          .plane_idx = 0,
