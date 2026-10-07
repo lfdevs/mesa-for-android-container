@@ -643,6 +643,14 @@ pan_res_handle(unsigned table, unsigned index)
    return (table << 24) | index;
 }
 
+/*
+ * Software flag in dword 7 of a v9/v10 texel buffer descriptor, next to the
+ * conversion. Set when the format has no alpha channel, so that robust
+ * out-of-bounds loads can return (0, 0, 0, 1). It is not part of the
+ * conversion and is masked off before the conversion is used.
+ */
+#define PAN_VA_BUF_CVT_NO_ALPHA BITFIELD_BIT(31)
+
 void pan_disassemble(FILE *fp, const void *code, size_t size, uint64_t gpu_id,
                      bool verbose);
 

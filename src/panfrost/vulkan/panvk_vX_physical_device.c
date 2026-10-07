@@ -664,7 +664,7 @@ panvk_per_arch(get_physical_device_features)(
       .pipelineExecutableInfo = true,
 
       /* VK_KHR_robustness2 */
-      .robustBufferAccess2 = PAN_ARCH >= 11,
+      .robustBufferAccess2 = PAN_ARCH >= 10,
       .robustImageAccess2 = false,
       .nullDescriptor = PAN_ARCH >= 10,
 

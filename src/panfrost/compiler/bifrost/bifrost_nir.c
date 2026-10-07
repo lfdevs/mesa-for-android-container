@@ -799,6 +799,104 @@ nir_shader_has_local_variables(const nir_shader *nir)
    return false;
 }
 
+/*
+ * LEA_BUF does not bounds check texel buffer accesses on v9/v10. With robust
+ * buffer access, run them only when the index is below the element count of
+ * the Buffer descriptor. Out-of-bounds loads return zero, with alpha 1 when
+ * the format has no alpha (PAN_VA_BUF_CVT_NO_ALPHA, robustBufferAccess2),
+ * atomics return zero and stores are dropped. v11+ checks this in hardware.
+ */
+static bool
+bi_lower_robust_texel_buf(nir_builder *b, nir_instr *instr, void *data)
+{
+   const nir_variable_mode *modes = data;
+   nir_alu_type dest_type = nir_type_invalid;
+   nir_def *handle, *index, *def = NULL;
+
+   if (instr->type == nir_instr_type_intrinsic) {
+      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+
+      switch (intr->intrinsic) {
+      case nir_intrinsic_image_load:
+         dest_type = nir_intrinsic_dest_type(intr);
+         FALLTHROUGH;
+      case nir_intrinsic_image_store:
+      case nir_intrinsic_image_atomic:
+      case nir_intrinsic_image_atomic_swap:
+         break;
+      default:
+         return false;
+      }
+
+      /* Storage texel buffers follow the storage buffer robustness. */
+      if (nir_intrinsic_image_dim(intr) != GLSL_SAMPLER_DIM_BUF ||
+          !(*modes & nir_var_mem_ssbo))
+         return false;
+
+      b->cursor = nir_before_instr(instr);
+      handle = intr->src[0].ssa;
+      index = nir_channel(b, intr->src[1].ssa, 0);
+      if (nir_intrinsic_infos[intr->intrinsic].has_dest)
+         def = &intr->def;
+   } else if (instr->type == nir_instr_type_tex) {
+      nir_tex_instr *tex = nir_instr_as_tex(instr);
+
+      /* Uniform texel buffers follow the uniform buffer robustness. */
+      if (tex->op != nir_texop_txf ||
+          tex->sampler_dim != GLSL_SAMPLER_DIM_BUF ||
+          !(*modes & nir_var_mem_ubo))
+         return false;
+
+      b->cursor = nir_before_instr(instr);
+      int h = nir_tex_instr_src_index(tex, nir_tex_src_texture_handle);
+      if (h < 0)
+         h = nir_tex_instr_src_index(tex, nir_tex_src_texture_offset);
+      handle = h >= 0 ? nir_iadd_imm(b, tex->src[h].src.ssa, tex->texture_index)
+                      : nir_imm_int(b, tex->texture_index);
+      int c = nir_tex_instr_src_index(tex, nir_tex_src_coord);
+      index = nir_channel(b, tex->src[c].src.ssa, 0);
+      dest_type = tex->dest_type;
+      def = &tex->def;
+   } else {
+      return false;
+   }
+
+   /* Null descriptors have size and stride 0, so every access is out of
+    * bounds and loads return zero.
+    */
+   nir_def *size = pan_nir_load_va_desc(b, 1, 32, handle, 1 * 4);
+   nir_def *stride = pan_nir_load_va_desc(b, 1, 32, handle, 4 * 4);
+   nir_def *size_el = nir_udiv(b, size, nir_umax(b, stride, nir_imm_int(b, 1)));
+   nir_def *in_bounds = nir_ult(b, index, size_el);
+
+   nir_def *oob = NULL;
+   if (def) {
+      oob = nir_imm_zero(b, def->num_components, def->bit_size);
+      if (dest_type != nir_type_invalid && def->num_components == 4) {
+         nir_def *cvt = pan_nir_load_va_desc(b, 1, 32, handle, 7 * 4);
+         nir_def *one =
+            nir_alu_type_get_base_type(dest_type) == nir_type_float
+               ? nir_imm_floatN_t(b, 1.0, def->bit_size)
+               : nir_imm_intN_t(b, 1, def->bit_size);
+         nir_def *alpha =
+            nir_bcsel(b, nir_test_mask(b, cvt, PAN_VA_BUF_CVT_NO_ALPHA), one,
+                      nir_imm_zero(b, 1, def->bit_size));
+         oob = nir_vector_insert_imm(b, oob, alpha, 3);
+      }
+   }
+
+   nir_push_if(b, in_bounds);
+   nir_instr *clone = nir_instr_clone(b->shader, instr);
+   nir_builder_instr_insert(b, clone);
+   nir_pop_if(b, NULL);
+
+   if (def)
+      nir_def_rewrite_uses(def, nir_if_phi(b, nir_instr_def(clone), oob));
+
+   nir_instr_remove(instr);
+   return true;
+}
+
 static bool pan_nir_lower_buf_image_access(nir_shader *nir, unsigned arch);
 static bool bi_should_idvs(nir_shader *nir, const struct pan_compile_inputs *inputs);
 static bool bifrost_nir_lower_vs_atomics(nir_shader *nir);
@@ -814,6 +912,13 @@ bifrost_postprocess_nir(nir_shader *nir,
 
    if (gpu_arch >= 9)
       NIR_PASS(_, nir, pan_nir_lower_image_64bit);
+
+   if ((gpu_arch == 9 || gpu_arch == 10) &&
+       (inputs->robust_modes & (nir_var_mem_ssbo | nir_var_mem_ubo))) {
+      nir_variable_mode robust_modes = inputs->robust_modes;
+      NIR_PASS(_, nir, nir_shader_instructions_pass, bi_lower_robust_texel_buf,
+               nir_metadata_none, &robust_modes);
+   }
 
    NIR_PASS(_, nir, nir_lower_image_atomics_to_global, NULL, NULL);
 
@@ -1094,7 +1199,7 @@ lower_buf_image_access(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    nir_def *texel_addr, *icd;
    if (*arch >= 9) {
       texel_addr = nir_lea_buf_pan(b, res_handle, buf_index);
-      icd = pan_nir_load_va_buf_cvt(b, res_handle);
+      icd = pan_nir_load_va_buf_cvt(b, res_handle, *arch);
    } else {
       nir_def *attr = nir_lea_attr_pan(b, res_handle, buf_index,
                                        nir_imm_int(b, 0),

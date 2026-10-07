@@ -79,13 +79,17 @@ pan_nir_load_va_desc(nir_builder *b, unsigned num_components, unsigned bit_size,
 }
 
 static inline nir_def *
-pan_nir_load_va_buf_cvt(nir_builder *b, nir_def *handle)
+pan_nir_load_va_buf_cvt(nir_builder *b, nir_def *handle, unsigned arch)
 {
    /* Dword 7 of the buffer descriptor type is unused by hardware and is
     * reserved for software to do whatever it wants with it.  By convention,
     * we place the conversion in dw7 so that we can fetch it from the shader.
     */
    nir_def *cvt = pan_nir_load_va_desc(b, 1, 32, handle, 7 * 4);
+
+   /* v9/v10 also keep PAN_VA_BUF_CVT_NO_ALPHA there. */
+   if (arch < 11)
+      cvt = nir_iand_imm(b, cvt, ~PAN_VA_BUF_CVT_NO_ALPHA);
 
    /* CONSTANT 0000 L */
    nir_def *zero_cvt = nir_imm_int(b, 95 << 12 | 231);

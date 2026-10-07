@@ -722,7 +722,7 @@ va_lower_txf_buf(nir_builder *b, nir_tex_instr *tex, unsigned arch)
 
    nir_def *addr = nir_pack_64_2x32(b,
       nir_lea_buf_pan(b, srcs.tex_h, srcs.coord));
-   nir_def *cvt = pan_nir_load_va_buf_cvt(b, srcs.tex_h);
+   nir_def *cvt = pan_nir_load_va_buf_cvt(b, srcs.tex_h, pan_arch(gpu_id));
    nir_def *val = nir_load_global_cvt_pan(b, tex->def.num_components,
                                           tex->def.bit_size, addr, cvt,
                                           tex->dest_type);
