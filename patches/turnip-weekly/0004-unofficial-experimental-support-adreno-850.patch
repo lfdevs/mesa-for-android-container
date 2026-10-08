@@ -1,0 +1,80 @@
+freedreno: add unofficial experimental support for Adreno 850
+
+Add Adreno 850 device IDs for both the MSM DRM catalog and KGSL,
+using the A8xx Gen2 and A840-derived configuration. Set the measured
+highest bank bit fallback to 16 for kernels that do not expose it.
+
+Accept KGSL UBWC 7.0 and map it to the existing A8xx 8-channel
+configuration. Keep the A8xx register database synchronized with the
+kernel catalog by adding the A850 CP, VSC, SP, and CX_MISC register
+definitions.
+
+This change intentionally leaves A850-specific GMU programming and MALU
+support to the kernel and future Mesa changes.
+
+Tested by building the aarch64 Mesa packages in the
+termux-package-builder container and running glxinfo, vulkaninfo,
+vkmark, and GMEM/SYSMEM offscreen tests on an Adreno 850 device.
+
+Kernel patches can be found at: https://patchwork.freedesktop.org/series/174781/
+
+This patch is from: https://github.com/lfdevs/mesa-for-android-container/pull/104
+
+---
+
+diff --git a/src/freedreno/common/freedreno_devices.py b/src/freedreno/common/freedreno_devices.py
+index 29364a412ca3..0563dd4c1405 100644
+--- a/src/freedreno/common/freedreno_devices.py
++++ b/src/freedreno/common/freedreno_devices.py
+@@ -1606,5 +1606,27 @@ add_gpus([
+         raw_magic_regs = a8xx_base_raw_magic_regs,
+     ))
+ 
++add_gpus([
++        GPUId(chip_id=0x44051401, name="Adreno (TM) 850"), # DRM/MSM
++        GPUId(chip_id=0xffff44051401, name="Adreno (TM) 850"), # DRM/MSM fuse fallback
++        GPUId(chip_id=0xffff44051431, name="Adreno (TM) 850"), # KGSL
++    ], A6xxGPUInfo(
++        CHIP.A8XX,
++        [a7xx_base, a7xx_gen3, a8xx_base, a8xx_gen2,
++         GPUProps(shading_rate_matches_vk = True)],
++        num_ccu = 6,
++        num_slices = 3,
++        tile_align_w = 96,
++        tile_align_h = 32,
++        tile_max_w = 16416,
++        tile_max_h = 16384,
++        num_vsc_pipes = 32,
++        cs_shared_mem_size = 32 * 1024,
++        wave_granularity = 2,
++        fibers_per_sp = 128 * 2 * 16,
++        highest_bank_bit = 16,
++        raw_magic_regs = a8xx_base_raw_magic_regs,
++    ))
++
+ if __name__ == "__main__":
+     main()
+diff --git a/src/freedreno/vulkan/msm_kgsl.h b/src/freedreno/vulkan/msm_kgsl.h
+index 036be5ab25a9..0c4e13667dfc 100644
+--- a/src/freedreno/vulkan/msm_kgsl.h
++++ b/src/freedreno/vulkan/msm_kgsl.h
+@@ -249,6 +249,7 @@ enum kgsl_user_mem_type {
+ #define KGSL_UBWC_4_0	4
+ #define KGSL_UBWC_5_0	5
+ #define KGSL_UBWC_6_0	6
++#define KGSL_UBWC_7_0	7
+ 
+ /*
+  * Reset status values for context
+diff --git a/src/freedreno/vulkan/tu_knl_kgsl.cc b/src/freedreno/vulkan/tu_knl_kgsl.cc
+index bec3720630c5..94066ba2c274 100644
+--- a/src/freedreno/vulkan/tu_knl_kgsl.cc
++++ b/src/freedreno/vulkan/tu_knl_kgsl.cc
+@@ -1975,6 +1975,7 @@ tu_knl_kgsl_load(struct tu_instance *instance, int fd)
+    case KGSL_UBWC_4_0:
+    case KGSL_UBWC_5_0:
+    case KGSL_UBWC_6_0:
++   case KGSL_UBWC_7_0:
+       device->ubwc_config.bank_swizzle_levels = 0x6;
+       device->ubwc_config.macrotile_mode = FDL_MACROTILE_8_CHANNEL;
+       break;
