@@ -86,6 +86,9 @@ const struct pan_model pan_model_list[] = {
    BIFROST_MODEL(PAN_PROD_ID(7, 2, 2),    "G52",    "G52", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192), MODEL_RATES(2, 2, 24)),
    BIFROST_MODEL(PAN_PROD_ID(7, 4, 2),    "G52 r1", "G52", MODEL_ANISO(ALL),  MODEL_TB_SIZES( 8192,  8192), MODEL_RATES(2, 2, 24)),
 
+   /* G77 (kbase TTRX, 0x9080): same Valhall v9 core as G57, 7-16 cores. */
+   VALHALL_MODEL(PAN_PROD_ID(9, 0, 0), 0, "G77",    "G77", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
+                                              MODEL_RATES_X(2, 4, 8,  32,  32, 8)),
    VALHALL_MODEL(PAN_PROD_ID(9, 0, 1), 0, "G57",    "G77", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
                                               MODEL_RATES_X(2, 4, 8,  32,  32, 8)),
    VALHALL_MODEL(PAN_PROD_ID(9, 0, 3), 0, "G57",    "G77", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
