@@ -600,7 +600,7 @@ fd6_set_sampler_views(struct pipe_context *pctx, mesa_shader_stage shader,
       return;
 
    for (unsigned i = 0; i < nr; i++) {
-      struct fd6_pipe_sampler_view *so = fd6_pipe_sampler_view(views[i + start]);
+      struct fd6_pipe_sampler_view *so = fd6_pipe_sampler_view(views[i]);
 
       if (!so)
          continue;
@@ -935,6 +935,11 @@ fd6_texture_state(struct fd_context *ctx, mesa_shader_stage type)
 
       struct fd6_pipe_sampler_view *view =
          fd6_pipe_sampler_view(tex->textures[i]);
+
+      /* A resource's backing storage can change while this sampler view
+       * stays bound. Refresh its descriptor and invalidate the
+       * old cache entries before looking up the texture state by view ID. */
+      fd6_sampler_view_update<CHIP>(ctx, view);
 
       key.view_seqno[i] = view->seqno;
    }
