@@ -665,7 +665,7 @@ panvk_per_arch(get_physical_device_features)(
 
       /* VK_KHR_robustness2 */
       .robustBufferAccess2 = PAN_ARCH >= 10,
-      .robustImageAccess2 = false,
+      .robustImageAccess2 = PAN_ARCH >= 10,
       .nullDescriptor = PAN_ARCH >= 10,
 
       /* VK_EXT_shader_tile_image */
