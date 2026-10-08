@@ -9,10 +9,10 @@ These patches are from whitebelyash: https://github.com/whitebelyash/mesa-unifie
  1 file changed, 25 insertions(+)
 
 diff --git a/src/freedreno/common/freedreno_devices.py b/src/freedreno/common/freedreno_devices.py
-index 049201343cf..6cea146689a 100644
+index 29364a412ca..ad09cf9b492 100644
 --- a/src/freedreno/common/freedreno_devices.py
 +++ b/src/freedreno/common/freedreno_devices.py
-@@ -1486,6 +1486,31 @@ add_gpus([
+@@ -1550,6 +1550,30 @@ add_gpus([
          raw_magic_regs = a8xx_base_raw_magic_regs,
      ))
  
@@ -37,7 +37,6 @@ index 049201343cf..6cea146689a 100644
 +        cs_shared_mem_size = 32 * 1024,
 +        wave_granularity = 2,
 +        fibers_per_sp = 128 * 2 * 16,
-+        magic_regs = dict(),
 +        raw_magic_regs = a8xx_base_raw_magic_regs,
 +    ))
 +
