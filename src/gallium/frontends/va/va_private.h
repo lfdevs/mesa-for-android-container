@@ -43,6 +43,7 @@
 #include "util/u_dynarray.h"
 #include "util/u_thread.h"
 #include "util/detect_os.h"
+#include "util/set.h"
 
 #if DETECT_OS_WINDOWS
 #define VA_PUBLIC_API
@@ -341,6 +342,7 @@ typedef struct {
    struct pipe_context *pipe;
    struct pipe_context *pipe2;
    struct handle_table *htab;
+   struct set *surfaces;
    struct pipe_video_codec *proc;
    mtx_t mutex;
    char vendor_string[256];
@@ -377,6 +379,15 @@ typedef struct {
    struct pipe_fence_handle *fence;
 } vlVaBuffer;
 
+/* Gallium has no VP9 encoder picture descriptor.  Keep the VA-API rate
+ * control values alongside the common descriptor for the termux-va bridge. */
+struct vlVaVP9EncPictureDesc {
+   struct pipe_picture_desc base;
+   uint32_t target_bitrate;
+   uint32_t frame_rate_num;
+   uint32_t frame_rate_den;
+};
+
 typedef struct vlVaContext {
    struct pipe_video_codec templat, *decoder;
    struct pipe_video_buffer *target;
@@ -392,6 +403,7 @@ typedef struct vlVaContext {
       struct pipe_h264_enc_picture_desc h264enc;
       struct pipe_h265_enc_picture_desc h265enc;
       struct pipe_av1_enc_picture_desc av1enc;
+      struct vlVaVP9EncPictureDesc vp9enc;
    } desc;
 
    struct {
@@ -436,6 +448,13 @@ typedef struct vlVaSurface {
    vlVaBuffer *coded_buf;
    struct pipe_fence_handle *fence; /* pipe_video_codec fence */
    struct pipe_fence_handle *pipe_fence; /* pipe_context fence */
+   /* A PRIME import may alias a decoder surface exported earlier by this
+   * VA display.  The producer is resolved transiently before VPP samples it. */
+   struct vlVaSurface *sync_surface;
+   /* Fence snapshot taken when Chromium imports the PRIME descriptor.  The
+    * decoder may recycle the same dma-buf for a newer frame before VPP runs. */
+   struct pipe_fence_handle *prime_fence;
+   bool is_prime_import;
    bool is_dpb;
    unsigned int strides[3];
    unsigned int offsets[3];
@@ -562,6 +581,15 @@ MESAPROC VAStatus vlVaHandleVAProcPipelineParameterBufferType(vlVaDriver *drv, v
 VAStatus vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface, const uint64_t *modifiers, unsigned modifiers_count);
 struct pipe_video_buffer *vlVaGetSurfaceBuffer(vlVaDriver *drv, vlVaSurface *surface);
 void vlVaSurfaceFlush(vlVaDriver *drv, vlVaSurface *surf);
+/* The caller holds drv->mutex.  The helper temporarily drops it while
+ * waiting for the producer context, then reacquires it before returning. */
+VAStatus vlVaSyncSurfaceObjectLocked(vlVaDriver *drv, vlVaSurface *surf,
+                                     uint64_t timeout_ns);
+/* PRoot/KGSL has no DRM render node and cannot make progress while Chromium
+ * waits for a decoder fence on its single VA thread. */
+bool vlVaSurfaceNoWait(void);
+vlVaSurface *surface_find_prime_producer_for_surface(vlVaDriver *drv,
+                                                     vlVaSurface *import_surface);
 void vlVaAddRawHeader(struct util_dynarray *headers, uint8_t type, uint32_t size, uint8_t *buf,
                       bool is_slice, uint32_t emulation_bytes_start);
 void vlVaGetBufferFeedback(vlVaBuffer *buf);
