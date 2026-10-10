@@ -908,6 +908,81 @@ bi_lower_robust_texel_buf(nir_builder *b, nir_instr *instr, void *data)
    return true;
 }
 
+/*
+ * v10 LD_TEX out-of-bounds storage image alpha is wrong both ways: 1 for
+ * formats with alpha (rgba8) and 0 without (r32ui); robustImageAccess2 wants
+ * 0 and 1, as v11 returns. RGB is already zero, so only fix alpha when
+ * the coordinates are outside the Texture descriptor (Width, Height,
+ * Array size or Depth, all minus(1); a null descriptor has word 0 == 0).
+ * Unsigned compares also catch negative and >16-bit coordinates.
+ */
+static bool
+bi_lower_robust_image_alpha_v10(nir_builder *b, nir_intrinsic_instr *intr,
+                                UNUSED void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_image_load ||
+       intr->def.num_components < 4)
+      return false;
+
+   const enum glsl_sampler_dim dim = nir_intrinsic_image_dim(intr);
+   if (dim != GLSL_SAMPLER_DIM_1D && dim != GLSL_SAMPLER_DIM_2D &&
+       dim != GLSL_SAMPLER_DIM_3D && dim != GLSL_SAMPLER_DIM_CUBE)
+      return false;
+
+   const enum pipe_format format = nir_intrinsic_format(intr);
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def *handle = intr->src[0].ssa;
+   nir_def *coords = intr->src[1].ssa;
+
+   nir_def *w01 = pan_nir_load_va_desc(b, 2, 32, handle, 0);
+   nir_def *w0 = nir_channel(b, w01, 0);
+   nir_def *w1 = nir_channel(b, w01, 1);
+
+   nir_def *oob = nir_ieq_imm(b, w0, 0);
+   oob = nir_ior(b, oob, nir_ult(b, nir_iand_imm(b, w1, 0xffff),
+                                 nir_channel(b, coords, 0)));
+   if (dim != GLSL_SAMPLER_DIM_1D)
+      oob = nir_ior(b, oob, nir_ult(b, nir_ushr_imm(b, w1, 16),
+                                    nir_channel(b, coords, 1)));
+
+   /* Storage cube views are 2D arrays, the face is in coords.z. */
+   if (dim == GLSL_SAMPLER_DIM_3D || dim == GLSL_SAMPLER_DIM_CUBE ||
+       nir_intrinsic_image_array(intr)) {
+      nir_def *n = pan_nir_load_va_desc(b, 1, 32, handle,
+                                        dim == GLSL_SAMPLER_DIM_3D ? 7 * 4
+                                                                   : 6 * 4);
+      unsigned c = dim == GLSL_SAMPLER_DIM_1D ? 1 : 2;
+      oob = nir_ior(b, oob, nir_ult(b, nir_iand_imm(b, n, 0xffff),
+                                    nir_channel(b, coords, c)));
+   }
+
+   /* OOB alpha is 0 with an alpha channel, else 1. Formatless: the view
+    * component order (Format bits 0:7, word 0 bit 10) is RGB1/GRB1/BGR1/
+    * 1RGB/... without alpha, which all have bit 4 set; RGBA/BGRA/... clear.
+    */
+   const unsigned bit_size = intr->def.bit_size;
+   const bool is_float =
+      nir_alu_type_get_base_type(nir_intrinsic_dest_type(intr)) ==
+      nir_type_float;
+   nir_def *oob_alpha;
+   if (format != PIPE_FORMAT_NONE) {
+      const bool one = !util_format_has_alpha(format);
+      oob_alpha = is_float ? nir_imm_floatN_t(b, one, bit_size)
+                           : nir_imm_intN_t(b, one, bit_size);
+   } else {
+      nir_def *no_alpha = nir_test_mask(b, w0, 1u << 14);
+      oob_alpha = is_float ? nir_b2fN(b, no_alpha, bit_size)
+                           : nir_b2iN(b, no_alpha, bit_size);
+   }
+
+   b->cursor = nir_after_instr(&intr->instr);
+   nir_def *alpha =
+      nir_bcsel(b, oob, oob_alpha, nir_channel(b, &intr->def, 3));
+   nir_def *res = nir_vector_insert_imm(b, &intr->def, alpha, 3);
+   nir_def_rewrite_uses_after(&intr->def, res);
+   return true;
+}
+
 static bool pan_nir_lower_buf_image_access(nir_shader *nir, unsigned arch);
 static bool bi_should_idvs(nir_shader *nir, const struct pan_compile_inputs *inputs);
 static bool bifrost_nir_lower_vs_atomics(nir_shader *nir);
@@ -930,6 +1005,11 @@ bifrost_postprocess_nir(nir_shader *nir,
       NIR_PASS(_, nir, nir_shader_instructions_pass, bi_lower_robust_texel_buf,
                nir_metadata_none, &robust_modes);
    }
+
+   if (gpu_arch == 10 && (inputs->robust_modes & nir_var_image))
+      NIR_PASS(_, nir, nir_shader_intrinsics_pass,
+               bi_lower_robust_image_alpha_v10, nir_metadata_control_flow,
+               NULL);
 
    NIR_PASS(_, nir, nir_lower_image_atomics_to_global, NULL, NULL);
 

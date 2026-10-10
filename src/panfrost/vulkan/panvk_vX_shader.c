@@ -3394,6 +3394,10 @@ panvk_compile_shader(struct panvk_device *dev,
       robust_modes |= nir_var_mem_ubo;
    if (info->robustness->storage_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT)
       robust_modes |= nir_var_mem_ssbo;
+   /* v10 image loads need a shader fix-up for robustImageAccess2. */
+   if (info->robustness->images ==
+       VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT)
+      robust_modes |= nir_var_image;
 
    struct pan_compile_inputs inputs = {
       .arch = PAN_ARCH,
