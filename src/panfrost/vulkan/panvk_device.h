@@ -73,6 +73,10 @@ struct panvk_device {
    } kmod;
 
    struct panvk_priv_bo *tiler_heap;
+   /* v9: second heap for the odd passes of PANVK_OVERLAP (v67b), so each
+    * heap grows from its own base (kbase commits up to the faulting page). */
+   struct panvk_priv_bo *tiler_heap2;
+   struct panvk_priv_bo *indirect_varying_buffer;
    struct panvk_priv_bo *sample_positions;
 
    struct {

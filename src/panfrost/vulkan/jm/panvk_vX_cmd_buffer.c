@@ -326,6 +326,23 @@ panvk_per_arch(cmd_prepare_tiler_context)(struct panvk_cmd_buffer *cmdbuf,
       batch->tiler.ctx_descs.gpu + (pan_size(TILER_CONTEXT) * layer_idx);
 
    pan_pack(&batch->tiler.heap_templ, TILER_HEAP, cfg) {
+#if PAN_ARCH == 9
+      /* Each overlap half gets its own heap. Top is the end of the first
+       * 2 MiB chunk, not of the region: the tiler takes chunks from both
+       * Bottom and Top, and kbase GROW_ON_GPF commits every page up to the
+       * faulting one, so a Top at the region end committed all of it on the
+       * first top-side allocation (bmdhacks/malisx2, MIT). */
+      if (panvk_overlap_enabled()) { /* v67b */
+         static unsigned next_half;
+         batch->heap_half = __atomic_fetch_add(&next_half, 1, __ATOMIC_RELAXED) & 1;
+      }
+      const struct panvk_priv_bo *heap =
+         batch->heap_half ? dev->tiler_heap2 : dev->tiler_heap;
+      cfg.size = pan_kmod_bo_size(heap->bo);
+      cfg.base = heap->addr.dev;
+      cfg.bottom = heap->addr.dev;
+      cfg.top = cfg.base + MIN2(cfg.size, 2 * 1024 * 1024);
+#else
       cfg.size = pan_kmod_bo_size(dev->tiler_heap->bo);
       cfg.base = dev->tiler_heap->addr.dev;
       cfg.bottom = dev->tiler_heap->addr.dev;
@@ -339,6 +356,7 @@ panvk_per_arch(cmd_prepare_tiler_context)(struct panvk_cmd_buffer *cmdbuf,
          cfg.bottom = cfg.base;
          cfg.top = cfg.base + half;
       }
+#endif
    }
 
    pan_pack(&batch->tiler.ctx_templ, TILER_CONTEXT, cfg) {

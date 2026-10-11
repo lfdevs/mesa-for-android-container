@@ -93,6 +93,9 @@ struct base_jd_atom {
    __u8 padding[15];
 };
 
+/* JM-only memory flag (mali_base_jm_kernel.h); CSF reserves bit 20. */
+#define KBASE_JM_MEM_TILER_ALIGN_TOP ((uint64_t)1 << 20)
+
 #define BASE_JD_EVENT_DONE     0x01
 #define BASE_JD_EVENT_ERR_MASK 0x40
 
@@ -2080,6 +2083,18 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
       commit_pages = (kmod_flags & PAN_KMOD_BO_FLAG_NO_MMAP)
                         ? 0
                         : MIN2(extension, va_pages);
+
+      /* v9 JM GPU-only growable regions (tiler heap, indirect varyings):
+       * commit one 2 MiB step and let the kernel place the region so that
+       * start + commit is 2 MiB aligned (TILER_ALIGN_TOP, JM-only flag, as
+       * kbase gives its own JIT heaps). The tiler heap descriptor's Top is
+       * then the end of the committed step, and GROW_ON_GPF commits the
+       * region step by step instead of all at once (bmdhacks/malisx2, MIT). */
+      if (!kbase_dev->is_csf && pan_arch(dev->props.gpu_id) == 9 &&
+          (kmod_flags & PAN_KMOD_BO_FLAG_NO_MMAP)) {
+         alloc_flags |= KBASE_JM_MEM_TILER_ALIGN_TOP;
+         commit_pages = MIN2(extension, va_pages);
+      }
    }
 
    /* MEM_ALLOC_EX (nr 59, 64 bytes) exists on CSF uAPI 1.9+ and the kernel
@@ -2134,7 +2149,16 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
          },
       };
 
-      if (ioctl(dev->fd, KBASE_IOCTL_MEM_ALLOC, &req)) {
+      int ret = ioctl(dev->fd, KBASE_IOCTL_MEM_ALLOC, &req);
+      if (ret && (errno == EINVAL || errno == ENOMEM) &&
+          (alloc_flags & KBASE_JM_MEM_TILER_ALIGN_TOP)) {
+         /* Kernel without TILER_ALIGN_TOP: the old full-size behaviour. */
+         req.in.flags = alloc_flags & ~KBASE_JM_MEM_TILER_ALIGN_TOP;
+         req.in.commit_pages = 0;
+         ret = ioctl(dev->fd, KBASE_IOCTL_MEM_ALLOC, &req);
+         commit_pages = 0;
+      }
+      if (ret) {
          mesa_loge("kbase: KBASE_IOCTL_MEM_ALLOC failed: %s", strerror(errno));
          goto err_free_bo;
       }

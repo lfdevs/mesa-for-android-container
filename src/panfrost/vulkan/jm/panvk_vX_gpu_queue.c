@@ -456,7 +456,9 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
             bos[bo_idx++] = batch->blit.dst;
 
          if (batch->vtc_jc.first_tiler)
-            bos[bo_idx++] = dev->tiler_heap->bo;
+            bos[bo_idx++] = (PAN_ARCH == 9 && batch->heap_half)
+                               ? dev->tiler_heap2->bo
+                               : dev->tiler_heap->bo;
 
          bos[bo_idx++] = dev->sample_positions->bo;
          assert(bo_idx == nr_bos);
