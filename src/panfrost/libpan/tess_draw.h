@@ -139,4 +139,7 @@ struct panlib_chunk_draw {
    uint32_t chunk_instance;
    /* Copy of "more" stored by the compute CS for the vertex/tiler CS. */
    uint32_t more_vt;
+   /* Instances per chunk, 0 for PANLIB_CHUNK_MAX_INSTANCES. v9 JM, which
+    * lowered whole draws before, keeps whole instance ranges. */
+   uint32_t max_insts;
 } PACKED;

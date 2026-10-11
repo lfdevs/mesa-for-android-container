@@ -477,7 +477,8 @@ panlib_chunk_step(global struct panlib_chunk_draw *c)
    if (verts <= c->max_verts) {
       n_verts = verts;
       n_insts = min(max(c->max_verts / verts, 1u), insts - inst);
-      n_insts = min(n_insts, PANLIB_CHUNK_MAX_INSTANCES);
+      n_insts = min(n_insts, c->max_insts ? c->max_insts
+                                          : PANLIB_CHUNK_MAX_INSTANCES);
       if (strips) {
          prims = sc.closed + u_decomposed_prims_for_vertices(prim, sc.run);
       } else {
@@ -1651,8 +1652,8 @@ v9_patch_compute_job(global uint8_t *job, bool null_job, uint32_t x,
  * instance sysvals and writes the generated draw. A draw past the indirect
  * count, empty, or over the record capacity becomes NULL jobs and an empty
  * generated draw.
- * ponytail: CSF splits oversized indirect draws in its GPU chunk loop, JM
- * drops them; a JM chunk loop needs a job chain per chunk. */
+ * Chunkable topologies come here one panlib_chunk_step() chunk at a time,
+ * see v9_prerast_chunked(); the others over the capacity are dropped. */
 KERNEL(1)
 panlib_v9_prerast_indirect(constant struct panlib_v9_prerast_patch *a)
 {
