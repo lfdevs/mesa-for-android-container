@@ -238,8 +238,14 @@ panlib_tess_step(global struct panlib_tess_draw *t, global uint32_t *tcs_stat)
    t->tcs_grid[1] = k;
    t->tcs_grid[2] = 1;
 
+#if PAN_ARCH == 9
+   /* With idx_limit, panlib_tess_draw() counts the patches the chunk keeps. */
+   if (tcs_stat && !t->idx_limit)
+      pstats_add(tcs_stat, n);
+#else
    if (tcs_stat)
       pstats_add(tcs_stat, n);
+#endif
 }
 
 /* domain: 0 triangles, 1 quads, 2 isolines. */
@@ -290,11 +296,35 @@ panlib_tess_draw(global struct panlib_tess_draw *t, global uint32_t *c_invs,
    if (t->new_chunk) {
       uint32_t sum = 0;
 
+#if PAN_ARCH == 9
+      uint32_t n = t->chunk_patches;
+
+      /* ponytail: serial prefix sum, a chunk holds a few thousand patches. */
+      for (uint32_t i = 0; i < t->chunk_patches; i++) {
+         if (t->idx_limit && i && sum + p->counts[i] > t->idx_limit) {
+            n = i;
+            break;
+         }
+         sum += p->counts[i];
+         p->counts[i] = sum;
+      }
+
+      /* The patches past the budget go to the next chunk, the tessellator
+       * writes the kept ones only. */
+      if (t->idx_limit) {
+         t->next_patch -= t->chunk_patches - n;
+         t->chunk_patches = n;
+         p->nr_patches = n;
+         if (t->tcs_stat)
+            pstats_add((global uint32_t *)(uintptr_t)t->tcs_stat, n);
+      }
+#else
       /* ponytail: serial prefix sum, a chunk holds a few hundred patches. */
       for (uint32_t i = 0; i < t->chunk_patches; i++) {
          sum += p->counts[i];
          p->counts[i] = sum;
       }
+#endif
 
       t->idx_total = sum;
       t->idx_cursor = 0;
@@ -511,6 +541,19 @@ panlib_chunk_step(global struct panlib_chunk_draw *c)
          const uint32_t window = min(c->max_verts, verts - i);
 
          prims = sc.closed;
+#if PAN_ARCH == 9
+         if (sc.last != UINT32_MAX && c->cut_tail && sc.last - i < step / 2 &&
+             i + window < verts) {
+            /* The strip after the last restart starts at s: cut it at a
+             * multiple of align from s, as a strip without restart. */
+            const uint32_t s = sc.last + 1;
+            const uint32_t cut = s + (i + step - s) / align * align;
+
+            n_verts = cut + overlap - i;
+            next = cut;
+            prims += u_decomposed_prims_for_vertices(prim, cut + overlap - s);
+         } else
+#endif
          if (sc.last != UINT32_MAX) {
             n_verts = sc.last - i;
             next = sc.last + 1;

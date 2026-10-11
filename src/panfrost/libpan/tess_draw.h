@@ -49,10 +49,17 @@ struct panlib_tess_draw {
    /* Chunk start within the API draw, see panvk_gpu_prerast_params. */
    uint32_t chunk_vertex;
    uint32_t chunk_instance;
-   uint32_t _pad;
+   /* v9 JM, unused (0) elsewhere: index budget of a chunk. panlib_tess_draw() keeps
+    * the longest run of the chunk's patches whose indices fit it (at least
+    * one patch) and hands the rest back to the next chunk. */
+   uint32_t idx_limit;
 
    uint64_t total_patches;
    uint64_t next_patch;
+#if defined(PAN_ARCH) && PAN_ARCH == 9
+   /* TCS patches statistic, counted by panlib_tess_draw() with idx_limit. */
+   uint64_t tcs_stat;
+#endif
 } PACKED;
 
 /* Vertex stride of a chunk window and what it shares with the next one, for
@@ -142,4 +149,10 @@ struct panlib_chunk_draw {
    /* Instances per chunk, 0 for PANLIB_CHUNK_MAX_INSTANCES. v9 JM, which
     * lowered whole draws before, keeps whole instance ranges. */
    uint32_t max_insts;
+#if defined(PAN_ARCH) && PAN_ARCH == 9
+   /* v9 JM: a strip window whose last restart index comes in
+    * its first half cuts the strip after it instead, so that every window
+    * moves on by at least half a step and the CPU can bound the chunks. */
+   uint32_t cut_tail;
+#endif
 } PACKED;

@@ -567,6 +567,9 @@ struct panvk_draw_info {
    /* 1 + the viewport whose depth range clamps this draw, 0 for viewport 0
     * (the draws of one viewport each of a multi-viewport draw). */
    uint32_t viewport_clamp;
+   /* An indirect gpu_prerast draw known to fit the arena (a tessellation
+    * output range): lowered as is, without GPU chunks. */
+   bool fits_arena;
 #endif
 };
 
