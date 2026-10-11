@@ -14,6 +14,8 @@
 
 #include "panvk_device.h"
 
+#include "util/bitset.h"
+
 #include "vk_queue.h"
 #include "vk_sync.h"
 
@@ -38,6 +40,10 @@ struct panvk_gpu_queue {
    /* v67b: last fragment atom per tiler heap half, last vtc atom */
    uint64_t half_frag_atom[2];
    uint64_t last_vtc_atom;
+#if PAN_ARCH == 9
+   /* Atom numbers submitted by the current vkQueueSubmit (see dep_type()). */
+   BITSET_DECLARE(submit_atoms, 256);
+#endif
 };
 
 VK_DEFINE_HANDLE_CASTS(panvk_gpu_queue, vk.base, VkQueue, VK_OBJECT_TYPE_QUEUE)

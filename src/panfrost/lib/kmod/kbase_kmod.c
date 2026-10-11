@@ -1351,39 +1351,70 @@ kbase_kmod_alias_destroy(struct pan_kmod_dev *dev, uint64_t va, uint64_t size,
    munmap((void *)(uintptr_t)va, size * nents);
 }
 
+/* struct base_jd_atom above is the kernel's base_jd_atom_v2 (56 bytes)
+ * padded with zeros to 64.  Stock kbase reads stride 56 as base_jd_atom_v2
+ * and stride 64 as base_jd_atom (a leading seq_nr, so our layout would be
+ * read 8 bytes off), and refuses stride 72 with EINVAL before reading any
+ * atom.  MediaTek kbase built with its GPU bandwidth monitor appends a u32
+ * frame_nr to both structs: it accepts only stride 64, read as
+ * base_jd_atom_v2 + frame_nr (our padding gives frame_nr 0), and 72.
+ * Submitting one dependency-only atom at stride 72 tells them apart.
+ * Probe from bmdhacks/malisx2 (MIT, src/kbase/jm.c). */
 static unsigned
 kbase_probe_atom_stride(int fd)
 {
    STATIC_ASSERT(sizeof(struct base_jd_atom) == 64);
    STATIC_ASSERT(sizeof(struct base_jd_event_v2) == 24);
 
-   struct base_jd_atom atom = { .atom_number = 255 };
+   /* seq_nr + base_jd_atom_v2 + frame_nr + tail padding (our zero pad). */
+   struct {
+      __u64 seq_nr;
+      struct base_jd_atom atom;
+   } probe = {
+      .atom = {
+         .udata = { .blob = { 0x6d616c6973783270ull, 0x61746f6d2d70726full } },
+         .atom_number = 255,
+      },
+   };
+   STATIC_ASSERT(sizeof(probe) == 72);
    struct kbase_ioctl_job_submit sub = {
-      .addr = (uintptr_t)&atom,
+      .addr = (uintptr_t)&probe,
       .nr_atoms = 1,
-      .stride = 64,
+      .stride = sizeof(probe),
    };
 
-   if (ioctl(fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0)
-      return 56;
+   if (ioctl(fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0) {
+      if (errno == EINVAL) {
+         mesa_logi("kbase: stock JM atom layout (stride 72 refused), stride 56");
+         return 56;
+      }
+      mesa_logw("kbase: JM atom layout probe failed (%s), stride 64",
+                strerror(errno));
+      return 64;
+   }
 
+   struct base_jd_event_v2 ev = { 0 };
+   ssize_t n = -1;
    struct pollfd pfd = { .fd = fd, .events = POLLIN };
    int ret;
    do {
       ret = poll(&pfd, 1, 1000);
    } while (ret < 0 && errno == EINTR);
-
    if (ret > 0 && (pfd.revents & POLLIN)) {
-      struct base_jd_event_v2 ev;
-      ssize_t n;
       do {
          n = read(fd, &ev, sizeof(ev));
       } while (n < 0 && errno == EINTR);
-      if (n == (ssize_t)sizeof(ev) &&
-          (ev.event_code & BASE_JD_EVENT_ERR_MASK))
-         return 56;
    }
 
+   if (n == (ssize_t)sizeof(ev) && ev.atom_number == 255 &&
+       ev.udata.blob[0] == probe.atom.udata.blob[0] &&
+       ev.udata.blob[1] == probe.atom.udata.blob[1])
+      mesa_logi("kbase: MediaTek JM atom layout (frame_nr), stride 64, "
+                "probe event 0x%x", ev.event_code);
+   else
+      mesa_logw("kbase: stride 72 accepted but the probe atom came back "
+                "as %u (n=%zd); unknown atom layout, stride 64",
+                ev.atom_number, n);
    return 64;
 }
 
