@@ -390,6 +390,9 @@ panvk_per_arch(cmd_open_batch)(struct panvk_cmd_buffer *cmdbuf)
       vk_zalloc(&cmdbuf->vk.pool->alloc, sizeof(*cmdbuf->cur_batch), 8,
                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    cmdbuf->cur_batch->jobs = UTIL_DYNARRAY_INIT;
+#if PAN_ARCH == 9
+   cmdbuf->cur_batch->malloc_vertex_jobs = UTIL_DYNARRAY_INIT;
+#endif
    cmdbuf->cur_batch->event_ops = UTIL_DYNARRAY_INIT;
    assert(cmdbuf->cur_batch);
    return cmdbuf->cur_batch;
@@ -474,6 +477,9 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
    list_for_each_entry_safe(struct panvk_batch, batch, &cmdbuf->batches, node) {
       list_del(&batch->node);
       util_dynarray_fini(&batch->jobs);
+#if PAN_ARCH == 9
+      util_dynarray_fini(&batch->malloc_vertex_jobs);
+#endif
       util_dynarray_fini(&batch->event_ops);
 
       vk_free(&cmdbuf->vk.pool->alloc, batch);
@@ -497,6 +503,9 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
    list_for_each_entry_safe(struct panvk_batch, batch, &cmdbuf->batches, node) {
       list_del(&batch->node);
       util_dynarray_fini(&batch->jobs);
+#if PAN_ARCH == 9
+      util_dynarray_fini(&batch->malloc_vertex_jobs);
+#endif
       util_dynarray_fini(&batch->event_ops);
 
       vk_free(&cmdbuf->vk.pool->alloc, batch);

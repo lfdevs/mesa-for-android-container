@@ -92,6 +92,21 @@ panvk_queue_submit_batch(struct panvk_gpu_queue *queue,
       util_dynarray_foreach(&batch->jobs, void *, job)
          memset((*job), 0, 4 * 4);
 
+#if PAN_ARCH == 9
+      /* A MALLOC_VERTEX job writes the pointer and strides of the vertex
+       * packets it allocated into its own Draw vertex array (the CPU only
+       * sets Packet). Left in place, the next run of the same command buffer
+       * starts from that stale pointer and the job faults. Put back what
+       * the CPU wrote. */
+      util_dynarray_foreach(&batch->malloc_vertex_jobs, void *, job) {
+         struct mali_vertex_array_packed *va =
+            (void *)((uint8_t *)(*job) +
+                     pan_section_offset(MALLOC_VERTEX_JOB, DRAW) + 2 * 4);
+         pan_pack(va, VERTEX_ARRAY, cfg)
+            cfg.packet = true;
+      }
+#endif
+
       /* Reset the tiler before re-issuing the batch */
       if (batch->tiler.ctx_descs.cpu) {
          memcpy(batch->tiler.heap_desc.cpu, &batch->tiler.heap_templ,

@@ -34,6 +34,10 @@
 struct panvk_batch {
    struct list_head node;
    struct util_dynarray jobs;
+#if PAN_ARCH == 9
+   /* MALLOC_VERTEX jobs, the GPU writes their vertex array pointer. */
+   struct util_dynarray malloc_vertex_jobs;
+#endif
    struct util_dynarray event_ops;
    struct pan_jc vtc_jc;
    struct pan_jc frag_jc;

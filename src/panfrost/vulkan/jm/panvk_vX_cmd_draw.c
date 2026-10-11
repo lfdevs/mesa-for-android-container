@@ -2192,6 +2192,7 @@ v9_emit_malloc_vertex_job(struct panvk_cmd_buffer *cmdbuf,
    if (!job.gpu)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
    util_dynarray_append(&batch->jobs, job.cpu);
+   util_dynarray_append(&batch->malloc_vertex_jobs, job.cpu);
 
    const struct vk_dynamic_graphics_state *dyns = &cmdbuf->vk.dynamic_graphics_state;
    const struct vk_rasterization_state *rs = &dyns->rs;
