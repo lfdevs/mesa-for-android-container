@@ -127,6 +127,11 @@ panvk_lower_sysvals(nir_builder *b, nir_instr *instr, void *data)
          val = nir_imm_zero(b, 1, 32);
          break;
       } else if (b->shader->info.stage == MESA_SHADER_VERTEX) {
+#if PAN_ARCH == 9
+         /* v9 JM records one draw per view, with the view in layer_id. */
+         val = load_sysval(b, graphics, bit_size, layer_id);
+         break;
+#endif
          /* On v14+ we have real multiview and view_index comes from a preload
           * in the vertex stage.  On earlier generations, view_index in vertex
           * shaders gets lowered away by nir_lower_multiview() so we should
@@ -229,7 +234,7 @@ panvk_lower_sysvals(nir_builder *b, nir_instr *instr, void *data)
    return true;
 }
 
-#if PAN_ARCH < 9
+#if PAN_ARCH <= 9
 static bool
 lower_gl_pos_layer_writes(nir_builder *b, nir_instr *instr, void *data)
 {
@@ -662,9 +667,13 @@ panvk_preprocess_nir(struct vk_physical_device *vk_pdev,
        nir->info.stage == MESA_SHADER_TESS_EVAL)
       NIR_PASS(_, nir, panvk_lower_clip_cull_vs);
 
-#if PAN_ARCH < 9
+#if PAN_ARCH <= 9
    /* This needs to be done just after the io_to_temporaries pass, because we
     * rely on out temporaries to collect the final layer_id value.
+    *
+    * v9 JM uses the Bifrost scheme too: one draw per layer, each with its
+    * own tiler context, and primitives whose gl_Layer is not the drawn layer
+    * are dropped in the VS.
     */
    NIR_PASS(_, nir, lower_layer_writes);
 #endif
@@ -3407,6 +3416,13 @@ panvk_compile_shader(struct panvk_device *dev,
       .robust_descriptors = dev->vk.enabled_features.nullDescriptor,
    };
 
+#if PAN_ARCH == 9
+   /* lower_layer_writes() removed the gl_Layer store, the variable stays. */
+   shader->writes_layer =
+      nir_find_variable_with_location(info->nir, nir_var_shader_out,
+                                      VARYING_SLOT_LAYER) != NULL;
+#endif
+
    switch (info->stage) {
 #if PAN_ARCH >= 10
    case MESA_SHADER_TESS_EVAL:
@@ -4291,6 +4307,9 @@ panvk_deserialize_shader(struct vk_device *vk_dev, struct blob_reader *blob,
    if (shader->gpu_prerast.io.abi_version != PANVK_GPU_PRERAST_ABI_VERSION)
       blob->overrun = true;
 #endif
+#if PAN_ARCH == 9
+   shader->writes_layer = blob_read_uint8(blob);
+#endif
 
    result = shader_desc_info_deserialize(device, blob, shader);
    if (result != VK_SUCCESS) {
@@ -4412,6 +4431,9 @@ panvk_shader_serialize(struct vk_device *vk_dev,
 
 #if PAN_ARCH >= 10
    blob_write_bytes(blob, &shader->gpu_prerast, sizeof(shader->gpu_prerast));
+#endif
+#if PAN_ARCH == 9
+   blob_write_uint8(blob, shader->writes_layer);
 #endif
 
    shader_desc_info_serialize(blob, shader);

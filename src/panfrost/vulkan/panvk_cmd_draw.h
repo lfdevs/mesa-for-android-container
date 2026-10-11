@@ -558,7 +558,7 @@ struct panvk_draw_info {
    bool prims_generated_counted;
    uint32_t gpu_prerast_prim_base;
 
-#if PAN_ARCH < 9
+#if PAN_ARCH <= 9
    uint32_t layer_id;
 #endif
 };

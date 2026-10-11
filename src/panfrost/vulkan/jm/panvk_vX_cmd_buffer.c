@@ -204,7 +204,11 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
 
          fbd_info.layer = layer_id;
          fbd_info.frame_shaders = fs;
-         fbd_info.frame_shaders.dcd_pointer += layer_id * 3 * pan_size(DRAW);
+         /* Bifrost has one set of pre/post frame DCDs per layer, v9 one set
+          * for all layers (alloc_pre_post_dcds()), the frame shaders read
+          * the layer from the FBD frame argument. */
+         if (PAN_ARCH < 9)
+            fbd_info.frame_shaders.dcd_pointer += layer_id * 3 * pan_size(DRAW);
 
          const struct pan_fb_descs fb_descs = {
             .fbd = fbd.cpu,
@@ -364,10 +368,16 @@ panvk_per_arch(cmd_prepare_tiler_context)(struct panvk_cmd_buffer *cmdbuf,
    }
 
 out_set_layer_ctx:
-   if (PAN_ARCH >= 9)
+   if (PAN_ARCH >= 9) {
       batch->tiler.ctx.valhall.desc = tiler_desc;
-   else
+      /* One tiler context per layer, primitives land in internal layer 0
+       * of their own context (the VS drops the hardware layer write), so
+       * the FBD of layer N must select list N - N = 0. */
+      assert(layer_idx <= UINT8_MAX);
+      batch->tiler.ctx.valhall.layer_offset = layer_idx;
+   } else {
       batch->tiler.ctx.bifrost.desc = tiler_desc;
+   }
 
    return VK_SUCCESS;
 }

@@ -2388,7 +2388,7 @@ v9_emit_malloc_vertex_job(struct panvk_cmd_buffer *cmdbuf,
 }
 
 static void
-v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
+v9_cmd_draw_layer(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
 {
    /* ponytail: JM tessellation from FristOneRR not ported; needs libpoly tess + panvk_tess_info */
    if (info->prim == MESA_PRIM_PATCHES)
@@ -2426,8 +2426,7 @@ v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
    result = panvk_per_arch(cmd_alloc_tls_desc)(cmdbuf, true);
    if (result != VK_SUCCESS)
       return;
-   result = panvk_per_arch(cmd_prepare_tiler_context)(cmdbuf, 0);
-   (void)0;
+   result = panvk_per_arch(cmd_prepare_tiler_context)(cmdbuf, info->layer_id);
    if (result != VK_SUCCESS)
       return;
 
@@ -2489,6 +2488,29 @@ v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
    clear_dirty_after_draw(cmdbuf);
    if (info->indirect.buffer_dev_addr)
       gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+}
+
+/* Multiview and layered rendering, same scheme as the Bifrost path: the draw
+ * is recorded once per view (or per framebuffer layer when the VS writes
+ * gl_Layer), each copy with its own tiler context and the view or layer in
+ * the layer_id sysval. The fragment jobs are emitted per layer when the
+ * batch is closed. */
+static void
+v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
+{
+   uint32_t view_mask = cmdbuf->state.gfx.render.view_mask;
+   uint32_t layer_count = view_mask ? util_bitcount(view_mask)
+                                    : cmdbuf->state.gfx.render.layer_count;
+   const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
+
+   /* Without a gl_Layer write, primitives go to layer 0 only. */
+   if (!view_mask && (!vs || !vs->writes_layer))
+      layer_count = 1;
+
+   for (uint32_t i = 0; i < MAX2(layer_count, 1); i++) {
+      info->layer_id = view_mask ? u_bit_scan(&view_mask) : i;
+      v9_cmd_draw_layer(cmdbuf, info);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL

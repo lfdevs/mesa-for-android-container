@@ -185,12 +185,14 @@ struct panvk_graphics_sysvals {
 
    struct panvk_input_attachment_info iam[INPUT_ATTACHMENT_MAP_SIZE];
 
-#if PAN_ARCH < 9
-   /* gl_Layer on Bifrost is a bit of hack. We have to issue one draw per
-    * layer, and filter primitives at the VS level.
+#if PAN_ARCH <= 9
+   /* gl_Layer on Bifrost and v9 JM is a bit of hack. We have to issue one
+    * draw per layer, and filter primitives at the VS level.
     */
    int32_t layer_id;
+#endif
 
+#if PAN_ARCH < 9
    struct {
       aligned_u64 sets[PANVK_DESC_TABLE_GFX_COUNT];
    } desc;
@@ -490,6 +492,12 @@ struct panvk_shader {
 
 #if PAN_ARCH >= 10
    struct panvk_gpu_prerast_shader gpu_prerast;
+#endif
+
+#if PAN_ARCH == 9
+   /* The shader writes gl_Layer. Without it a layered draw only renders
+    * layer 0, so v9 JM does not replicate the draw. */
+   bool writes_layer;
 #endif
 
    struct panvk_shader_variant variants[];
