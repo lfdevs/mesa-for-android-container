@@ -14,6 +14,9 @@
 struct panvk_event {
    struct vk_object_base base;
    bool signaled;
+   /* kbase atom of the work a vkCmdSetEvent() follows: the event becomes
+    * signaled once that atom has completed. */
+   uint64_t signal_atom;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_event, base, VkEvent, VK_OBJECT_TYPE_EVENT)

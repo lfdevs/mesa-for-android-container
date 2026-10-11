@@ -245,8 +245,10 @@ panvk_queue_submit_batch(struct panvk_gpu_queue *queue,
 }
 
 /* kbase has no kernel wait primitive for VkEvent (see panvk_event.h), so
- * events are tracked as a plain host-side flag and waited on with a
- * simple spin. */
+ * events are tracked as a host-side flag plus the kbase atom of the work a
+ * vkCmdSetEvent() follows. A wait spins only on events set from the host:
+ * a pending vkCmdSetEvent() on this queue is ordered before the waiting
+ * batch by the atom dependencies. */
 static void
 panvk_wait_event_ops(struct panvk_batch *batch)
 {
@@ -254,21 +256,30 @@ panvk_wait_event_ops(struct panvk_batch *batch)
       if (op->type != PANVK_EVENT_OP_WAIT)
          continue;
 
-      while (!op->event->signaled)
+      while (!op->event->signaled && !op->event->signal_atom)
          usleep(100);
    }
 }
 
+/* vkCmdSetEvent() takes effect when the GPU has completed the work recorded
+ * before it (atom), not at submit time: vkGetEventStatus() polls the atom.
+ * atom == 0 means that work already completed. */
 static void
-panvk_apply_event_ops(struct panvk_batch *batch)
+panvk_apply_event_ops(struct panvk_batch *batch, uint64_t atom)
 {
    util_dynarray_foreach(&batch->event_ops, struct panvk_cmd_event_op, op) {
       switch (op->type) {
       case PANVK_EVENT_OP_SET:
-         op->event->signaled = true;
+         if (op->event->signaled)
+            break;
+         if (atom)
+            op->event->signal_atom = atom;
+         else
+            op->event->signaled = true;
          break;
       case PANVK_EVENT_OP_RESET:
          op->event->signaled = false;
+         op->event->signal_atom = 0;
          break;
       case PANVK_EVENT_OP_WAIT:
          /* Handled before submission in panvk_wait_event_ops(). */
@@ -441,7 +452,8 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
             }
          }
 
-         panvk_apply_event_ops(batch);
+         panvk_apply_event_ops(batch, last_atom ? last_atom
+                                                : queue->last_submitted_atom);
       }
    }
 

@@ -7,6 +7,7 @@
 #include "panvk_entrypoints.h"
 #include "panvk_event.h"
 
+#include "kmod/kbase_kmod.h"
 #include "vk_log.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -43,7 +44,14 @@ panvk_per_arch(DestroyEvent)(VkDevice _device, VkEvent _event,
 VKAPI_ATTR VkResult VKAPI_CALL
 panvk_per_arch(GetEventStatus)(VkDevice _device, VkEvent _event)
 {
+   VK_FROM_HANDLE(panvk_device, device, _device);
    VK_FROM_HANDLE(panvk_event, event, _event);
+
+   if (!event->signaled && event->signal_atom &&
+       kbase_kmod_wait_atom(device->kmod.dev, event->signal_atom, 0)) {
+      event->signaled = true;
+      event->signal_atom = 0;
+   }
 
    return event->signaled ? VK_EVENT_SET : VK_EVENT_RESET;
 }
@@ -54,6 +62,7 @@ panvk_per_arch(SetEvent)(VkDevice _device, VkEvent _event)
    VK_FROM_HANDLE(panvk_event, event, _event);
 
    event->signaled = true;
+   event->signal_atom = 0;
 
    return VK_SUCCESS;
 }
@@ -64,6 +73,7 @@ panvk_per_arch(ResetEvent)(VkDevice _device, VkEvent _event)
    VK_FROM_HANDLE(panvk_event, event, _event);
 
    event->signaled = false;
+   event->signal_atom = 0;
 
    return VK_SUCCESS;
 }
