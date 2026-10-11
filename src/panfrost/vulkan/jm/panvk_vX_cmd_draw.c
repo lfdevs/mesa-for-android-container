@@ -2401,6 +2401,39 @@ v9_emit_malloc_vertex_job(struct panvk_cmd_buffer *cmdbuf,
             late_zs ? MALI_PIXEL_KILL_FORCE_LATE : MALI_PIXEL_KILL_FORCE_EARLY;
          cfg.flags_0.zs_update_operation =
             late_zs ? MALI_PIXEL_KILL_FORCE_LATE : MALI_PIXEL_KILL_FORCE_EARLY;
+         /* Depth bounds emulation (csf-v11 092/116): the lowered FS reads the
+          * tile depth and clears SampleMask bits outside the bounds, which
+          * already makes ZS late without EarlyFragmentTests. With them, an
+          * early update would let the FS read its own depth and keep the
+          * writes of samples outside the bounds: test early, update after
+          * the FS. Not when the app FS discards, writes SampleMask or uses
+          * alpha-to-coverage (those must not gate EFT ZS writes). Same
+          * condition as the ds.enable sysval. */
+         const bool db_on = fs->fs.depth_bounds &&
+                            dyns->ds.depth.bounds_test.enable &&
+                            (cmdbuf->state.gfx.render.bound_attachments &
+                             MESA_VK_RP_ATTACHMENT_DEPTH_BIT);
+         const bool writes_zs_or_oq =
+            ((cmdbuf->state.gfx.render.bound_attachments &
+              MESA_VK_RP_ATTACHMENT_DEPTH_BIT) &&
+             dyns->ds.depth.test_enable && dyns->ds.depth.write_enable) ||
+            ((cmdbuf->state.gfx.render.bound_attachments &
+              MESA_VK_RP_ATTACHMENT_STENCIL_BIT) &&
+             dyns->ds.stencil.test_enable) ||
+            cmdbuf->state.gfx.occlusion_query.mode !=
+               MALI_OCCLUSION_MODE_DISABLED;
+         if (db_on && fs->info.fs.early_fragment_tests && writes_zs_or_oq &&
+             !fs->info.fs.can_discard && !fs->fs.depth_bounds_app_mask &&
+             !dyns->ms.alpha_to_coverage_enable)
+            cfg.flags_0.zs_update_operation = MALI_PIXEL_KILL_FORCE_LATE;
+         /* Per-sample shading (sampleShadingEnable, gl_SampleID and friends),
+          * and with MSAA for a blend shader, which writes one sample at a
+          * time: CSF build_dcd_flags(). After Noysz/panvk-g99-jm 0059. */
+         cfg.flags_0.evaluate_per_sample =
+            (fs->info.fs.sample_shading ||
+             cmdbuf->state.gfx.cb.info.needs_shader) &&
+            dyns->ms.rasterization_samples > 1;
+         cfg.flags_0.alpha_to_coverage = dyns->ms.alpha_to_coverage_enable;
          /* the GPU must wait for the shader's coverage (discard,
           * sample mask, alpha-to-coverage) before updating depth/stencil. */
          cfg.flags_0.shader_modifies_coverage = !v61a_no_smc() &&
@@ -4087,9 +4120,38 @@ v9_count_draw_queries(struct panvk_cmd_buffer *cmdbuf,
  * gl_Layer), each copy with its own tiler context and the view or layer in
  * the layer_id sysval. The fragment jobs are emitted per layer when the
  * batch is closed. */
+/* variableMultisampleRate: an attachment-less pass takes the sample count of
+ * its draws. The FBD and tiler context of a batch have one, so a draw with
+ * another count closes the batch (its fragment job keeps the old count) and
+ * the next one is laid out with the new count. Secondaries are replayed into
+ * the primary on JM, so this covers them too. The JM form of csf-v11
+ * 074/095/114. */
+static void
+v9_attachmentless_samples(struct panvk_cmd_buffer *cmdbuf)
+{
+   struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   const struct vk_dynamic_graphics_state *dyns =
+      &cmdbuf->vk.dynamic_graphics_state;
+   const uint32_t samples = MAX2(dyns->ms.rasterization_samples, 1);
+
+   if (render->bound_attachments || dyns->rs.rasterizer_discard_enable ||
+       samples == render->fb.nr_samples)
+      return;
+
+   if (cmdbuf->cur_batch && cmdbuf->cur_batch->fb.desc.gpu) {
+      panvk_per_arch(cmd_close_batch)(cmdbuf);
+      panvk_per_arch(cmd_open_batch)(cmdbuf);
+   }
+   render->fb.nr_samples = samples;
+   /* cmd_select_tile_size() picks the tile size for the new count. */
+   render->fb.layout.sample_count = 0;
+}
+
 static void
 v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
 {
+   v9_attachmentless_samples(cmdbuf);
+
    uint32_t view_mask = cmdbuf->state.gfx.render.view_mask;
    uint32_t layer_count = view_mask ? util_bitcount(view_mask)
                                     : cmdbuf->state.gfx.render.layer_count;
