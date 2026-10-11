@@ -1951,11 +1951,12 @@ v9_emit_vs_attrib(struct panvk_cmd_buffer *cmdbuf, uint32_t attrib_idx,
    enum pipe_format f = vk_format_to_pipe_format(attrib_info->format);
 
    pan_pack(desc, ATTRIBUTE, cfg) {
-      /* Valhall doesn't add firstInstance when fetching per-instance
-       * attributes, so fold it into the attribute offset. */
+      /* Valhall fetches per-instance attributes with the 0-based instance
+       * (divided by the divisor), so fold firstInstance into the attribute
+       * offset: element = firstInstance + (instance - firstInstance) / div,
+       * also for divisor 0. Same as CSF emit_vs_attrib(). */
       cfg.offset = attrib_info->offset +
-                   ((per_instance && buf_info->divisor)
-                       ? (base_instance / buf_info->divisor) * stride : 0);
+                   (per_instance ? base_instance * stride : 0);
       cfg.format = GENX(pan_format_from_pipe_format)(f)->hw;
       cfg.table = 0;
       cfg.buffer_index = vb_desc_offset + attrib_info->binding;
@@ -2234,10 +2235,9 @@ panvk_skip_fs(unsigned regs, unsigned tls)
    return (mode == 1 && tls > 0) || (mode == 2 && (tls > 0 || regs > 32));
 }
 
-/* Instance-rate attributes with a divisor of an indirect draw: the patch
- * kernels fold the GPU-side firstInstance into their Offset
- * (v9_emit_vs_attrib only saw the placeholder 0). Returns false when out of
- * memory. */
+/* Instance-rate attributes of an indirect draw: the patch kernels fold the
+ * GPU-side firstInstance into their Offset (v9_emit_vs_attrib only saw the
+ * placeholder 0). Returns false when out of memory. */
 static bool
 v9_inst_attr_info(struct panvk_cmd_buffer *cmdbuf, uint32_t *mask,
                   uint64_t *info_gpu, uint64_t *vs_attribs)
@@ -2252,8 +2252,7 @@ v9_inst_attr_info(struct panvk_cmd_buffer *cmdbuf, uint32_t *mask,
    *vs_attribs = 0;
    u_foreach_bit(a, vi->attributes_valid) {
       const uint32_t b = vi->attributes[a].binding;
-      if (vi->bindings[b].input_rate != VK_VERTEX_INPUT_RATE_INSTANCE ||
-          !vi->bindings[b].divisor)
+      if (vi->bindings[b].input_rate != VK_VERTEX_INPUT_RATE_INSTANCE)
          continue;
       *mask |= BITFIELD_BIT(a);
       info[a][0] = vi->attributes[a].offset;

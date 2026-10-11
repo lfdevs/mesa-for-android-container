@@ -1577,13 +1577,14 @@ panlib_v9_draw_indirect_patch(global uint32_t *cmd, global uint8_t *job,
     * the CPU folds it into the Attribute Offset (word 2) for direct draws.
     * Here inst_attr_info holds {offset, stride, divisor} per attribute and
     * the Offset is rewritten (not incremented) so a resubmitted command
-    * buffer gets the same value. */
+    * buffer gets the same value. The hardware divides only the 0-based
+    * instance, so firstInstance is added undivided (any divisor, even 0). */
    for (uint32_t a = 0; a < 32; a++) {
       if (!(inst_attr_mask & (1u << a)))
          continue;
       global uint32_t *ii = inst_attr_info + a * 3;
       global int32_t *offset = (global int32_t *)(vs_attribs + a * 32 + 8);
-      *offset = (int32_t)(ii[0] + (first_instance / ii[2]) * ii[1]);
+      *offset = (int32_t)(ii[0] + first_instance * ii[1]);
    }
 }
 
@@ -1717,7 +1718,7 @@ panlib_v9_prerast_indirect(constant struct panlib_v9_prerast_patch *a)
          continue;
       global uint32_t *ii = info + i * 3;
       global int32_t *offset = (global int32_t *)(attribs + i * 32 + 8);
-      *offset = (int32_t)(ii[0] + (first_instance / ii[2]) * ii[1]);
+      *offset = (int32_t)(ii[0] + first_instance * ii[1]);
    }
 }
 
