@@ -347,12 +347,12 @@ panvk_per_arch(get_physical_device_features)(
       .occlusionQueryPrecise = true,
       .pipelineStatisticsQuery = PAN_ARCH >= 10,
       /* On v13+, the hardware isn't speculatively referencing to invalid
-         indices anymore. On v10-v12, pre-rasterization stages that write
+         indices anymore. On v9-v12, pre-rasterization stages that write
          memory run through gpu_prerast compute instead of IDVS. On by default
-         on v10+ (DXVK FL11_1); pan_enable_vertex_pipeline_stores_atomics=false
+         on v9+ (DXVK FL11_1); pan_enable_vertex_pipeline_stores_atomics=false
          turns it off. */
       .vertexPipelineStoresAndAtomics =
-         (PAN_ARCH >= 10 && instance->drirc.misc.enable_vertex_pipeline_stores_atomics) ||
+         (PAN_ARCH >= 9 && instance->drirc.misc.enable_vertex_pipeline_stores_atomics) ||
          instance->drirc.misc.force_enable_shader_atomics,
       .fragmentStoresAndAtomics = true,
       .shaderTessellationAndGeometryPointSize = PAN_ARCH >= 10,
@@ -365,8 +365,8 @@ panvk_per_arch(get_physical_device_features)(
       .shaderSampledImageArrayDynamicIndexing = true,
       .shaderStorageBufferArrayDynamicIndexing = true,
       .shaderStorageImageArrayDynamicIndexing = true,
-      .shaderClipDistance = PAN_ARCH >= 10,
-      .shaderCullDistance = PAN_ARCH >= 10,
+      .shaderClipDistance = PAN_ARCH >= 9,
+      .shaderCullDistance = PAN_ARCH >= 9,
       .shaderFloat64 = false,
       .shaderInt64 = true,
       .shaderInt16 = true,
@@ -1061,9 +1061,9 @@ panvk_per_arch(get_physical_device_properties)(
          PAN_ARCH >= 10 && device->kmod.dev->props.gpu_can_query_timestamp,
       .timestampPeriod =
          PAN_ARCH >= 10 ? panvk_get_gpu_system_timestamp_period(device) : 0,
-      .maxClipDistances = PAN_ARCH >= 10 ? 8 : 0,
-      .maxCullDistances = PAN_ARCH >= 10 ? 8 : 0,
-      .maxCombinedClipAndCullDistances = PAN_ARCH >= 10 ? 8 : 0,
+      .maxClipDistances = PAN_ARCH >= 9 ? 8 : 0,
+      .maxCullDistances = PAN_ARCH >= 9 ? 8 : 0,
+      .maxCombinedClipAndCullDistances = PAN_ARCH >= 9 ? 8 : 0,
       .discreteQueuePriorities = 2,
       .pointSizeRange = {pointSizeRangeMin, pointSizeRangeMax},
       .lineWidthRange = {0.0, 7.9921875},

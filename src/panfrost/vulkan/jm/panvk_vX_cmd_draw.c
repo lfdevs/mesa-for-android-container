@@ -2487,6 +2487,28 @@ v9_prerast_needed(const struct panvk_cmd_buffer *cmdbuf,
            v9_prerast_xfb_active(cmdbuf));
 }
 
+/* VS stores and atomics run once per vertex through gpu_prerast, like CSF
+ * gpu_prerast_wanted(). Draws it cannot lower fall back to IDVS, which runs
+ * them per position and varying shader invocation (allowed: the number of
+ * VS invocations is implementation-defined). */
+static bool
+v9_prerast_side_effects(struct panvk_cmd_buffer *cmdbuf,
+                        const struct panvk_draw_info *info)
+{
+   const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
+
+   if (info->gpu_prerast_generated || !vs ||
+       !vs->gpu_prerast.has_side_effects)
+      return false;
+
+   /* v9_prerast_draw() splits direct draws over the arena. */
+   struct panvk_draw_info probe = *info;
+   if (!probe.indirect.buffer_dev_addr)
+      probe.vertex.count = probe.instance.count = 1;
+   return panvk_per_arch(gpu_prerast_can_lower)(cmdbuf, &probe,
+                                                &vs->gpu_prerast);
+}
+
 /* Raster VS of a draw: the GS passthrough after a GS, the VS passthrough for
  * generated draws and viewport-selecting VSs, else the HW variant. */
 static const struct panvk_shader_variant *
@@ -3156,7 +3178,8 @@ v9_cmd_draw_layer(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
    if (info->prim == MESA_PRIM_PATCHES)
       return;
 
-   if (v9_prerast_needed(cmdbuf, info)) {
+   if (v9_prerast_needed(cmdbuf, info) ||
+       v9_prerast_side_effects(cmdbuf, info)) {
       v9_prerast_draw(cmdbuf, info);
       return;
    }
