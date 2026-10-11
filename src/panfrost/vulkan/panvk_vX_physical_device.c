@@ -214,7 +214,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_queue_family_foreign = true,
       .EXT_rasterization_order_attachment_access = PAN_ARCH >= 10,
       .EXT_rgba10x6_formats = PAN_ARCH >= 11,
-      .EXT_robustness2 = PAN_ARCH >= 10,
+      .EXT_robustness2 = PAN_ARCH >= 9,
       .EXT_sampler_filter_minmax = PAN_ARCH >= 10,
       .EXT_scalar_block_layout = true,
       .EXT_separate_stencil_usage = true,
@@ -664,9 +664,11 @@ panvk_per_arch(get_physical_device_features)(
       .pipelineExecutableInfo = true,
 
       /* VK_KHR_robustness2 */
-      .robustBufferAccess2 = PAN_ARCH >= 10,
+      /* v9/v10 texel buffers get software bounds checks
+       * (bi_lower_robust_texel_buf), the rest is the same Valhall path. */
+      .robustBufferAccess2 = PAN_ARCH >= 9,
       .robustImageAccess2 = PAN_ARCH >= 10,
-      .nullDescriptor = PAN_ARCH >= 10,
+      .nullDescriptor = PAN_ARCH >= 9,
 
       /* VK_EXT_shader_tile_image */
       .shaderTileImageColorReadAccess = PAN_ARCH >= 9,
