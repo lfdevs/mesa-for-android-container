@@ -381,6 +381,8 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
 
 #if PAN_ARCH == 9
    BITSET_ZERO(queue->submit_atoms);
+   if (submit->command_buffer_count)
+      kbase_kmod_jm_clean_imports(dev->kmod.dev);
 #endif
 
    if (submit->wait_count) {

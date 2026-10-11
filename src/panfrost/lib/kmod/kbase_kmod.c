@@ -36,6 +36,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +51,8 @@
 #include "util/u_atomic.h"
 #include "util/u_math.h"
 #include "util/log.h"
+#include "util/list.h"
+#include "util/u_debug.h"
 
 #include "drm-uapi/mali_kbase_ioctl.h"
 /* Only used as the interchange format for CSF interface information; no
@@ -187,6 +190,11 @@ struct kbase_kmod_dev {
    bool atom_failed[KBASE_MAX_ATOMS];
    uint64_t last_done_atom_ctx[KBASE_MAX_ATOMS];
    uint32_t last_done_code_ctx[KBASE_MAX_ATOMS];
+
+   /* v9 JM: CPU-mapped dma-buf imports the kernel did not make coherent
+    * (kbase_kmod_jm_clean_imports()). */
+   simple_mtx_t nc_lock;
+   struct list_head nc_bos;
 };
 
 struct kbase_kmod_vm {
@@ -232,6 +240,10 @@ struct kbase_kmod_bo {
     * for dma-heap imports with EINVAL); the kernel keeps CPU/GPU coherent.
     */
    bool cpu_gpu_coherent;
+
+   /* On kbase_kmod_dev::nc_bos (nc_link valid). */
+   bool nc_listed;
+   struct list_head nc_link;
 };
 
 bool
@@ -1567,6 +1579,8 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
    kbase_dev->kcpu.fence_fd = -1;
    simple_mtx_init(&kbase_dev->kcpu.lock, mtx_plain);
    simple_mtx_init(&kbase_dev->kcpu_export.lock, mtx_plain);
+   simple_mtx_init(&kbase_dev->nc_lock, mtx_plain);
+   list_inithead(&kbase_dev->nc_bos);
    if (!is_csf) {
       kbase_dev->atom_stride = atom_stride;
       simple_mtx_init(&kbase_dev->atoms_lock, mtx_plain);
@@ -1686,6 +1700,7 @@ kbase_kmod_dev_destroy(struct pan_kmod_dev *dev)
       ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_DELETE, &delete);
    }
    simple_mtx_destroy(&kbase_dev->kcpu_export.lock);
+   simple_mtx_destroy(&kbase_dev->nc_lock);
 
    if (!kbase_dev->is_csf) {
       simple_mtx_destroy(&kbase_dev->atoms_read_lock);
@@ -1999,6 +2014,24 @@ kbase_kmod_import_dmabuf(struct pan_kmod_dev *dev,
 
    pan_kmod_bo_init(&kbase_bo->base, dev, exclusive_vm, bo_size, flags,
                     handle);
+
+   /* Host-visible memory on JM is a dma-heap buffer the CPU writes through
+    * its own (cached) dma-buf mapping. When the kernel did not grant
+    * COHERENT_SYSTEM, HOST_COHERENT writes can sit in the CPU cache while
+    * the GPU reads memory (faux123: black dashes in 32-bit DXVK games).
+    * WB_MMAP BOs are flushed by vkFlushMappedMemoryRanges instead. */
+   if (!kbase_dev->is_csf && pan_arch(dev->props.gpu_id) == 9 &&
+       !kbase_bo->cpu_gpu_coherent && kbase_bo->cpu_ptr &&
+       !(kmod_flags & PAN_KMOD_BO_FLAG_WB_MMAP) &&
+       debug_get_bool_option("PANVK_KBASE_IMPORT_SYNC", true)) {
+      mesa_logw_once("kbase: dma-buf imports are not CPU-coherent; cleaning "
+                     "them before each submit (PANVK_KBASE_IMPORT_SYNC=0 "
+                     "disables)");
+      simple_mtx_lock(&kbase_dev->nc_lock);
+      list_addtail(&kbase_bo->nc_link, &kbase_dev->nc_bos);
+      kbase_bo->nc_listed = true;
+      simple_mtx_unlock(&kbase_dev->nc_lock);
+   }
    mesa_log(MESA_LOG_DEBUG, MESA_LOG_TAG, "kbase_kmod_bo_alloc_dmabuf: succeeded for %d, bo_size=%lu, handle=%u", kbase_bo->dmabuf_fd, bo_size, handle);
    mesa_log(MESA_LOG_DEBUG, MESA_LOG_TAG, "kbase: import flags=0x%llx -> va=0x%llx pages=%llu outflags=0x%llx",
              (unsigned long long)import_flags,
@@ -2231,6 +2264,14 @@ kbase_kmod_bo_free(struct pan_kmod_bo *bo)
 {
    struct kbase_kmod_bo *kbase_bo =
       container_of(bo, struct kbase_kmod_bo, base);
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(bo->dev, struct kbase_kmod_dev, base);
+
+   if (kbase_bo->nc_listed) {
+      simple_mtx_lock(&kbase_dev->nc_lock);
+      list_del(&kbase_bo->nc_link);
+      simple_mtx_unlock(&kbase_dev->nc_lock);
+   }
 
    pan_kmod_bo_cleanup(bo);
 
@@ -2906,6 +2947,32 @@ kbase_kmod_job_submit_retry(struct pan_kmod_dev *dev, uint64_t jc,
       }
    }
    return false;
+}
+
+/* Clean the CPU caches of every non-coherent CPU-mapped dma-buf import
+ * (see kbase_kmod_import_dmabuf()) so GPU work submitted next sees the CPU's
+ * writes. DMA_BUF_IOCTL_SYNC END makes the exporter sync its device
+ * attachments, kbase's included. ponytail: whole buffers on every submit;
+ * track dirty mappings if this shows up in profiles. */
+void
+kbase_kmod_jm_clean_imports(struct pan_kmod_dev *dev)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+
+   simple_mtx_lock(&kd->nc_lock);
+   list_for_each_entry(struct kbase_kmod_bo, bo, &kd->nc_bos, nc_link) {
+      struct dma_buf_sync sync = {
+         .flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE,
+      };
+      int ret;
+      do {
+         ret = ioctl(bo->dmabuf_fd, DMA_BUF_IOCTL_SYNC, &sync);
+      } while (ret && (errno == EINTR || errno == EAGAIN));
+      if (ret)
+         mesa_logw_once("kbase: DMA_BUF_IOCTL_SYNC failed: %s",
+                        strerror(errno));
+   }
+   simple_mtx_unlock(&kd->nc_lock);
 }
 
 bool
