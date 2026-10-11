@@ -1734,4 +1734,52 @@ panlib_v9_copy32(global uint32_t *dst, constant uint32_t *src)
 {
    *dst = *src;
 }
+
+/* Multi-viewport draws on v9 JM. CSF draws the viewport runs of
+ * panlib_vp_runs() in a command stream loop, each with its viewport's depth
+ * clamp. JM has a fixed job chain: the runs of each viewport are packed
+ * together here and drawn with one indexed draw per viewport, draws[5 * v],
+ * a NULL job when empty. Primitive order holds within a viewport, not across
+ * viewports (ponytail: overlapping viewports with blending see viewport
+ * order). merged: all viewports share one depth range, a single draw over
+ * the run indices keeps the order.
+ */
+KERNEL(1)
+panlib_v9_vp_partition(global const struct panlib_vp_run_header *header,
+                       global const uint32_t *run_indices,
+                       global uint32_t *out_indices, global uint32_t *draws,
+                       uint32_t viewport_count, uint32_t merged)
+{
+   global const struct panlib_vp_run *runs =
+      (global const struct panlib_vp_run *)(header + 1);
+   const uint32_t n = header->overflow ? 0 : header->run_count;
+   const uint32_t count = merged ? 1 : clamp(viewport_count, 1u,
+                                             PANLIB_VP_MAX_VIEWPORTS);
+   uint32_t first = 0;
+
+   for (uint32_t v = 0; v < count; v++) {
+      uint32_t k = 0;
+
+      if (merged) {
+         k = header->overflow ? 0 : header->index_count;
+      } else {
+         for (uint32_t r = 0; r < n; r++) {
+            if (runs[r].viewport != v)
+               continue;
+            for (uint32_t i = 0; i < runs[r].index_count; i++)
+               out_indices[first + k + i] =
+                  run_indices[runs[r].first_index + i];
+            k += runs[r].index_count;
+         }
+      }
+
+      global uint32_t *d = draws + v * 5;
+      d[0] = k;
+      d[1] = 1;
+      d[2] = first;
+      d[3] = 0;
+      d[4] = 0;
+      first += k;
+   }
+}
 #endif

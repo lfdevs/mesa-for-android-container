@@ -564,6 +564,9 @@ struct panvk_draw_info {
 #if PAN_ARCH == 9
    /* GPU-side gpu_prerast_prim_base (a tessellation output range), or 0. */
    uint64_t gpu_prerast_prim_base_addr;
+   /* 1 + the viewport whose depth range clamps this draw, 0 for viewport 0
+    * (the draws of one viewport each of a multi-viewport draw). */
+   uint32_t viewport_clamp;
 #endif
 };
 

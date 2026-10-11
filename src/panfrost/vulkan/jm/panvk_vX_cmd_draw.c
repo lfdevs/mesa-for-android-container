@@ -32,6 +32,7 @@
 #include "panvk_shader.h"
 
 #include "draw_helper.h"
+#include "libpan/draw_helper_vp.h"
 #include "pan_desc.h"
 #include "pan_earlyzs.h"
 #include "pan_encoder.h"
@@ -2147,9 +2148,57 @@ v9_prepare_blend_zsd(struct panvk_cmd_buffer *cmdbuf,
    return VK_SUCCESS;
 }
 
+/* A viewport-selecting shader with more than one viewport: its passthrough
+ * does each primitive's viewport transform and scissor itself (clip planes),
+ * the fixed function only clamps depth. */
+static bool
+v9_multi_viewport(const struct panvk_cmd_buffer *cmdbuf)
+{
+   return panvk_prerast_viewport_shader(&cmdbuf->state.gfx) &&
+          cmdbuf->vk.dynamic_graphics_state.vp.viewport_count > 1;
+}
+
+/* Depth clamp range of one viewport, CSF panvk_viewport_depth_range(). */
+static void
+v9_viewport_depth_range(const struct panvk_cmd_buffer *cmdbuf, unsigned index,
+                        float *z_min, float *z_max)
+{
+   const struct vk_viewport_state *vp = &cmdbuf->vk.dynamic_graphics_state.vp;
+
+   if (vp->depth_clamp_mode == VK_DEPTH_CLAMP_MODE_USER_DEFINED_RANGE_EXT) {
+      *z_min = vp->depth_clamp_range.minDepthClamp;
+      *z_max = vp->depth_clamp_range.maxDepthClamp;
+      return;
+   }
+
+   float sz, oz;
+   panvk_viewport_z_coeffs(vp, &cmdbuf->vk.dynamic_graphics_state.rs, index,
+                           &sz, &oz);
+   float a = vp->depth_clip_negative_one_to_one ? oz - sz : oz;
+   float b = oz + sz;
+   *z_min = MIN2(a, b);
+   *z_max = MAX2(a, b);
+}
+
 static void
 v9_emit_scissor(struct panvk_cmd_buffer *cmdbuf, struct mali_scissor_packed *out)
 {
+   if (v9_multi_viewport(cmdbuf)) {
+      /* The framebuffer: it cannot cut a primitive of another viewport. */
+      uint32_t w = cmdbuf->state.gfx.render.fb.layout.width_px;
+      uint32_t h = cmdbuf->state.gfx.render.fb.layout.height_px;
+
+      w = w ? w : MAX_FRAMEBUFFER_DIMENSION;
+      h = h ? h : MAX_FRAMEBUFFER_DIMENSION;
+      pan_pack(out, SCISSOR, cfg) {
+         cfg.scissor_minimum_x = 0;
+         cfg.scissor_minimum_y = 0;
+         cfg.scissor_maximum_x = MIN2(w - 1, (uint32_t)UINT16_MAX);
+         cfg.scissor_maximum_y = MIN2(h - 1, (uint32_t)UINT16_MAX);
+      }
+      return;
+   }
+
    const VkViewport *vp = &cmdbuf->vk.dynamic_graphics_state.vp.viewports[0];
    const VkRect2D *sc = &cmdbuf->vk.dynamic_graphics_state.vp.scissors[0];
    int minx = MAX2(sc->offset.x, (int)vp->x);
@@ -2247,7 +2296,10 @@ v9_emit_malloc_vertex_job(struct panvk_cmd_buffer *cmdbuf,
    enum mesa_prim reduced = u_reduced_prim(info->prim);
    bool polygon = reduced == MESA_PRIM_TRIANGLES;
    float z_min, z_max;
-   panvk_depth_range(&cmdbuf->state.gfx, &dyns->vp, &z_min, &z_max);
+   if (info->viewport_clamp)
+      v9_viewport_depth_range(cmdbuf, info->viewport_clamp - 1, &z_min, &z_max);
+   else
+      panvk_depth_range(&cmdbuf->state.gfx, &dyns->vp, &z_min, &z_max);
 
    const bool secondary_shader = vs->info.vs.secondary_enable && fs != NULL;
    /* Use the real varying count from the linked vs/fs pair instead of a
@@ -3005,6 +3057,172 @@ v9_prerast_indirect(struct panvk_cmd_buffer *cmdbuf,
    return gen.gpu;
 }
 
+/* Multi-viewport form of v9_prerast_draw_generated(): panlib_vp_runs() sorts
+ * the primitives of the records into viewport runs, as on CSF
+ * (gpu_prerast_vp_prepare()), panlib_v9_vp_partition() packs them per
+ * viewport, and each viewport gets one draw clamped to its depth range. One
+ * draw when every viewport has the same range. counts is the VS params
+ * {vertex count, instance count} or the GS draw command. */
+static void
+v9_prerast_draw_viewports(struct panvk_cmd_buffer *cmdbuf,
+                          const struct panvk_draw_info *src, uint64_t arena,
+                          uint64_t counts)
+{
+   const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
+   const struct panvk_shader *vps =
+      panvk_prerast_viewport_shader(&cmdbuf->state.gfx);
+   const struct panvk_shader_variant *fs =
+      panvk_shader_only_variant(get_fs(cmdbuf));
+   const uint32_t vp_count =
+      MIN2(cmdbuf->vk.dynamic_graphics_state.vp.viewport_count,
+           PANLIB_VP_MAX_VIEWPORTS);
+   uint64_t in_indices, records, outputs;
+   uint32_t record_stride, prim, index_count = 0, out_count = 0;
+   uint32_t run_capacity = 0;
+   bool count_ok, per_instance;
+
+   if (gs) {
+      const struct panvk_gpu_prerast_gs_info *gsi = &gs->gpu_prerast.gs;
+      const uint32_t slots = panvk_gpu_prerast_gs_cap_slots(gsi);
+
+      count_ok = slots && gsi->index_stride &&
+                 !__builtin_mul_overflow(slots, gsi->index_stride,
+                                         &index_count);
+      /* A strip expands to 3 indices per triangle. */
+      out_count = gsi->output_prim == MESA_PRIM_TRIANGLE_STRIP &&
+                        index_count > 2
+                     ? (index_count - 2) * 3
+                     : index_count;
+      run_capacity = count_ok ? MIN2(out_count, PANLIB_VP_MAX_RUNS) : 0;
+      in_indices = arena + PANVK_GPU_PRERAST_GS_INDEX_OFFSET;
+      records = arena + PANVK_GPU_PRERAST_GS_RECORD_OFFSET;
+      outputs = gsi->outputs_written;
+      record_stride = gsi->record_stride;
+      prim = gsi->output_prim;
+      per_instance = false;
+   } else {
+      const struct panvk_gpu_prerast_io *io = &vps->gpu_prerast.io;
+
+      index_count = panvk_gpu_prerast_record_capacity(io->record_stride);
+      uint64_t total = index_count;
+      if (!src->indirect.buffer_dev_addr)
+         total = MIN2(total,
+                      (uint64_t)src->vertex.count * src->instance.count);
+      const uint32_t mult =
+         src->prim == MESA_PRIM_LINE_STRIP                 ? 2
+         : (src->prim == MESA_PRIM_TRIANGLE_STRIP ||
+            src->prim == MESA_PRIM_TRIANGLE_FAN)           ? 3
+                                                           : 1;
+      const uint32_t vpp = src->prim == MESA_PRIM_POINTS ? 1
+                           : (src->prim == MESA_PRIM_LINES ||
+                              src->prim == MESA_PRIM_LINE_STRIP)
+                              ? 2
+                              : 3;
+      count_ok = index_count && total && total * mult <= UINT32_MAX;
+      out_count = count_ok ? total * mult : 0;
+      run_capacity =
+         count_ok ? MIN2(DIV_ROUND_UP(out_count, vpp), PANLIB_VP_MAX_RUNS) : 0;
+      in_indices = arena + PANVK_GPU_PRERAST_INDEX_OFFSET;
+      records = arena + PANVK_GPU_PRERAST_RECORD_OFFSET;
+      outputs = io->outputs_written;
+      record_stride = io->record_stride;
+      prim = src->prim;
+      per_instance = true;
+   }
+
+   uint64_t run_bytes = 0, index_bytes = 0;
+   if (!count_ok || index_count > PANLIB_VP_MAX_INPUT_INDICES ||
+       out_count > PANLIB_VP_MAX_OUT_INDICES ||
+       !panlib_vp_run_bytes(run_capacity, &run_bytes) ||
+       !panvk_gpu_prerast_checked_size(out_count, sizeof(uint32_t), 4,
+                                       &index_bytes)) {
+      mesa_loge_once("panvk: viewport run list does not fit, draw discarded");
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      return;
+   }
+
+   /* One draw when no viewport's depth clamp differs from viewport 0's. */
+   float z0_min, z0_max;
+   bool merged = true;
+   v9_viewport_depth_range(cmdbuf, 0, &z0_min, &z0_max);
+   for (uint32_t v = 1; v < vp_count; v++) {
+      float lo, hi;
+      v9_viewport_depth_range(cmdbuf, v, &lo, &hi);
+      merged &= lo == z0_min && hi == z0_max;
+   }
+
+   struct pan_ptr runs = panvk_cmd_alloc_dev_mem(cmdbuf, desc, run_bytes, 16);
+   struct pan_ptr out = panvk_cmd_alloc_dev_mem(cmdbuf, desc, index_bytes, 16);
+   struct pan_ptr part = {0};
+   if (!merged)
+      part = panvk_cmd_alloc_dev_mem(cmdbuf, desc, index_bytes, 16);
+   struct pan_ptr draws = panvk_cmd_alloc_dev_mem(
+      cmdbuf, desc, PANLIB_VP_MAX_VIEWPORTS * 5 * sizeof(uint32_t), 16);
+   if (!runs.gpu || !out.gpu || (!merged && !part.gpu) || !draws.gpu) {
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      return;
+   }
+
+   const struct panlib_vp_runs_launch_args args = {
+      .in_indices = in_indices,
+      .records = records,
+      .out_indices = out.gpu,
+      .header = runs.gpu,
+      .outputs_written = outputs,
+      .counts = counts,
+      .record_stride = record_stride,
+      .viewport_count = vp_count,
+      .prim = prim,
+      .provoking_last = cmdbuf->vk.dynamic_graphics_state.rs.provoking_vertex ==
+                        VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT,
+      .index_bound = index_count,
+      .index_capacity = out_count,
+      .run_capacity = run_capacity,
+      .per_instance = per_instance,
+      /* A VS has no PrimitiveID output (a TES has one): give the FS one that
+       * does not restart with each draw. */
+      .pack_prim_id = per_instance && fs && fs->info.fs.reads_primitive_id &&
+                      !(outputs & VARYING_BIT_PRIMITIVE_ID),
+      .prim_base = src->gpu_prerast_prim_base,
+   };
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+   panlib_vp_runs_launch_struct(&ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER,
+                                args);
+   panlib_v9_vp_partition(&ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER,
+                          runs.gpu, out.gpu, merged ? 0 : part.gpu, draws.gpu,
+                          vp_count, merged);
+
+   struct panvk_draw_info generated = *src;
+   generated.prim = prim == MESA_PRIM_POINTS ? MESA_PRIM_POINTS
+                    : (prim == MESA_PRIM_LINE_STRIP || prim == MESA_PRIM_LINES)
+                       ? MESA_PRIM_LINES
+                       : MESA_PRIM_TRIANGLES;
+   generated.index.buffer_dev_addr = merged ? out.gpu : part.gpu;
+   generated.index.buffer_size = index_bytes;
+   generated.index.index_size = 4;
+   generated.index.offset = 0;
+   generated.index.restart_enable = false;
+   generated.vertex.base = 0;
+   generated.vertex.count = 1;
+   generated.instance.base = 0;
+   generated.instance.count = 1;
+   generated.indirect.count_buffer_dev_addr = 0;
+   generated.indirect.draw_index = 0;
+   generated.gpu_prerast_generated = true;
+
+   for (uint32_t v = 0; v < (merged ? 1 : vp_count); v++) {
+      cmdbuf->state.gfx.sysvals.gpu_prerast_records = records;
+      generated.indirect.buffer_dev_addr =
+         draws.gpu + v * 5 * sizeof(uint32_t);
+      generated.viewport_clamp = merged ? 0 : v + 1;
+      gfx_state_set_dirty(cmdbuf, VS);
+      gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+      v9_cmd_draw_layer(cmdbuf, &generated);
+   }
+   gfx_state_set_dirty(cmdbuf, VS);
+   gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+}
+
 /* Lowers one draw that fits the arena (direct) or is dropped when it does
  * not (indirect, see panlib_v9_prerast_indirect()). */
 static void
@@ -3059,7 +3277,16 @@ v9_prerast_draw_one(struct panvk_cmd_buffer *cmdbuf,
       v9_prerast_xfb(cmdbuf, src, arena, has_gs ? gs.params : vs.params);
 
    /* Capture-only draws (rasterizer discard) have nothing to tile. */
-   if (!cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable)
+   if (cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable)
+      return;
+
+   if (v9_multi_viewport(cmdbuf))
+      v9_prerast_draw_viewports(
+         cmdbuf, src, arena,
+         has_gs ? gs.draw
+                : vs.params + offsetof(struct panvk_gpu_prerast_params,
+                                       vertex_count));
+   else
       v9_prerast_draw_generated(cmdbuf, src, arena, gen_draw);
 }
 
