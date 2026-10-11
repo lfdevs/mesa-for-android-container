@@ -561,6 +561,10 @@ struct panvk_draw_info {
 #if PAN_ARCH <= 9
    uint32_t layer_id;
 #endif
+#if PAN_ARCH == 9
+   /* GPU-side gpu_prerast_prim_base (a tessellation output range), or 0. */
+   uint64_t gpu_prerast_prim_base_addr;
+#endif
 };
 
 #define panvk_draw_info_index(__cmdbuf, __offset) {                            \

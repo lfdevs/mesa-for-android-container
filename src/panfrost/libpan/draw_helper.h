@@ -65,6 +65,9 @@ struct panlib_v9_prerast_patch {
    uint64_t gs_counts;
    /* VkDrawIndexedIndirectCommand of the generated draw (VS only). */
    uint64_t gen_draw;
+   /* {vertex, instance} start of a tessellation chunk, copied to
+    * panvk_gpu_prerast_params::chunk_vertex/_instance, or 0. */
+   uint64_t chunk;
    uint32_t indexed;
    uint32_t draw_index;
    uint32_t capacity;

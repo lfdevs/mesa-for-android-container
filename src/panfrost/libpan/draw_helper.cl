@@ -1675,6 +1675,11 @@ panlib_v9_prerast_indirect(constant struct panlib_v9_prerast_patch *a)
    counts[1] = inst;
    counts[2] = first_instance;
    counts[5] = first_index;
+   if (a->chunk) {
+      global uint32_t *chunk = (global uint32_t *)a->chunk;
+      counts[8] = chunk[0];
+      counts[9] = chunk[1];
+   }
    *(global uint32_t *)a->verts_per_instance = n;
 
    v9_patch_compute_job((global uint8_t *)a->vs_job, null_job, n, inst, 1);
@@ -1713,5 +1718,20 @@ panlib_v9_prerast_indirect(constant struct panlib_v9_prerast_patch *a)
       global int32_t *offset = (global int32_t *)(attribs + i * 32 + 8);
       *offset = (int32_t)(ii[0] + (first_instance / ii[2]) * ii[1]);
    }
+}
+
+/* Sizes a COMPUTE job from the {x, y, z} workgroup counts an earlier job
+ * wrote, a NULL job when one is 0: the JM form of an indirect dispatch. */
+KERNEL(1)
+panlib_v9_compute_job_grid(global uint8_t *job, constant uint32_t *grid)
+{
+   v9_patch_compute_job(job, !grid[0] || !grid[1] || !grid[2], grid[0],
+                        grid[1], grid[2]);
+}
+
+KERNEL(1)
+panlib_v9_copy32(global uint32_t *dst, constant uint32_t *src)
+{
+   *dst = *src;
 }
 #endif
