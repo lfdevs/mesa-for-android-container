@@ -2335,6 +2335,16 @@ v9_emit_malloc_vertex_job(struct panvk_cmd_buffer *cmdbuf,
          cfg.index_type = MALI_INDEX_TYPE_NONE;
       cfg.primitive_restart = info->index.restart_enable;
       cfg.secondary_shader = secondary_shader;
+      /* gl_PrimitiveID (Noysz 0067, CSF): the HW primitive index for the
+       * FS, overridden by the value the raster VS writes (GS, TES or
+       * viewport passthrough). A written ID needs the override even when
+       * the FS does not read it: without it the G57 drops every primitive
+       * whose ID is not 0 (TES viewport-select draws of 2+ patches). */
+      const bool writes_prim_id =
+         (vs->info.outputs_written & VARYING_BIT_PRIMITIVE_ID) != 0;
+      cfg.primitive_index_enable =
+         writes_prim_id || (fs && fs->info.fs.reads_primitive_id);
+      cfg.primitive_index_override = writes_prim_id;
    }
    pan_section_pack(job.cpu, MALLOC_VERTEX_JOB, INSTANCE_COUNT, cfg) {
       cfg.count = info->instance.count;
