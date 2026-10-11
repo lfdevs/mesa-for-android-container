@@ -21,6 +21,11 @@
 #include "panvk_meta.h"
 #include "panvk_shader.h"
 
+#if PAN_ARCH == 9
+#include "util/u_debug.h"
+DEBUG_GET_ONCE_OPTION(v9_rt128, "PANVK_V9_RT128", NULL)
+#endif
+
 struct panvk_blend_shader_key {
    enum panvk_meta_object_key_type type;
    struct pan_blend_shader_key info;
@@ -182,6 +187,18 @@ emit_blend_desc(const struct pan_blend_state *state, uint8_t rt_idx,
             cfg.internal.fixed_function.conversion.memory_format &= ~0xff;
             cfg.internal.fixed_function.conversion.memory_format |=
                MALI_RGB_COMPONENT_ORDER_RGBA;
+         }
+#endif
+
+#if PAN_ARCH == 9
+         /* Bisect knob for the v9 bc_decode blit into RGBA32F
+          * (worklogs/v9-jm/PROGRESS.md): 128-bit RTs only. */
+         if (util_format_get_blocksizebits(rt->format) == 128) {
+            const char *dbg = debug_get_option_v9_rt128();
+            if (dbg && strstr(dbg, "noround"))
+               cfg.round_to_fb_precision = false;
+            if (dbg && strstr(dbg, "raw"))
+               cfg.internal.fixed_function.conversion.raw = true;
          }
 #endif
 

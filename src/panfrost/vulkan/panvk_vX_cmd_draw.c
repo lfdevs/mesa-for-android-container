@@ -17,6 +17,11 @@
 #include "vk_android.h"
 #include "vk_render_pass.h"
 
+#if PAN_ARCH == 9
+#include "util/u_debug.h"
+DEBUG_GET_ONCE_OPTION(v9_rt128, "PANVK_V9_RT128", NULL)
+#endif
+
 static enum pan_fb_load_op
 get_att_fb_load_op(const VkRenderingAttachmentInfo *att)
 {
@@ -647,6 +652,13 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
       .tile_z_budget_B =
          pan_query_optimal_z_tib_size(PAN_ARCH, phys_dev->model),
    };
+#if PAN_ARCH == 9
+   /* Bisect knob for the bc_decode RGBA32F blit: an eighth of the colour
+    * budget (64-pixel tiles at 16 B/px). */
+   const char *rt128_dbg = debug_get_option_v9_rt128();
+   if (rt128_dbg && strstr(rt128_dbg, "tile"))
+      render->fb.layout.tile_rt_budget_B /= 8;
+#endif
    /* In case ms2ss is enabled, use the provided sample count.
     * All attachments need to have sample count == 1 or the provided value.
     * But, if all attachments have 1, we would end up choosing the wrong value
