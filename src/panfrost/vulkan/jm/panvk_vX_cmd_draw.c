@@ -3553,6 +3553,13 @@ v9_prerast_chunked(struct panvk_cmd_buffer *cmdbuf,
    if (!v9_prerast_reserve_jobs(cmdbuf, 2))
       return;
 
+   /* The cut happens on the GPU, the CPU cannot tell when: say it once. */
+   mesa_logw_once("panvk: v9 indirect gpu_prerast draws (GS, transform "
+                  "feedback, polygon mode, viewport select, VS stores) are "
+                  "drawn in at most %u chunks of %u vertices; the rest of a "
+                  "larger draw is dropped",
+                  V9_PRERAST_INDIRECT_CHUNKS, max_verts);
+
    struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
    panlib_chunk_setup(&ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER, cd.gpu,
                       draw->indirect.buffer_dev_addr,
@@ -3792,6 +3799,11 @@ v9_tess_draw(struct panvk_cmd_buffer *cmdbuf,
                   : (uint64_t)draw->instance.count *
                        DIV_ROUND_UP((uint64_t)ppi, max_patches);
    }
+   if (indirect)
+      mesa_logw_once("panvk: v9 indirect tessellated draws are drawn in at "
+                     "most %u chunks of %u patches; patches past them are "
+                     "dropped",
+                     V9_TESS_INDIRECT_CHUNKS, max_patches);
    uint64_t iters = chunks * iters_per_chunk;
    if (iters > V9_TESS_MAX_ITERATIONS) {
       mesa_loge_once("panvk: v9 tessellated draw needs %" PRIu64
