@@ -2367,13 +2367,45 @@ v9_emit_malloc_vertex_job(struct panvk_cmd_buffer *cmdbuf,
                   shader_remapped_sysval_offset(
                      vs, sysval_offset(graphics, vs.base_instance));
 
+      /* Instance-rate attributes with a divisor: the patch kernel folds the
+       * GPU-side firstInstance into their Offset (v9_emit_vs_attrib only
+       * saw the placeholder 0). */
+      const struct vk_dynamic_graphics_state *idyns =
+         &cmdbuf->vk.dynamic_graphics_state;
+      const struct vk_vertex_input_state *ivi = idyns->vi;
+      uint32_t inst_info[MAX_VS_ATTRIBS][3] = {0};
+      uint32_t inst_mask = 0;
+      uint64_t inst_info_gpu = 0, vs_attribs = 0;
+      u_foreach_bit(a, ivi->attributes_valid) {
+         const uint32_t b = ivi->attributes[a].binding;
+         if (ivi->bindings[b].input_rate != VK_VERTEX_INPUT_RATE_INSTANCE ||
+             !ivi->bindings[b].divisor)
+            continue;
+         inst_mask |= BITFIELD_BIT(a);
+         inst_info[a][0] = ivi->attributes[a].offset;
+         inst_info[a][1] = idyns->vi_binding_strides[b];
+         inst_info[a][2] = ivi->bindings[b].divisor;
+      }
+      if (inst_mask) {
+         struct pan_ptr ii =
+            panvk_cmd_alloc_dev_mem(cmdbuf, desc, sizeof(inst_info), 4);
+         if (!ii.gpu)
+            return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+         memcpy(ii.cpu, inst_info, sizeof(inst_info));
+         inst_info_gpu = ii.gpu;
+         vs_attribs = cmdbuf->state.gfx.vs.desc.driver_set.dev_addr;
+      }
+
       struct panvk_precomp_ctx pctx = panvk_per_arch(precomp_cs)(cmdbuf);
       panlib_v9_draw_indirect_patch(&pctx, panlib_1d(1),
                                     (enum panlib_barrier)(PANLIB_BARRIER_JM_BARRIER |
                                     PANLIB_BARRIER_JM_SUPPRESS_PREFETCH),
                                     info->indirect.buffer_dev_addr, job.gpu,
                                     info->index.buffer_dev_addr, fv_ptr, bi_ptr,
-                                    info->index.index_size);
+                                    info->index.index_size,
+                                    info->indirect.count_buffer_dev_addr,
+                                    info->indirect.draw_index, vs_attribs,
+                                    inst_mask, inst_info_gpu);
       indirect_dep = batch->vtc_jc.job_index;
    }
    static int draw_barrier = -1;
@@ -2407,6 +2439,13 @@ v9_cmd_draw_layer(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
 
    if (!cmdbuf->cur_batch)
       panvk_per_arch(cmd_open_batch)(cmdbuf);
+
+   /* There are only 16 bits in the job header for the job index, and a draw
+    * takes up to two jobs (indirect patch + MALLOC_VERTEX). */
+   if (cmdbuf->cur_batch->vtc_jc.job_index + 4 >= UINT16_MAX) {
+      panvk_per_arch(cmd_close_batch)(cmdbuf);
+      panvk_per_arch(cmd_open_batch)(cmdbuf);
+   }
 
    if (cmdbuf->state.gfx.render.first_provoking_vertex == U_TRISTATE_UNSET) {
       cmdbuf->state.gfx.render.first_provoking_vertex = u_tristate_make(
@@ -2560,6 +2599,41 @@ panvk_per_arch(CmdDrawIndexed)(VkCommandBuffer commandBuffer,
    v9_cmd_draw(cmdbuf, &info);
 }
 
+/* JM has no multi-draw descriptor: drawCount (or maxDrawCount) is unrolled
+ * into one indirect patch + MALLOC_VERTEX pair per draw, each with its own
+ * push-uniform block (the patch writes sysvals in it) and gl_DrawID. For the
+ * *Count variants the patch turns draws at or past the GPU-side count into
+ * NULL jobs. */
+static void
+v9_draw_indirect_unrolled(struct panvk_cmd_buffer *cmdbuf,
+                          struct panvk_buffer *buffer, VkDeviceSize offset,
+                          uint32_t draw_count, uint32_t stride, bool indexed,
+                          uint64_t count_buffer_dev_addr)
+{
+   if (indexed &&
+       (cmdbuf->state.gfx.ib.index_size == 0 || cmdbuf->state.gfx.ib.size == 0))
+      return;
+
+   for (uint32_t i = 0; i < draw_count; i++) {
+      struct panvk_draw_info info = {
+         .vertex.count = 1,
+         .instance.count = 1,
+         .indirect.buffer_dev_addr =
+            panvk_buffer_gpu_ptr(buffer, offset + (uint64_t)i * stride),
+         .indirect.count_buffer_dev_addr = count_buffer_dev_addr,
+         .indirect.draw_count = 1,
+         .indirect.draw_index = i,
+         .prim = panvk_get_client_prim(cmdbuf),
+      };
+      if (indexed)
+         info.index = (__typeof__(info.index))panvk_draw_info_index(cmdbuf, 0);
+
+      gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+      v9_cmd_draw(cmdbuf, &info);
+      gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+   }
+}
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdDrawIndirect)(VkCommandBuffer commandBuffer, VkBuffer _buffer,
                                 VkDeviceSize offset, uint32_t drawCount,
@@ -2568,24 +2642,8 @@ panvk_per_arch(CmdDrawIndirect)(VkCommandBuffer commandBuffer, VkBuffer _buffer,
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
    VK_FROM_HANDLE(panvk_buffer, buffer, _buffer);
 
-   for (uint32_t i = 0; i < drawCount; i++) {
-      struct panvk_draw_info info = {
-         .vertex.count = 1,
-         .instance.count = 1,
-         .indirect.buffer_dev_addr =
-            panvk_buffer_gpu_ptr(buffer, offset + (uint64_t)i * stride),
-         .indirect.draw_count = 1,
-         .prim = panvk_get_client_prim(cmdbuf),
-      };
-      static int logn = 0;
-      if (logn++ < 5)
-         (void)0;
-      /* The helper patches sysvals in the push-uniform block: make sure this
-       * draw gets its own block and the next draw doesn't reuse it. */
-      gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
-      v9_cmd_draw(cmdbuf, &info);
-      gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
-   }
+   v9_draw_indirect_unrolled(cmdbuf, buffer, offset, drawCount, stride, false,
+                             0);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -2596,26 +2654,42 @@ panvk_per_arch(CmdDrawIndexedIndirect)(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
    VK_FROM_HANDLE(panvk_buffer, buffer, _buffer);
 
-   if (cmdbuf->state.gfx.ib.index_size == 0 || cmdbuf->state.gfx.ib.size == 0)
-      return;
+   v9_draw_indirect_unrolled(cmdbuf, buffer, offset, drawCount, stride, true,
+                             0);
+}
 
-   for (uint32_t i = 0; i < drawCount; i++) {
-      struct panvk_draw_info info = {
-         .index = panvk_draw_info_index(cmdbuf, 0),
-         .vertex.count = 1,
-         .instance.count = 1,
-         .indirect.buffer_dev_addr =
-            panvk_buffer_gpu_ptr(buffer, offset + (uint64_t)i * stride),
-         .indirect.draw_count = 1,
-         .prim = panvk_get_client_prim(cmdbuf),
-      };
-      static int logn = 0;
-      if (logn++ < 5)
-         (void)0;
-      gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
-      v9_cmd_draw(cmdbuf, &info);
-      gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
-   }
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdDrawIndirectCount)(VkCommandBuffer commandBuffer,
+                                     VkBuffer _buffer, VkDeviceSize offset,
+                                     VkBuffer countBuffer,
+                                     VkDeviceSize countBufferOffset,
+                                     uint32_t maxDrawCount, uint32_t stride)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   VK_FROM_HANDLE(panvk_buffer, buffer, _buffer);
+   VK_FROM_HANDLE(panvk_buffer, count_buffer, countBuffer);
+
+   v9_draw_indirect_unrolled(
+      cmdbuf, buffer, offset, maxDrawCount, stride, false,
+      panvk_buffer_gpu_ptr(count_buffer, countBufferOffset));
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdDrawIndexedIndirectCount)(VkCommandBuffer commandBuffer,
+                                            VkBuffer _buffer,
+                                            VkDeviceSize offset,
+                                            VkBuffer countBuffer,
+                                            VkDeviceSize countBufferOffset,
+                                            uint32_t maxDrawCount,
+                                            uint32_t stride)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   VK_FROM_HANDLE(panvk_buffer, buffer, _buffer);
+   VK_FROM_HANDLE(panvk_buffer, count_buffer, countBuffer);
+
+   v9_draw_indirect_unrolled(
+      cmdbuf, buffer, offset, maxDrawCount, stride, true,
+      panvk_buffer_gpu_ptr(count_buffer, countBufferOffset));
 }
 
 #endif /* PAN_ARCH != 9 */

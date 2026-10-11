@@ -156,11 +156,17 @@ panvk_lower_sysvals(nir_builder *b, nir_instr *instr, void *data)
       if (PAN_ARCH >= 10)
          return false;
 
+      assert(b->shader->info.stage == MESA_SHADER_VERTEX);
+#if PAN_ARCH == 9
+      /* v9 JM unrolls multi-draws, one job per draw, with the index in a
+       * sysval (cmd_prepare_draw_sysvals). */
+      val = load_sysval(b, graphics, bit_size, draw_id);
+#else
       /* TODO: We only implement single-draw direct and indirect draws, so this
        * is sufficient. We'll revisit this when we get around to implementing
        * multidraw. */
-      assert(b->shader->info.stage == MESA_SHADER_VERTEX);
       val = nir_imm_int(b, 0);
+#endif
       break;
 
    case nir_intrinsic_load_printf_buffer_address:

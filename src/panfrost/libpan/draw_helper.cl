@@ -1511,7 +1511,11 @@ panlib_v9_draw_indirect_patch(global uint32_t *cmd, global uint8_t *job,
                               uint64_t index_base,
                               global uint32_t *first_vertex_sysval,
                               global uint32_t *base_instance_sysval,
-                              uint32_t index_size)
+                              uint32_t index_size,
+                              global uint32_t *draw_count_buf,
+                              uint32_t draw_index, global uint8_t *vs_attribs,
+                              uint32_t inst_attr_mask,
+                              global uint32_t *inst_attr_info)
 {
    const bool indexed = index_size != 0;
    const uint32_t count = cmd[0];
@@ -1519,7 +1523,10 @@ panlib_v9_draw_indirect_patch(global uint32_t *cmd, global uint8_t *job,
    const uint32_t first_index = indexed ? cmd[2] : 0;
    const int32_t vertex_base = indexed ? (int32_t)cmd[3] : (int32_t)cmd[2];
    const uint32_t first_instance = indexed ? cmd[4] : cmd[3];
-   const bool null_job = count == 0 || instance_count == 0;
+   /* vkCmdDraw*IndirectCount: draws at or past the GPU-side count become
+    * NULL jobs. draw_count_buf is NULL for vkCmdDraw*Indirect. */
+   const bool null_job = count == 0 || instance_count == 0 ||
+                         (draw_count_buf && draw_index >= *draw_count_buf);
 
    global struct mali_job_header_packed *hdr =
       (global struct mali_job_header_packed *)job;
@@ -1564,5 +1571,18 @@ panlib_v9_draw_indirect_patch(global uint32_t *cmd, global uint8_t *job,
       *first_vertex_sysval = vertex_base;
    if (base_instance_sysval)
       *base_instance_sysval = first_instance;
+
+   /* Valhall does not add firstInstance to instance-rate attribute fetches:
+    * the CPU folds it into the Attribute Offset (word 2) for direct draws.
+    * Here inst_attr_info holds {offset, stride, divisor} per attribute and
+    * the Offset is rewritten (not incremented) so a resubmitted command
+    * buffer gets the same value. */
+   for (uint32_t a = 0; a < 32; a++) {
+      if (!(inst_attr_mask & (1u << a)))
+         continue;
+      global uint32_t *ii = inst_attr_info + a * 3;
+      global int32_t *offset = (global int32_t *)(vs_attribs + a * 32 + 8);
+      *offset = (int32_t)(ii[0] + (first_instance / ii[2]) * ii[1]);
+   }
 }
 #endif

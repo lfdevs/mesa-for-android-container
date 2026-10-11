@@ -63,7 +63,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .KHR_depth_clamp_zero_one = false,
       .KHR_depth_stencil_resolve = true,
       .KHR_device_group = true,
-      .KHR_draw_indirect_count = PAN_ARCH >= 10,
+      .KHR_draw_indirect_count = PAN_ARCH >= 9,
       .KHR_driver_properties = true,
       .KHR_dynamic_rendering = true,
       .KHR_dynamic_rendering_local_read = true,
@@ -329,7 +329,7 @@ panvk_per_arch(get_physical_device_features)(
       .sampleRateShading = true,
       .dualSrcBlend = true,
       .logicOp = true,
-      .multiDrawIndirect = PAN_ARCH >= 10,
+      .multiDrawIndirect = PAN_ARCH >= 9,
       .drawIndirectFirstInstance = true,
       .depthClamp = true,
       .depthBiasClamp = true,
@@ -400,7 +400,7 @@ panvk_per_arch(get_physical_device_features)(
 
       /* Vulkan 1.2 */
       .samplerMirrorClampToEdge = true,
-      .drawIndirectCount = PAN_ARCH >= 10,
+      .drawIndirectCount = PAN_ARCH >= 9,
       .storageBuffer8BitAccess = true,
       .uniformAndStorageBuffer8BitAccess = true,
       .storagePushConstant8 = true,
@@ -1015,7 +1015,11 @@ panvk_per_arch(get_physical_device_properties)(
       .mipmapPrecisionBits = 8,
       /* Software limit. */
       .maxDrawIndexedIndexValue = UINT32_MAX,
-      .maxDrawIndirectCount = PAN_ARCH >= 10 ? UINT32_MAX : 1,
+      /* v9 JM unrolls multi-draws on the CPU, one job per draw: keep the
+       * multiDrawIndirect minimum. */
+      .maxDrawIndirectCount = PAN_ARCH >= 10  ? UINT32_MAX
+                              : PAN_ARCH == 9 ? UINT16_MAX
+                                              : 1,
       .maxSamplerLodBias = (float)INT16_MAX / 256.0f,
       .maxSamplerAnisotropy = 16,
       .maxViewports = PAN_ARCH >= 10 ? 16 : 1,

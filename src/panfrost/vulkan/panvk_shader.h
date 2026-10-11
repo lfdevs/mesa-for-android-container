@@ -192,6 +192,11 @@ struct panvk_graphics_sysvals {
    int32_t layer_id;
 #endif
 
+#if PAN_ARCH == 9
+   /* gl_DrawID: v9 JM unrolls multi-draws into one job per draw. */
+   int32_t draw_id;
+#endif
+
 #if PAN_ARCH < 9
    struct {
       aligned_u64 sets[PANVK_DESC_TABLE_GFX_COUNT];

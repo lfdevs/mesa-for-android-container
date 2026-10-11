@@ -952,6 +952,9 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
 #if PAN_ARCH <= 9
    set_gfx_sysval(cmdbuf, dirty_sysvals, layer_id, info->layer_id);
 #endif
+#if PAN_ARCH == 9
+   set_gfx_sysval(cmdbuf, dirty_sysvals, draw_id, info->indirect.draw_index);
+#endif
 
    if (dyn_gfx_state_dirty(cmdbuf, CB_BLEND_CONSTANTS)) {
       for (unsigned i = 0; i < ARRAY_SIZE(cb->blend_constants); i++) {
