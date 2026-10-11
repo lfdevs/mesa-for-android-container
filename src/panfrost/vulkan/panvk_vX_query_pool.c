@@ -67,6 +67,8 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       reports_per_query = PANVK_SUBQUEUE_COUNT + 1;
       break;
    }
+#endif
+#if PAN_ARCH >= 9
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
       reports_per_query = 1;
       break;
@@ -313,6 +315,8 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
                                                 pool->reports_per_query);
             break;
          }
+#endif
+#if PAN_ARCH >= 9
          case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
             if (write_results)
                cpu_write_query_result(dst, 0, flags, src[0].value);

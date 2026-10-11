@@ -91,9 +91,13 @@ panlib_copy_ts_query_result(uint64_t pool_addr, global uint32_t *available_addr,
       vk_write_query(dst, 1, flags, available);
 }
 
+#endif
+
+#if PAN_ARCH >= 9
 /* Each report holds stat_count command stream counters followed by
  * stat_count shader/hardware counters; the result is their sum. The
- * availability objects are panvk_cs_sync32, two dwords each. */
+ * availability objects are panvk_cs_sync32, two dwords each, on v10+ and
+ * one dword on v9. */
 KERNEL(1)
 panlib_copy_pstats_query_result(uint64_t pool_addr,
                                 global uint32_t *available_addr,
@@ -109,7 +113,7 @@ panlib_copy_pstats_query_result(uint64_t pool_addr,
    uintptr_t dst = dst_addr + ((uint64_t)i * dst_stride);
    global uint64_t *report =
       (global uint64_t *)(pool_addr + ((uint64_t)i * query_stride));
-   bool available = available_addr[i * 2] != 0;
+   bool available = available_addr[PAN_ARCH >= 10 ? i * 2 : i] != 0;
 
    if (available || (flags & VK_QUERY_RESULT_PARTIAL_BIT)) {
       for (uint32_t s = 0; s < stat_count; s++)
@@ -157,6 +161,9 @@ panlib_copy_query_result(uint64_t pool_addr, global uint32_t *available_addr,
    if ((flags & VK_QUERY_RESULT_PARTIAL_BIT) || available) {
       switch (query_type) {
       case VK_QUERY_TYPE_OCCLUSION:
+#if PAN_ARCH == 9
+      case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+#endif
          write_occlusion_query_result(dst, 0, flags, report_addr, report_count);
          break;
       default:

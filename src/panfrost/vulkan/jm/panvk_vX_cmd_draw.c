@@ -3876,6 +3876,110 @@ v9_cmd_draw_layer(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
       gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
 }
 
+/* Pipeline statistics and primitives generated queries of one API draw. JM
+ * has no command stream to add with, so a panlib_update_pstats_draw()
+ * workgroup counts every draw on the GPU, direct ones from a
+ * VkDrawIndexedIndirectCommand made here. Same counters as CSF
+ * cmd_pstats_draw(): the GS and tessellation kernels count their own output
+ * (clipping and primitives generated).
+ */
+static void
+v9_count_draw_queries(struct panvk_cmd_buffer *cmdbuf,
+                      const struct panvk_draw_info *draw)
+{
+#define PSTAT(name) VK_QUERY_PIPELINE_STATISTIC_##name##_BIT
+   const struct panvk_pstats_query_state *q = &cmdbuf->state.gfx.pstats_query;
+   const bool kernels_count = cmdbuf->state.gfx.gs.shader ||
+                              cmdbuf->state.gfx.tes.shader;
+   const uint64_t prims_generated =
+      kernels_count ? 0 : cmdbuf->state.gfx.prims_generated_query.ptr;
+   uint32_t counted = 0;
+
+   if (q->report) {
+      counted = q->mask & (PSTAT(INPUT_ASSEMBLY_VERTICES) |
+                           PSTAT(INPUT_ASSEMBLY_PRIMITIVES) |
+                           PSTAT(VERTEX_SHADER_INVOCATIONS));
+      if (!kernels_count)
+         counted |= q->mask & (PSTAT(CLIPPING_INVOCATIONS) |
+                               PSTAT(CLIPPING_PRIMITIVES));
+   }
+
+   if (!counted && !prims_generated)
+      return;
+
+   if (!v9_prerast_reserve_jobs(cmdbuf, 4))
+      return;
+
+   const uint32_t index_size = draw->index.index_size;
+   uint64_t cmd = draw->indirect.buffer_dev_addr;
+   uint32_t cmd_stride = draw->indirect.stride;
+   uint32_t draw_count = draw->indirect.draw_count;
+
+   if (!cmd) {
+      struct pan_ptr ptr = panvk_cmd_alloc_dev_mem(
+         cmdbuf, desc, sizeof(VkDrawIndexedIndirectCommand), 16);
+      if (!ptr.gpu)
+         return;
+
+      /* JM index offsets are in bytes. */
+      *(VkDrawIndexedIndirectCommand *)ptr.cpu = (VkDrawIndexedIndirectCommand){
+         .indexCount = draw->vertex.count,
+         .instanceCount = draw->instance.count,
+         .firstIndex = index_size ? draw->index.offset / index_size : 0,
+         .vertexOffset = draw->vertex.base,
+         .firstInstance = draw->instance.base,
+      };
+      cmd = ptr.gpu;
+      cmd_stride = 0;
+      draw_count = 1;
+   }
+
+   const uint32_t view_mask = cmdbuf->state.gfx.render.view_mask;
+   struct panlib_update_pstats_draw_args args = {
+      .cmd = cmd,
+      .cmd_stride = cmd_stride,
+      .count_buffer = draw->indirect.count_buffer_dev_addr,
+      .draw_index = draw->indirect.draw_index,
+      .index_buffer = cmdbuf->state.gfx.ib.dev_addr,
+      .index_buffer_size_el =
+         index_size ? cmdbuf->state.gfx.ib.size / index_size : 0,
+      .index_size_B = index_size,
+      .restart = index_size && draw->index.restart_enable,
+      .prim = draw->prim,
+      .view_count = view_mask ? util_bitcount(view_mask) : 1,
+      .patch_size = cmdbuf->vk.dynamic_graphics_state.ts.patch_control_points,
+   };
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+   if (counted) {
+      static const uint32_t order[] = {
+         PSTAT(INPUT_ASSEMBLY_VERTICES), PSTAT(INPUT_ASSEMBLY_PRIMITIVES),
+         PSTAT(VERTEX_SHADER_INVOCATIONS), PSTAT(CLIPPING_INVOCATIONS),
+         PSTAT(CLIPPING_PRIMITIVES),
+      };
+
+      args.stats = q->report + util_bitcount(q->mask) * sizeof(uint64_t);
+      args.slots = 0;
+      for (uint32_t i = 0; i < ARRAY_SIZE(order); i++) {
+         uint32_t slot = (counted & order[i])
+                            ? util_bitcount(q->mask & (order[i] - 1))
+                            : 0xf;
+         args.slots |= slot << (i * 4);
+      }
+      panlib_update_pstats_draw_struct(&ctx, panlib_1d(draw_count),
+                                       PANLIB_BARRIER_JM_BARRIER, args);
+   }
+
+   /* The primitives generated query is the IA primitives counter alone. */
+   if (prims_generated) {
+      args.stats = prims_generated;
+      args.slots = 0xfff0f;
+      panlib_update_pstats_draw_struct(&ctx, panlib_1d(draw_count),
+                                       PANLIB_BARRIER_JM_BARRIER, args);
+   }
+#undef PSTAT
+}
+
 /* Multiview and layered rendering, same scheme as the Bifrost path: the draw
  * is recorded once per view (or per framebuffer layer when the VS writes
  * gl_Layer), each copy with its own tiler context and the view or layer in
@@ -3898,10 +4002,29 @@ v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
    if (!view_mask && (!vs || !vs->writes_layer))
       layer_count = 1;
 
+   /* Counted once per API draw, not per layer. */
+   if (!info->pstats_counted)
+      v9_count_draw_queries(cmdbuf, info);
+
+   /* A layered draw re-runs the GS and tessellation kernels per layer: only
+    * the first run counts into the queries. Views count, as on CSF. */
+   const bool layered = !view_mask && layer_count > 1;
+   const struct panvk_pstats_query_state pstats =
+      cmdbuf->state.gfx.pstats_query;
+   const uint64_t prims_generated =
+      cmdbuf->state.gfx.prims_generated_query.ptr;
+
    for (uint32_t i = 0; i < MAX2(layer_count, 1); i++) {
       info->layer_id = view_mask ? u_bit_scan(&view_mask) : i;
+      if (layered && i == 1) {
+         cmdbuf->state.gfx.pstats_query.report = 0;
+         cmdbuf->state.gfx.prims_generated_query.ptr = 0;
+      }
       v9_cmd_draw_layer(cmdbuf, info);
    }
+
+   cmdbuf->state.gfx.pstats_query = pstats;
+   cmdbuf->state.gfx.prims_generated_query.ptr = prims_generated;
 }
 
 VKAPI_ATTR void VKAPI_CALL

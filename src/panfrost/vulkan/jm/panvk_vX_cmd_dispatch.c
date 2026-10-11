@@ -299,6 +299,44 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
                   indirect ? MALI_JOB_TYPE_NOT_STARTED : MALI_JOB_TYPE_COMPUTE,
                   false, false, 0, copy_desc_dep, &job, false);
 
+#if PAN_ARCH == 9
+   /* Compute shader invocations of a pipeline statistics query, counted
+    * on the GPU like CSF cmd_pstats_dispatch() does for indirect ones.
+    * ponytail: vk_meta dispatches are counted too, as on CSF. */
+   const uint64_t cs_invocations = panvk_pstats_counter_addr(
+      &cmdbuf->state.gfx.pstats_query,
+      VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT, true);
+   if (cs_invocations) {
+      uint64_t cmd = info->indirect.buffer_dev_addr;
+
+      if (!cmd) {
+         struct pan_ptr ptr = panvk_cmd_alloc_dev_mem(
+            cmdbuf, desc, sizeof(VkDispatchIndirectCommand), 16);
+         if (ptr.gpu) {
+            *(VkDispatchIndirectCommand *)ptr.cpu = (VkDispatchIndirectCommand){
+               .x = info->direct.wg_count.x,
+               .y = info->direct.wg_count.y,
+               .z = info->direct.wg_count.z,
+            };
+         }
+         cmd = ptr.gpu;
+      }
+
+      if (cmd) {
+         struct panlib_update_pstats_dispatch_args args = {
+            .counter = cs_invocations,
+            .cmd = cmd,
+            .local_size = cs->cs.local_size.x * cs->cs.local_size.y *
+                          cs->cs.local_size.z,
+         };
+         struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+         panlib_update_pstats_dispatch_struct(&ctx, panlib_1d(1),
+                                              PANLIB_BARRIER_JM_BARRIER, args);
+      }
+   }
+#endif
+
    panvk_per_arch(cmd_close_batch)(cmdbuf);
    clear_dirty_after_dispatch(cmdbuf);
 }

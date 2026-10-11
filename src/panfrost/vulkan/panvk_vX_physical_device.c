@@ -209,7 +209,7 @@ panvk_per_arch(get_physical_device_extensions)(
 #endif
       .EXT_private_data = true,
       .EXT_primitive_topology_list_restart = true,
-      .EXT_primitives_generated_query = PAN_ARCH >= 10,
+      .EXT_primitives_generated_query = PAN_ARCH >= 9,
       .EXT_provoking_vertex = true,
       .EXT_queue_family_foreign = true,
       .EXT_rasterization_order_attachment_access = PAN_ARCH >= 10,
@@ -345,7 +345,7 @@ panvk_per_arch(get_physical_device_features)(
       .textureCompressionBC = has_texture_compression_bc(device) ||
                               panvk_bc_emul_enabled(device),
       .occlusionQueryPrecise = true,
-      .pipelineStatisticsQuery = PAN_ARCH >= 10,
+      .pipelineStatisticsQuery = PAN_ARCH >= 9,
       /* On v13+, the hardware isn't speculatively referencing to invalid
          indices anymore. On v9-v12, pre-rasterization stages that write
          memory run through gpu_prerast compute instead of IDVS. On by default
@@ -638,8 +638,8 @@ panvk_per_arch(get_physical_device_features)(
       .primitiveTopologyPatchListRestart = false,
 
       /* VK_EXT_primitives_generated_query */
-      .primitivesGeneratedQuery = PAN_ARCH >= 10,
-      .primitivesGeneratedQueryWithRasterizerDiscard = PAN_ARCH >= 10,
+      .primitivesGeneratedQuery = PAN_ARCH >= 9,
+      .primitivesGeneratedQueryWithRasterizerDiscard = PAN_ARCH >= 9,
       .primitivesGeneratedQueryWithNonZeroStreams = false,
 
       /* VK_EXT_provoking_vertex */
@@ -1374,8 +1374,7 @@ panvk_per_arch(get_physical_device_properties)(
       .maxTransformFeedbackStreamDataSize = 512,
       .maxTransformFeedbackBufferDataSize = 512,
       .maxTransformFeedbackBufferDataStride = 2048,
-      /* v9 JM queries are occlusion only. */
-      .transformFeedbackQueries = PAN_ARCH >= 10,
+      .transformFeedbackQueries = PAN_ARCH >= 9,
       .transformFeedbackStreamsLinesTriangles = PAN_ARCH >= 9,
       .transformFeedbackRasterizationStreamSelect =
          PAN_ARCH >= 10 || (PAN_ARCH == 9 && !PANVK_DEBUG(NO_GS)),
