@@ -1006,7 +1006,10 @@ bifrost_postprocess_nir(nir_shader *nir,
                nir_metadata_none, &robust_modes);
    }
 
-   if (gpu_arch == 10 && (inputs->robust_modes & nir_var_image))
+   /* v9 (G57) LD_TEX returns the same wrong OOB alpha as v10, and its
+    * Texture descriptor and pixel format layouts are the same. */
+   if ((gpu_arch == 9 || gpu_arch == 10) &&
+       (inputs->robust_modes & nir_var_image))
       NIR_PASS(_, nir, nir_shader_intrinsics_pass,
                bi_lower_robust_image_alpha_v10, nir_metadata_control_flow,
                NULL);

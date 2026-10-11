@@ -29,6 +29,8 @@ struct base_external_resource {
 #define BASE_JD_REQ_T                  (1u << 2)
 #define BASE_JD_REQ_CF                 (1u << 3)
 #define BASE_JD_REQ_V                  (1u << 4)
+/* Keeps the GPU timestamp counter running while the atom runs (JM). */
+#define BASE_JD_REQ_PERMON             (1u << 7)
 #define BASE_JD_REQ_EXTERNAL_RESOURCES (1u << 8)
 #define BASE_JD_REQ_ONLY_COMPUTE       (1u << 10)
 

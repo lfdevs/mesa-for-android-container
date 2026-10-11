@@ -67,6 +67,12 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       reports_per_query = PANVK_SUBQUEUE_COUNT + 1;
       break;
    }
+#elif PAN_ARCH == 9
+   case VK_QUERY_TYPE_TIMESTAMP: {
+      /* One WRITE_VALUE SYSTEM_TIMESTAMP report. */
+      reports_per_query = 1;
+      break;
+   }
 #endif
 #if PAN_ARCH >= 9
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
@@ -315,6 +321,9 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
                                                 pool->reports_per_query);
             break;
          }
+#endif
+#if PAN_ARCH == 9
+         case VK_QUERY_TYPE_TIMESTAMP:
 #endif
 #if PAN_ARCH >= 9
          case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {

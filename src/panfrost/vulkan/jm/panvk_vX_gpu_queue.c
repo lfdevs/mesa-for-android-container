@@ -102,20 +102,24 @@ note_submitted(struct panvk_gpu_queue *queue, uint64_t atom)
 #endif
 }
 
-static uint64_t
-panvk_queue_submit_batch(struct panvk_gpu_queue *queue,
-                         struct panvk_cmd_buffer *cmdbuf,
-                         struct panvk_batch *batch, struct pan_kmod_bo **bos,
-                         unsigned nr_bos, uint64_t *out_frag_atom)
+/* A timestamp must follow the fragment work of the previous batches, so such
+ * a batch never takes the PANVK_OVERLAP path. */
+static inline bool
+batch_has_timestamps(const struct panvk_batch *batch)
 {
-   struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
-   struct panvk_physical_device *phys_dev =
-      to_panvk_physical_device(dev->vk.physical);
-   uint64_t vtc_atom = 0, frag_atom = 0;
-   (void)0;
+#if PAN_ARCH == 9
+   return batch->timestamps;
+#else
+   return false;
+#endif
+}
 
-   /* Reset the batch if it's already been issued */
-   if (batch->issued) {
+/* Reset a batch that has already been issued. */
+static void
+panvk_reset_issued_batch(struct panvk_cmd_buffer *cmdbuf,
+                         struct panvk_batch *batch)
+{
+   {
       util_dynarray_foreach(&batch->jobs, void *, job)
          memset((*job), 0, 4 * 4);
 
@@ -150,13 +154,37 @@ panvk_queue_submit_batch(struct panvk_gpu_queue *queue,
       panvk_pool_flush_maps(&cmdbuf->desc_pool);
    }
 
+   batch->issued = false;
+}
+
+static uint64_t
+panvk_queue_submit_batch(struct panvk_gpu_queue *queue,
+                         struct panvk_cmd_buffer *cmdbuf,
+                         struct panvk_batch *batch, struct pan_kmod_bo **bos,
+                         unsigned nr_bos, uint64_t *out_frag_atom)
+{
+   struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
+   struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(dev->vk.physical);
+   uint64_t vtc_atom = 0, frag_atom = 0;
+   (void)0;
+
+   /* Reset the batch if it's already been issued */
+   if (batch->issued)
+      panvk_reset_issued_batch(cmdbuf, batch);
+
    /* Flush pending synchronization requests before submitting the job, to
     * make sure things are GPU-visible. */
    pan_kmod_flush_bo_map_syncs(dev->kmod.dev);
 
    if (batch->vtc_jc.first_job) {
+      uint32_t vtc_core_req = (BASE_JD_REQ_CS | BASE_JD_REQ_T | BASE_JD_REQ_V);
+#if PAN_ARCH == 9
+      /* Without PERMON kbase leaves the GPU timestamp counter stopped. */
+      if (batch->timestamps)
+         vtc_core_req |= BASE_JD_REQ_PERMON;
+#endif
          if (unlikely(!queue->warmed_up)) {
-         uint32_t vtc_core_req = (BASE_JD_REQ_CS | BASE_JD_REQ_T | BASE_JD_REQ_V);
             /* The first vertex/tiler/compute chain must be submitted too
              * (it can be a buffer upload the app relies on). Submit it
              * synchronously, the same way the first fragment job is. */
@@ -169,9 +197,9 @@ panvk_queue_submit_batch(struct panvk_gpu_queue *queue,
             vtc_atom = 0; /* already waited for */
             queue->warmed_up = true;
          } else {
-         uint32_t vtc_core_req = (BASE_JD_REQ_CS | BASE_JD_REQ_T | BASE_JD_REQ_V);
             const bool v67_ov = panvk_overlap_enabled() && batch->frag_jc.first_job &&
-                                !queue->in_dep && queue->frag_warmed_up; /* v67b */
+                                !queue->in_dep && queue->frag_warmed_up && /* v67b */
+                                !batch_has_timestamps(batch);
             const uint64_t dep0 =
                 v67_ov ? queue->half_frag_atom[batch->heap_half & 1] : /* v67b */
                 (queue->last_any_atom ? queue->last_any_atom : queue->last_frag_atom);
@@ -427,6 +455,17 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
    for (uint32_t j = 0; j < submit->command_buffer_count; ++j) {
       struct panvk_cmd_buffer *cmdbuf =
          container_of(submit->command_buffers[j], struct panvk_cmd_buffer, vk);
+
+#if PAN_ARCH == 9
+      /* A conditional rendering predicate job rewrites job headers of the
+       * later batches of its draw (cmd_cond_render_end()). Reset (CPU write
+       * plus cache flush) every batch before any of them runs, so that no
+       * flush lands after a predicate job wrote a header. */
+      list_for_each_entry(struct panvk_batch, batch, &cmdbuf->batches, node) {
+         if (batch->issued)
+            panvk_reset_issued_batch(cmdbuf, batch);
+      }
+#endif
 
       list_for_each_entry(struct panvk_batch, batch, &cmdbuf->batches, node) {
          /* FIXME: should be done at the batch level */

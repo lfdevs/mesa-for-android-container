@@ -124,7 +124,39 @@ panvk_per_arch(CmdWriteTimestamp2)(VkCommandBuffer commandBuffer,
    UNUSED VK_FROM_HANDLE(panvk_cmd_buffer, cmd, commandBuffer);
    UNUSED VK_FROM_HANDLE(panvk_query_pool, pool, queryPool);
 
+#if PAN_ARCH == 9
+   /* Barrier write jobs: after every earlier job of the chain, the GPU
+    * system timestamp (as gallium JM), then the availability. With
+    * multiview, every view's query gets the timestamp (view_mask is reset at
+    * the end of the render pass on v9). */
+   const uint32_t view_mask = cmd->state.gfx.render.view_mask;
+   const uint32_t count = MIN2(view_mask ? util_bitcount(view_mask) : 1,
+                               pool->vk.query_count - query);
+
+   /* The fragment job of a render pass batch is a later atom than its
+    * vertex/tiler chain, so split the batch: the timestamp then follows all
+    * work recorded before it, whatever the stage. Also split before the
+    * 16-bit job index runs out. */
+   if (cmd->cur_batch &&
+       (cmd->cur_batch->fb.desc.gpu ||
+        cmd->cur_batch->vtc_jc.job_index + 2 * count >= UINT16_MAX)) {
+      panvk_per_arch(cmd_close_batch)(cmd);
+      panvk_per_arch(cmd_open_batch)(cmd);
+   }
+
+   bool had_batch;
+   struct panvk_batch *batch = open_batch(cmd, &had_batch);
+   batch->timestamps = true;
+   for (uint32_t q = query; q < query + count; q++) {
+      panvk_emit_write_job(cmd, batch, MALI_WRITE_VALUE_TYPE_SYSTEM_TIMESTAMP,
+                           panvk_query_report_dev_addr(pool, q), 0);
+      panvk_emit_write_job(cmd, batch, MALI_WRITE_VALUE_TYPE_IMMEDIATE_32,
+                           panvk_query_available_dev_addr(pool, q), 1);
+   }
+   close_batch(cmd, had_batch);
+#else
    panvk_stub();
+#endif
 }
 
 #if PAN_ARCH == 9
@@ -359,7 +391,13 @@ panvk_per_arch(CmdCopyQueryPoolResults)(
 
    /* XXX: Do we really need that barrier when EndQuery already handle it? */
    if ((flags & VK_QUERY_RESULT_WAIT_BIT) && cmd->cur_batch != NULL) {
+#if PAN_ARCH == 9
+      /* close_batch(cmd, true) is a no-op: really end the batch, so the copy
+       * runs after the query writes (e.g. timestamps) recorded in it. */
+      panvk_per_arch(cmd_close_batch)(cmd);
+#else
       close_batch(cmd, true);
+#endif
    }
 
    uint64_t dst_addr = panvk_buffer_gpu_ptr(dst_buffer, dstOffset);

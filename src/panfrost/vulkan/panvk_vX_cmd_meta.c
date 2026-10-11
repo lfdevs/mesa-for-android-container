@@ -105,7 +105,7 @@ meta_compute_start(struct panvk_cmd_buffer *cmdbuf,
    save_ctx->push_constants = cmdbuf->state.push_constants;
    save_ctx->cs.shader = cmdbuf->state.compute.shader;
    save_ctx->cs.desc = cmdbuf->state.compute.cs.desc;
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    save_ctx->cond_render_enabled = cmdbuf->state.cond_render.enabled;
    save_ctx->cond_render_inherited = cmdbuf->state.cond_render.inherited;
    cmdbuf->state.cond_render.enabled = false;
@@ -150,7 +150,7 @@ meta_compute_end(struct panvk_cmd_buffer *cmdbuf,
 
    cmdbuf->state.compute.shader = save_ctx->cs.shader;
    cmdbuf->state.compute.cs.desc = save_ctx->cs.desc;
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    cmdbuf->state.cond_render.enabled = save_ctx->cond_render_enabled;
    cmdbuf->state.cond_render.inherited = save_ctx->cond_render_inherited;
 #endif
@@ -203,7 +203,7 @@ meta_gfx_start(struct panvk_cmd_buffer *cmdbuf,
    gfx_state_set_dirty(cmdbuf, OQ);
 
    cmdbuf->state.gfx.vk_meta = true;
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    save_ctx->cond_render_enabled = cmdbuf->state.cond_render.enabled;
    save_ctx->cond_render_inherited = cmdbuf->state.cond_render.inherited;
    cmdbuf->state.cond_render.enabled = false;
@@ -289,7 +289,7 @@ meta_gfx_end(struct panvk_cmd_buffer *cmdbuf,
    gfx_state_set_dirty(cmdbuf, RENDER_STATE);
 
    cmdbuf->state.gfx.vk_meta = false;
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    cmdbuf->state.cond_render.enabled = save_ctx->cond_render_enabled;
    cmdbuf->state.cond_render.inherited = save_ctx->cond_render_inherited;
 #endif
@@ -352,7 +352,7 @@ panvk_per_arch(CmdClearAttachments)(VkCommandBuffer commandBuffer,
    }
 
    meta_gfx_start(cmdbuf, &save);
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    /* CmdClearAttachments IS affected by conditional rendering, so restore
     * the state that meta_gfx_start disabled.
     */

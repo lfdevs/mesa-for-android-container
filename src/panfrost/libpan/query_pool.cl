@@ -163,6 +163,7 @@ panlib_copy_query_result(uint64_t pool_addr, global uint32_t *available_addr,
       case VK_QUERY_TYPE_OCCLUSION:
 #if PAN_ARCH == 9
       case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+      case VK_QUERY_TYPE_TIMESTAMP:
 #endif
          write_occlusion_query_result(dst, 0, flags, report_addr, report_count);
          break;

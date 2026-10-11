@@ -37,6 +37,8 @@ struct panvk_batch {
 #if PAN_ARCH == 9
    /* MALLOC_VERTEX jobs, the GPU writes their vertex array pointer. */
    struct util_dynarray malloc_vertex_jobs;
+   /* The vertex/tiler chain writes SYSTEM_TIMESTAMP values. */
+   bool timestamps;
 #endif
    struct util_dynarray event_ops;
    struct pan_jc vtc_jc;
@@ -96,8 +98,28 @@ struct panvk_cmd_buffer {
       struct panvk_cmd_compute_state compute;
       struct panvk_push_constant_state push_constants;
       bool uses_poly_heap;
+#if PAN_ARCH == 9
+      struct {
+         bool enabled;
+         /* Saved by meta, secondaries replay into the primary on JM. */
+         bool inherited;
+         bool inverted;
+         uint64_t addr;
+      } cond_render;
+#endif
    } state;
 };
+
+#if PAN_ARCH == 9
+/* A draw or dispatch recorded while conditional rendering is active: the
+ * predicate job queued before its jobs (see cmd_cond_render_begin). */
+struct panvk_cond_render_mark {
+   struct panvk_batch *batch;
+   struct mali_job_header_packed *job;
+   uint64_t *list;
+   unsigned index;
+};
+#endif
 
 VK_DEFINE_HANDLE_CASTS(panvk_cmd_buffer, vk.base, VkCommandBuffer,
                        VK_OBJECT_TYPE_COMMAND_BUFFER)
@@ -143,6 +165,13 @@ struct panvk_batch *
    panvk_per_arch(cmd_open_batch)(struct panvk_cmd_buffer *cmdbuf);
 
 void panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf);
+
+#if PAN_ARCH == 9
+void panvk_per_arch(cmd_cond_render_begin)(struct panvk_cmd_buffer *cmdbuf,
+                                           struct panvk_cond_render_mark *m);
+void panvk_per_arch(cmd_cond_render_end)(struct panvk_cmd_buffer *cmdbuf,
+                                         struct panvk_cond_render_mark *m);
+#endif
 
 VkResult panvk_per_arch(cmd_alloc_fb_desc)(struct panvk_cmd_buffer *cmdbuf);
 

@@ -1827,4 +1827,34 @@ panlib_v9_vp_partition(global const struct panlib_vp_run_header *header,
       first += k;
    }
 }
+
+/* VK_EXT_conditional_rendering on v9 JM: queued before the jobs of a draw or
+ * dispatch recorded inside a conditional rendering block. *list_ptr points
+ * to { count, (job header address, recorded job type) x count }. Each job
+ * gets its recorded type back when the predicate passes, so a resubmitted
+ * command buffer is right whatever the previous run did, and a NULL type
+ * when it fails. */
+KERNEL(1)
+panlib_v9_cond_render(global uint32_t *pred, uint32_t inverted,
+                      global uint64_t *list_ptr)
+{
+   const bool run = (*pred != 0) != (inverted != 0);
+   global uint64_t *list = (global uint64_t *)*list_ptr;
+   if (!list)
+      return;
+
+   const uint64_t count = list[0];
+
+   for (uint64_t i = 0; i < count; i++) {
+      global struct mali_job_header_packed *hdr =
+         (global struct mali_job_header_packed *)list[1 + 2 * i];
+      pan_unpack(hdr, JOB_HEADER, unpacked_hdr)
+         ;
+      pan_pack(hdr, JOB_HEADER, cfg) {
+         memcpy(&cfg, &unpacked_hdr, sizeof(cfg));
+         cfg.type = run ? (enum mali_job_type)list[2 + 2 * i]
+                        : MALI_JOB_TYPE_NULL;
+      }
+   }
+}
 #endif

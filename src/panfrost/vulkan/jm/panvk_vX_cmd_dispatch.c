@@ -371,7 +371,14 @@ panvk_per_arch(CmdDispatchBase)(VkCommandBuffer commandBuffer,
       .wg_base = {baseGroupX, baseGroupY, baseGroupZ},
       .direct.wg_count = {groupCountX, groupCountY, groupCountZ},
    };
+#if PAN_ARCH == 9
+   struct panvk_cond_render_mark cond;
+   panvk_per_arch(cmd_cond_render_begin)(cmdbuf, &cond);
+#endif
    cmd_dispatch(cmdbuf, &info);
+#if PAN_ARCH == 9
+   panvk_per_arch(cmd_cond_render_end)(cmdbuf, &cond);
+#endif
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -384,5 +391,12 @@ panvk_per_arch(CmdDispatchIndirect)(VkCommandBuffer commandBuffer,
    struct panvk_dispatch_info info = {
       .indirect.buffer_dev_addr = buffer_gpu,
    };
+#if PAN_ARCH == 9
+   struct panvk_cond_render_mark cond;
+   panvk_per_arch(cmd_cond_render_begin)(cmdbuf, &cond);
+#endif
    cmd_dispatch(cmdbuf, &info);
+#if PAN_ARCH == 9
+   panvk_per_arch(cmd_cond_render_end)(cmdbuf, &cond);
+#endif
 }
