@@ -95,6 +95,14 @@ const struct pan_model pan_model_list[] = {
                                               MODEL_RATES_X(2, 4, 8,  32,  32, 8)),
    VALHALL_MODEL(PAN_PROD_ID(9, 2, 4), 0, "G68",    "G78", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
                                               MODEL_RATES_X(2, 4, 8,  32,  32, 8)),
+   /* G78 (kbase TBEX, product major 2; Tensor gs101 reports 0x9202) and
+    * G78AE (product major 5): same v9 core and 16 KiB colour tile buffer as
+    * the G57/G68. Transaction elimination produces stale tiles on G78
+    * (gs101); panvk only enables CRC on v10+, so it stays off here. */
+   VALHALL_MODEL(PAN_PROD_ID(9, 2, 2), 0, "G78",    "G78", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
+                                              MODEL_RATES_X(2, 4, 8,  32,  32, 8)),
+   VALHALL_MODEL(PAN_PROD_ID(9, 0, 5), 0, "G78AE",  "G78", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
+                                              MODEL_RATES_X(2, 4, 8,  32,  32, 8)),
    /* G710 (kbase TODX, 0xa862): same Valhall v10 core as G610, 7-16 cores. */
    VALHALL_MODEL(PAN_PROD_ID(10, 8, 2), 0, "G710",   "G710", MODEL_ANISO(ALL),  MODEL_TB_SIZES(32768, 16384),
                                               MODEL_RATES_X(4, 8, 16,  64,  64, 16)),
@@ -181,6 +189,18 @@ pan_get_model(uint64_t gpu_id, uint32_t gpu_variant,
           (pan_model_list[i].required_gpu_features & gpu_features) ==
           pan_model_list[i].required_gpu_features)
          return &pan_model_list[i];
+   }
+
+   /* kbase names v9 products by arch major and product major only
+    * (GPU_ID2_PRODUCT_MODEL, mask 0xf00f): arch minor is not part of the
+    * product, and parts report different values (gs101's G78: 0x9202). */
+   if ((gpu_prod_id >> 16) == 9) {
+      for (unsigned i = 0; i < ARRAY_SIZE(pan_model_list); ++i) {
+         if ((pan_model_list[i].gpu_prod_id & ~0xff00) ==
+                (gpu_prod_id & ~0xff00) &&
+             pan_model_list[i].gpu_variant == gpu_variant)
+            return &pan_model_list[i];
+      }
    }
 
    return NULL;
