@@ -20,7 +20,7 @@
 #include "panvk_physical_device.h"
 #include "panvk_sampler.h"
 #include "panvk_shader.h"
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 #include "panvk_gpu_prerast.h"
 #include "libpan/draw_helper_vp.h"
 #include "poly/nir/poly_nir.h"
@@ -737,7 +737,7 @@ panvk_preprocess_nir(struct vk_physical_device *vk_pdev,
    pan_preprocess_nir(nir, PAN_ARCH);
 }
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 static bool
 panvk_lower_gpu_prerast_sysval(nir_builder *b, nir_intrinsic_instr *intr,
                                UNUSED void *data)
@@ -2439,7 +2439,7 @@ panvk_hash_state(struct vk_physical_device *device,
    struct mesa_blake3 blake3_ctx;
    _mesa_blake3_init(&blake3_ctx);
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    const uint32_t gpu_prerast_abi = PANVK_GPU_PRERAST_ABI_VERSION;
    _mesa_blake3_update(&blake3_ctx, &gpu_prerast_abi, sizeof(gpu_prerast_abi));
 #endif
@@ -3386,7 +3386,7 @@ panvk_compile_shader(struct panvk_device *dev,
    if (shader == NULL)
       return panvk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    shader->gpu_prerast.io.abi_version = PANVK_GPU_PRERAST_ABI_VERSION;
 
    if (info->stage == MESA_SHADER_TESS_EVAL)
@@ -3430,11 +3430,11 @@ panvk_compile_shader(struct panvk_device *dev,
 #endif
 
    switch (info->stage) {
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    case MESA_SHADER_TESS_EVAL:
 #endif
    case MESA_SHADER_VERTEX: {
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
       /* Lowered/passthrough variants only exist on the gpu_prerast path. */
       const bool dyn_polygon_mode =
          !state || !state->rs ||
@@ -3470,7 +3470,7 @@ panvk_compile_shader(struct panvk_device *dev,
          /* Each variant gets its own NIR. To save an extra clone, we use the
           * original NIR for the last stage.
           */
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
          const bool clone_nir = true;
          const uint64_t pt_outputs = shader->gpu_prerast.io.outputs_written;
          const uint8_t vp_loc =
@@ -3493,7 +3493,7 @@ panvk_compile_shader(struct panvk_device *dev,
             clone_nir ? nir_shader_clone(NULL, info->nir) : info->nir;
 #endif
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
          bool gpu_lower = false;
          gpu_lower = v == PANVK_VS_VARIANT_GPU_LOWERED;
          if (gpu_lower) {
@@ -3534,7 +3534,7 @@ panvk_compile_shader(struct panvk_device *dev,
           * vk_vertex_input_state where there are holes in the attribute
           * locations.
           */
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
          if (v != PANVK_VS_VARIANT_GPU_PASSTHROUGH) {
 #endif
             nir_foreach_shader_in_variable(var, nir) {
@@ -3543,17 +3543,17 @@ panvk_compile_shader(struct panvk_device *dev,
                var->data.driver_location =
                   var->data.location - VERT_ATTRIB_GENERIC0;
             }
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
          }
          if (!gpu_lower && v != PANVK_VS_VARIANT_GPU_PASSTHROUGH) {
 #endif
             nir_assign_io_var_locations(nir, nir_var_shader_out);
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
          }
          if (v != PANVK_VS_VARIANT_GPU_PASSTHROUGH) {
 #endif
             panvk_lower_nir_io(nir);
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
             if (gpu_lower) {
                /* outputs_written is only valid after panvk_lower_nir()
                 * gathered info; info->nir may still report 0. The record
@@ -3595,13 +3595,13 @@ panvk_compile_shader(struct panvk_device *dev,
             pan_varying_collect_formats(&varying_layout, nir, PAN_ARCH);
             pan_build_varying_layout_compact(&varying_layout, nir, PAN_ARCH);
             inputs.varying_layout = &varying_layout;
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
             shader->gpu_prerast.io.varyings = varying_layout;
             shader->gpu_prerast.io.varying_count = nir->num_outputs;
 #endif
          }
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
          if (vp_loc) {
             shader->gpu_prerast.vp_scissor_loc = vp_loc;
             pan_varying_collect_formats(&vp_layout, nir, inputs.gpu_id);
@@ -3614,7 +3614,7 @@ panvk_compile_shader(struct panvk_device *dev,
 #endif
 
          if (v == PANVK_VS_VARIANT_HW
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
              || v == PANVK_VS_VARIANT_GPU_PASSTHROUGH
 #endif
          ) {
@@ -3628,7 +3628,7 @@ panvk_compile_shader(struct panvk_device *dev,
                                     noperspective_varyings,
                                     &shader->desc_info, variant);
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
          if (result == VK_SUCCESS && gpu_lower)
             shader->gpu_prerast.lowered_vs_compiled = true;
          if (result == VK_SUCCESS && v == PANVK_VS_VARIANT_GPU_PASSTHROUGH)
@@ -3645,7 +3645,7 @@ panvk_compile_shader(struct panvk_device *dev,
             return result;
          }
       }
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
       if (shader->gpu_prerast.lowered_vs_compiled)
          panvk_gpu_prerast_gather_xfb(&shader->gpu_prerast.xfb,
                                       info->nir->xfb_info,
@@ -3681,7 +3681,7 @@ panvk_compile_shader(struct panvk_device *dev,
       break;
    }
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    case MESA_SHADER_GEOMETRY: {
       struct panvk_gpu_prerast_gs_info *gs = &shader->gpu_prerast.gs;
       struct panvk_gpu_prerast_out_types out_types = {0};
@@ -4037,7 +4037,7 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
          /* The last geometry stage before the FS will always have a HW vertex
           * shader variant. Geometry's first vertex variant is the passthrough.
           */
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
          /* A VS/TES that selects a viewport is drawn through its
           * passthrough, whose layout carries the scissor planes.
           */
@@ -4057,7 +4057,7 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
                break;
             }
          }
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
          if (prev_shader->vk.stage == MESA_SHADER_GEOMETRY)
             scissor_loc = prev_shader->gpu_prerast.gs.scissor_clip_loc;
 #endif
@@ -4308,7 +4308,7 @@ panvk_deserialize_shader(struct vk_device *vk_dev, struct blob_reader *blob,
    if (shader == NULL)
       return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    blob_copy_bytes(blob, &shader->gpu_prerast, sizeof(shader->gpu_prerast));
    if (shader->gpu_prerast.io.abi_version != PANVK_GPU_PRERAST_ABI_VERSION)
       blob->overrun = true;
@@ -4435,7 +4435,7 @@ panvk_shader_serialize(struct vk_device *vk_dev,
 
    blob_write_uint8(blob, vk_shader->stage);
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    blob_write_bytes(blob, &shader->gpu_prerast, sizeof(shader->gpu_prerast));
 #endif
 #if PAN_ARCH == 9
@@ -4914,7 +4914,7 @@ panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stag
          gfx_state_set_dirty(cmd, FS_PUSH_UNIFORMS);
       }
       break;
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    case MESA_SHADER_GEOMETRY:
       if (cmd->state.gfx.gs.shader != shader) {
          cmd->state.gfx.gs.shader = shader;

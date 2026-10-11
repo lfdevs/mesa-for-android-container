@@ -16,7 +16,7 @@
 #include "tess_draw.h"
 #include "libpan_xfb.h"
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 
 /* Subgroup size is always 16 on v10+ */
 #define SUBGROUP_SIZE 16
@@ -1582,6 +1582,135 @@ panlib_v9_draw_indirect_patch(global uint32_t *cmd, global uint8_t *job,
          continue;
       global uint32_t *ii = inst_attr_info + a * 3;
       global int32_t *offset = (global int32_t *)(vs_attribs + a * 32 + 8);
+      *offset = (int32_t)(ii[0] + (first_instance / ii[2]) * ii[1]);
+   }
+}
+
+/* Transform feedback counters on JM, after Noysz/panvk-g99-jm 0060
+ * (xfb_helper.cl, MIT). CSF loads and stores them with command stream
+ * instructions. Bit i of mask selects buffer i, src/dst are u32[4] counter
+ * addresses (0 = not given). */
+KERNEL(1)
+panlib_v9_xfb_begin(global uint32_t *offsets, uint32_t mask,
+                    global uint32_t *src0, global uint32_t *src1,
+                    global uint32_t *src2, global uint32_t *src3)
+{
+   offsets[0] = (mask & 1) ? *src0 : 0;
+   offsets[1] = (mask & 2) ? *src1 : 0;
+   offsets[2] = (mask & 4) ? *src2 : 0;
+   offsets[3] = (mask & 8) ? *src3 : 0;
+}
+
+KERNEL(1)
+panlib_v9_xfb_end(global uint32_t *offsets, uint32_t mask,
+                  global uint32_t *dst0, global uint32_t *dst1,
+                  global uint32_t *dst2, global uint32_t *dst3)
+{
+   if (mask & 1)
+      *dst0 = offsets[0];
+   if (mask & 2)
+      *dst1 = offsets[1];
+   if (mask & 4)
+      *dst2 = offsets[2];
+   if (mask & 8)
+      *dst3 = offsets[3];
+}
+
+static void
+v9_patch_compute_job(global uint8_t *job, bool null_job, uint32_t x,
+                     uint32_t y, uint32_t z)
+{
+   global struct mali_job_header_packed *hdr =
+      (global struct mali_job_header_packed *)job;
+   pan_unpack(hdr, JOB_HEADER, unpacked_hdr)
+      ;
+   pan_pack(hdr, JOB_HEADER, cfg) {
+      memcpy(&cfg, &unpacked_hdr, sizeof(cfg));
+      cfg.type = null_job ? MALI_JOB_TYPE_NULL : MALI_JOB_TYPE_COMPUTE;
+   }
+
+   if (null_job)
+      return;
+
+   global struct mali_compute_payload_packed *payload =
+      (global struct mali_compute_payload_packed *)(job +
+         pan_section_offset(COMPUTE_JOB, PAYLOAD));
+   pan_unpack(payload, COMPUTE_PAYLOAD, unpacked_payload);
+   pan_pack(payload, COMPUTE_PAYLOAD, cfg) {
+      memcpy(&cfg, &unpacked_payload, sizeof(cfg));
+      cfg.workgroup_count_x = x;
+      cfg.workgroup_count_y = y;
+      cfg.workgroup_count_z = z;
+   }
+}
+
+/* Indirect draws through gpu_prerast on v9 JM: the cs loads and stores CSF
+ * gpu_prerast_vs()/gpu_prerast_gs_run() do before their dispatches. Reads
+ * one VkDraw(Indexed)IndirectCommand, fills the draw params, sizes the
+ * lowered VS (and GS kernel) COMPUTE jobs, sets the VS first vertex and base
+ * instance sysvals and writes the generated draw. A draw past the indirect
+ * count, empty, or over the record capacity becomes NULL jobs and an empty
+ * generated draw.
+ * ponytail: CSF splits oversized indirect draws in its GPU chunk loop, JM
+ * drops them; a JM chunk loop needs a job chain per chunk. */
+KERNEL(1)
+panlib_v9_prerast_indirect(constant struct panlib_v9_prerast_patch *a)
+{
+   global uint32_t *cmd = (global uint32_t *)a->cmd;
+   global uint32_t *draw_count = (global uint32_t *)a->draw_count;
+   const uint32_t count = cmd[0];
+   const uint32_t instance_count = cmd[1];
+   const uint32_t first_index = a->indexed ? cmd[2] : 0;
+   const int32_t vertex_base = a->indexed ? (int32_t)cmd[3] : (int32_t)cmd[2];
+   const uint32_t first_instance = a->indexed ? cmd[4] : cmd[3];
+   const bool null_job =
+      count == 0 || instance_count == 0 ||
+      (draw_count && a->draw_index >= *draw_count) ||
+      (uint64_t)count * instance_count > a->capacity;
+   const uint32_t n = null_job ? 0 : count;
+   const uint32_t inst = null_job ? 0 : instance_count;
+
+   global uint32_t *counts = (global uint32_t *)a->counts;
+   counts[0] = n;
+   counts[1] = inst;
+   counts[2] = first_instance;
+   counts[5] = first_index;
+   *(global uint32_t *)a->verts_per_instance = n;
+
+   v9_patch_compute_job((global uint8_t *)a->vs_job, null_job, n, inst, 1);
+   if (a->gs_job) {
+      global uint32_t *gs_counts = (global uint32_t *)a->gs_counts;
+      gs_counts[0] = n;
+      gs_counts[1] = inst;
+      v9_patch_compute_job((global uint8_t *)a->gs_job, null_job, n, inst,
+                           a->gs_invocations);
+   }
+
+   if (a->gen_draw) {
+      global uint32_t *gen = (global uint32_t *)a->gen_draw;
+      gen[0] = n;
+      gen[1] = inst;
+      gen[2] = 0;
+      gen[3] = 0;
+      gen[4] = first_instance;
+   }
+
+   if (null_job)
+      return;
+
+   if (a->first_vertex_sysval)
+      *(global int32_t *)a->first_vertex_sysval = vertex_base;
+   if (a->base_instance_sysval)
+      *(global uint32_t *)a->base_instance_sysval = first_instance;
+
+   /* Same Attribute Offset rewrite as panlib_v9_draw_indirect_patch(). */
+   global uint32_t *info = (global uint32_t *)a->inst_attr_info;
+   global uint8_t *attribs = (global uint8_t *)a->vs_attribs;
+   for (uint32_t i = 0; i < 32; i++) {
+      if (!(a->inst_attr_mask & (1u << i)))
+         continue;
+      global uint32_t *ii = info + i * 3;
+      global int32_t *offset = (global int32_t *)(attribs + i * 32 + 8);
       *offset = (int32_t)(ii[0] + (first_instance / ii[2]) * ii[1]);
    }
 }

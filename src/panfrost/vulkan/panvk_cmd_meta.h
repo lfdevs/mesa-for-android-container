@@ -62,7 +62,7 @@ struct panvk_cmd_meta_graphics_save_ctx {
       struct panvk_shader_desc_state desc;
    } vs;
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    const struct panvk_shader *gs, *tcs, *tes;
 #endif
 

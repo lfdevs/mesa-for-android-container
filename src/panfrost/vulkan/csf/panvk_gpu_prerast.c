@@ -4,7 +4,8 @@
  */
 
 #include "panvk_gpu_prerast.h"
-#include "panvk_cmd_buffer.h"
+/* Angle brackets: the per-arch include dir picks csf/ or (v9) jm/. */
+#include <panvk_cmd_buffer.h>
 #include "panvk_cmd_draw.h"
 
 struct panvk_gpu_prerast_draw

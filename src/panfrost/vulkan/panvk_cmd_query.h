@@ -22,7 +22,7 @@ struct panvk_occlusion_query_state {
    enum mali_occlusion_mode mode;
 };
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 struct panvk_prims_generated_query_state {
    uint64_t syncobj;
    uint64_t ptr;

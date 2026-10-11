@@ -20,7 +20,7 @@
 #include "panvk_cmd_alloc.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_device.h"
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 #include "panvk_gpu_prerast.h"
 #endif
 #include "panvk_cmd_draw.h"
@@ -212,7 +212,7 @@ panvk_device_cleanup_tls(struct panvk_device *dev)
    simple_mtx_destroy(&dev->tls.lock);
 }
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 /* Commit the gpu_prerast arenas at creation.  On MediaTek kbase (CSF 1.21),
  * GPU-fault growth loses the first gpu_prerast draw's output: PanProbe
  * gs_viewport_depth case A drew nothing on every run; without alloc-on-fault,
@@ -779,7 +779,7 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    simple_mtx_init(&device->tls.lock, mtx_plain);
    util_dynarray_init(&device->tls.bos, NULL);
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    if (PANVK_DEBUG(GPU_PRERAST) || device->vk.enabled_features.fillModeNonSolid ||
        device->vk.enabled_features.geometryShader ||
        device->vk.enabled_features.transformFeedback ||

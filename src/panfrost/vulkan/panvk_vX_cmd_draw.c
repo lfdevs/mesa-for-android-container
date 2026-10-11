@@ -851,7 +851,7 @@ prepare_iam_sysvals(struct panvk_cmd_buffer *cmdbuf, BITSET_WORD *dirty_sysvals)
       set_gfx_sysval(cmdbuf, dirty_sysvals, iam[i], iam[i]);
 }
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 static void
 panvk_upload_prerast_viewports(struct panvk_cmd_buffer *cmdbuf,
                                BITSET_WORD *dirty_sysvals)
@@ -1012,9 +1012,11 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
 
    }
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    panvk_upload_prerast_viewports(cmdbuf, dirty_sysvals);
+#endif
 
+#if PAN_ARCH >= 10
    {
       const struct vk_depth_stencil_state *dss =
          &cmdbuf->vk.dynamic_graphics_state.ds;
@@ -1077,7 +1079,7 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
    if (!BITSET_IS_EMPTY(dirty_shader_sysvals))
       gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    {
       /* The raster VS for a geometry draw is the GS passthrough, not the
        * HW VS masked above. Mask that variant too.

@@ -161,6 +161,10 @@ foreach arch : [6, 7, 9, 10, 11, 12, 13, 14]
   if arch in jm_archs
     inc_panvk_per_arch += jm_inc_dir
     per_arch_files += jm_files
+    if arch == 9
+      # v9 JM runs the shared gpu_prerast path (GS, tess, XFB)
+      per_arch_files += 'csf/panvk_gpu_prerast.c'
+    endif
   elif arch in csf_archs
     inc_panvk_per_arch += csf_inc_dir
     per_arch_files += csf_files

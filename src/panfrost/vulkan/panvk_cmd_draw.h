@@ -170,7 +170,7 @@ struct panvk_cmd_graphics_state {
    } dynamic;
 
    struct panvk_occlusion_query_state occlusion_query;
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    struct panvk_prims_generated_query_state prims_generated_query;
    struct panvk_pstats_query_state pstats_query;
 
@@ -224,7 +224,7 @@ struct panvk_cmd_graphics_state {
 #endif
    } vs;
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    struct {
       const struct panvk_shader *shader;
       struct panvk_shader_desc_state desc;
@@ -269,7 +269,7 @@ struct panvk_cmd_graphics_state {
    BITSET_DECLARE(dirty, PANVK_CMD_GRAPHICS_DIRTY_STATE_COUNT);
 };
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 /* Last pre-raster stage whose passthrough selects a viewport (GS, else
  * TES, else VS), or NULL.
  */

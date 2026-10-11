@@ -219,7 +219,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_scalar_block_layout = true,
       .EXT_separate_stencil_usage = true,
       .EXT_shader_atomic_float = true,
-      .EXT_transform_feedback = PAN_ARCH >= 10,
+      .EXT_transform_feedback = PAN_ARCH >= 9,
       .EXT_shader_demote_to_helper_invocation = true,
       .EXT_shader_image_atomic_int64 = PAN_ARCH >= 9,
       .EXT_shader_module_identifier = true,
@@ -647,7 +647,7 @@ panvk_per_arch(get_physical_device_features)(
       .transformFeedbackPreservesProvokingVertex = false,
 
       /* VK_EXT_transform_feedback */
-      .transformFeedback = PAN_ARCH >= 10,
+      .transformFeedback = PAN_ARCH >= 9,
       .geometryStreams = PAN_ARCH >= 10 && !PANVK_DEBUG(NO_GS),
 
       /* v7 doesn't support AFBC(BGR). We need to tweak the texture swizzle to
@@ -1364,15 +1364,17 @@ panvk_per_arch(get_physical_device_properties)(
       .maxMultiDrawCount = 2048,
 
       /* VK_EXT_transform_feedback */
-      .maxTransformFeedbackStreams = PAN_ARCH >= 10 ? 4 : 0,
-      .maxTransformFeedbackBuffers = PAN_ARCH >= 10 ? 4 : 0,
+      /* v9 has no GS yet: one vertex stream. */
+      .maxTransformFeedbackStreams = PAN_ARCH >= 10 ? 4 : PAN_ARCH == 9 ? 1 : 0,
+      .maxTransformFeedbackBuffers = PAN_ARCH >= 9 ? 4 : 0,
       .maxTransformFeedbackBufferSize = UINT32_MAX,
       .maxTransformFeedbackStreamDataSize = 512,
       .maxTransformFeedbackBufferDataSize = 512,
       .maxTransformFeedbackBufferDataStride = 2048,
-      .transformFeedbackQueries = true,
-      .transformFeedbackStreamsLinesTriangles = true,
-      .transformFeedbackRasterizationStreamSelect = true,
+      /* v9 JM queries are occlusion only. */
+      .transformFeedbackQueries = PAN_ARCH >= 10,
+      .transformFeedbackStreamsLinesTriangles = PAN_ARCH >= 10,
+      .transformFeedbackRasterizationStreamSelect = PAN_ARCH >= 10,
       .transformFeedbackDraw = true,
 
       /* VK_EXT_shader_tile_image */

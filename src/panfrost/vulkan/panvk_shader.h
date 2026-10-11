@@ -19,7 +19,7 @@
 #include "panvk_descriptor_set.h"
 #include "panvk_macros.h"
 #include "panvk_mempool.h"
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 #include "panvk_gpu_prerast.h"
 #endif
 
@@ -172,7 +172,7 @@ struct panvk_graphics_sysvals {
       uint32_t noperspective_varyings;
     } vs;
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    aligned_u64 gpu_prerast_params;
    aligned_u64 gpu_prerast_records;
    aligned_u64 gpu_prerast_tess;
@@ -473,7 +473,7 @@ enum panvk_vs_variant {
    /* Hardware vertex shader, when next stage is fragment */
    PANVK_VS_VARIANT_HW,
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    PANVK_VS_VARIANT_GPU_LOWERED,
    PANVK_VS_VARIANT_GPU_PASSTHROUGH,
    PANVK_VS_VARIANT_GPU_POLYGON,
@@ -482,7 +482,7 @@ enum panvk_vs_variant {
    PANVK_VS_VARIANTS,
 };
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 enum panvk_gs_variant {
    PANVK_GS_VARIANT_PASSTHROUGH,
    PANVK_GS_VARIANT_KERNEL,
@@ -495,7 +495,7 @@ struct panvk_shader {
 
    struct panvk_shader_desc_info desc_info;
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    struct panvk_gpu_prerast_shader gpu_prerast;
 #endif
 
@@ -513,7 +513,7 @@ panvk_shader_num_variants(mesa_shader_stage stage)
 {
    if (stage == MESA_SHADER_VERTEX)
       return PANVK_VS_VARIANTS;
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    if (stage == MESA_SHADER_GEOMETRY)
       return PANVK_GS_VARIANTS;
    if (stage == MESA_SHADER_TESS_EVAL)
@@ -525,7 +525,7 @@ panvk_shader_num_variants(mesa_shader_stage stage)
 
 static const char *panvk_vs_shader_variant_name[] = {
    [PANVK_VS_VARIANT_HW] = NULL,
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    [PANVK_VS_VARIANT_GPU_LOWERED] = "GPU_LOWERED",
    [PANVK_VS_VARIANT_GPU_PASSTHROUGH] = "GPU_PASSTHROUGH",
    [PANVK_VS_VARIANT_GPU_POLYGON] = "GPU_POLYGON",
@@ -545,7 +545,7 @@ panvk_shader_variant_name(const struct panvk_shader *shader,
       return panvk_vs_shader_variant_name[i];
    }
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
    if (shader->vk.stage == MESA_SHADER_GEOMETRY)
       return i == PANVK_GS_VARIANT_KERNEL ? "GS_KERNEL" : "GS_PASSTHROUGH";
 #endif
