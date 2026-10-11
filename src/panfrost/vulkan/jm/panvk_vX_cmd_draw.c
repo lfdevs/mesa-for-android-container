@@ -2041,14 +2041,14 @@ v9_prepare_vs_driver_set(struct panvk_cmd_buffer *cmdbuf, uint32_t base_instance
                                       &cmdbuf->state.gfx.vs.desc, base_instance);
 }
 
+/* Driver set of a stage without vertex attributes (FS, GS kernel): the
+ * dummy sampler and the dynamic buffers. */
 static VkResult
-v9_prepare_fs_driver_set(struct panvk_cmd_buffer *cmdbuf)
+v9_prepare_stage_driver_set(struct panvk_cmd_buffer *cmdbuf,
+                            const struct panvk_shader *shader,
+                            struct panvk_shader_desc_state *st)
 {
-   if (!cmdbuf->state.gfx.fs.shader)
-      return VK_SUCCESS;
-
-   const struct panvk_shader_desc_info *info = &cmdbuf->state.gfx.fs.shader->desc_info;
-   struct panvk_shader_desc_state *st = &cmdbuf->state.gfx.fs.desc;
+   const struct panvk_shader_desc_info *info = &shader->desc_info;
    uint32_t desc_count = info->dyn_bufs.count + 1;
    struct pan_ptr driver_set = panvk_cmd_alloc_dev_mem(
       cmdbuf, desc, desc_count * PANVK_DESCRIPTOR_SIZE, PANVK_DESCRIPTOR_SIZE);
@@ -2064,6 +2064,16 @@ v9_prepare_fs_driver_set(struct panvk_cmd_buffer *cmdbuf)
    st->driver_set.dev_addr = driver_set.gpu;
    st->driver_set.size = desc_count * PANVK_DESCRIPTOR_SIZE;
    return VK_SUCCESS;
+}
+
+static VkResult
+v9_prepare_fs_driver_set(struct panvk_cmd_buffer *cmdbuf)
+{
+   if (!cmdbuf->state.gfx.fs.shader)
+      return VK_SUCCESS;
+
+   return v9_prepare_stage_driver_set(cmdbuf, cmdbuf->state.gfx.fs.shader,
+                                      &cmdbuf->state.gfx.fs.desc);
 }
 
 static VkResult
@@ -2644,7 +2654,129 @@ v9_prerast_vs(struct panvk_cmd_buffer *cmdbuf,
    return out->job.gpu != 0;
 }
 
-/* panlib_xfb_capture() over the records the lowered VS left, CSF
+/* GS kernel of a draw, CSF gpu_prerast_gs_run(): one invocation per input
+ * vertex slot, instance and GS invocation, reading the lowered VS records and
+ * appending strips to arena + PANVK_GPU_PRERAST_GS_RECORD_OFFSET/_INDEX_OFFSET.
+ * The GS params and the generated draw command live in per-draw memory, not
+ * the arena: the CPU fills the params, a fill job zeroes the draw command
+ * the kernel appends to (so a resubmitted command buffer starts from 0). The
+ * job is prepared here and added by the caller. After Noysz/panvk-g99-jm
+ * 0063/0065. */
+struct v9_prerast_gs_job {
+   uint64_t params;
+   uint64_t draw;
+   struct pan_ptr job;
+};
+
+static bool
+v9_prerast_gs(struct panvk_cmd_buffer *cmdbuf,
+              const struct panvk_draw_info *src, uint64_t arena,
+              struct v9_prerast_gs_job *out)
+{
+   const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
+   const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
+   const struct panvk_gpu_prerast_gs_info *gsi = &gs->gpu_prerast.gs;
+   const struct panvk_shader_variant *kernel =
+      &gs->variants[PANVK_GS_VARIANT_KERNEL];
+   struct panvk_descriptor_state *desc_state = &cmdbuf->state.gfx.desc_state;
+   struct panvk_shader_desc_state *gs_desc = &cmdbuf->state.gfx.gs.desc;
+   const bool indirect = src->indirect.buffer_dev_addr != 0;
+
+   if (panvk_per_arch(cmd_prepare_push_descs)(
+          cmdbuf, desc_state, gs->desc_info.used_set_mask) != VK_SUCCESS ||
+       v9_prepare_stage_driver_set(cmdbuf, gs, gs_desc) != VK_SUCCESS ||
+       panvk_per_arch(cmd_prepare_shader_res_table)(
+          cmdbuf, desc_state, &gs->desc_info, gs_desc, 1) != VK_SUCCESS)
+      return false;
+
+   struct pan_ptr params = panvk_cmd_alloc_dev_mem(
+      cmdbuf, desc, sizeof(struct panvk_gpu_prerast_gs_params), 64);
+   struct pan_ptr draw = panvk_cmd_alloc_dev_mem(
+      cmdbuf, desc, sizeof(VkDrawIndexedIndirectCommand), 16);
+   if (!params.gpu || !draw.gpu)
+      return false;
+
+   const struct panvk_pstats_query_state *pstats =
+      &cmdbuf->state.gfx.pstats_query;
+   struct panvk_gpu_prerast_gs_params *p = params.cpu;
+   *p = (struct panvk_gpu_prerast_gs_params){
+      .vs_records = arena + PANVK_GPU_PRERAST_RECORD_OFFSET,
+      .vs_outputs = vs->gpu_prerast.io.outputs_written,
+      .gen_indices = arena + PANVK_GPU_PRERAST_INDEX_OFFSET,
+      .records = arena + PANVK_GPU_PRERAST_GS_RECORD_OFFSET,
+      .indices = arena + PANVK_GPU_PRERAST_GS_INDEX_OFFSET,
+      .draw = draw.gpu,
+      /* panlib_v9_prerast_indirect() writes the counts of indirect draws. */
+      .vertex_count = indirect ? 0 : src->vertex.count,
+      .instance_count = indirect ? 0 : src->instance.count,
+      .primitive_restart = src->index.restart_enable,
+      .prim = src->prim,
+      .cap_slots = panvk_gpu_prerast_gs_cap_slots(gsi),
+      .vs_record_capacity =
+         panvk_gpu_prerast_record_capacity(vs->gpu_prerast.io.record_stride),
+      .provoking_last = cmdbuf->vk.dynamic_graphics_state.rs.provoking_vertex ==
+                        VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT,
+      .prim_id_base = src->gpu_prerast_prim_base,
+      .raster_stream =
+         cmdbuf->vk.dynamic_graphics_state.rs.rasterization_stream,
+      .stats = {
+         panvk_pstats_counter_addr(
+            pstats, VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_INVOCATIONS_BIT,
+            true),
+         panvk_pstats_counter_addr(
+            pstats, VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT,
+            true),
+         panvk_pstats_counter_addr(
+            pstats, VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT, true),
+         panvk_pstats_counter_addr(
+            pstats, VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT, true),
+      },
+      .prims_generated = cmdbuf->state.gfx.prims_generated_query.ptr,
+      .strips = arena + PANVK_GPU_PRERAST_GS_STRIP_OFFSET,
+   };
+
+   struct pan_ptr push;
+   if (panvk_per_arch(cmd_prepare_gfx_push_uniforms)(cmdbuf, kernel, &push,
+                                                     1) != VK_SUCCESS)
+      return false;
+   if (shader_uses_sysval(kernel, graphics, gpu_prerast_params))
+      *(uint64_t *)((uint8_t *)push.cpu +
+                    shader_remapped_sysval_offset(
+                       kernel, sysval_offset(graphics, gpu_prerast_params))) =
+         params.gpu;
+
+   out->params = params.gpu;
+   out->draw = draw.gpu;
+   out->job = v9_prerast_job(cmdbuf, kernel, gs_desc->res_table, push.gpu,
+                             indirect ? 1 : src->vertex.count,
+                             indirect ? 1 : src->instance.count,
+                             gsi->invocations, indirect);
+   return out->job.gpu != 0;
+}
+
+/* Jobs before the GS kernel: zero its draw command, and with primitive
+ * restart build the strip table (panlib_gs_strip_table()) from the lowered
+ * VS indices. */
+static void
+v9_prerast_gs_prologue(struct panvk_cmd_buffer *cmdbuf,
+                       const struct panvk_draw_info *src, uint64_t arena,
+                       const struct v9_prerast_gs_job *gs)
+{
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+   panlib_fill_scalar(&ctx, panlib_1d(sizeof(VkDrawIndexedIndirectCommand) / 4),
+                      PANLIB_BARRIER_JM_BARRIER, gs->draw, 0);
+
+   if (src->index.restart_enable)
+      panlib_gs_strip_table(
+         &ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER,
+         arena + PANVK_GPU_PRERAST_INDEX_OFFSET,
+         gs->params + offsetof(struct panvk_gpu_prerast_gs_params, vertex_count),
+         PANVK_GPU_PRERAST_GS_STRIP_CAP, src->prim,
+         arena + PANVK_GPU_PRERAST_GS_STRIP_OFFSET);
+}
+
+/* panlib_xfb_capture() over the records the lowered VS or GS left, CSF
  * gpu_prerast_xfb() without the conditional rendering part (v9 has no
  * VK_EXT_conditional_rendering). */
 static void
@@ -2701,10 +2833,11 @@ v9_prerast_xfb(struct panvk_cmd_buffer *cmdbuf,
    panlib_xfb_capture(&ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER, ptr.gpu);
 }
 
-/* Draws the records of a VS-only lowering: the generated indices (vertex
- * IDs of instance 0, ~0 at restarts) with the passthrough VS. gen_draw is
+/* Draws the records of a lowering. VS only: the generated indices (vertex
+ * IDs of instance 0, ~0 at restarts) with the passthrough VS, gen_draw is
  * the VkDrawIndexedIndirectCommand panlib_v9_prerast_indirect() wrote for an
- * indirect draw, 0 for a direct one. */
+ * indirect draw, 0 for a direct one. GS: the strips with the GS passthrough,
+ * gen_draw is the GS kernel's draw command. */
 static void
 v9_prerast_draw_generated(struct panvk_cmd_buffer *cmdbuf,
                           const struct panvk_draw_info *src, uint64_t arena,
@@ -2722,9 +2855,34 @@ v9_prerast_draw_generated(struct panvk_cmd_buffer *cmdbuf,
    generated.indirect.count_buffer_dev_addr = 0;
    generated.indirect.draw_index = 0;
    generated.gpu_prerast_generated = true;
-
    cmdbuf->state.gfx.sysvals.gpu_prerast_records =
       arena + PANVK_GPU_PRERAST_RECORD_OFFSET;
+
+   /* The GS strips: one instance, restart-separated, the count the kernel
+    * appended in gen_draw. */
+   const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
+   if (gs) {
+      switch (gs->gpu_prerast.gs.output_prim) {
+      case MESA_PRIM_POINTS:
+         generated.prim = MESA_PRIM_POINTS;
+         break;
+      case MESA_PRIM_LINE_STRIP:
+         generated.prim = MESA_PRIM_LINE_STRIP;
+         break;
+      default:
+         generated.prim = MESA_PRIM_TRIANGLE_STRIP;
+         break;
+      }
+      generated.index.buffer_dev_addr = arena + PANVK_GPU_PRERAST_GS_INDEX_OFFSET;
+      generated.index.buffer_size =
+         PANVK_GPU_PRERAST_GS_INDEX_CAPACITY * sizeof(uint32_t);
+      generated.index.restart_enable = true;
+      generated.vertex.count = 1;
+      generated.instance.base = 0;
+      generated.instance.count = 1;
+      cmdbuf->state.gfx.sysvals.gpu_prerast_records =
+         arena + PANVK_GPU_PRERAST_GS_RECORD_OFFSET;
+   }
    gfx_state_set_dirty(cmdbuf, VS);
    gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
    v9_cmd_draw_layer(cmdbuf, &generated);
@@ -2737,7 +2895,8 @@ v9_prerast_draw_generated(struct panvk_cmd_buffer *cmdbuf,
 static uint64_t
 v9_prerast_indirect(struct panvk_cmd_buffer *cmdbuf,
                     const struct panvk_draw_info *src,
-                    const struct v9_prerast_vs_job *vs)
+                    const struct v9_prerast_vs_job *vs,
+                    const struct v9_prerast_gs_job *gs)
 {
    const struct panvk_shader *shader = cmdbuf->state.gfx.vs.shader;
    const struct panvk_shader_variant *lowered =
@@ -2782,6 +2941,18 @@ v9_prerast_indirect(struct panvk_cmd_buffer *cmdbuf,
          shader->gpu_prerast.io.record_stride),
       .inst_attr_mask = inst_mask,
    };
+   if (gs) {
+      const struct panvk_gpu_prerast_gs_info *gsi =
+         &cmdbuf->state.gfx.gs.shader->gpu_prerast.gs;
+
+      a->gs_job = gs->job.gpu;
+      a->gs_counts =
+         gs->params + offsetof(struct panvk_gpu_prerast_gs_params, vertex_count);
+      a->gs_invocations = gsi->invocations;
+      /* The GS slots bound the draw too, see gpu_prerast_can_lower(). */
+      a->capacity = MIN2(a->capacity,
+                         panvk_gpu_prerast_gs_cap_slots(gsi) / gsi->invocations);
+   }
    if (shader_uses_sysval(lowered, graphics, vs.first_vertex))
       a->first_vertex_sysval =
          vs->push + shader_remapped_sysval_offset(
@@ -2828,20 +2999,29 @@ v9_prerast_draw_one(struct panvk_cmd_buffer *cmdbuf,
    if (panvk_per_arch(cmd_alloc_tls_desc)(cmdbuf, true) != VK_SUCCESS)
       return;
 
+   const bool has_gs = cmdbuf->state.gfx.gs.shader != NULL;
    struct v9_prerast_vs_job vs;
+   struct v9_prerast_gs_job gs;
    uint64_t gen_draw = 0;
    if (!v9_prerast_vs(cmdbuf, src, arena, &vs) ||
+       (has_gs && !v9_prerast_gs(cmdbuf, src, arena, &gs)) ||
        (src->indirect.buffer_dev_addr &&
-        !(gen_draw = v9_prerast_indirect(cmdbuf, src, &vs)))) {
+        !(gen_draw = v9_prerast_indirect(cmdbuf, src, &vs,
+                                         has_gs ? &gs : NULL)))) {
       vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
       return;
    }
    v9_prerast_add_job(cmdbuf, &vs.job);
+   if (has_gs) {
+      v9_prerast_gs_prologue(cmdbuf, src, arena, &gs);
+      v9_prerast_add_job(cmdbuf, &gs.job);
+      gen_draw = gs.draw;
+   }
 
    /* Captured once per draw: multiview and transform feedback are
     * exclusive, a layered draw captures layer 0. */
    if (src->layer_id == 0 && v9_prerast_xfb_active(cmdbuf))
-      v9_prerast_xfb(cmdbuf, src, arena, vs.params);
+      v9_prerast_xfb(cmdbuf, src, arena, has_gs ? gs.params : vs.params);
 
    /* Capture-only draws (rasterizer discard) have nothing to tile. */
    if (!cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable)
@@ -2910,12 +3090,6 @@ v9_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
       return;
    }
 
-   /* ponytail: the GS kernel stage lands with the GS patch; geometryShader
-    * stays off on v9 until then. */
-   if (cmdbuf->state.gfx.gs.shader) {
-      v9_prerast_unhandled("geometry shader");
-      return;
-   }
 
    const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
    const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
@@ -3101,7 +3275,10 @@ v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
    uint32_t view_mask = cmdbuf->state.gfx.render.view_mask;
    uint32_t layer_count = view_mask ? util_bitcount(view_mask)
                                     : cmdbuf->state.gfx.render.layer_count;
-   const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
+   /* The last pre-rasterization stage writes gl_Layer. */
+   const struct panvk_shader *vs = cmdbuf->state.gfx.gs.shader
+                                      ? cmdbuf->state.gfx.gs.shader
+                                      : cmdbuf->state.gfx.vs.shader;
 
    /* Without a gl_Layer write, primitives go to layer 0 only. */
    if (!view_mask && (!vs || !vs->writes_layer))

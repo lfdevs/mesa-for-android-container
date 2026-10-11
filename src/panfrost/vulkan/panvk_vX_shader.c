@@ -679,9 +679,12 @@ panvk_preprocess_nir(struct vk_physical_device *vk_pdev,
     *
     * v9 JM uses the Bifrost scheme too: one draw per layer, each with its
     * own tiler context, and primitives whose gl_Layer is not the drawn layer
-    * are dropped in the VS.
+    * are dropped in the VS. A GS keeps its real positions in the records
+    * (transform feedback captures them) and its passthrough drops the
+    * primitives of the other layers.
     */
-   NIR_PASS(_, nir, lower_layer_writes);
+   if (nir->info.stage != MESA_SHADER_GEOMETRY)
+      NIR_PASS(_, nir, lower_layer_writes);
 #endif
 
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
@@ -2277,6 +2280,19 @@ panvk_gpu_prerast_gs_passthrough_nir(const nir_shader_compiler_options *options,
                                  .align_mul = 4);
    }
 
+#if PAN_ARCH == 9
+   /* v9 JM draws once per layer (see lower_layer_writes()): primitives of
+    * other layers get an infinite position, gl_Layer is no HW varying. */
+   nir_def *layer = NULL;
+   if (gs->outputs_written & VARYING_BIT_LAYER) {
+      unsigned layer_slot = util_bitcount64(
+         gs->outputs_written & BITFIELD64_MASK(VARYING_SLOT_LAYER));
+      layer = nir_load_global(&b, 1, 32,
+                              nir_iadd_imm(&b, record, layer_slot * 16),
+                              .align_mul = 4);
+   }
+#endif
+
    unsigned idx = 0;
    nir_def *planes = NULL;
    u_foreach_bit64(location, gs->outputs_written) {
@@ -2287,6 +2303,10 @@ panvk_gpu_prerast_gs_passthrough_nir(const nir_shader_compiler_options *options,
        */
       if (location == VARYING_SLOT_VIEWPORT)
          continue;
+#if PAN_ARCH == 9
+      if (location == VARYING_SLOT_LAYER)
+         continue;
+#endif
       unsigned ncomp = 4;
       nir_alu_type type = t->type[location] ? t->type[location]
                                             : nir_type_float32;
@@ -2307,6 +2327,12 @@ panvk_gpu_prerast_gs_passthrough_nir(const nir_shader_compiler_options *options,
       nir_def *value = nir_load_global(&b, ncomp, 32,
                                        nir_iadd_imm(&b, record, slot * 16),
                                        .align_mul = 4);
+#if PAN_ARCH == 9
+      if (layer && location == VARYING_SLOT_POS)
+         value = nir_bcsel(
+            &b, nir_ieq(&b, layer, load_sysval(&b, graphics, 32, layer_id)),
+            value, nir_imm_vec4(&b, INFINITY, INFINITY, INFINITY, 1.0f));
+#endif
       if (vp_index && location == VARYING_SLOT_POS) {
          struct panvk_prerast_xform xf =
             panvk_prerast_viewport_xform(&b, value, vp_index);
@@ -2325,6 +2351,9 @@ panvk_gpu_prerast_gs_passthrough_nir(const nir_shader_compiler_options *options,
 
    b.shader->info.outputs_written =
       gs->outputs_written & ~VARYING_BIT_VIEWPORT;
+#if PAN_ARCH == 9
+   b.shader->info.outputs_written &= ~VARYING_BIT_LAYER;
+#endif
    if (planes)
       b.shader->info.outputs_written |= BITFIELD64_BIT(scissor_loc);
    b.shader->num_outputs = idx;
