@@ -490,7 +490,13 @@ panvk_bc_shadow_info(const struct panvk_image *image, VkImageCreateInfo *info,
       to_panvk_physical_device(image->vk.base.device->physical);
    const bool bc12 = image->vk.format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK &&
                      image->vk.format <= VK_FORMAT_BC2_SRGB_BLOCK;
-   const unsigned cu = debug_get_num_option("PANVK_BC_AFRC", bc12 ? 24 : 32);
+   /* BC1 RGB (no alpha) and BC7: 16 (8 bpp), sampling cost unchanged. */
+   const bool bc8 = image->vk.format == VK_FORMAT_BC1_RGB_UNORM_BLOCK ||
+                    image->vk.format == VK_FORMAT_BC1_RGB_SRGB_BLOCK ||
+                    image->vk.format == VK_FORMAT_BC7_UNORM_BLOCK ||
+                    image->vk.format == VK_FORMAT_BC7_SRGB_BLOCK;
+   const unsigned cu =
+      debug_get_num_option("PANVK_BC_AFRC", bc8 ? 16 : bc12 ? 24 : 32);
 
    if ((cu == 16 || cu == 24 || cu == 32) &&
        image->bc_format == VK_FORMAT_R8G8B8A8_UNORM &&
