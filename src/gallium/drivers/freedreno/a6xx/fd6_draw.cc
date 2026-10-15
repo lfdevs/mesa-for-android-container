@@ -8,6 +8,8 @@
  */
 
 #include "pipe/p_state.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include "util/u_memory.h"
 #include "util/u_prim.h"
 #include "util/u_string.h"
@@ -324,6 +326,12 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
    struct fd6_context *fd6_ctx = fd6_context(ctx);
    struct fd6_emit emit;
 
+   if (getenv("DMD_VA_PROBE"))
+      fprintf(stderr, "tva-fd draw mode=%u prim=%u count=%u start=%u vs=%p fs=%p\n",
+              info->mode, ctx->screen->primtypes[info->mode],
+              draws ? draws[0].count : 0, draws ? draws[0].start : 0,
+              ctx->prog.vs, ctx->prog.fs);
+
    emit.ctx = ctx;
    emit.info = info;
    emit.indirect = indirect;
@@ -337,8 +345,11 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
    emit.prog = NULL;
    emit.draw_id = 0;
 
-   if (!(ctx->prog.vs && ctx->prog.fs))
+   if (!(ctx->prog.vs && ctx->prog.fs)) {
+      if (getenv("DMD_VA_PROBE"))
+         fprintf(stderr, "tva-fd draw skipped: missing shader\n");
       return;
+   }
 
    if (PIPELINE == HAS_TESS_GS) {
       if ((info->mode == MESA_PRIM_PATCHES) || ctx->prog.gs) {
@@ -362,8 +373,11 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
    }
 
    /* bail if compile failed: */
-   if (!emit.prog)
+   if (!emit.prog) {
+      if (getenv("DMD_VA_PROBE"))
+         fprintf(stderr, "tva-fd draw skipped: program lookup failed\n");
       return;
+   }
 
    fixup_draw_state(ctx, &emit);
 

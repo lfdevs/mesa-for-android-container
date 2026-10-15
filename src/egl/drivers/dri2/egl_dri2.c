@@ -852,6 +852,18 @@ dri2_setup_device(_EGLDisplay *disp, EGLBoolean software)
    _EGLDevice *dev;
    int render_fd;
 
+#ifdef HAVE_LIBDRM
+   /* The optional DRM shim exposes KGSL as an EGL render device. Keep the
+    * software-device fallback for applications running without the shim. */
+   if (disp->Options.Kgsl && !software && dri2_dpy->fd_render_gpu >= 0) {
+      dev = _eglFindDevice(dri2_dpy->fd_render_gpu, false);
+      if (dev) {
+         disp->Device = dev;
+         return EGL_TRUE;
+      }
+   }
+#endif
+
    if (disp->Options.Kgsl || disp->Options.Zink)
       software = true;
 

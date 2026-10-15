@@ -9,6 +9,8 @@
 
 #include "tu_device.h"
 
+#include <stdlib.h>
+
 #include "drm-uapi/drm_fourcc.h"
 #include "git_sha1.h"
 #include "perfcntrs/freedreno_perfcntr.h"
@@ -252,7 +254,11 @@ get_device_extensions(const struct tu_physical_device *device,
       .KHR_external_memory = true,
       .KHR_external_memory_fd = true,
       .KHR_external_semaphore = true,
-      .KHR_external_semaphore_fd = true,
+      /* KGSL exposes binary SYNC_FD fences only.  OPAQUE_FD timeline
+       * semaphores are unsupported, yet FFmpeg treats this extension as
+       * evidence that they are available and cannot import dma-heap frames.
+       */
+      .KHR_external_semaphore_fd = !is_kgsl(device->instance),
       .KHR_format_feature_flags2 = true,
       .KHR_fragment_shading_rate = device->info->props.has_attachment_shading_rate,
       .KHR_get_memory_requirements2 = true,
@@ -1792,6 +1798,17 @@ tu_physical_device_init(struct tu_physical_device *device,
    device->level1_dcache_size = util_cache_granularity();
    device->has_cached_non_coherent_memory =
       device->level1_dcache_size > 0 && !DETECT_ARCH_ARM;
+
+   /* KGSL on some Android kernels reports IOCOHERENT support even though
+    * userspace mappings still require explicit cache maintenance.  Keep the
+    * normal capability probing as the default, but provide a device-side
+    * switch while diagnosing such stacks.  This makes Vulkan expose a cached
+    * non-coherent memory type and routes map readback through the invalidate
+    * path instead of relying on the (incorrect) HOST_COHERENT declaration. */
+   if (getenv("TU_KGSL_FORCE_NONCOHERENT")) {
+      device->has_cached_coherent_memory = false;
+      device->has_cached_non_coherent_memory = device->level1_dcache_size > 0;
+   }
    device->preferred_uncached_as_cached_index = -1;
 
    device->memory.type_count = 1;
