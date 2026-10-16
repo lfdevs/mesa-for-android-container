@@ -329,7 +329,8 @@ panvk_per_arch(get_physical_device_features)(
       .sampleRateShading = true,
       .dualSrcBlend = true,
       .logicOp = true,
-      .multiDrawIndirect = PAN_ARCH >= 9,
+      /* JM (v6/v7/v9) unrolls multi-draws on the CPU. */
+      .multiDrawIndirect = true,
       .drawIndirectFirstInstance = true,
       .depthClamp = true,
       .depthBiasClamp = true,
@@ -1019,11 +1020,9 @@ panvk_per_arch(get_physical_device_properties)(
       .mipmapPrecisionBits = 8,
       /* Software limit. */
       .maxDrawIndexedIndexValue = UINT32_MAX,
-      /* v9 JM unrolls multi-draws on the CPU, one job per draw: keep the
-       * multiDrawIndirect minimum. */
-      .maxDrawIndirectCount = PAN_ARCH >= 10  ? UINT32_MAX
-                              : PAN_ARCH == 9 ? UINT16_MAX
-                                              : 1,
+      /* JM (v6/v7/v9) unrolls multi-draws on the CPU, one job per draw:
+       * keep the multiDrawIndirect minimum. */
+      .maxDrawIndirectCount = PAN_ARCH >= 10 ? UINT32_MAX : UINT16_MAX,
       .maxSamplerLodBias = (float)INT16_MAX / 256.0f,
       .maxSamplerAnisotropy = 16,
       .maxViewports = PAN_ARCH >= 9 ? 16 : 1,

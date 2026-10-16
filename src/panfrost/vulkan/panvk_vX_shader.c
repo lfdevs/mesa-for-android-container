@@ -3451,6 +3451,15 @@ panvk_compile_shader(struct panvk_device *dev,
       .robust_descriptors = dev->vk.enabled_features.nullDescriptor,
    };
 
+#if PAN_ARCH < 9
+   /* Bifrost: no IDVS. JimVulkan measured INDEXED_VERTEX jobs that complete
+    * without writing positions on G72/G76; the vendor driver also uses a
+    * plain VERTEX + TILER chain there. The geometry stage emulation needs
+    * the separate vertex job as well.
+    */
+   inputs.no_idvs = true;
+#endif
+
 #if PAN_ARCH == 9
    /* lower_layer_writes() removed the gl_Layer store, the variable stays. */
    shader->writes_layer =
@@ -4815,8 +4824,13 @@ panvk_per_arch(link_shaders)(struct panvk_pool *desc_pool,
    const struct pan_varying_slot *vs_psiz_slot =
       pan_varying_layout_find_slot(vs_layout, VARYING_SLOT_PSIZ);
 
+   /* The position buffer exists even when the vertex shader writes no
+    * gl_Position (a DXVK vertex shader feeding a geometry stage or stream
+    * output only): the vertex job accesses it regardless, and a NULL buffer
+    * faults the whole job chain.
+    */
+   buf_strides[PANVK_VARY_BUF_POSITION] = sizeof(uint32_t) * 4;
    if (vs_pos_slot) {
-      buf_strides[PANVK_VARY_BUF_POSITION] = sizeof(uint32_t) * 4;
       buf_sizes[VARYING_SLOT_POS] =
          nir_alu_type_get_type_size(vs_pos_slot->alu_type);
    }

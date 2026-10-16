@@ -1415,10 +1415,17 @@ prepare_draw_layer(struct panvk_cmd_buffer *cmdbuf,
       if (result != VK_SUCCESS)
          return result;
 
+      /* A vertex shader that writes no gl_Position leaves the position
+       * buffer undefined: rasterize nothing rather than garbage.
+       */
+      const bool writes_pos =
+         pan_varying_layout_find_slot(&vs->info.varyings.formats,
+                                      VARYING_SLOT_POS) != NULL;
       bool needs_tiling =
-         !cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable ||
-         cmdbuf->state.gfx.occlusion_query.mode !=
-            MALI_OCCLUSION_MODE_DISABLED;
+         writes_pos &&
+         (!cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable ||
+          cmdbuf->state.gfx.occlusion_query.mode !=
+             MALI_OCCLUSION_MODE_DISABLED);
 
       if (needs_tiling) {
          result = panvk_draw_prepare_tiler_job(cmdbuf, draw);
@@ -1842,22 +1849,22 @@ panvk_per_arch(CmdDrawIndirect)(VkCommandBuffer commandBuffer, VkBuffer _buffer,
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
    VK_FROM_HANDLE(panvk_buffer, buffer, _buffer);
 
-   if (drawCount == 0)
-      return;
+   /* The job manager takes one indirect draw at a time: multiDrawIndirect
+    * is drawCount of them, each reading its own command.
+    */
+   for (uint32_t i = 0; i < drawCount; i++) {
+      struct panvk_draw_data draw = {
+         .info = {
+            .indirect.buffer_dev_addr =
+               panvk_buffer_gpu_ptr(buffer, offset + (VkDeviceSize)i * stride),
+            .indirect.draw_count = 1,
+            .indirect.stride = stride,
+            .prim = panvk_get_client_prim(cmdbuf),
+         },
+      };
 
-   /* We cannot support arbitrary draw count on JM */
-   assert(drawCount == 1);
-
-   struct panvk_draw_data draw = {
-      .info = {
-         .indirect.buffer_dev_addr = panvk_buffer_gpu_ptr(buffer, offset),
-         .indirect.draw_count = drawCount,
-         .indirect.stride = stride,
-         .prim = panvk_get_client_prim(cmdbuf),
-      },
-   };
-
-   panvk_cmd_draw_indirect(cmdbuf, &draw);
+      panvk_cmd_draw_indirect(cmdbuf, &draw);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1877,20 +1884,21 @@ panvk_per_arch(CmdDrawIndexedIndirect)(VkCommandBuffer commandBuffer,
    if (drawCount == 0 || cmdbuf->state.gfx.ib.size == 0)
       return;
 
-   /* We cannot support arbitrary draw count on JM */
-   assert(drawCount == 1);
+   /* One indirect draw at a time, as in CmdDrawIndirect. */
+   for (uint32_t i = 0; i < drawCount; i++) {
+      struct panvk_draw_data draw = {
+         .info = {
+            .index = panvk_draw_info_index(cmdbuf, 0),
+            .indirect.buffer_dev_addr =
+               panvk_buffer_gpu_ptr(buffer, offset + (VkDeviceSize)i * stride),
+            .indirect.draw_count = 1,
+            .indirect.stride = stride,
+            .prim = panvk_get_client_prim(cmdbuf),
+         },
+      };
 
-   struct panvk_draw_data draw = {
-      .info = {
-         .index = panvk_draw_info_index(cmdbuf, 0),
-         .indirect.buffer_dev_addr = panvk_buffer_gpu_ptr(buffer, offset),
-         .indirect.draw_count = drawCount,
-         .indirect.stride = stride,
-         .prim = panvk_get_client_prim(cmdbuf),
-      },
-   };
-
-   panvk_cmd_draw_indirect(cmdbuf, &draw);
+      panvk_cmd_draw_indirect(cmdbuf, &draw);
+   }
 }
 #else /* PAN_ARCH == 9 */
 
