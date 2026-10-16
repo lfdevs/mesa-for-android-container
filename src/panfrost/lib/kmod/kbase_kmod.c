@@ -1664,7 +1664,64 @@ kbase_kmod_import_dmabuf(struct pan_kmod_dev *dev,
       },
    };
 
-   if (ioctl(dev->fd, KBASE_IOCTL_MEM_IMPORT, &req)) {
+   /* MediaTek kbase built with CONFIG_MALI_MTK_SLC_DYNAMIC_POLICY_V2 (MT6993
+    * Mali-G1-Ultra, CSF uAPI 1.38) appends PBHA hint fields to both halves of
+    * union kbase_ioctl_mem_import, so it is 40 bytes there and the Arm
+    * 24-byte _IOWR encoding is unknown to the kernel (ENOTTY).  Retry with
+    * the 40-byte layout; zeroed extras select the "no PBHA hint" path.
+    * Latched per process: 0 unknown, 1 Arm layout, 2 MTK layout. */
+   static uint32_t import_layout;
+   int ret = -1;
+
+   if (p_atomic_read(&import_layout) != 2) {
+      ret = ioctl(dev->fd, KBASE_IOCTL_MEM_IMPORT, &req);
+      if (!ret && p_atomic_cmpxchg(&import_layout, 0, 1) == 0)
+         mesa_logi("kbase: mem_import via MEM_IMPORT (24 bytes)");
+   }
+
+   if (ret && (p_atomic_read(&import_layout) == 2 || errno == ENOTTY)) {
+      union {
+         struct {
+            uint64_t flags;
+            uint64_t phandle;
+            uint32_t type;
+            uint32_t padding;
+            uint32_t vk_allocate_memory_call_id;
+            uint8_t num_planes;
+            uint8_t pbha_8bit;
+            uint8_t alignment[6];
+         } in;
+         struct {
+            uint64_t flags;
+            uint64_t gpu_va;
+            uint64_t va_pages;
+            uint8_t pbha_8bit;
+            uint8_t alignment[7];
+         } out;
+      } mreq = {
+         .in = {
+            .flags = req.in.flags,
+            .phandle = req.in.phandle,
+            .type = req.in.type,
+         },
+      };
+      static_assert(sizeof(mreq) == 40, "MTK SLC mem_import layout");
+
+      if (p_atomic_read(&import_layout) != 2)
+         mesa_logw("kbase: KBASE_IOCTL_MEM_IMPORT failed: %s; trying the "
+                   "MTK SLC layout", strerror(errno));
+      ret = ioctl(dev->fd, _IOWR(KBASE_IOCTL_TYPE, 22, __typeof__(mreq)),
+                  &mreq);
+      if (!ret) {
+         req.out.flags = mreq.out.flags;
+         req.out.gpu_va = mreq.out.gpu_va;
+         req.out.va_pages = mreq.out.va_pages;
+         if (p_atomic_cmpxchg(&import_layout, 0, 2) == 0)
+            mesa_logi("kbase: mem_import via MTK SLC layout (40 bytes)");
+      }
+   }
+
+   if (ret) {
       mesa_loge("kbase: KBASE_IOCTL_MEM_IMPORT failed: %s", strerror(errno));
       goto err_close_dmabuf;
    }
