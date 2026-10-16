@@ -170,6 +170,20 @@ struct panvk_gpu_queue {
       uint64_t ctx;
       uint64_t first_chunk;
    } kbase_spare_heap;
+   /* Retired heap contexts that are no longer firmware-visible, waiting to
+    * be destroyed on the kbase_spare_heap thread.  KBASE_IOCTL_CS_TILER_HEAP_TERM
+    * took 1.5 ms p50 (23 ms max) on the submitting thread in NFS Most Wanted.
+    * The submitting thread appends under lock; the job drains the list and
+    * clears queued when it finds it empty. */
+#define PANVK_KBASE_HEAP_TERM_MAX 16
+   struct {
+      mtx_t lock;
+      struct util_queue_fence fence;
+      bool enabled;
+      bool queued;
+      uint32_t count;
+      uint64_t ctxs[PANVK_KBASE_HEAP_TERM_MAX];
+   } kbase_heap_term;
 #endif
 
    struct {

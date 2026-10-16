@@ -2107,6 +2107,73 @@ kbase_spare_heap_take(struct panvk_gpu_queue *queue, uint64_t *first_chunk)
    return ctx;
 }
 
+/* Retired tiler heaps are destroyed on the heap thread by default.
+ * PANVK_KBASE_ASYNC_HEAP_TERM=0 destroys them on the submitting thread. */
+DEBUG_GET_ONCE_BOOL_OPTION(kbase_async_heap_term, "PANVK_KBASE_ASYNC_HEAP_TERM",
+                           true)
+
+static void
+kbase_heap_term_job(void *job, void *gdata, int thread_index)
+{
+   struct panvk_gpu_queue *queue = job;
+   struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
+   uint64_t ctxs[PANVK_KBASE_HEAP_TERM_MAX];
+
+   while (true) {
+      mtx_lock(&queue->kbase_heap_term.lock);
+      const uint32_t count = queue->kbase_heap_term.count;
+      if (!count) {
+         queue->kbase_heap_term.queued = false;
+         mtx_unlock(&queue->kbase_heap_term.lock);
+         return;
+      }
+      memcpy(ctxs, queue->kbase_heap_term.ctxs, count * sizeof(ctxs[0]));
+      queue->kbase_heap_term.count = 0;
+      mtx_unlock(&queue->kbase_heap_term.lock);
+
+      for (uint32_t i = 0; i < count; i++)
+         kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev, ctxs[i]);
+   }
+}
+
+/* Destroys heap contexts that are no longer firmware-visible (the caller
+ * checked the graphics seqnos), on the heap thread when possible.  Destroying
+ * later than that point is always safe; only earlier is not. */
+static void
+kbase_heap_term_push(struct panvk_gpu_queue *queue, const uint64_t *ctxs,
+                     uint32_t count)
+{
+   struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
+   uint32_t pushed = 0;
+   bool add_job = false;
+
+   if (queue->kbase_heap_term.enabled) {
+      mtx_lock(&queue->kbase_heap_term.lock);
+      while (pushed < count &&
+             queue->kbase_heap_term.count < PANVK_KBASE_HEAP_TERM_MAX)
+         queue->kbase_heap_term.ctxs[queue->kbase_heap_term.count++] =
+            ctxs[pushed++];
+      if (pushed && !queue->kbase_heap_term.queued) {
+         queue->kbase_heap_term.queued = true;
+         add_job = true;
+      }
+      mtx_unlock(&queue->kbase_heap_term.lock);
+   }
+
+   if (add_job) {
+      /* A previous job that just cleared queued may not have signalled its
+       * fence yet; that is a few instructions away. */
+      util_queue_fence_wait(&queue->kbase_heap_term.fence);
+      util_queue_add_job(&queue->kbase_spare_heap.thread, queue,
+                         &queue->kbase_heap_term.fence, kbase_heap_term_job,
+                         NULL, 0);
+   }
+
+   /* Disabled, or the thread is PANVK_KBASE_HEAP_TERM_MAX contexts behind. */
+   for (uint32_t i = pushed; i < count; i++)
+      kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev, ctxs[i]);
+}
+
 static void
 kbase_spare_heap_init(struct panvk_gpu_queue *queue)
 {
@@ -2114,6 +2181,17 @@ kbase_spare_heap_init(struct panvk_gpu_queue *queue)
    queue->kbase_spare_heap.enabled =
       util_queue_init(&queue->kbase_spare_heap.thread, "panvk_heap", 2, 1, 0,
                       NULL);
+
+   /* The thread holds at most one spare-heap job and one term job, so
+    * util_queue_add_job() never blocks on its two job slots. */
+   util_queue_fence_init(&queue->kbase_heap_term.fence);
+   queue->kbase_heap_term.queued = false;
+   queue->kbase_heap_term.count = 0;
+   queue->kbase_heap_term.enabled =
+      queue->kbase_spare_heap.enabled &&
+      debug_get_option_kbase_async_heap_term() &&
+      mtx_init(&queue->kbase_heap_term.lock, mtx_plain) == thrd_success;
+
    kbase_spare_heap_kick(queue);
 }
 
@@ -2124,12 +2202,27 @@ kbase_spare_heap_finish(struct panvk_gpu_queue *queue)
    uint64_t first_chunk;
    uint64_t ctx = kbase_spare_heap_take(queue, &first_chunk);
 
+   /* util_queue_destroy() drops jobs that have not started: run the
+    * pending heap destructions first. */
+   if (queue->kbase_heap_term.enabled)
+      util_queue_fence_wait(&queue->kbase_heap_term.fence);
+
    if (queue->kbase_spare_heap.enabled)
       util_queue_destroy(&queue->kbase_spare_heap.thread);
    queue->kbase_spare_heap.enabled = false;
    util_queue_fence_destroy(&queue->kbase_spare_heap.fence);
    if (ctx)
       kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev, ctx);
+
+   if (queue->kbase_heap_term.enabled) {
+      for (uint32_t i = 0; i < queue->kbase_heap_term.count; i++)
+         kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev,
+                                           queue->kbase_heap_term.ctxs[i]);
+      queue->kbase_heap_term.count = 0;
+      mtx_destroy(&queue->kbase_heap_term.lock);
+   }
+   queue->kbase_heap_term.enabled = false;
+   util_queue_fence_destroy(&queue->kbase_heap_term.fence);
 }
 #endif
 
@@ -2302,8 +2395,6 @@ cleanup_tiler(struct panvk_gpu_queue *queue)
 static bool
 kbase_try_destroy_retired_heap(struct panvk_gpu_queue *queue)
 {
-   struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
-
    if (!queue->kbase_retired_heap_count)
       return true;
 
@@ -2319,15 +2410,18 @@ kbase_try_destroy_retired_heap(struct panvk_gpu_queue *queue)
       kbase_subqueue_seqno_cell(queue, PANVK_SUBQUEUE_VERTEX_TILER)->seqno;
    const uint64_t frag_seqno =
       kbase_subqueue_seqno_cell(queue, PANVK_SUBQUEUE_FRAGMENT)->seqno;
+   uint64_t ctxs[ARRAY_SIZE(queue->kbase_retired_heaps)];
    uint32_t done = 0;
 
    while (done < queue->kbase_retired_heap_count &&
           vt_seqno > queue->kbase_retired_heaps[done].vt_jobs &&
           frag_seqno > queue->kbase_retired_heaps[done].frag_jobs) {
-      kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev,
-                                        queue->kbase_retired_heaps[done].ctx);
+      ctxs[done] = queue->kbase_retired_heaps[done].ctx;
       done++;
    }
+
+   if (done)
+      kbase_heap_term_push(queue, ctxs, done);
 
    queue->kbase_retired_heap_count -= done;
    memmove(queue->kbase_retired_heaps, queue->kbase_retired_heaps + done,
@@ -2351,7 +2445,7 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
    /* Hold at most PANVK_KBASE_HEAP_SLOTS - 1 retired contexts: if they are
     * all still firmware-visible, skip this renewal (VK_INCOMPLETE) and retry
     * on a later graphics submission.  The next descriptor slot belonged to
-    * the oldest heap, which is destroyed by now. */
+    * the oldest heap, which the firmware no longer reads. */
    if (!kbase_try_destroy_retired_heap(queue))
       return VK_INCOMPLETE;
 
