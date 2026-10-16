@@ -351,10 +351,12 @@ load_indirect_inputs(nir_builder *b, const struct panvk_gs_lower_options *opts,
    /* Only an indexed draw has a minimum to read. */
    nir_def *min_addr =
       load_param_u64(b, opts, offsetof(struct panvk_gs_push, index_min));
+   /* The else value must exist before the if: a phi only follows phis. */
+   nir_def *zero = nir_imm_int(b, 0);
    nir_push_if(b, indexed);
    nir_def *min_val = nir_load_global(b, 1, 32, min_addr, .align_mul = 4);
    nir_pop_if(b, NULL);
-   in.bias = nir_if_phi(b, min_val, nir_imm_int(b, 0));
+   in.bias = nir_if_phi(b, min_val, zero);
 
    /* Instance Size, a "padded" count: (2 * odd + 1) << shift. */
    nir_def *dcd =
@@ -384,11 +386,12 @@ load_direct_bias(nir_builder *b, const struct panvk_gs_lower_options *opts,
 {
    nir_def *min_addr =
       load_param_u64(b, opts, offsetof(struct panvk_gs_push, index_min));
+   nir_def *zero = nir_imm_int(b, 0);
    nir_push_if(b, nir_iand(b, nir_ine_imm(b, min_addr, 0),
                            nir_ine_imm(b, index_size, 0)));
    nir_def *v = nir_load_global(b, 1, 32, min_addr, .align_mul = 4);
    nir_pop_if(b, NULL);
-   return nir_if_phi(b, v, nir_imm_int(b, 0));
+   return nir_if_phi(b, v, zero);
 }
 
 /* Which of the vertex shader's varying records is vertex i of this
@@ -533,13 +536,13 @@ lower_per_vertex_input(nir_builder *b, nir_intrinsic_instr *intr,
    /* A slot the vertex shader does not write reads as zero, and must not be
     * loaded at all.
     */
+   nir_def *zero =
+      nir_imm_zero(b, intr->def.num_components, intr->def.bit_size);
    nir_push_if(b, nir_ine_imm(b, offset, PANVK_GS_SLOT_UNUSED));
    nir_def *val = load_components(b, base, byte, intr->def.num_components,
                                   intr->def.bit_size);
    nir_pop_if(b, NULL);
-   return nir_if_phi(b, val,
-                     nir_imm_zero(b, intr->def.num_components,
-                                  intr->def.bit_size));
+   return nir_if_phi(b, val, zero);
 }
 
 /* Output vertex slot counter of stream s, the address of index list entry
@@ -1099,8 +1102,13 @@ panvk_nir_lower_gs(nir_shader *nir, const struct panvk_gs_lower_options *opts)
    NIR_PASS(_, nir, nir_lower_vars_to_ssa);
    NIR_PASS(_, nir, nir_opt_dce);
 
-   /* It is a compute shader from here on. */
+   /* It is a compute shader from here on. The geometry info shares a union
+    * with the compute info, and the capture is explicit stores now.
+    */
    nir->info.stage = MESA_SHADER_COMPUTE;
+   memset(&nir->info.cs, 0, sizeof(nir->info.cs));
+   nir->xfb_info = NULL;
+   nir->info.has_transform_feedback_varyings = false;
    nir->info.workgroup_size[0] = PANVK_GS_WORKGROUP_SIZE;
    nir->info.workgroup_size[1] = 1;
    nir->info.workgroup_size[2] = 1;

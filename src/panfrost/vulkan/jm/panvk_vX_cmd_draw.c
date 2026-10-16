@@ -1217,9 +1217,10 @@ panvk_emit_tiler_dcd(struct panvk_cmd_buffer *cmdbuf,
 
       /* In case of indirect draw, the descriptor will be patched at runtime */
       if (gs) {
+         /* One instance. Both sizes are "padded" fields: 0 does not encode. */
          cfg.offset_start = 0;
          cfg.instance_size = 1;
-         cfg.instance_primitive_size = 0;
+         cfg.instance_primitive_size = 1;
       } else if (!is_indirect_draw(draw)) {
          cfg.offset_start = draw->info.vertex.raw_offset;
          cfg.instance_size =
