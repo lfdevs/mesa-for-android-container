@@ -203,5 +203,15 @@ pan_get_model(uint64_t gpu_id, uint32_t gpu_variant,
       }
    }
 
+   /* Bifrost (v6/v7) rows carry no variant, but some kbase kernels report
+    * one anyway (G52 r1 0x74021000 says variant 0x2), so match on the
+    * product id alone there. */
+   if ((gpu_prod_id >> 16) >= 6 && (gpu_prod_id >> 16) < 9) {
+      for (unsigned i = 0; i < ARRAY_SIZE(pan_model_list); ++i) {
+         if (pan_model_list[i].gpu_prod_id == gpu_prod_id)
+            return &pan_model_list[i];
+      }
+   }
+
    return NULL;
 }
