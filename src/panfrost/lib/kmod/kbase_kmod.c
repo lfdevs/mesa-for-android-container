@@ -1538,7 +1538,19 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
       .max_allocations = 255,
       .phys_pages = (128ull << 30) / kbase_kmod_page_size(),
    };
-   if (ioctl(fd, KBASE_IOCTL_MEM_JIT_INIT, &jit_init)) {
+   /* Bifrost (arch < 9) JM: nothing we allocate needs JIT or CUSTOM_VA
+    * (the tiler heap is a SAME_VA GROW_ON_GPF BO), and JIT_INIT fails with
+    * ENOMEM on G52 r1 kernels, so skip it (as JimVulkan/mali-panvk, MIT). */
+   uint64_t raw_id = kbase_gpuprop_get(props_buf, props_size,
+                                       KBASE_GPUPROP_RAW_GPU_ID, 0);
+   if (!raw_id)
+      raw_id = kbase_gpuprop_get(props_buf, props_size,
+                                 KBASE_GPUPROP_PRODUCT_ID, 0) << 16;
+   if (!is_csf && raw_id && pan_arch(raw_id & 0xffffffffu) < 9) {
+      mesa_logi("kbase: v%u JM, KBASE_IOCTL_MEM_JIT_INIT skipped; tiler "
+                "heap is a GROW_ON_GPF region",
+                pan_arch(raw_id & 0xffffffffu));
+   } else if (ioctl(fd, KBASE_IOCTL_MEM_JIT_INIT, &jit_init)) {
       mesa_logw("kbase: KBASE_IOCTL_MEM_JIT_INIT failed: %s "
                 "(tiler heap creation will not work)", strerror(errno));
    }
@@ -2127,6 +2139,16 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
           (kmod_flags & PAN_KMOD_BO_FLAG_NO_MMAP)) {
          alloc_flags |= KBASE_JM_MEM_TILER_ALIGN_TOP;
          commit_pages = MIN2(extension, va_pages);
+      }
+
+      /* Bifrost JM (no JIT, see dev_create): commit 1 MiB up front and let
+       * GPU faults grow the rest in 2 MiB steps (JimVulkan/mali-panvk). */
+      if (!kbase_dev->is_csf && pan_arch(dev->props.gpu_id) < 9 &&
+          (kmod_flags & PAN_KMOD_BO_FLAG_NO_MMAP)) {
+         commit_pages = MIN2((1024 * 1024) / page_size, va_pages);
+         mesa_logi("kbase: v%u growable BO, GROW_ON_GPF, %" PRIu64
+                   " of %" PRIu64 " pages committed",
+                   pan_arch(dev->props.gpu_id), commit_pages, va_pages);
       }
    }
 
