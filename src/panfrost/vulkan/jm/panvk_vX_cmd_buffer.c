@@ -481,6 +481,13 @@ panvk_per_arch(CmdPipelineBarrier2)(VkCommandBuffer commandBuffer,
       panvk_per_arch(cmd_close_batch)(cmdbuf);
       panvk_per_arch(cmd_open_batch)(cmdbuf);
    }
+
+   /* BC emulation: an image leaving VK_IMAGE_LAYOUT_ZERO_INITIALIZED_EXT
+    * has zero blocks, whose decoded texels are not zero (BC1 decodes them
+    * to opaque black). Decode them as CSF does. The internal barriers it
+    * records have no image barriers, so this does not recurse.
+    */
+   panvk_per_arch(cmd_bc_decode_zero_initialized)(cmdbuf, pDependencyInfo);
 }
 
 static void
