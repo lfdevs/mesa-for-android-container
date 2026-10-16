@@ -1438,13 +1438,8 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
    switch (arch) {
    case 6:
    case 7:
-      if (!os_get_option("PAN_I_WANT_A_BROKEN_VULKAN_DRIVER")) {
-         result = panvk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
-                               "WARNING: panvk is not well-tested on v%d, "
-                               "pass PAN_I_WANT_A_BROKEN_VULKAN_DRIVER=1 "
-                               "if you know what you're doing.", arch);
-         goto fail_kbase;
-      }
+      /* Bifrost over kbase JM (jm-v7 series): experimental, no gate. */
+      mesa_logw("panvk: v%u (Bifrost) support is experimental", arch);
       break;
 
    case 9: /* Valhall JM over kbase job atoms (jm-v9 series) */
