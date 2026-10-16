@@ -158,6 +158,9 @@ enum panvk_cmd_graphics_dirty_state {
    PANVK_CMD_GRAPHICS_DIRTY_VS_PUSH_UNIFORMS,
    PANVK_CMD_GRAPHICS_DIRTY_FS_PUSH_UNIFORMS,
    PANVK_CMD_GRAPHICS_DIRTY_IDVS,
+#if PAN_ARCH < 9
+   PANVK_CMD_GRAPHICS_DIRTY_GS,
+#endif
    PANVK_CMD_GRAPHICS_DIRTY_STATE_COUNT,
 };
 
@@ -229,6 +232,25 @@ struct panvk_cmd_graphics_state {
       const struct panvk_shader *shader;
       struct panvk_shader_desc_state desc;
    } gs, tcs, tes;
+#else
+   /* Geometry shaders are emulated by a compute job between the vertex and
+    * tiler jobs (panvk_nir_lower_gs.c). The buffers are the ones that job
+    * writes and the tiler then reads.
+    */
+   struct {
+      const struct panvk_shader *shader;
+      struct panvk_shader_desc_state desc;
+      uint64_t out_pos;
+      uint64_t out_general;
+      uint64_t out_index;
+      uint64_t in_general;
+      uint64_t in_offsets;
+      uint64_t out_offsets;
+      uint64_t viewports;
+      uint32_t out_vertex_count;
+      uint32_t out_index_count;
+      enum mesa_prim out_prim;
+   } gs;
 #endif
 
    struct {

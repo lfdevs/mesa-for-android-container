@@ -3458,6 +3458,14 @@ panvk_compile_shader(struct panvk_device *dev,
     * the separate vertex job as well.
     */
    inputs.no_idvs = true;
+
+   /* The geometry shader emulation reads the vertex shader's output in clip
+    * space and does the viewport transform itself (panvk_nir_lower_gs.c).
+    */
+   const bool vs_clip_space =
+      info->stage == MESA_SHADER_VERTEX &&
+      (info->next_stage_mask & VK_SHADER_STAGE_GEOMETRY_BIT);
+   inputs.skip_viewport_transform = vs_clip_space;
 #endif
 
 #if PAN_ARCH == 9
@@ -3504,6 +3512,9 @@ panvk_compile_shader(struct panvk_device *dev,
 #endif
       for (enum panvk_vs_variant v = 0; v <= last_variant; v++) {
          struct panvk_shader_variant *variant = &shader->variants[v];
+#if PAN_ARCH < 9
+         variant->gs.vs_clip_space = vs_clip_space;
+#endif
 
          /* Each variant gets its own NIR. To save an extra clone, we use the
           * original NIR for the last stage.
@@ -3845,6 +3856,78 @@ panvk_compile_shader(struct panvk_device *dev,
          return result;
       }
       t->compiled = true;
+      break;
+   }
+#else
+   case MESA_SHADER_GEOMETRY: {
+      /* Mali has no geometry stage: the shader is lowered into a compute
+       * shader that runs between the vertex job and the tiler job. See
+       * panvk_nir_lower_gs.c.
+       */
+      struct panvk_shader_variant *variant =
+         (struct panvk_shader_variant *)panvk_shader_only_variant(shader);
+      nir_shader *nir = info->nir;
+
+      const unsigned in_verts =
+         mesa_vertices_per_prim(nir->info.gs.input_primitive);
+      const unsigned out_verts =
+         mesa_vertices_per_prim(nir->info.gs.output_primitive);
+
+      variant->gs.input_verts_per_prim = in_verts;
+      variant->gs.output_verts_per_prim = out_verts;
+      variant->gs.max_output_verts = nir->info.gs.vertices_out;
+      variant->gs.invocations = MAX2(nir->info.gs.invocations, 1);
+      variant->gs.max_output_prims =
+         nir->info.gs.vertices_out >= out_verts
+            ? nir->info.gs.vertices_out - (out_verts - 1)
+            : 0;
+      variant->gs.output_prim = nir->info.gs.output_primitive;
+      /* From the variables: nothing gathered info on this NIR yet. */
+      variant->gs.outputs_written = 0;
+      nir_foreach_shader_out_variable(var, nir) {
+         if (var->data.compact)
+            continue;
+         const unsigned slots = glsl_count_attribute_slots(var->type, false);
+         variant->gs.outputs_written |=
+            BITFIELD64_RANGE(var->data.location, slots);
+      }
+      variant->gs.writes_viewport =
+         variant->gs.outputs_written & BITFIELD64_BIT(VARYING_SLOT_VIEWPORT);
+      if (variant->gs.writes_viewport)
+         variant->gs.outputs_written |=
+            BITFIELD64_BIT(PANVK_GS_VIEWPORT_INDEX_SLOT);
+
+      const struct panvk_gs_lower_options gs_opts = {
+         .stream_mask = 1,
+         .input_verts_per_prim = in_verts,
+         .output_verts_per_prim = out_verts,
+         .max_output_verts = variant->gs.max_output_verts,
+         .max_output_prims = variant->gs.max_output_prims,
+         .invocations = variant->gs.invocations,
+         .pos_stride = sizeof(uint32_t) * 4,
+         .params_base = SYSVALS_PUSH_CONST_BASE +
+                        offsetof(struct panvk_compute_sysvals, gs),
+      };
+
+      if (!panvk_nir_lower_gs(nir, &gs_opts)) {
+         panvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
+         return panvk_error(dev, VK_ERROR_FEATURE_NOT_PRESENT);
+      }
+
+      /* A compute shader from here on. */
+      panvk_lower_nir(dev, nir, info->set_layout_count, info->set_layouts,
+                      info->robustness, state, &shader->desc_info, false);
+
+      struct pan_compile_inputs k_inputs = inputs;
+      k_inputs.varying_layout = NULL;
+      k_inputs.view_mask = 0;
+      variant->own_bin = true;
+      result = panvk_compile_nir(dev, nir, info->flags, &k_inputs, state, NULL,
+                                 &shader->desc_info, variant);
+      if (result != VK_SUCCESS) {
+         panvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
+         return result;
+      }
       break;
    }
 #endif
@@ -4243,6 +4326,9 @@ panvk_deserialize_shader_variant(struct vk_device *vk_dev,
 
    shader->info = info;
    blob_copy_bytes(blob, &shader->fau, sizeof(shader->fau));
+#if PAN_ARCH < 9
+   blob_copy_bytes(blob, &shader->gs, sizeof(shader->gs));
+#endif
 
    switch (shader->info.stage) {
    case MESA_SHADER_COMPUTE:
@@ -4418,6 +4504,9 @@ panvk_shader_serialize_variant(struct vk_device *vk_dev,
 {
    blob_write_bytes(blob, &shader->info, sizeof(shader->info));
    blob_write_bytes(blob, &shader->fau, sizeof(shader->fau));
+#if PAN_ARCH < 9
+   blob_write_bytes(blob, &shader->gs, sizeof(shader->gs));
+#endif
 
    switch (shader->info.stage) {
    case MESA_SHADER_COMPUTE:
@@ -4745,7 +4834,7 @@ static VkResult
 emit_varying_attrs(struct panvk_pool *desc_pool,
                    const struct pan_varying_layout *varyings,
                    const unsigned *bit_sizes, const unsigned *buf_offsets,
-                   struct panvk_priv_mem *mem)
+                   bool pos_clip_space, struct panvk_priv_mem *mem)
 {
    const unsigned varying_count = varyings->count;
    if (!varying_count) {
@@ -4792,6 +4881,13 @@ emit_varying_attrs(struct panvk_pool *desc_pool,
                cfg.buffer_index = varying_buf_id(loc);
                cfg.offset = buf_offsets[loc];
                cfg.format = varying_format(loc, pfmt);
+               /* SNAP_4 is the tiler's fixed-point position. A vertex shader
+                * feeding the geometry emulation writes clip space, which the
+                * emulation reads back as plain floats.
+                */
+               if (loc == VARYING_SLOT_POS && pos_clip_space)
+                  cfg.format = GENX(pan_format_from_pipe_format)(
+                                  PIPE_FORMAT_R32G32B32A32_FLOAT)->hw;
             }
             cfg.offset_enable = false;
          }
@@ -4804,6 +4900,7 @@ emit_varying_attrs(struct panvk_pool *desc_pool,
 VkResult
 panvk_per_arch(link_shaders)(struct panvk_pool *desc_pool,
                              const struct panvk_shader_variant *vs,
+                             const struct panvk_shader_variant *gs,
                              const struct panvk_shader_variant *fs,
                              struct panvk_shader_link *link)
 {
@@ -4841,10 +4938,26 @@ panvk_per_arch(link_shaders)(struct panvk_pool *desc_pool,
    }
    buf_strides[PANVK_VARY_BUF_GENERAL] = vs_layout->generic_size_B;
 
+   /* A geometry shader may read any generic slot the vertex shader writes,
+    * so all of them are kept, and the fragment shader is linked against the
+    * emulation's own output buffer below.
+    */
+   if (gs) {
+      for (uint32_t i = 0; i < vs_layout->count; i++) {
+         const struct pan_varying_slot *vs_slot =
+            pan_varying_layout_slot_at(vs_layout, i);
+         if (!vs_slot || vs_slot->section != PAN_VARYING_SECTION_GENERIC)
+            continue;
+         buf_offsets[vs_slot->location] = vs_slot->offset;
+         buf_sizes[vs_slot->location] =
+            nir_alu_type_get_type_size(vs_slot->alu_type);
+      }
+   }
+
    /* When no fragment shader is present we can just ignore all
     * generic varyings writes.
     */
-   const uint32_t fs_var_count = fs ? fs->info.varyings.formats.count : 0;
+   const uint32_t fs_var_count = !gs && fs ? fs->info.varyings.formats.count : 0;
    for (uint32_t i = 0; i < fs_var_count; i++) {
       const struct pan_varying_slot *fs_var =
          pan_varying_layout_slot_at(&fs->info.varyings.formats, i);
@@ -4870,18 +4983,50 @@ panvk_per_arch(link_shaders)(struct panvk_pool *desc_pool,
    }
 
    panvk_shader_link_cleanup(link);
-   VkResult result = emit_varying_attrs(desc_pool, vs_layout, buf_sizes,
-                                        buf_offsets, &link->vs.attribs);
+   VkResult result =
+      emit_varying_attrs(desc_pool, vs_layout, buf_sizes, buf_offsets,
+                         vs->gs.vs_clip_space, &link->vs.attribs);
    if (result != VK_SUCCESS)
       return result;
+
+   /* The geometry shader's output layout: a vec4 of 32-bit components per
+    * location it writes and the fragment shader reads, which is what the
+    * emulation stores (panvk_nir_lower_gs.c).
+    */
+   unsigned gs_sizes[VARYING_SLOT_MAX] = {0};
+   unsigned gs_offsets[VARYING_SLOT_MAX] = {0};
+   link->gs_out_stride = 0;
+   for (unsigned i = 0; i < VARYING_SLOT_MAX; i++)
+      link->gs_out_offsets[i] = PANVK_GS_SLOT_UNUSED;
+   if (gs && fs) {
+      for (uint32_t i = 0; i < fs->info.varyings.formats.count; i++) {
+         const struct pan_varying_slot *fs_var =
+            pan_varying_layout_slot_at(&fs->info.varyings.formats, i);
+         if (!fs_var || fs_var->section != PAN_VARYING_SECTION_GENERIC ||
+             !(gs->gs.outputs_written & BITFIELD64_BIT(fs_var->location)))
+            continue;
+         gs_offsets[fs_var->location] = link->gs_out_stride;
+         gs_sizes[fs_var->location] = 32;
+         link->gs_out_offsets[fs_var->location] = link->gs_out_stride;
+         link->gs_out_stride += 16;
+      }
+   }
 
    if (fs) {
       pan_varying_layout_require_format(&fs->info.varyings.formats);
       result = emit_varying_attrs(desc_pool, &fs->info.varyings.formats,
-                                  buf_sizes, buf_offsets, &link->fs.attribs);
+                                  gs ? gs_sizes : buf_sizes,
+                                  gs ? gs_offsets : buf_offsets, false,
+                                  &link->fs.attribs);
       if (result != VK_SUCCESS)
          return result;
    }
+
+   /* Slot offsets for the geometry shader emulation; a slot nothing reads
+    * must say so, or the emulation stores through a zero-sized buffer.
+    */
+   for (unsigned i = 0; i < VARYING_SLOT_MAX; i++)
+      link->buf_offsets[i] = buf_sizes[i] ? buf_offsets[i] : PANVK_GS_SLOT_UNUSED;
 
    memcpy(link->buf_strides, buf_strides, sizeof(link->buf_strides));
    return VK_SUCCESS;
@@ -4978,6 +5123,12 @@ panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stag
       }
       break;
 #else
+   case MESA_SHADER_GEOMETRY:
+      if (cmd->state.gfx.gs.shader != shader) {
+         cmd->state.gfx.gs.shader = shader;
+         gfx_state_set_dirty(cmd, GS);
+      }
+      break;
    case MESA_SHADER_TESS_CTRL:
    case MESA_SHADER_TESS_EVAL:
       assert(shader == NULL);

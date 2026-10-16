@@ -95,6 +95,17 @@ panvk_per_arch(cmd_prepare_compute_push_uniforms)(
                                 (uint64_t *)&cmdbuf->state.compute.sysvals);
 }
 
+#if PAN_ARCH < 9
+VkResult
+panvk_per_arch(cmd_prepare_gs_push_uniforms)(
+   struct panvk_cmd_buffer *cmdbuf, const struct panvk_shader_variant *shader,
+   const struct panvk_compute_sysvals *sysvals, struct pan_ptr *push_uniforms)
+{
+   return prepare_push_uniforms(cmdbuf, shader, push_uniforms, 1,
+                                (uint64_t *)sysvals);
+}
+#endif
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdPushConstants2KHR)(
    VkCommandBuffer commandBuffer,
