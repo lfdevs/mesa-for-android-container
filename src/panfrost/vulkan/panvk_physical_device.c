@@ -1221,7 +1221,7 @@ panvk_marketing_name(const struct pan_model *model, unsigned core_count)
                                : "Mali-G620";
    case PAN_PROD_ID(13, 8, 0):
       return core_count >= 10 ? "Mali-G925-Immortalis"
-             : core_count >= 6 ? model->name
+             : core_count >= 6 ? "Mali-G725"
                                : "Mali-G625";
    default:
       return model->name;
