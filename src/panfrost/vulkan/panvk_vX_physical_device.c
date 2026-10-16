@@ -982,7 +982,11 @@ panvk_per_arch(get_physical_device_properties)(
       .maxFragmentInputComponents = 128,
       /* 8 render targets. */
       .maxFragmentOutputAttachments = MAX_RTS,
-      .maxFragmentDualSrcAttachments = max_cbuf_atts,
+      /* Only render target 0 is validated for dual-source blending: the
+       * compiler keeps one SRC1 type per shader (blend_src1_type, asserted
+       * to be set once) and the blend shader is built from that single type
+       * for every render target. Gallium panfrost reports 1 as well. */
+      .maxFragmentDualSrcAttachments = 1,
       /* 8 render targets, 2^12 storage buffers and 2^8 storage images (see
        * above).
        */
