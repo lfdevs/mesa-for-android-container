@@ -46,9 +46,11 @@
 #include "pan_samples.h"
 #include "pan_shader.h"
 #include "libpan/draw_helper_vp.h"
+#include "libpan/fan_chunks.h"
 
 #include "util/bitscan.h"
 #include "vk_android.h"
+#include "util/u_debug.h"
 #include "vk_format.h"
 #include "vk_meta.h"
 #include "vk_pipeline_layout.h"
@@ -5441,6 +5443,40 @@ gpu_prerast_chunkable(enum mesa_prim prim)
    }
 }
 
+/* Fans in the GPU chunk loop (panlib_fan_chunk_step) are opt-in until a
+ * device run proves them: PANVK_FAN_CHUNKS=1 (Android:
+ * debug.mesa.panvk.fan.chunks=1). Off, indirect fans are lowered in one pass
+ * and clamped to the arena (panlib_fan_clamp_draw), and indexed fans with
+ * primitive restart over the arena are skipped.
+ */
+DEBUG_GET_ONCE_BOOL_OPTION(fan_chunks, "PANVK_FAN_CHUNKS", false)
+
+/* Indirect fans, and direct indexed fans with restart over the arena, which
+ * the CPU split cannot cut. The other direct fans are split on the CPU, see
+ * gpu_prerast_split_fan().
+ */
+static bool
+gpu_prerast_fan_chunks(const struct panvk_cmd_buffer *cmdbuf,
+                       const struct panvk_draw_info *draw)
+{
+   if (!debug_get_option_fan_chunks() || gpu_prerast_max_verts(cmdbuf) < 3)
+      return false;
+
+   /* The polygon kernel walks back to the fan hub per vertex: with restart,
+    * a chunk of one long fan makes that quadratic (the 120 GS hang). */
+   if (draw->index.index_size && draw->index.restart_enable &&
+       !cmdbuf->state.gfx.gs.shader &&
+       panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, draw) !=
+          PANVK_GPU_PRERAST_POLY_NONE)
+      return false;
+
+   if (draw->indirect.buffer_dev_addr)
+      return true;
+
+   return draw->index.index_size && draw->index.restart_enable &&
+          draw->vertex.count > gpu_prerast_max_verts(cmdbuf);
+}
+
 /* Indirect draws have no vertex count when recording, and strips with
  * primitive restart need the restart positions to be cut: both run as a GPU
  * chunk loop.
@@ -5451,6 +5487,9 @@ gpu_prerast_chunk_wanted(const struct panvk_cmd_buffer *cmdbuf,
 {
    uint32_t align, overlap, div;
    const uint32_t max_verts = gpu_prerast_max_verts(cmdbuf);
+
+   if (draw->prim == MESA_PRIM_TRIANGLE_FAN)
+      return gpu_prerast_fan_chunks(cmdbuf, draw);
 
    if (!gpu_prerast_chunkable(draw->prim))
       return false;
@@ -5488,6 +5527,7 @@ gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
    const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
    const bool indirect = draw->indirect.buffer_dev_addr != 0;
    const bool indexed = draw->index.index_size != 0;
+   const bool fan = draw->prim == MESA_PRIM_TRIANGLE_FAN;
    const uint64_t arena = panvk_priv_mem_dev_addr(dev->gpu_prerast_arena);
 
    struct pan_ptr cd =
@@ -5496,9 +5536,26 @@ gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
    struct pan_ptr direct = {0};
    if (!indirect)
       direct = panvk_cmd_alloc_dev_mem(cmdbuf, desc, 8 * sizeof(uint32_t), 16);
-   if (!cd.gpu || (!indirect && !direct.gpu)) {
+   /* Fans: the fan state and the chunk index buffer, see fan_chunks.h. */
+   struct pan_ptr fd = {0}, fib = {0};
+   const uint32_t fan_indices = gpu_prerast_max_verts(cmdbuf) + 1;
+   if (fan) {
+      fd = panvk_cmd_alloc_dev_mem(cmdbuf, desc,
+                                   sizeof(struct panlib_fan_chunk), 16);
+      fib = panvk_cmd_alloc_dev_mem(cmdbuf, desc,
+                                    fan_indices * sizeof(uint32_t), 16);
+   }
+   if (!cd.gpu || (!indirect && !direct.gpu) ||
+       (fan && (!fd.gpu || !fib.gpu))) {
       vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
       return;
+   }
+   if (fan) {
+      struct panlib_fan_chunk *f = fd.cpu;
+
+      memset(f, 0, sizeof(*f));
+      f->indices = fib.gpu;
+      f->hub = PANLIB_FAN_NO_HUB;
    }
 
 #define CD(f) (cd.gpu + offsetof(struct panlib_chunk_draw, f))
@@ -5549,6 +5606,17 @@ gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
    chunk.pstats_counted = true;
    chunk.prims_generated_counted = true;
    chunk.gpu_prerast_prim_base = 0;
+   /* A fan chunk is an indexed fan of 32-bit indices from the chunk index
+    * buffer. Its vertexOffset is the API vertexOffset, or firstVertex for a
+    * non-indexed fan, whose chunk indices are the element numbers.
+    */
+   if (fan) {
+      chunk.index.index_size = 4;
+      chunk.index.buffer_dev_addr = fib.gpu;
+      chunk.index.buffer_size = fan_indices * sizeof(uint32_t);
+      chunk.index.offset = 0;
+      chunk.index.restart_enable = c->restart;
+   }
 
    const enum panvk_gpu_prerast_poly_mode poly_mode =
       gs ? PANVK_GPU_PRERAST_POLY_NONE
@@ -5606,7 +5674,15 @@ gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
       gpu_prerast_sync32_take(cmdbuf, PANVK_SUBQUEUE_COMPUTE,
                               PANVK_QUEUE_TESS_FREE_SYNC_OFFSET);
 
-      panlib_chunk_step(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, cd.gpu);
+      if (fan) {
+         panlib_fan_chunk_step(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, cd.gpu,
+                               fd.gpu);
+         cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+         panlib_fan_chunk_fill(&ctx, panlib_1d(DIV_ROUND_UP(fan_indices, 64)),
+                               PANLIB_BARRIER_NONE, cd.gpu, fd.gpu);
+      } else {
+         panlib_chunk_step(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, cd.gpu);
+      }
       cs_wait_slots(b, dev->csf.sb.all_iters_mask);
 
       ok &= gpu_prerast_vs(cmdbuf, &chunk, vs, arena, poly_mode, false,
@@ -5806,6 +5882,10 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
    if (fan && !(draw->index.index_size && draw->index.restart_enable) &&
        max_verts >= 3)
       return gpu_prerast_split_fan(cmdbuf, draw, max_verts);
+
+   /* Restart fans over the arena are cut on the GPU, if enabled. */
+   if (fan && gpu_prerast_fan_chunks(cmdbuf, draw))
+      return false;
 
    if (!gpu_prerast_chunkable(draw->prim)) {
       /* ponytail: a restart index starts a new fan hub, which this CPU
