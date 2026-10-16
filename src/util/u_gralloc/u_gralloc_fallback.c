@@ -67,11 +67,24 @@ struct panvk_v19_mapper {
    __attribute__((aligned(16))) uint32_t version;
    struct panvk_v19_mapper_v5 v5;
 };
+/* The HIDL IMapper@4.0 raw-vtable backend below is off by default: it is
+ * unreachable from app linker namespaces on every device seen so far (the
+ * vendor mapper@4.0-impl and libvndksupport are refused, and the
+ * isDeclared lookup is SELinux-denied) and it depends on the frozen
+ * aarch64 libc++ ABI of one vendor implementation. Apps use the verified
+ * owned-AHB fallback (vk_android_get_ahb_layout) instead. Build with
+ * -DPANVK_GRALLOC_HIDL_MAPPER4 to enable it for standalone tools that run
+ * in the vendor namespace.
+ */
+#if defined(__aarch64__) && defined(PANVK_GRALLOC_HIDL_MAPPER4)
+#define PANVK_V19_HIDL 1
+#endif
+
 typedef int32_t (*panvk_v19_load_mapper_fn)(struct panvk_v19_mapper **);
 typedef void *(*panvk_v19_open_passthrough_fn)(const char *, const char *, int);
 typedef void *(*panvk_v19_load_sphal_fn)(const char *, int);
 
-#if defined(__aarch64__)
+#ifdef PANVK_V19_HIDL
 /* HIDL IMapper@4.0 passthrough for vendor API < 34 (no AIMapper stable-C).
  * libhidlbase is neither in the NDK nor visible to an app namespace, so the
  * frozen IMapper@4.0 C++ ABI (aarch64 Itanium, libc++ ABI v1) is called
@@ -155,7 +168,9 @@ static int panvk_v19_backend; /* 5: AIMapper stable-C, 4: HIDL IMapper@4.0, 0: n
 
 #define PANVK_V19_MAX_NAMES 16
 static const char *const panvk_v19_hw_dirs[] = { "/vendor/lib64/hw", "/odm/lib64/hw" };
+#ifdef PANVK_V19_HIDL
 static const char panvk_v19_m4_prefix[] = "android.hardware.graphics.mapper@4.0-impl-";
+#endif
 
 static void
 panvk_v19_add_name(char names[][64], int *n, const char *s, size_t len)
@@ -176,7 +191,9 @@ static int
 panvk_v19_collect_names(char names[][64])
 {
    int n = 0;
+#ifdef PANVK_V19_HIDL
    const size_t plen = sizeof(panvk_v19_m4_prefix) - 1;
+#endif
    for (const char *env = getenv("PANVK_MAPPER_NAMES"); env && *env;) {
       size_t len = strcspn(env, ",");
       panvk_v19_add_name(names, &n, env, len);
@@ -191,8 +208,10 @@ panvk_v19_collect_names(char names[][64])
          if (len < 4 || strcmp(s + len - 3, ".so")) continue;
          if (len > 10 && !strncmp(s, "mapper.", 7))
             panvk_v19_add_name(names, &n, s + 7, len - 10);
+#ifdef PANVK_V19_HIDL
          else if (len > plen + 3 && !strncmp(s, panvk_v19_m4_prefix, plen))
             panvk_v19_add_name(names, &n, s + plen, len - plen - 3);
+#endif
       }
       closedir(dir);
    }
@@ -262,7 +281,7 @@ panvk_v19_mapper_init_once(void)
          return;
       }
    }
-#if defined(__aarch64__)
+#ifdef PANVK_V19_HIDL
    /* HIDL IMapper@4.0 passthrough (vendor API < 34). */
    for (int i = 0; i < n; i++) {
       for (unsigned d = 0; d < ARRAY_SIZE(panvk_v19_hw_dirs); d++) {
@@ -296,7 +315,7 @@ panvk_v19_init_mapper(void)
 static int32_t
 panvk_v19_import(const native_handle_t *raw, panvk_v19_buffer_handle_t *out)
 {
-#if defined(__aarch64__)
+#ifdef PANVK_V19_HIDL
    if (panvk_v19_backend == 4) {
       struct panvk_v19_cb_ctx ctx = { .error = -1 };
       struct panvk_v19_hidl_handle hh = { raw, false };
@@ -314,7 +333,7 @@ panvk_v19_import(const native_handle_t *raw, panvk_v19_buffer_handle_t *out)
 static int32_t
 panvk_v19_free(panvk_v19_buffer_handle_t h)
 {
-#if defined(__aarch64__)
+#ifdef PANVK_V19_HIDL
    if (panvk_v19_backend == 4) {
       struct panvk_v19_hidl_ret r =
          PANVK_V19_M4_CALL(panvk_v19_m4_free_fn, PANVK_V19_M4_FREE)(panvk_v19_m4, (void *)h);
@@ -330,7 +349,7 @@ static int
 panvk_v19_get_blob(panvk_v19_buffer_handle_t h, int64_t type, struct panvk_v19_blob *out)
 {
    memset(out, 0, sizeof(*out));
-#if defined(__aarch64__)
+#ifdef PANVK_V19_HIDL
    if (panvk_v19_backend == 4) {
       static const char name[] = "android.hardware.graphics.common.StandardMetadataType";
       struct panvk_v19_metadata_type mt = { { name, sizeof(name) - 1, false }, type };
