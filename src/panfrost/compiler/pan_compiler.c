@@ -357,9 +357,10 @@ pan_shader_update_info(struct pan_shader_info *info, nir_shader *s,
 
    if (arch >= 9) {
       /* Valhall hardware doesn't have a "flush FP16, preserve FP32" mode, and
-       * we don't advertise independent FP16/FP32 denorm modes in panvk, but
-       * it's still possible to have shaders that don't specify any denorm mode
-       * for FP32. In that case, default to flush FP32. */
+       * panvk only reports FP32 as independent (FP16 flush-to-zero is not
+       * advertised), but it's still possible to have shaders that don't
+       * specify any denorm mode for FP32. In that case, default to flush
+       * FP32. */
       if (info->ftz_fp16 && !info->ftz_fp32) {
          assert(!nir_is_denorm_preserve(execution_mode, 32));
          info->ftz_fp32 = true;

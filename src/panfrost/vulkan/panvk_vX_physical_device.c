@@ -1118,8 +1118,14 @@ panvk_per_arch(get_physical_device_properties)(
       /* VK_KHR_driver_properties */
       .driverID = VK_DRIVER_ID_MESA_PANVK,
       .conformanceVersion = get_conformance_version(),
+      /* Valhall has one 2-bit flush-to-zero mode per shader (Preserve, DX11
+       * = FP32 flushed and FP16 preserved, Always = both flushed) and no
+       * per-instruction override, so only FP32 can differ from the 16/64-bit
+       * types, and "flush FP16, preserve FP32" does not exist.
+       * shaderDenormFlushToZeroFloat16/64 are therefore not reported.
+       */
       .denormBehaviorIndependence =
-         PAN_ARCH >= 9 ? VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE
+         PAN_ARCH >= 9 ? VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY
                        : VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL,
       .roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL,
       .shaderSignedZeroInfNanPreserveFloat16 = true,
@@ -1128,9 +1134,9 @@ panvk_per_arch(get_physical_device_properties)(
       .shaderDenormPreserveFloat16 = true,
       .shaderDenormPreserveFloat32 = true,
       .shaderDenormPreserveFloat64 = true,
-      .shaderDenormFlushToZeroFloat16 = true,
+      .shaderDenormFlushToZeroFloat16 = PAN_ARCH < 9,
       .shaderDenormFlushToZeroFloat32 = true,
-      .shaderDenormFlushToZeroFloat64 = true,
+      .shaderDenormFlushToZeroFloat64 = PAN_ARCH < 9,
       .shaderRoundingModeRTEFloat16 = true,
       .shaderRoundingModeRTEFloat32 = true,
       .shaderRoundingModeRTEFloat64 = false,
