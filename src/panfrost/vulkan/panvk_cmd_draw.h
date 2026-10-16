@@ -254,6 +254,11 @@ struct panvk_cmd_graphics_state {
     */
    struct {
       const struct panvk_shader *shader;
+      /* What the emulation runs for the current draw: the bound geometry
+       * shader, or the passthrough of a clip-space vertex shader
+       * (panvk_passthrough_gs()), or NULL.
+       */
+      const struct panvk_shader *emu;
       struct panvk_shader_desc_state desc;
       uint64_t out_pos;
       uint64_t out_general;

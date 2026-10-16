@@ -476,6 +476,15 @@ struct panvk_shader_variant {
        * stored unsnapped.
        */
       bool vs_clip_space;
+      /* Vertex shader with xfb outputs and no geometry stage after it: every
+       * draw goes through a passthrough geometry shader built from these
+       * (panvk_passthrough_gs()), which captures.
+       */
+      bool xfb_passthrough;
+      uint8_t xfb_buffers_written;
+      uint8_t xfb_streams_written;
+      uint8_t xfb_output_count;
+      struct panvk_xfb_output xfb_outputs[PANVK_XFB_MAX_RECORD_DWORDS];
    } gs;
 #endif
 
@@ -549,6 +558,14 @@ struct panvk_shader {
    /* The shader writes gl_Layer. Without it a layered draw only renders
     * layer 0, so v9 JM does not replicate the draw. */
    bool writes_layer;
+#endif
+
+#if PAN_ARCH < 9
+   /* Vertex shaders with gs.vs_clip_space drawn without a geometry shader:
+    * the passthrough geometry shaders, created on first use by input
+    * primitive class.
+    */
+   struct panvk_shader *passthrough_gs[PANVK_XFB_GS_CLASS_COUNT];
 #endif
 
    struct panvk_shader_variant variants[];
@@ -726,5 +743,15 @@ VkResult panvk_per_arch(create_shader_from_binary)(
 
 VkResult panvk_per_arch(create_shader)(
    struct panvk_device *dev, nir_shader *nir, struct panvk_shader **shader_out);
+
+#if PAN_ARCH < 9
+/* The passthrough geometry shader a vertex shader with gs.vs_clip_space
+ * draws prim through when no geometry shader is bound (it captures the
+ * vertex shader's transform feedback), NULL when it cannot be made.
+ */
+const struct panvk_shader *panvk_per_arch(passthrough_gs)(
+   struct panvk_device *dev, const struct panvk_shader *vs,
+   enum mesa_prim prim);
+#endif
 
 #endif

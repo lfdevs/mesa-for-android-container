@@ -93,6 +93,10 @@ struct panvk_draw_data {
     * known here: they size the geometry shader emulation exactly.
     */
    uint32_t cpu_count, cpu_instances;
+   /* A job the indirect draw helper must wait for: the one that writes the
+    * command (vkCmdDrawIndirectByteCountEXT), 0 for none.
+    */
+   unsigned indirect_dep_job;
    uint64_t position;
    union {
       uint64_t psiz;
@@ -514,7 +518,7 @@ panvk_draw_prepare_varyings(struct panvk_cmd_buffer *cmdbuf,
    struct mali_attribute_buffer_packed *buf_descs = bufs.cpu;
    const struct vk_input_assembly_state *ia =
       &cmdbuf->vk.dynamic_graphics_state.ia;
-   const struct panvk_shader *gs_shader = cmdbuf->state.gfx.gs.shader;
+   const struct panvk_shader *gs_shader = cmdbuf->state.gfx.gs.emu;
    bool writes_point_size =
       !gs_shader && vs->info.vs.writes_point_size &&
       ia->primitive_topology == VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
@@ -1411,9 +1415,8 @@ panvk_cmd_prepare_draw_link_shaders(struct panvk_cmd_buffer *cmd)
    const struct panvk_shader_variant *fs =
       panvk_shader_only_variant(get_fs(cmd));
    const struct panvk_shader_variant *gs =
-      cmd->state.gfx.gs.shader
-         ? panvk_shader_only_variant(cmd->state.gfx.gs.shader)
-         : NULL;
+      cmd->state.gfx.gs.emu ? panvk_shader_only_variant(cmd->state.gfx.gs.emu)
+                            : NULL;
 
    VkResult result =
       panvk_per_arch(link_shaders)(&cmd->desc_pool, vs, gs, fs, &gfx->link);
@@ -1448,6 +1451,30 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
        UINT16_MAX) {
       panvk_per_arch(cmd_close_batch)(cmdbuf);
       batch = panvk_per_arch(cmd_open_batch)(cmdbuf);
+   }
+
+   /* The geometry emulation runs the bound geometry shader, or for a vertex
+    * shader compiled to feed it (transform feedback, or a shader object
+    * linked to a geometry shader that is not bound) the passthrough
+    * matching this draw's topology. Switching between them relinks.
+    */
+   const struct panvk_shader *emu = cmdbuf->state.gfx.gs.shader;
+   if (!emu && vs->gs.vs_clip_space) {
+      emu = panvk_per_arch(passthrough_gs)(
+         to_panvk_device(cmdbuf->vk.base.device), cmdbuf->state.gfx.vs.shader,
+         draw->info.prim);
+      /* The vertex shader writes clip space: without the emulation there is
+       * nothing the tiler could draw.
+       */
+      if (!emu) {
+         vk_command_buffer_set_error(&cmdbuf->vk,
+                                     VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+      }
+   }
+   if (emu != cmdbuf->state.gfx.gs.emu) {
+      cmdbuf->state.gfx.gs.emu = emu;
+      gfx_state_set_dirty(cmdbuf, GS);
    }
 
    if (fs_user_dirty(cmdbuf) || gfx_state_dirty(cmdbuf, VS) ||
@@ -1717,7 +1744,7 @@ emit_gs_job(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw,
             unsigned dep_job_id)
 {
    struct panvk_batch *batch = cmdbuf->cur_batch;
-   const struct panvk_shader *gs_shader = cmdbuf->state.gfx.gs.shader;
+   const struct panvk_shader *gs_shader = cmdbuf->state.gfx.gs.emu;
    const struct panvk_shader_variant *gs = panvk_shader_only_variant(gs_shader);
    const struct panvk_shader_link *link = &cmdbuf->state.gfx.link;
    const struct panvk_graphics_sysvals *gfx_sysvals = &cmdbuf->state.gfx.sysvals;
@@ -1879,7 +1906,7 @@ emit_xfb_jobs(struct panvk_cmd_buffer *cmdbuf, unsigned dep_job_id)
 {
    struct panvk_batch *batch = cmdbuf->cur_batch;
    const struct panvk_shader_variant *gs =
-      panvk_shader_only_variant(cmdbuf->state.gfx.gs.shader);
+      panvk_shader_only_variant(cmdbuf->state.gfx.gs.emu);
    const uint32_t n = cmdbuf->state.gfx.gs.xfb_invocations;
    const uint32_t k_dw = gs->gs.xfb_dwords;
    const uint32_t idx_per_invocation =
@@ -2175,7 +2202,7 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
       enum panlib_barrier indirect_barrier =
          PANLIB_BARRIER_JM_SUPPRESS_PREFETCH;
       struct panlib_precomp_grid indirect_grid = panlib_1d_with_jm_deps(
-         1, init_heap_job_id, job_before_indirect_helper);
+         1, draw->indirect_dep_job, job_before_indirect_helper);
 
       if (draw->info.indirect.buffer_dev_addr != 0 &&
           draw->info.index.index_size) {
@@ -2527,6 +2554,66 @@ panvk_per_arch(CmdEndTransformFeedbackEXT)(
    xfb_counters(cmdbuf, firstCounterBuffer, counterBufferCount,
                 pCounterBuffers, pCounterBufferOffsets, false);
    cmdbuf->state.gfx.xfb.active = false;
+}
+
+/* transformFeedbackDraw: a one-thread job turns the counter into a
+ * VkDrawIndirectCommand, then it is an ordinary indirect draw whose helper
+ * waits for that job.
+ */
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdDrawIndirectByteCountEXT)(
+   VkCommandBuffer commandBuffer, uint32_t instanceCount,
+   uint32_t firstInstance, VkBuffer counterBuffer,
+   VkDeviceSize counterBufferOffset, uint32_t counterOffset,
+   uint32_t vertexStride)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   VK_FROM_HANDLE(panvk_buffer, counter, counterBuffer);
+
+   if (!instanceCount)
+      return;
+
+   struct pan_ptr cmd = panvk_cmd_alloc_dev_mem(
+      cmdbuf, desc, sizeof(VkDrawIndirectCommand), 16);
+   if (!cmd.gpu)
+      return;
+
+   /* The draw may open a new batch (job index overflow), which would leave
+    * this job behind in the old one: open it first.
+    */
+   if (!cmdbuf->cur_batch)
+      panvk_per_arch(cmd_open_batch)(cmdbuf);
+   if (cmdbuf->cur_batch->vtc_jc.job_index +
+          (4 * cmdbuf->state.gfx.render.layer_count) + 1 >=
+       UINT16_MAX) {
+      panvk_per_arch(cmd_close_batch)(cmdbuf);
+      panvk_per_arch(cmd_open_batch)(cmdbuf);
+   }
+
+   /* A barrier: the counter is written by an earlier End in this chain. */
+   struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+   const struct panlib_xfb_byte_count_draw_args args = {
+      .counter = panvk_buffer_gpu_ptr(counter, counterBufferOffset),
+      .counter_offset = counterOffset,
+      .stride = vertexStride,
+      .instance_count = instanceCount,
+      .first_instance = firstInstance,
+      .draw = cmd.gpu,
+   };
+   panlib_xfb_byte_count_draw_struct(&precomp_ctx, panlib_1d(1),
+                                     PANLIB_BARRIER_JM_BARRIER, args);
+
+   struct panvk_draw_data draw = {
+      .info = {
+         .indirect.buffer_dev_addr = cmd.gpu,
+         .indirect.draw_count = 1,
+         .indirect.stride = sizeof(VkDrawIndirectCommand),
+         .prim = panvk_get_client_prim(cmdbuf),
+      },
+      .indirect_dep_job = cmdbuf->cur_batch->vtc_jc.job_index,
+   };
+
+   panvk_cmd_draw_indirect(cmdbuf, &draw);
 }
 #else /* PAN_ARCH == 9 */
 

@@ -649,7 +649,9 @@ panvk_per_arch(get_physical_device_features)(
       .transformFeedbackPreservesProvokingVertex = false,
 
       /* VK_EXT_transform_feedback */
-      /* v6/v7: captured from the geometry shader emulation only. */
+      /* v6/v7: captured from the geometry shader emulation, a vertex shader
+       * without a geometry shader through a passthrough one.
+       */
       .transformFeedback = true,
       .geometryStreams = !PANVK_DEBUG(NO_GS),
 
@@ -1380,7 +1382,7 @@ panvk_per_arch(get_physical_device_properties)(
       .transformFeedbackStreamsLinesTriangles = PAN_ARCH >= 9,
       .transformFeedbackRasterizationStreamSelect =
          PAN_ARCH >= 10 || (PAN_ARCH == 9 && !PANVK_DEBUG(NO_GS)),
-      .transformFeedbackDraw = PAN_ARCH >= 9,
+      .transformFeedbackDraw = true,
 
       /* VK_EXT_shader_tile_image */
       .shaderTileImageCoherentReadAccelerated = PAN_ARCH >= 9,

@@ -172,6 +172,57 @@ struct panvk_gs_push {
  */
 int panvk_gs_xfb_table(const struct nir_xfb_info *xfb, uint32_t *table);
 
+/* Transform feedback without a geometry shader: a vertex shader with xfb
+ * outputs runs through the geometry emulation with a generated passthrough
+ * geometry shader that emits every input primitive as it is, so the capture
+ * path above is the only one. The vertex shader keeps what the passthrough
+ * needs to rebuild its nir_xfb_info (struct panvk_xfb_output) and one
+ * passthrough exists per input primitive class.
+ */
+struct panvk_xfb_output {
+   uint8_t buffer;
+   uint8_t location;
+   uint8_t component_mask;
+   uint8_t pad;
+   uint16_t offset;
+};
+
+enum panvk_xfb_gs_class {
+   PANVK_XFB_GS_POINTS,
+   PANVK_XFB_GS_LINES,
+   PANVK_XFB_GS_TRIANGLES,
+   PANVK_XFB_GS_LINES_ADJ,
+   PANVK_XFB_GS_TRIANGLES_ADJ,
+   PANVK_XFB_GS_CLASS_COUNT,
+};
+
+/* The passthrough class of a draw topology, -1 for one with no class
+ * (patches: there is no tessellation here).
+ */
+static inline int
+panvk_xfb_gs_class(enum mesa_prim prim)
+{
+   switch (prim) {
+   case MESA_PRIM_POINTS:
+      return PANVK_XFB_GS_POINTS;
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_STRIP:
+      return PANVK_XFB_GS_LINES;
+   case MESA_PRIM_TRIANGLES:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_FAN:
+      return PANVK_XFB_GS_TRIANGLES;
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      return PANVK_XFB_GS_LINES_ADJ;
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return PANVK_XFB_GS_TRIANGLES_ADJ;
+   default:
+      return -1;
+   }
+}
+
 struct panvk_gs_lower_options {
    unsigned input_verts_per_prim;
    unsigned output_verts_per_prim;

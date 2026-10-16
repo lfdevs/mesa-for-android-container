@@ -649,9 +649,15 @@ lower_emit_vertex(nir_builder *b, nir_intrinsic_instr *intr,
          }
 
          /* Point size lives in its own fp16 buffer, and the other built-ins
-          * (layer, clip distances) have no path to the tiler here.
+          * (layer, compact clip distances) have no path to the tiler here.
+          * The vec4 clip/cull slots a lowered vertex shader writes (see
+          * panvk_lower_clip_cull_vs) are generic, and the transform feedback
+          * passthrough carries them on to the fragment shader's discard.
           */
-         if (loc < VARYING_SLOT_VAR0 || var->data.compact)
+         const bool dist_slot =
+            loc == VARYING_SLOT_CLIP_DIST0 || loc == VARYING_SLOT_CLIP_DIST1 ||
+            loc == VARYING_SLOT_CULL_DIST0 || loc == VARYING_SLOT_CULL_DIST1;
+         if ((loc < VARYING_SLOT_VAR0 && !dist_slot) || var->data.compact)
             continue;
 
          /* One location per element of an output array, each at the

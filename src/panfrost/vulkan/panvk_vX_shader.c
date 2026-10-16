@@ -31,6 +31,7 @@
 #include "util/memstream.h"
 #include "util/mesa-blake3.h"
 #include "util/shader_stats.h"
+#include "util/u_atomic.h"
 #include "util/u_dynarray.h"
 #include "util/u_hexdump.h"
 #include "util/u_memory.h"
@@ -3366,6 +3367,11 @@ panvk_shader_destroy(struct vk_device *vk_dev, struct vk_shader *vk_shader,
 
 #if PAN_ARCH < 9
    panvk_pool_free_mem(&shader->desc_info.others.map);
+
+   for (unsigned i = 0; i < ARRAY_SIZE(shader->passthrough_gs); i++) {
+      if (shader->passthrough_gs[i])
+         panvk_shader_destroy(vk_dev, &shader->passthrough_gs[i]->vk, NULL);
+   }
 #endif
 
    vk_shader_free(vk_dev, pAllocator, &shader->vk);
@@ -3390,6 +3396,234 @@ panvk_lower_cull_dist_flags_intr(nir_builder *b, nir_intrinsic_instr *intr,
 }
 
 static const struct vk_shader_ops panvk_shader_ops;
+
+#if PAN_ARCH < 9
+/* Transform feedback from a vertex shader that is the last pre-rasterization
+ * stage goes through the geometry shader emulation with a passthrough
+ * geometry shader (panvk_passthrough_gs()), so the vertex shader must
+ * write clip space for it. A capture the emulation cannot do (16-bit data)
+ * keeps the plain vertex shader and captures nothing. With a geometry shader
+ * bound that one runs instead, and the vertex shader's xfb is ignored.
+ */
+static bool
+panvk_vs_wants_xfb_passthrough(const struct vk_shader_compile_info *info)
+{
+   if (info->stage != MESA_SHADER_VERTEX || !info->nir->xfb_info)
+      return false;
+
+   uint32_t table[PANVK_XFB_MAX_RECORD_DWORDS];
+   return panvk_gs_xfb_table(info->nir->xfb_info, table) > 0;
+}
+
+static void
+panvk_vs_store_xfb(struct panvk_shader_variant *variant,
+                   const nir_xfb_info *xfb)
+{
+   /* panvk_gs_xfb_table() accepted it: at most one output per dword. */
+   assert(xfb->output_count <= ARRAY_SIZE(variant->gs.xfb_outputs));
+
+   variant->gs.xfb_passthrough = true;
+   variant->gs.xfb_buffers_written = xfb->buffers_written;
+   variant->gs.xfb_streams_written = xfb->streams_written;
+   variant->gs.xfb_output_count = xfb->output_count;
+   for (unsigned b = 0; b < 4; b++) {
+      variant->gs.xfb_strides[b] = xfb->buffers[b].stride;
+      variant->gs.xfb_buffer_stream[b] = xfb->buffer_to_stream[b];
+   }
+   for (unsigned i = 0; i < xfb->output_count; i++) {
+      variant->gs.xfb_outputs[i] = (struct panvk_xfb_output){
+         .buffer = xfb->outputs[i].buffer,
+         .location = xfb->outputs[i].location,
+         .component_mask = xfb->outputs[i].component_mask,
+         .offset = xfb->outputs[i].offset,
+      };
+   }
+}
+
+/* The passthrough geometry shader for a vertex shader's varying layout:
+ * every generic slot and gl_Position copied from each input vertex to an
+ * output vertex, in primitive order (adjacency vertices dropped), with the
+ * vertex shader's xfb outputs. 16-bit slots are widened, the emulation only
+ * carries 32-bit outputs.
+ */
+static nir_shader *
+panvk_build_passthrough_gs(const struct panvk_shader_variant *vs,
+                               enum panvk_xfb_gs_class cls)
+{
+   static const struct {
+      enum mesa_prim in, out;
+      uint8_t vin, nemit, emit[3];
+   } classes[] = {
+      [PANVK_XFB_GS_POINTS] = {MESA_PRIM_POINTS, MESA_PRIM_POINTS, 1, 1,
+                               {0}},
+      [PANVK_XFB_GS_LINES] = {MESA_PRIM_LINES, MESA_PRIM_LINE_STRIP, 2, 2,
+                              {0, 1}},
+      [PANVK_XFB_GS_TRIANGLES] = {MESA_PRIM_TRIANGLES,
+                                  MESA_PRIM_TRIANGLE_STRIP, 3, 3, {0, 1, 2}},
+      [PANVK_XFB_GS_LINES_ADJ] = {MESA_PRIM_LINES_ADJACENCY,
+                                  MESA_PRIM_LINE_STRIP, 4, 2, {1, 2}},
+      [PANVK_XFB_GS_TRIANGLES_ADJ] = {MESA_PRIM_TRIANGLES_ADJACENCY,
+                                      MESA_PRIM_TRIANGLE_STRIP, 6, 3,
+                                      {0, 2, 4}},
+   };
+   const struct pan_varying_layout *layout = &vs->info.varyings.formats;
+
+   nir_builder b = nir_builder_init_simple_shader(
+      MESA_SHADER_GEOMETRY,
+      pan_get_nir_shader_compiler_options(PAN_ARCH, MESA_SHADER_GEOMETRY,
+                                          false),
+      "panvk xfb passthrough");
+   nir_shader *nir = b.shader;
+
+   nir->info.gs.input_primitive = classes[cls].in;
+   nir->info.gs.output_primitive = classes[cls].out;
+   nir->info.gs.vertices_in = classes[cls].vin;
+   nir->info.gs.vertices_out = classes[cls].nemit;
+   nir->info.gs.invocations = 1;
+   nir->info.gs.active_stream_mask = 1;
+
+   /* A clip-space vertex shader drawn without its geometry shader (shader
+    * objects) still needs the emulation to rasterize, with nothing to
+    * capture.
+    */
+   if (vs->gs.xfb_passthrough) {
+      nir_xfb_info *xfb =
+         rzalloc_size(nir, nir_xfb_info_size(vs->gs.xfb_output_count));
+      xfb->buffers_written = vs->gs.xfb_buffers_written;
+      xfb->streams_written = vs->gs.xfb_streams_written;
+      for (unsigned i = 0; i < 4; i++) {
+         xfb->buffers[i].stride = vs->gs.xfb_strides[i];
+         xfb->buffer_to_stream[i] = vs->gs.xfb_buffer_stream[i];
+         nir->info.xfb_stride[i] = vs->gs.xfb_strides[i] / 4;
+      }
+      xfb->output_count = vs->gs.xfb_output_count;
+      for (unsigned i = 0; i < xfb->output_count; i++) {
+         const struct panvk_xfb_output *o = &vs->gs.xfb_outputs[i];
+         xfb->outputs[i] = (nir_xfb_output_info){
+            .buffer = o->buffer,
+            .offset = o->offset,
+            .location = o->location,
+            .component_mask = o->component_mask,
+            .component_offset = ffs(o->component_mask) - 1,
+         };
+      }
+      nir->xfb_info = xfb;
+      nir->info.has_transform_feedback_varyings = true;
+   }
+
+   nir_variable *in_vars[PAN_MAX_VARYINGS + 1], *out_vars[PAN_MAX_VARYINGS + 1];
+   nir_alu_type types[PAN_MAX_VARYINGS + 1];
+   unsigned n = 0;
+
+   /* gl_Position always: the emulation reads it from the position buffer. */
+   in_vars[n] = nir_variable_create(
+      nir, nir_var_shader_in, glsl_array_type(glsl_vec4_type(), 6, 0),
+      "in_pos");
+   in_vars[n]->data.location = VARYING_SLOT_POS;
+   out_vars[n] = nir_variable_create(nir, nir_var_shader_out,
+                                     glsl_vec4_type(), "out_pos");
+   out_vars[n]->data.location = VARYING_SLOT_POS;
+   types[n++] = nir_type_float32;
+
+   for (unsigned i = 0; i < layout->count; i++) {
+      const struct pan_varying_slot *slot =
+         pan_varying_layout_slot_at(layout, i);
+      if (!slot || slot->section != PAN_VARYING_SECTION_GENERIC ||
+          slot->location == VARYING_SLOT_POS)
+         continue;
+
+      const nir_alu_type base = nir_alu_type_get_base_type(slot->alu_type);
+      const unsigned bits = nir_alu_type_get_type_size(slot->alu_type);
+      if ((bits != 16 && bits != 32) ||
+          (base != nir_type_float && base != nir_type_int &&
+           base != nir_type_uint))
+         continue;
+
+      const unsigned ncomps = MAX2(slot->ncomps, 1);
+      in_vars[n] = nir_variable_create(
+         nir, nir_var_shader_in,
+         glsl_array_type(
+            glsl_vector_type(nir_get_glsl_base_type_for_nir_type(base | bits),
+                             ncomps),
+            6, 0),
+         "in_slot");
+      in_vars[n]->data.location = slot->location;
+      out_vars[n] = nir_variable_create(
+         nir, nir_var_shader_out,
+         glsl_vector_type(nir_get_glsl_base_type_for_nir_type(base | 32),
+                          ncomps),
+         "out_slot");
+      out_vars[n]->data.location = slot->location;
+      types[n++] = base | bits;
+   }
+
+   for (unsigned v = 0; v < classes[cls].nemit; v++) {
+      for (unsigned j = 0; j < n; j++) {
+         nir_def *val =
+            nir_load_array_var_imm(&b, in_vars[j], classes[cls].emit[v]);
+         if (val->bit_size == 16) {
+            switch (nir_alu_type_get_base_type(types[j])) {
+            case nir_type_float:
+               val = nir_f2f32(&b, val);
+               break;
+            case nir_type_int:
+               val = nir_i2i32(&b, val);
+               break;
+            default:
+               val = nir_u2u32(&b, val);
+               break;
+            }
+         }
+         nir_store_var(&b, out_vars[j], val, BITFIELD_MASK(val->num_components));
+      }
+      nir_emit_vertex(&b, 0);
+   }
+   nir_end_primitive(&b, 0);
+
+   nir_validate_shader(nir, "panvk xfb passthrough");
+   return nir;
+}
+
+const struct panvk_shader *
+panvk_per_arch(passthrough_gs)(struct panvk_device *dev,
+                                   const struct panvk_shader *vs_shader,
+                                   enum mesa_prim prim)
+{
+   const struct panvk_shader_variant *vs = panvk_shader_hw_variant(vs_shader);
+   const int cls = panvk_xfb_gs_class(prim);
+
+   if (!vs->gs.vs_clip_space || cls < 0)
+      return NULL;
+
+   /* Created by the first command buffer that needs it; a racing one
+    * throws its own away.
+    */
+   struct panvk_shader **slot =
+      (struct panvk_shader **)&vs_shader->passthrough_gs[cls];
+   struct panvk_shader *gs = p_atomic_read(slot);
+   if (gs)
+      return gs;
+
+   nir_shader *nir = panvk_build_passthrough_gs(vs, cls);
+   if (!nir)
+      return NULL;
+
+   panvk_per_arch(compiler_lock)();
+   VkResult result = panvk_per_arch(create_shader)(dev, nir, &gs);
+   panvk_per_arch(compiler_unlock)();
+   ralloc_free(nir);
+   if (result != VK_SUCCESS)
+      return NULL;
+
+   struct panvk_shader *old = p_atomic_cmpxchg_ptr(slot, NULL, gs);
+   if (old) {
+      panvk_shader_destroy(&dev->vk, &gs->vk, NULL);
+      return old;
+   }
+
+   return gs;
+}
+#endif
 
 static VkResult
 panvk_compile_shader(struct panvk_device *dev,
@@ -3462,9 +3696,11 @@ panvk_compile_shader(struct panvk_device *dev,
    /* The geometry shader emulation reads the vertex shader's output in clip
     * space and does the viewport transform itself (panvk_nir_lower_gs.c).
     */
+   const bool vs_xfb_passthrough = panvk_vs_wants_xfb_passthrough(info);
    const bool vs_clip_space =
       info->stage == MESA_SHADER_VERTEX &&
-      (info->next_stage_mask & VK_SHADER_STAGE_GEOMETRY_BIT);
+      ((info->next_stage_mask & VK_SHADER_STAGE_GEOMETRY_BIT) ||
+       vs_xfb_passthrough);
    inputs.skip_viewport_transform = vs_clip_space;
 #endif
 
@@ -3514,6 +3750,8 @@ panvk_compile_shader(struct panvk_device *dev,
          struct panvk_shader_variant *variant = &shader->variants[v];
 #if PAN_ARCH < 9
          variant->gs.vs_clip_space = vs_clip_space;
+         if (vs_xfb_passthrough)
+            panvk_vs_store_xfb(variant, info->nir->xfb_info);
 #endif
 
          /* Each variant gets its own NIR. To save an extra clone, we use the
