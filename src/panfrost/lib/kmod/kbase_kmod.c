@@ -186,6 +186,8 @@ struct kbase_kmod_dev {
    struct kbase_atom_slot atoms[KBASE_MAX_ATOMS];
    uint64_t next_atom_number;
    unsigned atom_stride;
+   /* Stock base_jd_atom (stride 64): a u64 seq_nr precedes our atom. */
+   bool atom_seq_nr;
    uint32_t last_event_code[KBASE_MAX_ATOMS];
    bool atom_failed[KBASE_MAX_ATOMS];
    uint64_t last_done_atom_ctx[KBASE_MAX_ATOMS];
@@ -1433,6 +1435,59 @@ kbase_probe_atom_stride(int fd)
    return 64;
 }
 
+/* Submit one dependency-only atom (number 255) at the given stride and
+ * drain its event.  Returns false only if the kernel refuses the stride. */
+static bool
+kbase_try_atom_stride(int fd, unsigned stride, bool seq_nr)
+{
+   struct {
+      __u64 seq_nr;
+      struct base_jd_atom atom;
+   } w = { .atom = { .atom_number = 255 } };
+   struct kbase_ioctl_job_submit sub = {
+      .addr = seq_nr ? (uintptr_t)&w : (uintptr_t)&w.atom,
+      .nr_atoms = 1,
+      .stride = stride,
+   };
+
+   if (ioctl(fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0)
+      return errno != EINVAL;
+
+   struct base_jd_event_v2 ev;
+   struct pollfd pfd = { .fd = fd, .events = POLLIN };
+   int ret;
+   do {
+      ret = poll(&pfd, 1, 1000);
+   } while (ret < 0 && errno == EINTR);
+   if (ret > 0 && (pfd.revents & POLLIN)) {
+      while (read(fd, &ev, sizeof(ev)) < 0 && errno == EINTR)
+         ;
+   }
+   return true;
+}
+
+/* Bifrost (arch < 9) only: the 72-byte probe only tells stock from
+ * MediaTek kbase.  On stock kbase, check that stride 56 (base_jd_atom_v2)
+ * is really accepted, else try 64 (seq_nr + v2, the layout JimVulkan's
+ * mali-panvk uses), so v9 behaviour is unchanged. */
+static unsigned
+kbase_check_bifrost_atom_stride(int fd, bool *seq_nr)
+{
+   *seq_nr = false;
+   if (kbase_try_atom_stride(fd, 56, false)) {
+      mesa_logi("kbase: Bifrost JM atom stride 56 (base_jd_atom_v2)");
+      return 56;
+   }
+   if (kbase_try_atom_stride(fd, 64, true)) {
+      *seq_nr = true;
+      mesa_logi("kbase: Bifrost JM atom stride 56 refused, stride 64 "
+                "(seq_nr + base_jd_atom_v2)");
+      return 64;
+   }
+   mesa_logw("kbase: Bifrost JM atom strides 56 and 64 refused, keeping 56");
+   return 56;
+}
+
 static struct pan_kmod_dev *
 kbase_kmod_dev_create(int fd, uint32_t flags,
                       UNUSED const struct pan_kmod_driver *drv_info,
@@ -1555,6 +1610,11 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
                 "(tiler heap creation will not work)", strerror(errno));
    }
 
+   bool atom_seq_nr = false;
+   if (!is_csf && atom_stride == 56 && raw_id &&
+       pan_arch(raw_id & 0xffffffffu) < 9)
+      atom_stride = kbase_check_bifrost_atom_stride(fd, &atom_seq_nr);
+
    struct kbase_kmod_dev *kbase_dev =
       pan_kmod_alloc(allocator, sizeof(*kbase_dev));
    if (!kbase_dev) {
@@ -1595,6 +1655,7 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
    list_inithead(&kbase_dev->nc_bos);
    if (!is_csf) {
       kbase_dev->atom_stride = atom_stride;
+      kbase_dev->atom_seq_nr = atom_seq_nr;
       simple_mtx_init(&kbase_dev->atoms_lock, mtx_plain);
       simple_mtx_init(&kbase_dev->atoms_read_lock, mtx_plain);
    }
@@ -2851,8 +2912,12 @@ kbase_kmod_job_submit(struct pan_kmod_dev *dev, uint64_t jc,
       atom.core_req |= BASE_JD_REQ_EXTERNAL_RESOURCES;
    }
 
+   struct {
+      __u64 seq_nr;
+      struct base_jd_atom atom;
+   } w = { .atom = atom };
    struct kbase_ioctl_job_submit sub = {
-      .addr = (uintptr_t)&atom,
+      .addr = kd->atom_seq_nr ? (uintptr_t)&w : (uintptr_t)&atom,
       .nr_atoms = 1,
       .stride = kd->atom_stride,
    };
@@ -2898,8 +2963,12 @@ kbase_kmod_job_submit_dep(struct pan_kmod_dev *dev, uint64_t jc,
       atom.pre_dep[i].dependency_type = use ? types[i] : 0;
    }
 
+   struct {
+      __u64 seq_nr;
+      struct base_jd_atom atom;
+   } w = { .atom = atom };
    struct kbase_ioctl_job_submit sub = {
-      .addr = (uintptr_t)&atom,
+      .addr = kd->atom_seq_nr ? (uintptr_t)&w : (uintptr_t)&atom,
       .nr_atoms = 1,
       .stride = kd->atom_stride,
    };
