@@ -190,6 +190,13 @@ meta_gfx_start(struct panvk_cmd_buffer *cmdbuf,
    cmdbuf->state.gfx.gs.shader = NULL;
    cmdbuf->state.gfx.tcs.shader = NULL;
    cmdbuf->state.gfx.tes.shader = NULL;
+#else
+   /* Binding the meta pipeline clears the geometry shader, and nothing
+    * would bind the application's one again after the meta operation.
+    */
+   save_ctx->gs = cmdbuf->state.gfx.gs.shader;
+   cmdbuf->state.gfx.gs.shader = NULL;
+   gfx_state_set_dirty(cmdbuf, GS);
 #endif
 
    save_ctx->dyn_state.all = cmdbuf->vk.dynamic_graphics_state;
@@ -261,6 +268,9 @@ meta_gfx_end(struct panvk_cmd_buffer *cmdbuf,
    cmdbuf->state.gfx.gs.shader = save_ctx->gs;
    cmdbuf->state.gfx.tcs.shader = save_ctx->tcs;
    cmdbuf->state.gfx.tes.shader = save_ctx->tes;
+#else
+   cmdbuf->state.gfx.gs.shader = save_ctx->gs;
+   gfx_state_set_dirty(cmdbuf, GS);
 #endif
 
 #if PAN_ARCH < 9
