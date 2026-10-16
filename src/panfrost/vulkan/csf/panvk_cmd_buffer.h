@@ -609,6 +609,12 @@ struct panvk_cmd_buffer {
       /* CPU-side estimate used by the kbase queue to choose a conservative
        * tiler-heap renewal cadence. */
       uint64_t tiler_work_estimate;
+      /* Instances before the CPU split chunk being drawn (gpu_prerast_split).
+       * The chunk keeps the API firstInstance (gl_BaseInstance, per-instance
+       * attribute offsets) and the lowered VS adds this to its instance IDs,
+       * so gl_InstanceIndex and attribute divisors see the API instance.
+       */
+      uint32_t gpu_prerast_inst_base;
 
       struct panvk_cond_render_state cond_render;
    } state;

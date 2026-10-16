@@ -4267,13 +4267,17 @@ gpu_prerast_vs(struct panvk_cmd_buffer *cmdbuf,
       cs_load32_to(compute, value, addr, 0);
       cs_load32_to(compute, first_index_reg, addr, 4);
       cs_wait_slot(compute, SB_ID(LS));
+      /* A GPU chunk of a CPU instance split chunk. */
+      if (cmdbuf->state.gpu_prerast_inst_base)
+         cs_add_imm32(compute, first_index_reg, first_index_reg,
+                      cmdbuf->state.gpu_prerast_inst_base);
       cs_store32(compute, value, draw_params,
                  offsetof(struct panvk_gpu_prerast_params, chunk_vertex));
       cs_store32(compute, first_index_reg, draw_params,
                  offsetof(struct panvk_gpu_prerast_params, chunk_instance));
    } else {
       STORE_PARAM32(chunk_vertex, 0);
-      STORE_PARAM32(chunk_instance, 0);
+      STORE_PARAM32(chunk_instance, cmdbuf->state.gpu_prerast_inst_base);
    }
    if (poly_mode != PANVK_GPU_PRERAST_POLY_NONE) {
       const struct vk_dynamic_graphics_state *dyns =
@@ -4322,20 +4326,31 @@ gpu_prerast_vs(struct panvk_cmd_buffer *cmdbuf,
    return true;
 }
 
+/* Whether gpu_prerast_draw() lowers the draw, or leaves it to IDVS. */
+static bool
+gpu_prerast_lowers(const struct panvk_cmd_buffer *cmdbuf,
+                   const struct panvk_draw_info *source)
+{
+   const struct panvk_shader *shader = cmdbuf->state.gfx.vs.shader;
+   /* The chunk loop has no per-draw capacity, only the shaders matter. */
+   struct panvk_draw_info probe = *source;
+   if (gpu_prerast_chunk_wanted(cmdbuf, source) &&
+       !probe.indirect.buffer_dev_addr)
+      probe.vertex.count = probe.instance.count = 1;
+
+   return panvk_per_arch(gpu_prerast_can_lower)(cmdbuf, &probe,
+                                                &shader->gpu_prerast);
+}
+
 static bool
 gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
                  const struct panvk_draw_info *source)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    const struct panvk_shader *shader = cmdbuf->state.gfx.vs.shader;
-   /* The chunk loop has no per-draw capacity, only the shaders matter. */
    const bool chunked = gpu_prerast_chunk_wanted(cmdbuf, source);
-   struct panvk_draw_info probe = *source;
-   if (chunked && !probe.indirect.buffer_dev_addr)
-      probe.vertex.count = probe.instance.count = 1;
 
-   if (!panvk_per_arch(gpu_prerast_can_lower)(cmdbuf, &probe,
-                                               &shader->gpu_prerast))
+   if (!gpu_prerast_lowers(cmdbuf, source))
       return false;
 
    if (chunked) {
@@ -5650,6 +5665,23 @@ gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
       vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 }
 
+/* Draws a CPU split chunk that starts inst instances into the draw. The
+ * chunk keeps the API firstInstance: gl_BaseInstance and the per-instance
+ * attribute offsets stay the API ones, and gpu_prerast_vs() adds the offset
+ * to the lowered VS instance IDs, like the GPU chunk loop's chunk_instance.
+ * Nested splits add up.
+ */
+static void
+gpu_prerast_draw_split(struct panvk_cmd_buffer *cmdbuf,
+                       const struct panvk_draw_info *chunk, uint32_t inst)
+{
+   const uint32_t saved = cmdbuf->state.gpu_prerast_inst_base;
+
+   cmdbuf->state.gpu_prerast_inst_base = saved + inst;
+   panvk_cmd_draw(cmdbuf, *chunk);
+   cmdbuf->state.gpu_prerast_inst_base = saved;
+}
+
 /* A triangle fan over the arena, as indexed fans of the hub and the next
  * window of vertices. Windows share one vertex, so each API triangle is drawn
  * once with its own vertices, winding and primitive ID. The 32-bit chunk
@@ -5672,7 +5704,6 @@ gpu_prerast_split_fan(struct panvk_cmd_buffer *cmdbuf,
    chunk.instance.count = 1;
 
    for (uint32_t inst = 0; inst < draw->instance.count; inst++) {
-      chunk.instance.base = draw->instance.base + inst;
       for (uint32_t s = 1; s + 1 < draw->vertex.count; s += win - 1) {
          const uint32_t n = MIN2(win, draw->vertex.count - s);
          struct pan_ptr ib =
@@ -5697,7 +5728,7 @@ gpu_prerast_split_fan(struct panvk_cmd_buffer *cmdbuf,
          chunk.index.buffer_size = (n + 1) * sizeof(uint32_t);
          chunk.vertex.count = n + 1;
          chunk.gpu_prerast_prim_base = s - 1;
-         panvk_cmd_draw(cmdbuf, chunk);
+         gpu_prerast_draw_split(cmdbuf, &chunk, inst);
       }
    }
    return true;
@@ -5747,9 +5778,8 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
          MIN2(max_verts / draw->vertex.count,
               fan ? PANLIB_CHUNK_MAX_INSTANCES : UINT32_MAX);
       for (uint32_t i = 0; i < draw->instance.count; i += step) {
-         chunk.instance.base = draw->instance.base + i;
          chunk.instance.count = MIN2(step, draw->instance.count - i);
-         panvk_cmd_draw(cmdbuf, chunk);
+         gpu_prerast_draw_split(cmdbuf, &chunk, i);
       }
       return true;
    }
@@ -5788,7 +5818,6 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
 
    chunk.instance.count = 1;
    for (uint32_t inst = 0; inst < draw->instance.count; inst++) {
-      chunk.instance.base = draw->instance.base + inst;
       for (uint32_t i = 0; i + overlap < draw->vertex.count; i += step) {
          chunk.vertex.count = MIN2(step + overlap, draw->vertex.count - i);
          if (draw->index.index_size)
@@ -5796,7 +5825,7 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
          else
             chunk.vertex.base = draw->vertex.base + i;
          chunk.gpu_prerast_prim_base = i / prim_div;
-         panvk_cmd_draw(cmdbuf, chunk);
+         gpu_prerast_draw_split(cmdbuf, &chunk, inst);
       }
    }
    return true;
@@ -5852,6 +5881,15 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
 
    if (gpu_prerast_wanted(cmdbuf, &draw) && gpu_prerast_split(cmdbuf, &draw))
       return;
+
+   /* A split chunk that falls back to IDVS has no instance ID offset: shift
+    * the base instead, which keeps gl_InstanceIndex but not gl_BaseInstance.
+    */
+   if (cmdbuf->state.gpu_prerast_inst_base && !draw.gpu_prerast_generated &&
+       (draw.prim == MESA_PRIM_PATCHES || !gpu_prerast_lowers(cmdbuf, &draw))) {
+      draw.instance.base += cmdbuf->state.gpu_prerast_inst_base;
+      cmdbuf->state.gpu_prerast_inst_base = 0;
+   }
 
    if (draw.indirect.buffer_dev_addr)
       account_tiler_work(cmdbuf, (uint64_t)draw.indirect.draw_count * 256);
