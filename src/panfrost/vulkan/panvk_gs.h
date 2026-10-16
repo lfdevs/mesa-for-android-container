@@ -197,7 +197,7 @@ enum panvk_xfb_gs_class {
 };
 
 /* The passthrough class of a draw topology, -1 for one with no class
- * (patches: there is no tessellation here).
+ * (patches: a tessellated draw picks the class of its output primitives).
  */
 static inline int
 panvk_xfb_gs_class(enum mesa_prim prim)
@@ -247,18 +247,50 @@ struct panvk_gs_lower_options {
 bool panvk_nir_lower_gs(struct nir_shader *nir,
                         const struct panvk_gs_lower_options *opts);
 
-/* Tessellation: the tess control shader runs as a compute shader after the
- * vertex job, one workgroup per patch (workgroup_id.x the patch, .y the
- * instance), one invocation per output vertex. The tess eval shader becomes
- * a point-in, point-out geometry shader run once per tessellator index.
+/* Tessellation (jm-v7 014). The tess control shader runs as a compute
+ * shader after the vertex job, one workgroup per patch (workgroup_id.x the
+ * patch, .y the instance), one invocation per output vertex. The libpoly
+ * tessellator kernels count, prefix sum and write the domain point indices,
+ * and the tess eval shader runs as the vertex shader of a non-indexed draw
+ * over them: vertex i is tessellator index i. A geometry shader or transform
+ * feedback after it goes through the geometry emulation of that draw.
+ *
+ * The tess control output, the per-patch counts and the tessellator output
+ * live in one device arena (panvk_device::tess_arena), reused by every
+ * tessellated draw: each draw's first arena write is a barrier job.
  */
-#define PANVK_TESS_HEAP_SIZE   (64u << 20)
-#define PANVK_TESS_MAX_INDICES (1u << 18)
+#define PANVK_TESS_HEAP_SIZE (64u << 20)
+/* Tessellator indices one draw keeps, at most. Whole patches past it are
+ * dropped (panlib_v7_tess_prefix).
+ */
+#define PANVK_TESS_MAX_INDICES (1u << 20)
+/* Patches one draw tessellates, at most: the tessellator grid and the serial
+ * prefix sum are sized for it.
+ */
+#define PANVK_TESS_MAX_PATCHES 8192u
+/* With a geometry shader or transform feedback after the tess eval shader,
+ * the geometry emulation of the generated draw is sized for this many input
+ * primitives (instead of PANVK_GS_INDIRECT_MAX_PRIMS).
+ */
+#define PANVK_TESS_GS_MAX_PRIMS 8192u
+#define PANVK_TESS_UNSET 0xff
 
-/* The tessellator's grid for an indirect draw: each thread walks the
- * patches at this stride.
+/* What the draw path needs from a tess control or tess eval shader. The
+ * domain, spacing, winding and point mode may come from either stage.
  */
-#define PANVK_TESS_INDIRECT_GRID 1024
+struct panvk_tess_info {
+   /* 0 triangles, 1 quads, 2 isolines, PANVK_TESS_UNSET. */
+   uint8_t domain;
+   /* enum poly_tess_partitioning, PANVK_TESS_UNSET. */
+   uint8_t spacing;
+   uint8_t ccw;
+   uint8_t point_mode;
+   /* Tess control only. */
+   uint8_t out_patch_size;
+   uint8_t patch_constants;
+   uint16_t stride_el;
+   uint64_t per_vertex_outputs;
+};
 
 /* opts: input_verts_per_prim 0 (panvk_gs_push::patch_size), pos_stride,
  * params_base.
@@ -269,10 +301,5 @@ bool panvk_nir_lower_tcs_inputs(struct nir_shader *nir,
 /* nir_load_tess_param_buffer_poly -> panvk_gs_push::tess_params. */
 bool panvk_nir_lower_tess_params(struct nir_shader *nir,
                                  const struct panvk_gs_lower_options *opts);
-
-/* A tess eval shader whose inputs src/poly already lowered, into the
- * geometry emulation's input form: one point in, one point out.
- */
-void panvk_nir_tes_to_gs(struct nir_shader *nir);
 
 #endif /* PANVK_GS_H */

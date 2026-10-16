@@ -77,6 +77,8 @@ struct panvk_device {
     * heap grows from its own base (kbase commits up to the faulting page). */
    struct panvk_priv_bo *tiler_heap2;
    struct panvk_priv_bo *indirect_varying_buffer;
+   /* v6/v7 tessellation (jm-v7 014), see panvk_gs.h. NULL elsewhere. */
+   struct panvk_priv_bo *tess_arena;
    struct panvk_priv_bo *sample_positions;
 
    struct {

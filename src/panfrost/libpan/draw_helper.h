@@ -11,6 +11,11 @@
 #pragma once
 
 #if (PAN_ARCH == 6 || PAN_ARCH == 7)
+#include "poly/geometry.h"
+#include "poly/tessellator.h"
+#endif
+
+#if (PAN_ARCH == 6 || PAN_ARCH == 7)
 /* Keep in sync with panvk_varying_buf_id */
 enum panlib_varying_buf_id {
    PANLIB_VARY_BUF_GENERAL,
@@ -61,6 +66,29 @@ struct libpan_xfb_draw {
     uint32_t start[4];       /* scan: byte offset this draw writes from */
     uint32_t written;        /* scan: primitives captured */
     uint32_t needed;         /* scan: primitives emitted */
+};
+
+/* Tessellation, one per tessellated draw (jm-v7 014). The draw path fills
+ * the parameters, panlib_v7_tess_setup/_prefix and the tessellator the
+ * rest. The buffers p points at live in the device's tess arena.
+ */
+struct panlib_v7_tess {
+   struct poly_tess_params p;
+   struct poly_heap heap;
+   /* VkDrawIndirectCommand of the tess eval draw. */
+   uint32_t draw[4];
+   uint32_t input_patch_size;
+   uint32_t out_patch_size;
+   uint32_t max_patches;
+   uint32_t max_indices;
+   /* struct libpan_draw_helper_varying_buf_info the tess eval draw
+    * allocates its varyings from, and what one output vertex takes there
+    * (all layers), plus a margin left free: the index count is cut so that
+    * the draw fits. 0 for no limit.
+    */
+   uint64_t varying_info;
+   uint32_t varying_bytes;
+   uint32_t varying_margin;
 };
 #endif
 

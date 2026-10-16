@@ -519,15 +519,24 @@ lower_per_vertex_input(nir_builder *b, nir_intrinsic_instr *intr,
    }
 
    /* An input array element: the io semantics name the variable's first
-    * location and src[1] the slot within it.
+    * location and src[1] the slot within it. The geometry shader lowers
+    * indirect input derefs first, a tess control shader may index an input
+    * array dynamically.
     */
-   const unsigned location =
-      sem.location +
-      (nir_src_is_const(intr->src[1]) ? nir_src_as_uint(intr->src[1]) : 0);
+   nir_def *offset;
+   if (nir_src_is_const(intr->src[1])) {
+      offset = load_slot_offset(b, st->in_offsets,
+                                sem.location + nir_src_as_uint(intr->src[1]));
+   } else {
+      nir_def *loc = nir_iadd_imm(b, intr->src[1].ssa, sem.location);
+      offset = nir_load_global(
+         b, 1, 32,
+         nir_iadd(b, st->in_offsets, nir_u2u64(b, nir_imul_imm(b, loc, 4))),
+         .align_mul = 4);
+   }
 
    nir_def *base = st->in_general;
    nir_def *stride = st->in_general_stride;
-   nir_def *offset = load_slot_offset(b, st->in_offsets, location);
 
    nir_def *byte =
       nir_iadd(b, nir_imul(b, vtx, stride),
@@ -1227,27 +1236,4 @@ panvk_nir_lower_tcs_inputs(nir_shader *nir,
 
    return nir_shader_intrinsics_pass(nir, lower_tcs_instr, nir_metadata_none,
                                      &st);
-}
-
-void
-panvk_nir_tes_to_gs(nir_shader *nir)
-{
-   nir->info.stage = MESA_SHADER_GEOMETRY;
-   memset(&nir->info.gs, 0, sizeof(nir->info.gs));
-   nir->info.gs.input_primitive = MESA_PRIM_POINTS;
-   nir->info.gs.output_primitive = MESA_PRIM_POINTS;
-   nir->info.gs.vertices_in = 1;
-   nir->info.gs.vertices_out = 1;
-   nir->info.gs.invocations = 1;
-   nir->info.gs.active_stream_mask = 1;
-
-   /* The outputs are copied out of their temporaries at the very end of the
-    * shader (nir_lower_io_vars_to_temporaries in panvk_preprocess_nir), so a
-    * single EmitVertex after everything flushes the finished vertex.
-    */
-   NIR_PASS(_, nir, nir_lower_returns);
-   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-   nir_builder b = nir_builder_at(nir_after_impl(impl));
-   nir_emit_vertex(&b, 0);
-   nir_progress(true, impl, nir_metadata_none);
 }

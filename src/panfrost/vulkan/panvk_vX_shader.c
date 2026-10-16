@@ -25,6 +25,12 @@
 #include "libpan/draw_helper_vp.h"
 #include "poly/nir/poly_nir.h"
 #include "libpoly.h"
+#else
+/* Tessellation on v6/v7 (jm-v7 014). */
+#include "poly/geometry.h"
+#include "poly/tessellator.h"
+#include "poly/nir/poly_nir.h"
+#include "libpoly.h"
 #endif
 
 #include "spirv/nir_spirv.h"
@@ -3423,7 +3429,9 @@ static const struct vk_shader_ops panvk_shader_ops;
 static bool
 panvk_vs_wants_xfb_passthrough(const struct vk_shader_compile_info *info)
 {
-   if (info->stage != MESA_SHADER_VERTEX || !info->nir->xfb_info)
+   if ((info->stage != MESA_SHADER_VERTEX &&
+        info->stage != MESA_SHADER_TESS_EVAL) ||
+       !info->nir->xfb_info)
       return false;
 
    uint32_t table[PANVK_XFB_MAX_RECORD_DWORDS];
@@ -3638,6 +3646,124 @@ panvk_per_arch(passthrough_gs)(struct panvk_device *dev,
 
    return gs;
 }
+
+/* Tessellation (jm-v7 014), see panvk_gs.h. */
+static void
+panvk_v7_tess_record_info(struct panvk_tess_info *t, const nir_shader *nir)
+{
+   static const uint8_t spacing[] = {
+      [TESS_SPACING_EQUAL] = POLY_TESS_PARTITIONING_INTEGER,
+      [TESS_SPACING_FRACTIONAL_ODD] = POLY_TESS_PARTITIONING_FRACTIONAL_ODD,
+      [TESS_SPACING_FRACTIONAL_EVEN] = POLY_TESS_PARTITIONING_FRACTIONAL_EVEN,
+   };
+
+   t->domain = nir->info.tess._primitive_mode == TESS_PRIMITIVE_TRIANGLES ? 0
+               : nir->info.tess._primitive_mode == TESS_PRIMITIVE_QUADS   ? 1
+               : nir->info.tess._primitive_mode == TESS_PRIMITIVE_ISOLINES
+                  ? 2
+                  : PANVK_TESS_UNSET;
+   t->spacing = nir->info.tess.spacing != TESS_SPACING_UNSPECIFIED
+                   ? spacing[nir->info.tess.spacing]
+                   : PANVK_TESS_UNSET;
+   t->ccw = nir->info.tess.ccw;
+   t->point_mode = nir->info.tess.point_mode;
+}
+
+static bool
+panvk_v7_lower_tess_param_intr(nir_builder *b, nir_intrinsic_instr *intr,
+                               UNUSED void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_load_tess_param_buffer_poly)
+      return false;
+
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def_replace(&intr->def, load_sysval(b, graphics, 64, tess_params));
+   return true;
+}
+
+/* The tess eval shader runs as the vertex shader of a non-indexed draw:
+ * vertex i is tessellator index i, and the raw id the libpoly helpers take
+ * (patch * POLY_TES_PATCH_ID_STRIDE + point) is index_buffer[i]. The
+ * tessellator already wrote the indices in the final winding.
+ */
+static bool
+panvk_v7_lower_tes_index(nir_shader *nir)
+{
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_builder b = nir_builder_at(nir_before_impl(impl));
+
+   nir_def *vid = nir_load_vertex_id(&b);
+   nir_def *p = nir_load_tess_param_buffer_poly(&b);
+   nir_def *ib = nir_load_global_constant(
+      &b, 1, 64,
+      nir_iadd_imm(&b, p, offsetof(struct poly_tess_params, index_buffer)),
+      .align_mul = 8);
+   nir_def *raw = nir_load_global_constant(
+      &b, 1, 32, nir_iadd(&b, ib, nir_u2u64(&b, nir_imul_imm(&b, vid, 4))),
+      .align_mul = 4);
+
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         if (intr->intrinsic == nir_intrinsic_load_vertex_id &&
+             &intr->def != vid)
+            nir_def_replace(&intr->def, raw);
+      }
+   }
+
+   return nir_progress(true, impl, nir_metadata_control_flow);
+}
+
+/* TES inputs become loads from the tess control output buffer, then the TES
+ * is a vertex shader (poly_nir_lower_tes(to_hw_vs)).
+ */
+static void
+panvk_v7_lower_tes(nir_shader *nir, struct panvk_tess_info *t)
+{
+   memset(t, 0, sizeof(*t));
+   panvk_v7_tess_record_info(t, nir);
+
+   NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in, glsl_type_size, 0);
+   NIR_PASS(_, nir, nir_opt_constant_folding);
+
+   /* PointMode may be set only on the TCS, and poly_nir_lower_tes() then
+    * emits a store_output with src_type 0 that varying collection ignores.
+    * A real output variable avoids that (same as v9). The tiler draws the
+    * points at the constant size 1 (no point size array: the API topology
+    * is a patch list).
+    */
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+   if (nir->info.tess.point_mode &&
+       !(nir->info.outputs_written & VARYING_BIT_PSIZ)) {
+      nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+      nir_builder psiz_b = nir_builder_at(nir_after_impl(impl));
+      nir_variable *psiz = nir_variable_create(
+         nir, nir_var_shader_out, glsl_float_type(), "gl_PointSize");
+      psiz->data.location = VARYING_SLOT_PSIZ;
+      nir_store_var(&psiz_b, psiz, nir_imm_float(&psiz_b, 1.0f), 1);
+      nir->info.outputs_written |= VARYING_BIT_PSIZ;
+   }
+
+   NIR_PASS(_, nir, poly_nir_lower_tes, true);
+
+   /* Every input is a global load now, and the vertex shader path expects
+    * vertex attributes only: drop the dead derefs and variables.
+    */
+   NIR_PASS(_, nir, nir_opt_dce);
+   NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_shader_in, NULL);
+   nir->info.inputs_read = 0;
+   nir->num_inputs = 0;
+
+   NIR_PASS(_, nir, panvk_v7_lower_tes_index);
+   /* pan_preprocess_nir() saw a tess eval shader: the vertex ID lowering
+    * of a Bifrost vertex shader is still to do.
+    */
+   NIR_PASS(_, nir, pan_nir_lower_vertex_id);
+   NIR_PASS(_, nir, nir_shader_intrinsics_pass,
+            panvk_v7_lower_tess_param_intr, nir_metadata_control_flow, NULL);
+}
 #endif
 
 static VkResult
@@ -3711,13 +3837,24 @@ panvk_compile_shader(struct panvk_device *dev,
 
    /* The geometry shader emulation reads the vertex shader's output in clip
     * space and does the viewport transform itself (panvk_nir_lower_gs.c).
+    * So does the tess control shader (panvk_nir_lower_tcs_inputs()). A tess
+    * eval shader runs as a vertex shader, and feeds the emulation when a
+    * geometry shader or transform feedback follows.
     */
    const bool vs_xfb_passthrough = panvk_vs_wants_xfb_passthrough(info);
    const bool vs_clip_space =
-      info->stage == MESA_SHADER_VERTEX &&
-      ((info->next_stage_mask & VK_SHADER_STAGE_GEOMETRY_BIT) ||
-       vs_xfb_passthrough);
+      (info->stage == MESA_SHADER_VERTEX &&
+       ((info->next_stage_mask & (VK_SHADER_STAGE_GEOMETRY_BIT |
+                                  VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)) ||
+        vs_xfb_passthrough)) ||
+      (info->stage == MESA_SHADER_TESS_EVAL &&
+       ((info->next_stage_mask & VK_SHADER_STAGE_GEOMETRY_BIT) ||
+        vs_xfb_passthrough));
    inputs.skip_viewport_transform = vs_clip_space;
+
+   struct panvk_tess_info tes_info = {0};
+   if (info->stage == MESA_SHADER_TESS_EVAL)
+      panvk_v7_lower_tes(info->nir, &tes_info);
 #endif
 
 #if PAN_ARCH == 9
@@ -3728,9 +3865,7 @@ panvk_compile_shader(struct panvk_device *dev,
 #endif
 
    switch (info->stage) {
-#if PAN_ARCH >= 9
    case MESA_SHADER_TESS_EVAL:
-#endif
    case MESA_SHADER_VERTEX: {
 #if PAN_ARCH >= 9
       /* Lowered/passthrough variants only exist on the gpu_prerast path. */
@@ -3768,6 +3903,7 @@ panvk_compile_shader(struct panvk_device *dev,
          variant->gs.vs_clip_space = vs_clip_space;
          if (vs_xfb_passthrough)
             panvk_vs_store_xfb(variant, info->nir->xfb_info);
+         variant->gs.tess = tes_info;
 #endif
 
          /* Each variant gets its own NIR. To save an extra clone, we use the
@@ -4204,6 +4340,78 @@ panvk_compile_shader(struct panvk_device *dev,
       }
 
       /* A compute shader from here on. */
+      panvk_lower_nir(dev, nir, info->set_layout_count, info->set_layouts,
+                      info->robustness, state, &shader->desc_info, false);
+
+      struct pan_compile_inputs k_inputs = inputs;
+      k_inputs.varying_layout = NULL;
+      k_inputs.view_mask = 0;
+      variant->own_bin = true;
+      result = panvk_compile_nir(dev, nir, info->flags, &k_inputs, state, NULL,
+                                 &shader->desc_info, variant);
+      if (result != VK_SUCCESS) {
+         panvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
+         return result;
+      }
+      break;
+   }
+
+   case MESA_SHADER_TESS_CTRL: {
+      /* A compute shader run after the vertex job, one workgroup per patch,
+       * one invocation per output vertex (panvk_gs.h). Its inputs are the
+       * vertex shader's varyings, its outputs go to the poly tess control
+       * buffer the tessellator and the tess eval shader read.
+       */
+      struct panvk_shader_variant *variant =
+         (struct panvk_shader_variant *)panvk_shader_only_variant(shader);
+      struct panvk_tess_info *t = &variant->gs.tess;
+      nir_shader *nir = info->nir;
+
+      NIR_PASS(_, nir, nir_lower_var_copies);
+      NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
+               glsl_type_size, 0);
+      NIR_PASS(_, nir, nir_opt_constant_folding);
+      nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
+      memset(t, 0, sizeof(*t));
+      panvk_v7_tess_record_info(t, nir);
+      t->per_vertex_outputs = poly_tcs_per_vertex_outputs(nir);
+      t->patch_constants = util_last_bit(nir->info.patch_outputs_written);
+      t->out_patch_size = nir->info.tess.tcs_vertices_out;
+      t->stride_el = poly_tcs_output_stride(nir) / 4;
+
+      const struct panvk_gs_lower_options tcs_opts = {
+         .input_verts_per_prim = 0,
+         .pos_stride = sizeof(uint32_t) * 4,
+         .params_base = SYSVALS_PUSH_CONST_BASE +
+                        offsetof(struct panvk_compute_sysvals, gs),
+      };
+
+      /* Inputs first: poly_nir_lower_tcs() would read them from its own
+       * vertex records. The barriers on outputs become workgroup barriers
+       * on global memory here, so poly leaves them alone.
+       */
+      NIR_PASS(_, nir, panvk_nir_lower_tcs_inputs, &tcs_opts);
+      NIR_PASS(_, nir, poly_nir_lower_tcs, false);
+      NIR_PASS(_, nir, panvk_nir_lower_tess_params, &tcs_opts);
+      NIR_PASS(_, nir, nir_remove_dead_variables,
+               nir_var_shader_in | nir_var_shader_out, NULL);
+
+      /* A compute shader from here on. The tess info shares a union with
+       * the compute info.
+       */
+      nir->info.stage = MESA_SHADER_COMPUTE;
+      memset(&nir->info.cs, 0, sizeof(nir->info.cs));
+      nir->info.workgroup_size[0] = t->out_patch_size;
+      nir->info.workgroup_size[1] = 1;
+      nir->info.workgroup_size[2] = 1;
+      nir->info.workgroup_size_variable = false;
+      nir->info.outputs_written = 0;
+      nir->info.inputs_read = 0;
+      nir->info.patch_outputs_written = 0;
+      nir->num_inputs = 0;
+      nir->num_outputs = 0;
+
       panvk_lower_nir(dev, nir, info->set_layout_count, info->set_layouts,
                       info->robustness, state, &shader->desc_info, false);
 
@@ -5418,9 +5626,12 @@ panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stag
          gfx_state_set_dirty(cmd, GS);
       }
       break;
+   /* Tessellated draws switch the vertex shader themselves (jm-v7 014). */
    case MESA_SHADER_TESS_CTRL:
+      cmd->state.gfx.tcs.shader = shader;
+      break;
    case MESA_SHADER_TESS_EVAL:
-      assert(shader == NULL);
+      cmd->state.gfx.tes.shader = shader;
       break;
 #endif
    default:

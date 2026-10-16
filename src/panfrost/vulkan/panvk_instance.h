@@ -43,6 +43,8 @@ enum panvk_debug_flags {
    PANVK_DEBUG_BC_COMPUTE = 1 << 26,
    PANVK_DEBUG_BC_WIDE = 1 << 27,
    PANVK_DEBUG_BC_TIMING = 1 << 29,
+   /* v6/v7: do not expose the tessellation emulation (jm-v7 014). */
+   PANVK_DEBUG_NO_TESS = 1 << 28,
 };
 
 extern uint64_t panvk_debug;

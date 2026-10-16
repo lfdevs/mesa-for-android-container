@@ -326,7 +326,11 @@ panvk_per_arch(get_physical_device_features)(
       .independentBlend = true,
       /* v6/v7: emulated by a compute job (panvk_nir_lower_gs.c). */
       .geometryShader = !PANVK_DEBUG(NO_GS),
-      .tessellationShader = PAN_ARCH >= 9,
+      /* v6/v7: the tess control shader runs as compute, the libpoly
+       * tessellator as compute kernels, the tess eval shader as the vertex
+       * shader of a second draw (jm-v7 014).
+       */
+      .tessellationShader = PAN_ARCH >= 9 || !PANVK_DEBUG(NO_TESS),
       .sampleRateShading = true,
       .dualSrcBlend = true,
       .logicOp = true,
@@ -560,7 +564,8 @@ panvk_per_arch(get_physical_device_features)(
       /* VK_EXT_extended_dynamic_state2 */
       .extendedDynamicState2 = true,
       .extendedDynamicState2LogicOp = true,
-      .extendedDynamicState2PatchControlPoints = PAN_ARCH >= 9,
+      .extendedDynamicState2PatchControlPoints =
+         PAN_ARCH >= 9 || !PANVK_DEBUG(NO_TESS),
 
       /* VK_EXT_extended_dynamic_state3 */
       .extendedDynamicState3TessellationDomainOrigin = false,
@@ -886,6 +891,8 @@ panvk_per_arch(get_physical_device_properties)(
    os_get_page_size(&os_page_size);
 
    const bool has_disk_cache = device->vk.disk_cache != NULL;
+   /* v6/v7: tessellation emulation (jm-v7 014), same limits as v9+. */
+   const bool tess = PAN_ARCH >= 9 || !PANVK_DEBUG(NO_TESS);
 
    /* Ensure that the max threads count per workgroup is valid for Bifrost */
    assert(PAN_ARCH > 8 || device->kmod.dev->props.max_threads_per_wg <= 1024);
@@ -980,14 +987,14 @@ panvk_per_arch(get_physical_device_properties)(
       .maxVertexInputBindingStride = MESA_VK_MAX_VERTEX_BINDING_STRIDE,
       /* 32 vec4 varyings. */
       .maxVertexOutputComponents = 128,
-      .maxTessellationGenerationLevel = PAN_ARCH >= 9 ? 64 : 0,
-      .maxTessellationPatchSize = PAN_ARCH >= 9 ? 32 : 0,
-      .maxTessellationControlPerVertexInputComponents = PAN_ARCH >= 9 ? 128 : 0,
-      .maxTessellationControlPerVertexOutputComponents = PAN_ARCH >= 9 ? 128 : 0,
-      .maxTessellationControlPerPatchOutputComponents = PAN_ARCH >= 9 ? 120 : 0,
-      .maxTessellationControlTotalOutputComponents = PAN_ARCH >= 9 ? 4096 : 0,
-      .maxTessellationEvaluationInputComponents = PAN_ARCH >= 9 ? 128 : 0,
-      .maxTessellationEvaluationOutputComponents = PAN_ARCH >= 9 ? 128 : 0,
+      .maxTessellationGenerationLevel = tess ? 64 : 0,
+      .maxTessellationPatchSize = tess ? 32 : 0,
+      .maxTessellationControlPerVertexInputComponents = tess ? 128 : 0,
+      .maxTessellationControlPerVertexOutputComponents = tess ? 128 : 0,
+      .maxTessellationControlPerPatchOutputComponents = tess ? 120 : 0,
+      .maxTessellationControlTotalOutputComponents = tess ? 4096 : 0,
+      .maxTessellationEvaluationInputComponents = tess ? 128 : 0,
+      .maxTessellationEvaluationOutputComponents = tess ? 128 : 0,
       .maxGeometryShaderInvocations = PAN_ARCH >= 9 ? 64 : 32,
       .maxGeometryInputComponents = 64,
       .maxGeometryOutputComponents = 128,

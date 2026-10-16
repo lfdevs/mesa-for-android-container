@@ -280,6 +280,25 @@ struct panvk_cmd_graphics_state {
       uint32_t xfb_stream_slots;
       uint32_t xfb_stream_idx;
    } gs;
+
+   /* Tessellation (jm-v7 014): the tess control shader runs as a compute
+    * job, the tess eval shader as the vertex shader of a second draw.
+    */
+   struct {
+      const struct panvk_shader *shader;
+   } tcs, tes;
+
+   /* The tessellated draw being recorded: which part (enum
+    * panvk_tess_phase), its struct panlib_v7_tess, the
+    * Vk*IndirectCommand the tess setup reads, and the tess control job
+    * index once emitted (0 on failure).
+    */
+   struct {
+      uint32_t phase;
+      uint64_t td;
+      uint64_t src_draw;
+      unsigned tcs_job;
+   } tess;
 #endif
 
    struct {

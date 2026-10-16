@@ -1653,6 +1653,112 @@ panlib_xfb_counters(global uint32_t *offsets, uint64_t c0, uint64_t c1,
    }
 }
 
+/* Tessellation (jm-v7 014), see struct panlib_v7_tess. src_draw is the
+ * Vk[Indexed]DrawIndirectCommand of the API draw: the patches are whole
+ * instances when they fit max_patches, else the first max_patches patches of
+ * the first instance. Sizes the tess control job, a NULL job when there is
+ * no patch.
+ */
+KERNEL(1)
+panlib_v7_tess_setup(global struct panlib_v7_tess *t,
+                     constant uint32_t *src_draw, global uint8_t *tcs_job)
+{
+   global struct poly_tess_params *p = &t->p;
+   uint32_t ps = max(t->input_patch_size, 1u);
+   uint32_t ppi = min(src_draw[0] / ps, t->max_patches);
+   uint32_t inst = ppi ? min(src_draw[1], t->max_patches / ppi) : 0;
+   uint32_t n = ppi * inst;
+
+   p->patches_per_instance = max(ppi, 1u);
+   p->nr_patches = n;
+   t->heap.bottom = 0;
+   t->draw[0] = 0;
+   t->draw[1] = 1;
+   t->draw[2] = 0;
+   t->draw[3] = 0;
+
+   panlib_patch_job_type_header((global struct mali_job_header_packed *)tcs_job,
+                                n ? MALI_JOB_TYPE_COMPUTE : MALI_JOB_TYPE_NULL);
+   if (n) {
+      pan_pack_work_groups_compute(
+         (global struct mali_invocation_packed *)(tcs_job +
+                                                  pan_section_offset(
+                                                     COMPUTE_JOB, INVOCATION)),
+         ppi, inst, 1, t->out_patch_size, 1, 1, false, false);
+   }
+}
+
+/* domain: 0 triangles, 1 quads, 2 isolines. Same as panlib_tessellate(). */
+KERNEL(64)
+panlib_v7_tessellate(constant struct poly_tess_params *p, uint32_t domain__3,
+                     uint32_t mode__2)
+{
+   uint32_t patch = cl_global_id.x;
+   enum poly_tess_mode mode = mode__2;
+
+   if (patch >= p->nr_patches)
+      return;
+
+   if (domain__3 == 0)
+      poly_tess_tri_process(p, patch, mode);
+   else if (domain__3 == 1)
+      poly_tess_quad_process(p, patch, mode);
+   else
+      poly_tess_isoline_process(p, patch, mode);
+
+   /* The tessellator emits clockwise triangles, swap two vertices of each
+    * one for the other winding.
+    */
+   if (mode == POLY_TESS_MODE_WITH_COUNTS && p->ccw && domain__3 != 2 &&
+       !p->points_mode) {
+      global uint32_t *idx = p->index_buffer;
+      uint32_t end = p->counts[patch];
+
+      for (uint32_t i = patch ? p->counts[patch - 1] : 0; i + 2 < end;
+           i += 3) {
+         uint32_t tmp = idx[i + 1];
+         idx[i + 1] = idx[i + 2];
+         idx[i + 2] = tmp;
+      }
+   }
+}
+
+/* Inclusive prefix sum of the per-patch index counts. Whole patches are kept
+ * while their indices fit max_indices and, with varying_info, the indirect
+ * varying buffer the tess eval draw allocates from. The tessellator then
+ * writes the kept patches only, and the tess eval draw covers them.
+ * ponytail: serial, a draw holds at most PANVK_TESS_MAX_PATCHES patches.
+ */
+KERNEL(1)
+panlib_v7_tess_prefix(global struct panlib_v7_tess *t)
+{
+   global struct poly_tess_params *p = &t->p;
+   uint32_t budget = t->max_indices;
+
+   if (t->varying_info && t->varying_bytes) {
+      global struct libpan_draw_helper_varying_buf_info *vi =
+         (global struct libpan_draw_helper_varying_buf_info *)t->varying_info;
+      uint32_t used =
+         atomic_fetch_add_explicit(&vi->offset, 0, memory_order_relaxed);
+      uint32_t left = vi->size > used + t->varying_margin
+                         ? vi->size - used - t->varying_margin
+                         : 0;
+      budget = min(budget, left / t->varying_bytes);
+   }
+
+   uint32_t sum = 0, n = 0;
+   for (; n < p->nr_patches; n++) {
+      uint32_t c = p->counts[n];
+      if (c > budget - sum)
+         break;
+      sum += c;
+      p->counts[n] = sum;
+   }
+
+   p->nr_patches = n;
+   t->draw[0] = sum;
+}
+
 #endif
 
 #if PAN_ARCH == 9

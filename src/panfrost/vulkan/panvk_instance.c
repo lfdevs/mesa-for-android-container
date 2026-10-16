@@ -68,6 +68,7 @@ static const struct debug_control panvk_debug_options[] = {
    {"bc_compute", PANVK_DEBUG_BC_COMPUTE},
    {"bc_wide", PANVK_DEBUG_BC_WIDE},
    {"bc_timing", PANVK_DEBUG_BC_TIMING},
+   {"no_tess", PANVK_DEBUG_NO_TESS},
    {NULL, 0},
 };
 

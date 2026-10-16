@@ -203,6 +203,11 @@ struct panvk_graphics_sysvals {
    struct {
       aligned_u64 sets[PANVK_DESC_TABLE_GFX_COUNT];
    } desc;
+
+   /* Tessellation: the draw's struct poly_tess_params, read by the tess eval
+    * shader running as the vertex shader.
+    */
+   aligned_u64 tess_params;
 #endif
 } __attribute__((aligned(FAU_WORD_SIZE)));
 
@@ -485,6 +490,11 @@ struct panvk_shader_variant {
       uint8_t xfb_streams_written;
       uint8_t xfb_output_count;
       struct panvk_xfb_output xfb_outputs[PANVK_XFB_MAX_RECORD_DWORDS];
+      /* Tessellation: a tess control shader (compiled as compute, see
+       * panvk_nir_lower_tcs_inputs()) or a tess eval shader (compiled as the
+       * vertex shader of a draw over the tessellator indices).
+       */
+      struct panvk_tess_info tess;
    } gs;
 #endif
 

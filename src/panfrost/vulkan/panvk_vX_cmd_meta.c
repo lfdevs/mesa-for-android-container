@@ -195,7 +195,11 @@ meta_gfx_start(struct panvk_cmd_buffer *cmdbuf,
     * would bind the application's one again after the meta operation.
     */
    save_ctx->gs = cmdbuf->state.gfx.gs.shader;
+   save_ctx->tcs = cmdbuf->state.gfx.tcs.shader;
+   save_ctx->tes = cmdbuf->state.gfx.tes.shader;
    cmdbuf->state.gfx.gs.shader = NULL;
+   cmdbuf->state.gfx.tcs.shader = NULL;
+   cmdbuf->state.gfx.tes.shader = NULL;
    gfx_state_set_dirty(cmdbuf, GS);
 #endif
 
@@ -270,6 +274,8 @@ meta_gfx_end(struct panvk_cmd_buffer *cmdbuf,
    cmdbuf->state.gfx.tes.shader = save_ctx->tes;
 #else
    cmdbuf->state.gfx.gs.shader = save_ctx->gs;
+   cmdbuf->state.gfx.tcs.shader = save_ctx->tcs;
+   cmdbuf->state.gfx.tes.shader = save_ctx->tes;
    gfx_state_set_dirty(cmdbuf, GS);
 #endif
 
