@@ -1547,6 +1547,108 @@ panlib_draw_index_minmax_search_helper(global uint8_t *index_buffer_ptr,
    atomic_fetch_min(min_ptr, local_min);
    atomic_fetch_max(max_ptr, local_max);
 }
+
+/* Transform feedback from the geometry shader emulation. Per invocation it
+ * left how many complete primitives it emitted and a staging record for
+ * every vertex slot. Capture order is draw order, which is invocation order:
+ * one thread turns the counts into each invocation's first primitive, fits
+ * the draw into the buffers and advances the write offsets. Every primitive
+ * of a draw is the same size, so the ones that fit are a prefix.
+ * Ported from JimVulkan (MIT, Copyright 2026 XclipseTools).
+ */
+KERNEL(1)
+panlib_xfb_scan(global struct libpan_xfb_draw *d)
+{
+   global uint32_t *counts = (global uint32_t *)d->counts;
+   global uint32_t *first = (global uint32_t *)d->first;
+   global uint32_t *off_in = (global uint32_t *)d->offsets_in;
+   global uint32_t *off_out = (global uint32_t *)d->offsets_out;
+
+   uint32_t total = 0;
+   for (uint32_t i = 0; i < d->invocations; i++) {
+      first[i] = total;
+      total += counts[i];
+   }
+
+   uint32_t fit = total;
+   for (uint32_t b = 0; b < 4; b++) {
+      const uint32_t o = off_in[b];
+      d->start[b] = o;
+      if (!d->stride[b])
+         continue;
+      const uint32_t room = d->size[b] > o ? d->size[b] - o : 0;
+      fit = min(fit, room / (d->stride[b] * d->vpp));
+   }
+
+   for (uint32_t b = 0; b < 4; b++)
+      off_out[b] = off_in[b] + fit * d->stride[b] * d->vpp;
+
+   d->written = fit;
+   d->needed = total;
+}
+
+/* One thread per emulation invocation: its primitives' vertices, record
+ * dword by record dword, to where the table says.
+ */
+KERNEL(64)
+panlib_xfb_copy(global struct libpan_xfb_draw *d)
+{
+   const uint32_t inv = cl_global_id.x;
+   if (inv >= d->invocations)
+      return;
+
+   const uint32_t p0 = ((global uint32_t *)d->first)[inv];
+   const uint32_t written = d->written;
+   if (p0 >= written)
+      return;
+
+   const uint32_t n = min(((global uint32_t *)d->counts)[inv], written - p0);
+   const uint32_t vpp = d->vpp;
+   const uint32_t k_dw = d->record_dwords;
+   global uint32_t *idx =
+      (global uint32_t *)d->indices + (uint64_t)inv * d->idx_per_invocation;
+   global uint32_t *staging = (global uint32_t *)d->staging;
+   global uint32_t *table = (global uint32_t *)d->table;
+
+   for (uint32_t p = 0; p < n; p++) {
+      for (uint32_t k = 0; k < vpp; k++) {
+         global uint32_t *rec = staging + (uint64_t)idx[p * vpp + k] * k_dw;
+         const uint64_t v = (uint64_t)(p0 + p) * vpp + k;
+
+         for (uint32_t j = 0; j < k_dw; j++) {
+            const uint32_t e = table[j];
+            const uint32_t b = e >> 16;
+            /* Another stream's buffer: not this pass's to write. */
+            if (!d->stride[b])
+               continue;
+            global uint32_t *dst =
+               (global uint32_t *)(d->buffer[b] + d->start[b] +
+                                   v * d->stride[b]);
+            dst[e & 0xffff] = rec[j];
+         }
+      }
+   }
+}
+
+/* vkCmdBegin/EndTransformFeedbackEXT with counter buffers: load the write
+ * offsets from them (load != 0, a missing counter starts at 0) or store the
+ * offsets into them.
+ */
+KERNEL(1)
+panlib_xfb_counters(global uint32_t *offsets, uint64_t c0, uint64_t c1,
+                    uint64_t c2, uint64_t c3, uint32_t load)
+{
+   const uint64_t c[4] = {c0, c1, c2, c3};
+
+   for (uint32_t b = 0; b < 4; b++) {
+      global uint32_t *counter = (global uint32_t *)c[b];
+      if (load)
+         offsets[b] = counter ? *counter : 0;
+      else if (counter)
+         *counter = offsets[b];
+   }
+}
+
 #endif
 
 #if PAN_ARCH == 9

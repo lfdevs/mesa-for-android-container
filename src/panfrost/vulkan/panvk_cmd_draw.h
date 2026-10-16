@@ -186,6 +186,21 @@ struct panvk_cmd_graphics_state {
       } buffers[4];
       uint64_t queries[4];
    } xfb;
+#else
+   /* VK_EXT_transform_feedback, captured from the geometry shader
+    * emulation. The write offsets live in GPU memory: each capturing draw
+    * reads `offsets` and leaves a fresh slot for the next. last_job orders
+    * the capture jobs of the current batch; closing the batch resets it.
+    */
+   struct {
+      bool active;
+      uint64_t offsets;
+      struct {
+         uint64_t addr;
+         uint32_t size;
+      } buffers[4];
+      unsigned last_job;
+   } xfb;
 #endif
    struct panvk_graphics_sysvals sysvals;
 
@@ -250,6 +265,15 @@ struct panvk_cmd_graphics_state {
       uint32_t out_vertex_count;
       uint32_t out_index_count;
       enum mesa_prim out_prim;
+      /* Transform feedback: the counts and staging records the emulation
+       * fills when the draw captures (see panvk_gs_push).
+       */
+      uint64_t xfb_counts;
+      uint64_t xfb_staging;
+      uint32_t xfb_invocations;
+      uint64_t xfb_stream_index;
+      uint32_t xfb_stream_slots;
+      uint32_t xfb_stream_idx;
    } gs;
 #endif
 

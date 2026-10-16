@@ -459,6 +459,18 @@ struct panvk_shader_variant {
       enum mesa_prim output_prim;
       /* Writes gl_ViewportIndex. */
       bool writes_viewport;
+      /* Transform feedback, see panvk_gs_xfb_table(): the staging record
+       * size in dwords (0 = captures nothing), each xfb buffer's stride in
+       * bytes (0 = not captured to), and where every record dword goes.
+       */
+      uint32_t xfb_dwords;
+      uint32_t xfb_strides[4];
+      uint32_t xfb_table[PANVK_XFB_MAX_RECORD_DWORDS];
+      /* geometryStreams: the streams the shader emits on, and the stream
+       * each xfb buffer captures.
+       */
+      uint8_t stream_mask;
+      uint8_t xfb_buffer_stream[4];
       /* Vertex shader variants: compiled to feed the emulation, so
        * gl_Position stays in clip space (skip_viewport_transform) and is
        * stored unsnapped.

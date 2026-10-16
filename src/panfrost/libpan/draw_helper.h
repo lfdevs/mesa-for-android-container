@@ -38,6 +38,30 @@ struct libpan_draw_helper_attrib_info {
     /* When the attribute is per instance, the stride otherwise 0 */
     uint32_t stride;
 };
+
+/* Transform feedback captured from the geometry shader emulation, one per
+ * capturing draw. The draw path fills everything above `start`;
+ * panlib_xfb_scan fills the rest, panlib_xfb_copy reads it.
+ */
+struct libpan_xfb_draw {
+    uint64_t buffer[4];      /* bound address */
+    uint32_t size[4];        /* bound size in bytes */
+    uint32_t stride[4];      /* the shader's xfb stride, 0 = not captured to */
+    uint64_t offsets_in;     /* uint32_t[4]: write offsets before this draw */
+    uint64_t offsets_out;    /* uint32_t[4]: after it */
+    uint64_t counts;         /* uint32_t per emulation invocation: primitives */
+    uint64_t first;          /* uint32_t per invocation: its first primitive */
+    uint64_t indices;        /* the emulation's index buffer */
+    uint64_t staging;        /* record_dwords per output vertex slot */
+    uint64_t table;          /* uint32_t per record dword: buffer << 16 | dword */
+    uint32_t invocations;    /* emulation invocations dispatched */
+    uint32_t idx_per_invocation;
+    uint32_t vpp;            /* vertices per output primitive */
+    uint32_t record_dwords;
+    uint32_t start[4];       /* scan: byte offset this draw writes from */
+    uint32_t written;        /* scan: primitives captured */
+    uint32_t needed;         /* scan: primitives emitted */
+};
 #endif
 
 #if PAN_ARCH == 9

@@ -119,6 +119,9 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
          list_addtail(&batch->node, &cmdbuf->batches);
       }
       cmdbuf->cur_batch = NULL;
+#if PAN_ARCH < 9
+      cmdbuf->state.gfx.xfb.last_job = 0;
+#endif
       return;
    }
 
@@ -231,6 +234,10 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
    }
 
    cmdbuf->cur_batch = NULL;
+#if PAN_ARCH < 9
+   /* Job indices belong to a batch's chain. */
+   cmdbuf->state.gfx.xfb.last_job = 0;
+#endif
 }
 
 VkResult

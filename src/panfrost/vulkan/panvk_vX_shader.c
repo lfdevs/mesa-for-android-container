@@ -3897,8 +3897,43 @@ panvk_compile_shader(struct panvk_device *dev,
          variant->gs.outputs_written |=
             BITFIELD64_BIT(PANVK_GS_VIEWPORT_INDEX_SLOT);
 
+      const int xfb_dwords =
+         panvk_gs_xfb_table(nir->xfb_info, variant->gs.xfb_table);
+      if (xfb_dwords < 0) {
+         panvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
+         return panvk_error(dev, VK_ERROR_FEATURE_NOT_PRESENT);
+      }
+      variant->gs.xfb_dwords = xfb_dwords;
+      for (unsigned b = 0; b < 4; b++) {
+         variant->gs.xfb_strides[b] =
+            nir->xfb_info && (nir->xfb_info->buffers_written & BITFIELD_BIT(b))
+               ? nir->xfb_info->buffers[b].stride
+               : 0;
+         variant->gs.xfb_buffer_stream[b] =
+            nir->xfb_info ? nir->xfb_info->buffer_to_stream[b] : 0;
+      }
+
+      /* The vertex streams the shader emits on, from its intrinsics:
+       * info.gs.active_stream_mask is not gathered yet.
+       */
+      variant->gs.stream_mask = 1;
+      nir_foreach_function_impl(impl, nir) {
+         nir_foreach_block(block, impl) {
+            nir_foreach_instr(instr, block) {
+               if (instr->type != nir_instr_type_intrinsic)
+                  continue;
+               nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+               if (intr->intrinsic == nir_intrinsic_emit_vertex ||
+                   intr->intrinsic == nir_intrinsic_end_primitive)
+                  variant->gs.stream_mask |=
+                     1u << nir_intrinsic_stream_id(intr);
+            }
+         }
+      }
+
       const struct panvk_gs_lower_options gs_opts = {
-         .stream_mask = 1,
+         .stream_mask = variant->gs.stream_mask,
+         .xfb = nir->xfb_info,
          .input_verts_per_prim = in_verts,
          .output_verts_per_prim = out_verts,
          .max_output_verts = variant->gs.max_output_verts,

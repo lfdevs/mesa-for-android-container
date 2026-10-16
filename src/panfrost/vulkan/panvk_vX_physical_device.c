@@ -219,7 +219,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_scalar_block_layout = true,
       .EXT_separate_stencil_usage = true,
       .EXT_shader_atomic_float = true,
-      .EXT_transform_feedback = PAN_ARCH >= 9,
+      .EXT_transform_feedback = true,
       .EXT_shader_demote_to_helper_invocation = true,
       .EXT_shader_image_atomic_int64 = PAN_ARCH >= 9,
       .EXT_shader_module_identifier = true,
@@ -649,8 +649,9 @@ panvk_per_arch(get_physical_device_features)(
       .transformFeedbackPreservesProvokingVertex = false,
 
       /* VK_EXT_transform_feedback */
-      .transformFeedback = PAN_ARCH >= 9,
-      .geometryStreams = PAN_ARCH >= 9 && !PANVK_DEBUG(NO_GS),
+      /* v6/v7: captured from the geometry shader emulation only. */
+      .transformFeedback = true,
+      .geometryStreams = !PANVK_DEBUG(NO_GS),
 
       /* v7 doesn't support AFBC(BGR). We need to tweak the texture swizzle to
        * make it work, which forces us to apply the same swizzle on the border
@@ -1369,9 +1370,8 @@ panvk_per_arch(get_physical_device_properties)(
       /* Streams come from a GS (v9: one without it). */
       .maxTransformFeedbackStreams =
          PAN_ARCH >= 10  ? 4
-         : PAN_ARCH == 9 ? (PANVK_DEBUG(NO_GS) ? 1 : 4)
-                         : 0,
-      .maxTransformFeedbackBuffers = PAN_ARCH >= 9 ? 4 : 0,
+                         : (PANVK_DEBUG(NO_GS) ? 1 : 4),
+      .maxTransformFeedbackBuffers = 4,
       .maxTransformFeedbackBufferSize = UINT32_MAX,
       .maxTransformFeedbackStreamDataSize = 512,
       .maxTransformFeedbackBufferDataSize = 512,
@@ -1380,7 +1380,7 @@ panvk_per_arch(get_physical_device_properties)(
       .transformFeedbackStreamsLinesTriangles = PAN_ARCH >= 9,
       .transformFeedbackRasterizationStreamSelect =
          PAN_ARCH >= 10 || (PAN_ARCH == 9 && !PANVK_DEBUG(NO_GS)),
-      .transformFeedbackDraw = true,
+      .transformFeedbackDraw = PAN_ARCH >= 9,
 
       /* VK_EXT_shader_tile_image */
       .shaderTileImageCoherentReadAccelerated = PAN_ARCH >= 9,
