@@ -1357,7 +1357,17 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
             cs_move32_to(prim_b, size, cs_root_chunk_size(sec_b));
             cs_call(prim_b, addr, size);
             prim_b->req_resource_mask |= sec_b->req_resource_mask;
+         }
 
+         /* The secondary's u_trace covers every segment (cmd_cut_vmr_segment
+          * does not cut it): append it once, after the last call into this
+          * subqueue, also when the last segment is empty and only the
+          * earlier ones were called. */
+         bool called = !cs_is_empty(sec_b);
+         for (uint32_t s = 0; s < seg_count && !called; s++)
+            called = segs[s].size[j] != 0;
+         if (called) {
+            struct cs_builder *prim_b = panvk_get_cs_builder(primary, j);
             struct u_trace *prim_ut = &primary->utrace.uts[j];
             struct u_trace *sec_ut = &secondary->utrace.uts[j];
             u_trace_clone_append(u_trace_begin_iterator(sec_ut),
