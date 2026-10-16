@@ -4305,6 +4305,25 @@ gpu_prerast_vs(struct panvk_cmd_buffer *cmdbuf,
       cs_flush_stores(compute);
    }
 
+   /* An indirect fan lowered in one pass draws what fits the arena. The
+    * rest has no records or generated indices: drop it.
+    */
+   if (source->indirect.buffer_dev_addr && !chunk_addr &&
+       source->prim == MESA_PRIM_TRIANGLE_FAN) {
+      struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+      panlib_fan_clamp_draw(
+         &ctx, panlib_1d(1), PANLIB_BARRIER_NONE,
+         params + offsetof(struct panvk_gpu_prerast_params, vertex_count),
+         params + offsetof(struct panvk_gpu_prerast_params, instance_count),
+         params + offsetof(struct panvk_gpu_prerast_params,
+                           vertex.verts_per_instance),
+         dispatch_params, generated_draw,
+         panvk_gpu_prerast_record_capacity(
+            shader->gpu_prerast.io.record_stride));
+      cs_wait_slots(compute, dev->csf.sb.all_iters_mask);
+   }
+
    struct panvk_dispatch_info dispatch = {
       .direct.wg_count = {vertex_count, instance_count, 1},
       .barrier = barrier,
