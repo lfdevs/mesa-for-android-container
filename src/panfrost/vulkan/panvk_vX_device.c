@@ -30,6 +30,7 @@
 #include "panvk_physical_device.h"
 #include "panvk_precomp_cache.h"
 #include "panvk_priv_bo.h"
+#include "panvk_image_view.h"
 #include "panvk_queue.h"
 #include "panvk_utrace.h"
 #include "panvk_utrace_perfetto.h"
@@ -49,6 +50,9 @@
 #include "pan_props.h"
 #include "pan_samples.h"
 #include "poly/geometry.h"
+#if PAN_ARCH < 9
+#include "pan_buffer.h"
+#endif
 
 static void *
 panvk_kmod_zalloc(const struct pan_kmod_allocator *allocator, size_t size,
@@ -624,6 +628,130 @@ cleanup_va_heaps(struct panvk_device *device)
    for (uint32_t i = 0; i < ARRAY_SIZE(device->as.heaps); i++)
       util_vma_heap_finish(&device->as.heaps[i].heap);
 }
+#if PAN_ARCH < 9
+#define PANVK_NULL_ZERO_SIZE (PANVK_NULL_UBO_ENTRIES * 16)
+
+/* See panvk_device::null_descs. The texture and storage image descriptors
+ * come from the device's own entry points, so they are exactly what an
+ * application's 1x1 image view would get. Nothing ever writes through them:
+ * a null storage image or texel buffer has a 0-byte range, so its stores are
+ * dropped.
+ * Ported from JimVulkan/mesa-unified-drivers (MIT, Copyright 2026
+ * XclipseTools).
+ */
+static VkResult
+panvk_init_null_descs(struct panvk_device *dev)
+{
+   const struct vk_device_dispatch_table *t = &dev->vk.dispatch_table;
+   VkDevice h = panvk_device_to_handle(dev);
+   VkResult result;
+
+   result = panvk_priv_bo_create(
+      dev, PANVK_NULL_ZERO_SIZE,
+      panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP),
+      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &dev->null_descs.zero_bo);
+   if (result != VK_SUCCESS)
+      return result;
+   memset(dev->null_descs.zero_bo->addr.host, 0, PANVK_NULL_ZERO_SIZE);
+   panvk_priv_bo_flush(dev->null_descs.zero_bo, 0, PANVK_NULL_ZERO_SIZE);
+   dev->null_descs.zero_addr = dev->null_descs.zero_bo->addr.dev;
+
+   const VkImageCreateInfo ici = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
+      .extent = {1, 1, 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_LINEAR,
+      .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+   };
+   result = t->CreateImage(h, &ici, NULL, &dev->null_descs.image);
+   if (result != VK_SUCCESS)
+      return result;
+
+   VkMemoryRequirements mr;
+   t->GetImageMemoryRequirements(h, dev->null_descs.image, &mr);
+   const VkMemoryAllocateInfo mai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = mr.size,
+      .memoryTypeIndex = ffs(mr.memoryTypeBits) - 1,
+   };
+   result = t->AllocateMemory(h, &mai, NULL, &dev->null_descs.image_mem);
+   if (result != VK_SUCCESS)
+      return result;
+   result = t->BindImageMemory(h, dev->null_descs.image,
+                               dev->null_descs.image_mem, 0);
+   if (result != VK_SUCCESS)
+      return result;
+
+   const VkImageViewCreateInfo vci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = dev->null_descs.image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
+      .components = {VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO,
+                     VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO},
+      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+   };
+   result = t->CreateImageView(h, &vci, NULL, &dev->null_descs.view);
+   if (result != VK_SUCCESS)
+      return result;
+
+   VK_FROM_HANDLE(panvk_image_view, view, dev->null_descs.view);
+   static_assert(sizeof(view->descs.tex[0]) == sizeof(dev->null_descs.tex),
+                 "texture descriptor size");
+   static_assert(sizeof(view->descs.img_attrib_buf) ==
+                    sizeof(dev->null_descs.img),
+                 "storage image descriptor size");
+   memcpy(dev->null_descs.tex, &view->descs.tex[0],
+          sizeof(dev->null_descs.tex));
+
+   struct mali_attribute_buffer_packed img[2];
+   memcpy(img, view->descs.img_attrib_buf, sizeof(img));
+   pan_unpack(&img[0], ATTRIBUTE_BUFFER, img_cfg);
+   pan_pack(&img[0], ATTRIBUTE_BUFFER, cfg) {
+      cfg = img_cfg;
+      cfg.size = 0;
+   }
+   memcpy(dev->null_descs.img, img, sizeof(img));
+
+   struct {
+      struct mali_attribute_buffer_packed buf;
+      struct mali_attribute_packed attr;
+      uint32_t pad[2];
+   } texel = {0};
+   static_assert(sizeof(texel) == sizeof(dev->null_descs.texel),
+                 "texel buffer descriptor size");
+   const struct pan_buffer_view bview = {
+      .format = PIPE_FORMAT_R32_UINT,
+      .width_el = 0,
+      .base = dev->null_descs.zero_addr,
+   };
+   GENX(pan_buffer_texture_emit)(&bview, &texel.buf, &texel.attr);
+   memcpy(dev->null_descs.texel, &texel, sizeof(texel));
+
+   dev->null_descs.valid = true;
+   return VK_SUCCESS;
+}
+
+static void
+panvk_finish_null_descs(struct panvk_device *dev)
+{
+   const struct vk_device_dispatch_table *t = &dev->vk.dispatch_table;
+   VkDevice h = panvk_device_to_handle(dev);
+
+   if (dev->null_descs.view)
+      t->DestroyImageView(h, dev->null_descs.view, NULL);
+   if (dev->null_descs.image)
+      t->DestroyImage(h, dev->null_descs.image, NULL);
+   if (dev->null_descs.image_mem)
+      t->FreeMemory(h, dev->null_descs.image_mem, NULL);
+   panvk_priv_bo_unref(dev->null_descs.zero_bo);
+   memset(&dev->null_descs, 0, sizeof(dev->null_descs));
+}
+#endif
 
 VkResult
 panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
@@ -933,6 +1061,15 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    if (result != VK_SUCCESS)
       goto err_finish_queues;
 
+#if PAN_ARCH < 9
+   /* Always, not only with nullDescriptor: a few KB, and an application
+    * binding null without the feature reads zeros instead of faulting.
+    */
+   result = panvk_init_null_descs(device);
+   if (result != VK_SUCCESS)
+      goto err_finish_queues;
+#endif
+
    for (unsigned i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
       const VkDeviceQueueCreateInfo *queue_create =
          &pCreateInfo->pQueueCreateInfos[i];
@@ -965,6 +1102,10 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
 err_finish_queues:
    vk_foreach_queue_safe(queue, &device->vk)
       panvk_queue_destroy(queue);
+
+#if PAN_ARCH < 9
+   panvk_finish_null_descs(device);
+#endif
 
    if (device->depth_bounds_fs)
       vk_shader_destroy(&device->vk, &device->depth_bounds_fs->vk, NULL);
@@ -1031,6 +1172,9 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
    panvk_precomp_cleanup(device);
 #if PAN_ARCH >= 10 && PAN_ARCH < 14
    panvk_per_arch(device_draw_context_cleanup)(device);
+#endif
+#if PAN_ARCH < 9
+   panvk_finish_null_descs(device);
 #endif
    if (device->depth_bounds_fs)
       vk_shader_destroy(&device->vk, &device->depth_bounds_fs->vk, NULL);

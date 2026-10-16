@@ -604,8 +604,9 @@ load_tex_size(nir_builder *b, nir_deref_instr *deref, enum glsl_sampler_dim dim,
       loaded_size = nir_iadd_imm(b, nir_u2u32(b, tex_sz), 1);
    }
 
-   /* TODO/Bifrost: Null descriptors */
-   assert(PAN_ARCH < 9 && !ctx->null_descriptor_support);
+   /* Bifrost null descriptors are a 1x1 image (panvk_device::null_descs),
+    * so a query through one reports that image, not zero.
+    */
 
    return loaded_size;
 }
@@ -674,8 +675,9 @@ load_tex_levels(nir_builder *b, nir_deref_instr *deref,
    nir_def *lod_count = nir_iand_imm(b, nir_ushr_imm(b, tex_word2, 16), 0x1f);
    nir_def *loaded_levels = nir_iadd_imm(b, lod_count, 1);
 
-   /* TODO/Bifrost: Null descriptors */
-   assert(PAN_ARCH < 9 && !ctx->null_descriptor_support);
+   /* Bifrost null descriptors are a 1x1 image (panvk_device::null_descs),
+    * so a query through one reports that image, not zero.
+    */
 
    return loaded_levels;
 }
@@ -692,8 +694,9 @@ load_tex_samples(nir_builder *b, nir_deref_instr *deref,
    nir_def *sample_count = nir_iand_imm(b, nir_ushr_imm(b, tex_word3, 13), 0x7);
    nir_def *loaded_samples = nir_ishl(b, nir_imm_int(b, 1), sample_count);
 
-   /* TODO/Bifrost: Null descriptors */
-   assert(PAN_ARCH < 9 && !ctx->null_descriptor_support);
+   /* Bifrost null descriptors are a 1x1 image (panvk_device::null_descs),
+    * so a query through one reports that image, not zero.
+    */
 
    return loaded_samples;
 }

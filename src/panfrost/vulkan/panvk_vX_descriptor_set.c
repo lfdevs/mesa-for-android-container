@@ -91,6 +91,66 @@ write_desc_data(struct panvk_descriptor_set *set, uint32_t binding,
 #define write_nulldesc(set, binding, elem, subdesc)                            \
    do {                                                                        \
    } while (0)
+
+/* nullDescriptor on Bifrost, see panvk_device::null_descs. A push set has
+ * no object base, the layout always has one.
+ * Ported from JimVulkan/mesa-unified-drivers (MIT, Copyright 2026
+ * XclipseTools).
+ */
+static void
+write_nulldesc_v7(struct panvk_descriptor_set *set, uint32_t binding,
+                  uint32_t elem, struct panvk_subdesc_info subdesc,
+                  VkDescriptorType type)
+{
+   const struct panvk_device *dev =
+      to_panvk_device(set->layout->vk.base.device);
+   uint32_t zero[PANVK_DESCRIPTOR_SIZE / 4] = {0};
+   const uint32_t *desc = NULL;
+
+   if (!dev->null_descs.valid)
+      return;
+
+   switch (type) {
+   case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+   case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+   case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+      desc = dev->null_descs.tex;
+      break;
+   case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+      desc = dev->null_descs.img;
+      break;
+   case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+   case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+      desc = dev->null_descs.texel;
+      break;
+   case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: {
+      /* Size 0 behind the bounds check null descriptors force on
+       * (panvk_ssbo_robustness()).
+       */
+      struct panvk_ssbo_addr *ssbo = (struct panvk_ssbo_addr *)zero;
+      ssbo->base_addr = dev->null_descs.zero_addr;
+      desc = zero;
+      break;
+   }
+   case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+      /* The zeroed page as a UBO. Not a 0-entry UBO: JimVulkan measured a
+       * job reading through a 0-entry UBO end TERMINATED, and pointer 0
+       * read-faults.
+       */
+      pan_pack((struct mali_uniform_buffer_packed *)zero, UNIFORM_BUFFER,
+               cfg) {
+         cfg.pointer = dev->null_descs.zero_addr;
+         cfg.entries = PANVK_NULL_UBO_ENTRIES;
+      }
+      desc = zero;
+      break;
+   default:
+      return;
+   }
+
+   write_desc_data(set, binding, elem, subdesc, 0, desc,
+                   PANVK_DESCRIPTOR_SIZE);
+}
 #endif
 
 static void
@@ -140,9 +200,18 @@ write_image_view_desc(struct panvk_descriptor_set *set,
 
    if (pImageInfo->imageView == VK_NULL_HANDLE) {
       for (uint8_t plane = 0; plane < binding_layout->textures_per_desc;
-           plane++)
+           plane++) {
+#if PAN_ARCH < 9
+         write_nulldesc_v7(set, binding, elem,
+                           type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+                              ? NO_SUBDESC
+                              : get_tex_subdesc_info(type, plane),
+                           type);
+#else
          write_nulldesc(set, binding, elem,
                         get_tex_subdesc_info(binding_layout->type, plane));
+#endif
+      }
       return;
    }
 
@@ -172,7 +241,11 @@ write_buffer_desc(struct panvk_descriptor_set *set,
                   uint32_t elem, VkDescriptorType type)
 {
    if (info->buffer == VK_NULL_HANDLE) {
+#if PAN_ARCH < 9
+      write_nulldesc_v7(set, binding, elem, NO_SUBDESC, type);
+#else
       write_nulldesc(set, binding, elem, NO_SUBDESC);
+#endif
       return;
    }
 
@@ -222,15 +295,29 @@ write_dynamic_buffer_desc(struct panvk_descriptor_set *set,
    uint64_t dev_addr = 0x8ull << 60;
    uint64_t range = 0;
 
+   const struct panvk_descriptor_set_binding_layout *binding_layout =
+      &set->layout->bindings[binding];
+
    if (info->buffer != VK_NULL_HANDLE) {
       VK_FROM_HANDLE(panvk_buffer, buffer, info->buffer);
 
       dev_addr = panvk_buffer_gpu_ptr(buffer, info->offset);
       range = panvk_buffer_range(buffer, info->offset, info->range);
    }
-
-   const struct panvk_descriptor_set_binding_layout *binding_layout =
-      &set->layout->bindings[binding];
+#if PAN_ARCH < 9
+   else if (binding_layout->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) {
+      /* A null dynamic UBO reads the zeroed page (see write_nulldesc_v7()).
+       * A null dynamic SSBO keeps size 0 at the sink address: its accesses
+       * are bounds checked.
+       */
+      const struct panvk_device *dev =
+         to_panvk_device(set->layout->vk.base.device);
+      if (dev->null_descs.valid) {
+         dev_addr = dev->null_descs.zero_addr;
+         range = PANVK_NULL_UBO_ENTRIES * 16;
+      }
+   }
+#endif
    uint32_t dyn_buf_idx = binding_layout->desc_idx + elem;
 
    assert(range <= UINT32_MAX);
@@ -246,7 +333,11 @@ write_buffer_view_desc(struct panvk_descriptor_set *set,
                        uint32_t elem, VkDescriptorType type)
 {
    if (bufferView == VK_NULL_HANDLE) {
+#if PAN_ARCH < 9
+      write_nulldesc_v7(set, binding, elem, NO_SUBDESC, type);
+#else
       write_nulldesc(set, binding, elem, NO_SUBDESC);
+#endif
       return;
    }
 

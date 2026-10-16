@@ -408,6 +408,19 @@ panvk_buffer_ubo_addr_format(VkPipelineRobustnessBufferBehaviorEXT robustness)
    }
 }
 
+/* A Bifrost null SSBO is the zeroed page with size 0 (panvk_device::
+ * null_descs): only the bounds-checked address format keeps accesses through
+ * it off that page, so null descriptors turn it on.
+ */
+static inline VkPipelineRobustnessBufferBehaviorEXT
+panvk_ssbo_robustness(const struct vk_pipeline_robustness_state *rs)
+{
+   if (PAN_ARCH < 9 && rs->null_storage_buffer_descriptor &&
+       rs->storage_buffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT)
+      return VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
+   return rs->storage_buffers;
+}
+
 static inline nir_address_format
 panvk_buffer_ssbo_addr_format(VkPipelineRobustnessBufferBehaviorEXT robustness)
 {
@@ -439,7 +452,8 @@ panvk_get_spirv_options(UNUSED struct vk_physical_device *vk_pdev,
 {
    return (struct spirv_to_nir_options){
       .ubo_addr_format = panvk_buffer_ubo_addr_format(rs->uniform_buffers),
-      .ssbo_addr_format = panvk_buffer_ssbo_addr_format(rs->storage_buffers),
+      .ssbo_addr_format =
+         panvk_buffer_ssbo_addr_format(panvk_ssbo_robustness(rs)),
       .phys_ssbo_addr_format = nir_address_format_64bit_global,
       .shared_addr_format = nir_address_format_32bit_offset,
       .min_ubo_alignment = 16,
@@ -2844,7 +2858,7 @@ panvk_lower_nir(struct panvk_device *dev, nir_shader *nir,
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ubo,
             panvk_buffer_ubo_addr_format(rs->uniform_buffers));
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ssbo,
-            panvk_buffer_ssbo_addr_format(rs->storage_buffers));
+            panvk_buffer_ssbo_addr_format(panvk_ssbo_robustness(rs)));
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_push_const,
             nir_address_format_32bit_offset);
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_global,
@@ -2854,7 +2868,8 @@ panvk_lower_nir(struct panvk_device *dev, nir_shader *nir,
     * descriptor-level bounds check Mali HW does for native buffer
     * loads/stores is bypassed. Insert software bounds checks here for SSBO
     * accesses when robust storage buffer access is requested. */
-   if (rs->storage_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT) {
+   if (panvk_ssbo_robustness(rs) !=
+       VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT) {
       NIR_PASS(_, nir, nir_lower_robust_access, is_robust_ssbo_intr, NULL);
       NIR_PASS(_, nir, nir_opt_constant_folding);
       NIR_PASS(_, nir, nir_opt_dce);
@@ -3670,7 +3685,8 @@ panvk_compile_shader(struct panvk_device *dev,
    nir_variable_mode robust_modes = 0;
    if (info->robustness->uniform_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT)
       robust_modes |= nir_var_mem_ubo;
-   if (info->robustness->storage_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT)
+   if (panvk_ssbo_robustness(info->robustness) !=
+       VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT)
       robust_modes |= nir_var_mem_ssbo;
    /* v9/v10 image loads need a shader fix-up for robustImageAccess2. */
    if (info->robustness->images ==

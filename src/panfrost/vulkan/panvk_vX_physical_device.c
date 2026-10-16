@@ -214,7 +214,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_queue_family_foreign = true,
       .EXT_rasterization_order_attachment_access = PAN_ARCH >= 10,
       .EXT_rgba10x6_formats = PAN_ARCH >= 11,
-      .EXT_robustness2 = PAN_ARCH >= 9,
+      .EXT_robustness2 = true,
       .EXT_sampler_filter_minmax = PAN_ARCH >= 10,
       .EXT_scalar_block_layout = true,
       .EXT_separate_stencil_usage = true,
@@ -672,10 +672,16 @@ panvk_per_arch(get_physical_device_features)(
       /* v9/v10 texel buffers get software bounds checks
        * (bi_lower_robust_texel_buf) and OOB storage image loads a GPU alpha
        * fix-up (bi_lower_robust_image_alpha_v10), the rest is the same
-       * Valhall path. */
-      .robustBufferAccess2 = PAN_ARCH >= 9,
+       * Valhall path.
+       * v6/v7: SSBOs use the bounds-checked address format, UBOs, texel
+       * buffers, storage images and vertex attributes the hardware bounds
+       * of their descriptors, and null descriptors are emulated
+       * (panvk_device::null_descs), as in JimVulkan. robustImageAccess2
+       * stays off: the out-of-bounds alpha is unknown there.
+       */
+      .robustBufferAccess2 = true,
       .robustImageAccess2 = PAN_ARCH >= 9,
-      .nullDescriptor = PAN_ARCH >= 9,
+      .nullDescriptor = true,
 
       /* VK_EXT_shader_tile_image */
       .shaderTileImageColorReadAccess = PAN_ARCH >= 9,

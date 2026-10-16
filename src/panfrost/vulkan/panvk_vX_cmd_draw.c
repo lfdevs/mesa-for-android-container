@@ -1151,7 +1151,17 @@ panvk_per_arch(CmdBindVertexBuffers2)(VkCommandBuffer commandBuffer,
          cmdbuf->state.gfx.vb.bufs[firstBinding + i].size = panvk_buffer_range(
             buffer, pOffsets[i], pSizes ? pSizes[i] : VK_WHOLE_SIZE);
       } else {
+#if PAN_ARCH < 9
+         /* nullDescriptor: zeroed memory nothing writes rather than address
+          * 0, which the Bifrost attribute fetch would fault on.
+          */
+         const struct panvk_device *dev =
+            to_panvk_device(cmdbuf->vk.base.device);
+         cmdbuf->state.gfx.vb.bufs[firstBinding + i].address =
+            dev->null_descs.zero_addr;
+#else
          cmdbuf->state.gfx.vb.bufs[firstBinding + i].address = 0;
+#endif
          cmdbuf->state.gfx.vb.bufs[firstBinding + i].size = 0;
       }
    }

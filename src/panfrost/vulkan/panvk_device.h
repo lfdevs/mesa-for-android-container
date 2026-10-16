@@ -115,6 +115,26 @@ struct panvk_device {
    /* Bound in place of a missing FS so the depth bounds test still runs. */
    struct panvk_shader *depth_bounds_fs;
 
+   /* Bifrost (v6/v7) has no NULL descriptor. A null descriptor write copies
+    * one of these instead: a texture of an internal 1x1 image with a ZERO
+    * swizzle, and a storage image and texel buffer whose attribute buffer
+    * is 0 bytes, so loads return zeros and stores are dropped by the bounds
+    * check. zero_bo is zeroed memory nothing writes, what null vertex
+    * buffers and UBOs point at (null SSBOs too, with size 0). Unused, and
+    * the same layout, on v9+.
+    * From JimVulkan/mesa-unified-drivers (MIT, Copyright 2026 XclipseTools).
+    */
+#define PANVK_NULL_UBO_ENTRIES 256
+   struct {
+      bool valid;
+      uint32_t tex[8], img[8], texel[8];
+      struct panvk_priv_bo *zero_bo;
+      uint64_t zero_addr;
+      VkImage image;
+      VkDeviceMemory image_mem;
+      VkImageView view;
+   } null_descs;
+
    struct {
       struct panvk_pool rw;
       struct panvk_pool rw_nc;
