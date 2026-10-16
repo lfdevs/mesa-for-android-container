@@ -63,4 +63,8 @@ static nir_shader *
 panvk_fixup_gs_passthrough(const struct panvk_gpu_prerast_gs_info *gs,
                            const nir_shader *gs_nir, nir_shader *pt);
 
+struct vk_pipeline_robustness_state;
+UNUSED static struct vk_pipeline_robustness_state
+panvk_internal_robustness(void);
+
 #endif /* PANVK_VX_CLIP_VP_H */

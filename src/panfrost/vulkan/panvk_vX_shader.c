@@ -4839,7 +4839,7 @@ panvk_per_arch(create_depth_bounds_fs)(struct panvk_device *dev)
       "panvk-depth-bounds-fs");
    b.shader->info.internal = true;
 
-   const struct vk_pipeline_robustness_state rs = {0};
+   const struct vk_pipeline_robustness_state rs = panvk_internal_robustness();
    struct vk_shader_compile_info info = {
       .stage = MESA_SHADER_FRAGMENT,
       .nir = b.shader,
@@ -5296,3 +5296,18 @@ panvk_fixup_gs_passthrough(UNUSED const struct panvk_gpu_prerast_gs_info *gs,
    return pt;
 }
 #endif
+
+/* Robustness for internal shaders that have no buffer, image or vertex input
+ * access. A zeroed state is DEVICE_DEFAULT, which the address format
+ * helpers reject.
+ */
+UNUSED static struct vk_pipeline_robustness_state
+panvk_internal_robustness(void)
+{
+   return (struct vk_pipeline_robustness_state){
+      .images = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT,
+      .storage_buffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
+      .uniform_buffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
+      .vertex_inputs = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
+   };
+}
