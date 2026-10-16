@@ -56,7 +56,7 @@
 #include "vk_pipeline.h"
 #include "vk_pipeline_layout.h"
 #include "vk_shader.h"
-#include "vk_util.h"
+#include "panvk_vX_clip_vp.h"
 
 #define FAU_WORD_COUNT 64
 
@@ -563,7 +563,7 @@ panvk_lower_clip_cull_vs(nir_shader *nir)
                                           VARYING_SLOT_CULL_DIST1, "cull1"),
                     nir_vec(&b, &cull_v[4], 4), 0xf);
    }
-
+   panvk_store_cull_flags(&b, nir, cull, cull_v, ncull);
    return nir_progress(true, nir_shader_get_entrypoint(nir),
                        nir_metadata_none);
 }
@@ -574,14 +574,14 @@ panvk_lower_clip_cull_fs(nir_shader *nir, uint64_t prev_outputs,
 {
    static const gl_varying_slot locs[4] = {
       VARYING_SLOT_CLIP_DIST0, VARYING_SLOT_CLIP_DIST1,
-      VARYING_SLOT_CULL_DIST0, VARYING_SLOT_CULL_DIST1,
+      PANVK_FS_CULL_KILL_SLOT0, PANVK_FS_CULL_KILL_SLOT1,
    };
    static const char *names[4] = {"clip0", "clip1", "cull0", "cull1"};
    const bool extra_scissor = scissor_loc >= VARYING_SLOT_VAR0 &&
                               scissor_loc < VARYING_SLOT_MAX;
 
    if (!(prev_outputs & (VARYING_BIT_CLIP_DIST0 | VARYING_BIT_CLIP_DIST1 |
-                         VARYING_BIT_CULL_DIST0 | VARYING_BIT_CULL_DIST1)) &&
+                         PANVK_FS_CULL_BITS)) &&
        !extra_scissor)
       return false;
 
@@ -621,7 +621,7 @@ panvk_lower_clip_cull_fs(nir_shader *nir, uint64_t prev_outputs,
       }
       if (old_cull[i].var) {
          nir_store_array_var_imm(&b, old_cull[i].var, old_cull[i].idx,
-                                 nir_imm_float(&b, 0.0f), 1);
+                                 panvk_fs_cull_value(&b, nir, prev_outputs, i), 1);
       }
    }
 
@@ -1304,7 +1304,7 @@ panvk_gpu_prerast_vs_vp_passthrough_nir(
    b.shader->info.outputs_written =
       (outputs & ~VARYING_BIT_VIEWPORT) | BITFIELD64_BIT(scissor_loc) |
       (add_prim_id ? VARYING_BIT_PRIMITIVE_ID : 0);
-   b.shader->num_outputs = idx;
+   b.shader->num_outputs = panvk_vp_index_copy(&b, vp_index, idx);
    return b.shader;
 }
 
@@ -3335,7 +3335,7 @@ panvk_lower_cull_dist_flags_intr(nir_builder *b, nir_intrinsic_instr *intr,
       return false;
 
    gl_varying_slot loc = nir_intrinsic_io_semantics(intr).location;
-   if (loc != VARYING_SLOT_CULL_DIST0 && loc != VARYING_SLOT_CULL_DIST1)
+   if (PAN_ARCH >= 10 || (loc != VARYING_SLOT_CULL_DIST0 && loc != VARYING_SLOT_CULL_DIST1))
       return false;
 
    b->cursor = nir_before_instr(&intr->instr);
@@ -3664,7 +3664,7 @@ panvk_compile_shader(struct panvk_device *dev,
       struct panvk_gpu_prerast_gs_info *gs = &shader->gpu_prerast.gs;
       struct panvk_gpu_prerast_out_types out_types = {0};
       nir_shader *nir = info->nir;
-
+      panvk_unmerge_cull_vars(nir);
       shader->gpu_prerast.io.abi_version = PANVK_GPU_PRERAST_ABI_VERSION;
       shader->gpu_prerast.has_side_effects = nir->info.writes_memory;
 
@@ -3682,7 +3682,7 @@ panvk_compile_shader(struct panvk_device *dev,
       if (gs->xfb)
          gs->record_stride += 16;
       panvk_gpu_prerast_gather_xfb(&shader->gpu_prerast.xfb, nir->xfb_info,
-                                   gs->outputs_written, 0);
+                                   gs->outputs_written, PANVK_GS_XFB_NCLIP(nir));
       gs->max_vertices = MAX2(nir->info.gs.vertices_out, 1);
       gs->index_stride = ALIGN_POT(2 * gs->max_vertices, 4);
       gs->invocations = MAX2(nir->info.gs.invocations, 1);
@@ -3697,8 +3697,8 @@ panvk_compile_shader(struct panvk_device *dev,
           (gs->outputs_written & VARYING_BIT_POS))
          gs->scissor_clip_loc = panvk_prerast_scissor_slot(
             gs->outputs_written & ~VARYING_BIT_VIEWPORT);
-      nir_shader *pt_nir = panvk_gpu_prerast_gs_passthrough_nir(
-         info->nir->options, gs, &out_types, gs->scissor_clip_loc);
+      nir_shader *pt_nir = panvk_fixup_gs_passthrough(gs, nir, panvk_gpu_prerast_gs_passthrough_nir(
+         info->nir->options, gs, &out_types, gs->scissor_clip_loc));
       struct panvk_shader_desc_info pt_desc_info = {0};
       panvk_lower_nir(dev, pt_nir, info->set_layout_count, info->set_layouts,
                       info->robustness, state, &pt_desc_info, false);
@@ -3740,7 +3740,7 @@ panvk_compile_shader(struct panvk_device *dev,
    case MESA_SHADER_TESS_CTRL: {
       struct panvk_gpu_prerast_tess_info *t = &shader->gpu_prerast.tess;
       nir_shader *nir = info->nir;
-
+      panvk_unmerge_cull_vars(nir);
       shader->gpu_prerast.has_side_effects = nir->info.writes_memory;
 
       NIR_PASS(_, nir, nir_lower_var_copies);
@@ -3800,7 +3800,7 @@ panvk_compile_shader(struct panvk_device *dev,
 
       uint64_t prev_dist_outputs =
          VARYING_BIT_CLIP_DIST0 | VARYING_BIT_CLIP_DIST1 |
-         VARYING_BIT_CULL_DIST0 | VARYING_BIT_CULL_DIST1;
+         panvk_fs_dist_defaults(nir);
       if (vs_varying_layout) {
          prev_dist_outputs = 0;
          for (unsigned i = 0; i < vs_varying_layout->count; i++) {
@@ -5039,3 +5039,260 @@ VkResult panvk_per_arch(create_shader)(
 
    return VK_SUCCESS;
 }
+
+#if PAN_ARCH >= 10
+UNUSED static void
+panvk_store_cull_flags(nir_builder *b, nir_shader *nir,
+                       const struct panvk_dist_elem *cull,
+                       nir_def *const *cull_v, unsigned ncull)
+{
+   for (unsigned s = 0; s < 2 && ncull > s * 4; s++) {
+      nir_def *flags[4];
+      for (unsigned c = 0; c < 4; c++) {
+         const unsigned i = s * 4 + c;
+         flags[c] = i < ncull && cull[i].var
+                       ? nir_b2f32(b, nir_flt_imm(b, cull_v[i], 0.0))
+                       : nir_imm_float(b, 0.0f);
+      }
+      nir_store_var(b,
+                    panvk_create_dist_var(nir, nir_var_shader_out,
+                                          PANVK_CULL_FLAG_SLOT0 + s,
+                                          s ? "cull_flag1" : "cull_flag0"),
+                    nir_vec(b, flags, 4), 0xf);
+   }
+}
+
+/* FS gl_CullDistance[idx]: the raw distance, interpolated. */
+UNUSED static nir_def *
+panvk_fs_cull_value(nir_builder *b, nir_shader *nir, uint64_t prev_outputs,
+                    unsigned idx)
+{
+   const gl_varying_slot loc = VARYING_SLOT_CULL_DIST0 + idx / 4;
+   if (!(prev_outputs & BITFIELD64_BIT(loc)))
+      return nir_imm_float(b, 0.0f);
+
+   nir_variable *var = NULL;
+   nir_foreach_shader_in_variable(v, nir) {
+      if (v->data.location == loc && !v->data.compact) {
+         var = v;
+         break;
+      }
+   }
+   if (!var)
+      var = panvk_create_dist_var(nir, nir_var_shader_in, loc,
+                                  idx < 4 ? "cull0" : "cull1");
+
+   return nir_channel(b, nir_load_var(b, var), idx % 4);
+}
+
+/* Varyings an FS may read when the previous stage is not known. Also points
+ * ViewportIndex at the passthrough copy; without one the load reads 0, the
+ * value for an unwritten index.
+ */
+UNUSED static uint64_t
+panvk_fs_dist_defaults(nir_shader *nir)
+{
+   nir_foreach_shader_in_variable(var, nir) {
+      if (var->data.location == VARYING_SLOT_VIEWPORT)
+         var->data.location = PANVK_VP_INDEX_SLOT;
+   }
+
+   return PANVK_FS_CULL_BITS;
+}
+
+/* nir_merge_clip_cull_distance_vars() packs the cull array right after the
+ * clip one in CLIP_DIST0/1. VS/TES records keep the two apart
+ * (panvk_lower_clip_cull_vs()), so a GS or TCS reading them, and the GS
+ * passthrough reading the GS records, need the cull array back at
+ * CULL_DIST0. Outputs know the clip array size. For inputs, a lone array
+ * sits at CLIP_DIST0 either way and only its name ("gl_in.gl_CullDistance"
+ * from glslang) marks it as cull; an unnamed one is taken as clip.
+ */
+static void
+panvk_unmerge_cull_var(nir_shader *nir, nir_variable_mode mode)
+{
+   nir_variable *vars[2] = {NULL, NULL};
+   unsigned count = 0;
+
+   nir_foreach_variable_with_modes(var, nir, mode) {
+      if (!var->data.compact ||
+          (var->data.location != VARYING_SLOT_CLIP_DIST0 &&
+           var->data.location != VARYING_SLOT_CLIP_DIST1))
+         continue;
+      if (count < 2)
+         vars[count] = var;
+      count++;
+   }
+
+   nir_variable *cull = NULL;
+   if (mode == nir_var_shader_out) {
+      const unsigned nclip = nir->info.clip_distance_array_size;
+      if (!nir->info.cull_distance_array_size)
+         return;
+      for (unsigned i = 0; i < MIN2(count, 2); i++) {
+         const unsigned base =
+            (vars[i]->data.location - VARYING_SLOT_CLIP_DIST0) * 4 +
+            vars[i]->data.location_frac;
+         if (base == nclip && (nclip || count == 1))
+            cull = vars[i];
+      }
+   } else if (count == 2) {
+      const bool first_is_clip =
+         vars[0]->data.location == VARYING_SLOT_CLIP_DIST0 &&
+         vars[0]->data.location_frac == 0;
+      cull = first_is_clip ? vars[1] : vars[0];
+   } else if (count == 1 && vars[0]->name &&
+              strstr(vars[0]->name, "CullDistance")) {
+      cull = vars[0];
+   }
+
+   if (cull) {
+      cull->data.location = VARYING_SLOT_CULL_DIST0;
+      cull->data.location_frac = 0;
+   }
+}
+
+UNUSED static void
+panvk_unmerge_cull_vars(nir_shader *nir)
+{
+   if (nir->info.stage != MESA_SHADER_GEOMETRY &&
+       nir->info.stage != MESA_SHADER_TESS_CTRL)
+      return;
+
+   panvk_unmerge_cull_var(nir, nir_var_shader_in);
+   /* TCS outputs stay merged: the TES reads them the same way. */
+   if (nir->info.stage == MESA_SHADER_GEOMETRY)
+      panvk_unmerge_cull_var(nir, nir_var_shader_out);
+}
+
+/* The ViewportIndex the shader wrote, for an FS that reads it. */
+UNUSED static unsigned
+panvk_vp_index_copy(nir_builder *b, nir_def *vp_index, unsigned base)
+{
+   nir_store_output(b, vp_index, nir_imm_int(b, 0), .base = base,
+                    .write_mask = 0x1, .src_type = nir_type_int32,
+                    .io_semantics = {.location = PANVK_VP_INDEX_SLOT,
+                                     .num_slots = 1});
+   b->shader->info.outputs_written |= BITFIELD64_BIT(PANVK_VP_INDEX_SLOT);
+   return base + 1;
+}
+
+/* The GS stores only the lanes of its arrays; the rest of a record keeps
+ * whatever the arena held, which is how GS clip results changed from one
+ * CTS case to the next. Unused clip lanes become +1 (no kill), unused cull
+ * lanes 0, and the cull flags and the ViewportIndex copy are added.
+ */
+UNUSED static nir_shader *
+panvk_fixup_gs_passthrough(const struct panvk_gpu_prerast_gs_info *gs,
+                           const nir_shader *gs_nir, nir_shader *pt)
+{
+   const unsigned nclip = gs_nir->info.clip_distance_array_size;
+   const unsigned ncull = gs_nir->info.cull_distance_array_size;
+   nir_function_impl *impl = nir_shader_get_entrypoint(pt);
+   nir_builder b = nir_builder_create(impl);
+
+   nir_foreach_block_safe(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         if (intr->intrinsic != nir_intrinsic_store_output)
+            continue;
+
+         const gl_varying_slot loc = nir_intrinsic_io_semantics(intr).location;
+         const bool clip = loc == VARYING_SLOT_CLIP_DIST0 ||
+                           loc == VARYING_SLOT_CLIP_DIST1;
+         const bool cull = loc == VARYING_SLOT_CULL_DIST0 ||
+                           loc == VARYING_SLOT_CULL_DIST1;
+         if ((!clip && !cull) || loc == gs->scissor_clip_loc)
+            continue;
+
+         const unsigned first =
+            (loc - (clip ? VARYING_SLOT_CLIP_DIST0 : VARYING_SLOT_CULL_DIST0)) *
+            4;
+         const unsigned used = clip ? nclip : ncull;
+         nir_def *value = intr->src[0].ssa;
+         b.cursor = nir_before_instr(instr);
+         nir_def *lanes[4], *flags[4];
+         for (unsigned c = 0; c < 4; c++) {
+            const bool live = first + c < used && c < value->num_components;
+            lanes[c] = live ? nir_channel(&b, value, c)
+                            : nir_imm_float(&b, clip ? 1.0f : 0.0f);
+            flags[c] = live ? nir_b2f32(&b, nir_flt_imm(&b, lanes[c], 0.0))
+                            : nir_imm_float(&b, 0.0f);
+         }
+         nir_src_rewrite(&intr->src[0], nir_vec(&b, lanes, 4));
+         nir_intrinsic_set_write_mask(intr, 0xf);
+         nir_intrinsic_set_src_type(intr, nir_type_float32);
+
+         if (cull) {
+            const gl_varying_slot flag_loc =
+               PANVK_CULL_FLAG_SLOT0 + (loc - VARYING_SLOT_CULL_DIST0);
+            b.cursor = nir_after_instr(instr);
+            nir_store_output(&b, nir_vec(&b, flags, 4), nir_imm_int(&b, 0),
+                             .base = pt->num_outputs++, .write_mask = 0xf,
+                             .src_type = nir_type_float32,
+                             .io_semantics = {.location = flag_loc,
+                                              .num_slots = 1});
+            pt->info.outputs_written |= BITFIELD64_BIT(flag_loc);
+         }
+      }
+   }
+
+   if (gs->outputs_written & VARYING_BIT_VIEWPORT) {
+      b.cursor = nir_after_impl(impl);
+      const unsigned vp_slot = util_bitcount64(
+         gs->outputs_written & BITFIELD64_MASK(VARYING_SLOT_VIEWPORT));
+      nir_def *record = nir_iadd(
+         &b, load_sysval(&b, graphics, 64, gpu_prerast_records),
+         nir_u2u64(&b, nir_imul_imm(&b, nir_load_vertex_id(&b),
+                                    gs->record_stride)));
+      nir_def *vp = nir_load_global(&b, 1, 32,
+                                    nir_iadd_imm(&b, record, vp_slot * 16),
+                                    .align_mul = 4);
+      pt->num_outputs = panvk_vp_index_copy(&b, vp, pt->num_outputs);
+   }
+
+   nir_progress(true, impl, nir_metadata_none);
+   return pt;
+}
+#else
+UNUSED static void
+panvk_store_cull_flags(UNUSED nir_builder *b, UNUSED nir_shader *nir,
+                       UNUSED const struct panvk_dist_elem *cull,
+                       UNUSED nir_def *const *cull_v, UNUSED unsigned ncull)
+{
+}
+
+UNUSED static nir_def *
+panvk_fs_cull_value(nir_builder *b, UNUSED nir_shader *nir,
+                    UNUSED uint64_t prev_outputs, UNUSED unsigned idx)
+{
+   return nir_imm_float(b, 0.0f);
+}
+
+UNUSED static uint64_t
+panvk_fs_dist_defaults(UNUSED nir_shader *nir)
+{
+   return PANVK_FS_CULL_BITS;
+}
+
+UNUSED static void
+panvk_unmerge_cull_vars(UNUSED nir_shader *nir)
+{
+}
+
+UNUSED static unsigned
+panvk_vp_index_copy(UNUSED nir_builder *b, UNUSED nir_def *vp_index,
+                    unsigned base)
+{
+   return base;
+}
+
+UNUSED static nir_shader *
+panvk_fixup_gs_passthrough(UNUSED const struct panvk_gpu_prerast_gs_info *gs,
+                           UNUSED const nir_shader *gs_nir, nir_shader *pt)
+{
+   return pt;
+}
+#endif
