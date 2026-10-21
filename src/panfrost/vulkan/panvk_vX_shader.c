@@ -2973,15 +2973,19 @@ panvk_v7_lower_robust_image2_intr(nir_builder *b, nir_intrinsic_instr *intr,
       return true;
    }
 
+   /* jm-v7 081: the phi's zero is built before the if, so the phi leads
+    * the merge block.
+    */
+   nir_def *zero = nir_intrinsic_infos[intr->intrinsic].has_dest
+                      ? nir_imm_zero(b, intr->def.num_components,
+                                     intr->def.bit_size)
+                      : NULL;
    nir_push_if(b, in_bounds);
    nir_instr *clone = nir_instr_clone(b->shader, &intr->instr);
    nir_builder_instr_insert(b, clone);
    nir_pop_if(b, NULL);
-   if (nir_intrinsic_infos[intr->intrinsic].has_dest) {
-      nir_def *zero =
-         nir_imm_zero(b, intr->def.num_components, intr->def.bit_size);
+   if (zero)
       nir_def_rewrite_uses(&intr->def, nir_if_phi(b, nir_instr_def(clone), zero));
-   }
    nir_instr_remove(&intr->instr);
    return true;
 }
@@ -4138,6 +4142,12 @@ panvk_v7_lower_vs_ref_guard(nir_shader *nir)
    nir_builder b = nir_builder_at(nir_before_impl(impl));
 
    nir_def *addr = load_sysval(&b, graphics, 64, vs_ref_bitmap);
+   /* jm-v7 081: build the phi's constant before the if. nir_imm_*() inserts
+    * at the cursor, so after nir_pop_if() it would land in the merge block
+    * ahead of the phi: phis no longer lead the block, nir_foreach_phi()
+    * misses them and the constant does not dominate the else edge.
+    */
+   nir_def *all_ref = nir_imm_true(&b);
    nir_push_if(&b, nir_ine_imm(&b, addr, 0));
    nir_def *hdr = nir_load_global(&b, 1, 32, addr, .align_mul = 4);
    nir_def *rid = nir_load_raw_vertex_id(&b);
@@ -4151,7 +4161,7 @@ panvk_v7_lower_vs_ref_guard(nir_shader *nir)
       &b, nir_iand_imm(&b, nir_ushr(&b, word, nir_iand_imm(&b, rid, 31)), 1));
    nir_def *ref_in = nir_ior(&b, nir_ine_imm(&b, hdr, 0), bit);
    nir_pop_if(&b, NULL);
-   nir_def *ref = nir_if_phi(&b, ref_in, nir_imm_true(&b));
+   nir_def *ref = nir_if_phi(&b, ref_in, all_ref);
 
    /* Collect first: wrapping splits blocks. */
    struct util_dynarray list = UTIL_DYNARRAY_INIT;
@@ -4168,39 +4178,31 @@ panvk_v7_lower_vs_ref_guard(nir_shader *nir)
       nir_intrinsic_instr *intr = *it;
       nir_instr *instr = &intr->instr;
 
+      const bool has_dest = nir_intrinsic_infos[intr->intrinsic].has_dest;
+
       b.cursor = nir_before_instr(instr);
+      /* jm-v7 080: a skipped atomic returns 0, not undef: a VS spin lock on
+       * an unreferenced vertex must not loop on garbage. jm-v7 081: the
+       * zero is built before the if (see all_ref above).
+       */
+      nir_def *zero = has_dest ? nir_imm_zero(&b, intr->def.num_components,
+                                              intr->def.bit_size)
+                               : NULL;
       nir_instr_remove(instr);
       nir_push_if(&b, ref);
       nir_builder_instr_insert(&b, instr);
       nir_pop_if(&b, NULL);
-      if (nir_intrinsic_infos[intr->intrinsic].has_dest) {
-         /* jm-v7 080: a skipped atomic returns 0, not undef: a VS spin
-          * lock on an unreferenced vertex must not loop on garbage.
-          */
-         nir_def *zero =
-            nir_imm_zero(&b, intr->def.num_components, intr->def.bit_size);
+      if (has_dest) {
          nir_def *phi = nir_if_phi(&b, &intr->def, zero);
-         nir_def_rewrite_uses_after(&intr->def, phi);
-      }
-   }
-
-   /* jm-v7 035: the intrinsic (then block) and its phi (block after the
-    * if) are in different blocks, so nir_def_rewrite_uses_after() above
-    * also rewrote the phi's own then source to the phi. Every guarded
-    * atomic then returned its else value, also for referenced vertices
-    * (vertex_stores iter*: outv 1000; draw_params: rec[undef]). Point the
-    * source back at the intrinsic.
-    */
-   util_dynarray_foreach(&list, nir_intrinsic_instr *, it) {
-      nir_intrinsic_instr *intr = *it;
-      if (!nir_intrinsic_infos[intr->intrinsic].has_dest)
-         continue;
-      nir_block *then_block = intr->instr.block;
-      nir_if *nif = nir_cf_node_as_if(then_block->cf_node.parent);
-      nir_block *after = nir_cf_node_as_block(nir_cf_node_next(&nif->cf_node));
-      nir_foreach_phi(phi, after) {
-         nir_foreach_phi_src(src, phi) {
-            if (src->pred == then_block && src->src.ssa == &phi->def)
+         /* jm-v7 035/081: the intrinsic (then block) and the phi (merge
+          * block) are in different blocks, so nir_def_rewrite_uses_after()
+          * would also rewrite the phi's own then source to the phi
+          * (phi(phi, 0) = 0: vertex_stores outv 1000, draw_params
+          * rec[0]). Rewrite every other use, then point that source back.
+          */
+         nir_def_rewrite_uses(&intr->def, phi);
+         nir_foreach_phi_src(src, nir_instr_as_phi(nir_def_instr(phi))) {
+            if (src->src.ssa == phi)
                nir_src_rewrite(&src->src, &intr->def);
          }
       }

@@ -999,6 +999,8 @@ lower_bindless_img_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
    case nir_intrinsic_image_deref_atomic_swap: {
       const unsigned bit_size = intr->def.bit_size;
       nir_atomic_op op = nir_intrinsic_atomic_op(intr);
+      /* jm-v7 081: before the if, so the phi leads the merge block. */
+      nir_def *zero = nir_imm_intN_t(b, 0, bit_size);
       nir_push_if(b, t.in_bounds);
       nir_def *res;
       if (intr->intrinsic == nir_intrinsic_image_deref_atomic_swap)
@@ -1008,7 +1010,7 @@ lower_bindless_img_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
          res = nir_global_atomic(b, bit_size, t.addr, intr->src[3].ssa,
                                  .atomic_op = op);
       nir_pop_if(b, NULL);
-      res = nir_if_phi(b, res, nir_imm_intN_t(b, 0, bit_size));
+      res = nir_if_phi(b, res, zero);
       nir_def_replace(&intr->def, res);
       return true;
    }
