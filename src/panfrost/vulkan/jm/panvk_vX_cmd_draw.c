@@ -110,6 +110,11 @@ struct panvk_draw_data {
    uint32_t vp_split;
    uint32_t vp_split_mask;
    uint64_t gs_out_viewport;
+   /* The restart-free index list and its command (jm-v7 030), built once
+    * per draw for all layers (jm-v7 078). 0 until built.
+    */
+   uint64_t gs_restart_list;
+   uint64_t gs_restart_cmd;
    uint64_t position;
    union {
       uint64_t psiz;
@@ -595,14 +600,23 @@ panvk_draw_get_indirect_varying_info(struct panvk_cmd_buffer *cmdbuf)
 
 static uint32_t panvk_gs_vp_split(const struct panvk_cmd_buffer *cmdbuf);
 
-/* Geometry emulation buffers: GPU-only, from the growable pool for the
- * emulation of a tess eval draw (jm-v7 033), else the descriptor pool.
+/* Geometry emulation buffers: GPU-only. jm-v7 078: always from the growable
+ * GPU-only pool (NO_MMAP, alloc-on-fault, reused 2 MB slabs). The desc pool
+ * has 64 KB slabs and no big-BO reuse, so each worst-case GS draw created a
+ * fresh committed, CPU-mapped BO that EndCommandBuffer then cleaned byte by
+ * byte. `growable` is kept for the callers; PANVK_V7_GS_DESC=1 restores the
+ * desc pool for non-growable draws (A/B).
  */
 static struct pan_ptr
 gs_alloc(struct panvk_cmd_buffer *cmdbuf, bool growable, uint64_t size,
          unsigned alignment)
 {
-   if (growable)
+   static int gs_desc = -1;
+   if (gs_desc < 0) {
+      const char *e = getenv("PANVK_V7_GS_DESC");
+      gs_desc = e && e[0] == '1';
+   }
+   if (growable || !gs_desc)
       return panvk_cmd_alloc_dev_mem(cmdbuf, gs, size, alignment);
    return panvk_cmd_alloc_dev_mem(cmdbuf, desc, size, alignment);
 }
@@ -2300,27 +2314,36 @@ emit_gs_job(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw,
    const uint32_t in_vpp = gs->gs.input_verts_per_prim;
    if (index_size && draw->info.index.restart_enable &&
        topology != PANVK_GS_TOPO_LIST && in_vpp && indirect_cmd) {
-      /* Primitives per instance never exceed the dispatched total. */
-      const uint32_t cap = in_prims;
-      struct pan_ptr list = panvk_cmd_alloc_dev_mem(
-         cmdbuf, desc, (uint64_t)cap * in_vpp * sizeof(uint32_t), 4);
-      struct pan_ptr cmd = panvk_cmd_alloc_dev_mem(
-         cmdbuf, desc, sizeof(VkDrawIndexedIndirectCommand), 16);
-      if (!list.gpu || !cmd.gpu)
-         return 0;
+      /* jm-v7 078: built once for all layers (the GS jobs of the later
+       * layers are barriers after it in the same chain), in the GPU-only
+       * pool: up to cap * in_vpp * 4 bytes (12-24 MB for a large indirect
+       * draw) used to come from the desc pool, per layer.
+       */
+      if (!draw->gs_restart_list) {
+         /* Primitives per instance never exceed the dispatched total. */
+         const uint32_t cap = in_prims;
+         struct pan_ptr list = gs_alloc(
+            cmdbuf, true, (uint64_t)cap * in_vpp * sizeof(uint32_t), 4);
+         struct pan_ptr cmd = panvk_cmd_alloc_dev_mem(
+            cmdbuf, desc, sizeof(VkDrawIndexedIndirectCommand), 16);
+         if (!list.gpu || !cmd.gpu)
+            return 0;
 
-      struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
-      /* A barrier: the command may come from earlier GPU work. */
-      panlib_v7_gs_restart_list(
-         &ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER, list.gpu, cmd.gpu,
-         indirect_cmd, draw->info.index.buffer_dev_addr,
-         draw->info.index.buffer_size / index_size, index_size, topology,
-         in_vpp, cap);
+         struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+         /* A barrier: the command may come from earlier GPU work. */
+         panlib_v7_gs_restart_list(
+            &ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER, list.gpu, cmd.gpu,
+            indirect_cmd, draw->info.index.buffer_dev_addr,
+            draw->info.index.buffer_size / index_size, index_size, topology,
+            in_vpp, cap);
+         draw->gs_restart_list = list.gpu;
+         draw->gs_restart_cmd = cmd.gpu;
+      }
 
-      index_buf = list.gpu;
+      index_buf = draw->gs_restart_list;
       index_size = 4;
       topology = PANVK_GS_TOPO_LIST;
-      indirect_cmd = cmd.gpu;
+      indirect_cmd = draw->gs_restart_cmd;
    }
 
    /* gl_ViewportIndex (jm-v7 017): each viewport's transform and scissor
