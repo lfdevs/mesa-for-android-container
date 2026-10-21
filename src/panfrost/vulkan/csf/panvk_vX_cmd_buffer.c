@@ -1051,6 +1051,9 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
 
    vk_command_buffer_reset(&cmdbuf->vk);
 
+   /* Not pending any more: BC timestamps are final. */
+   panvk_per_arch(cmd_bc_release)(cmdbuf);
+
    panvk_pool_reset(&cmdbuf->cs_pool);
    panvk_pool_reset(&cmdbuf->desc_pool);
    panvk_pool_reset(&cmdbuf->tls_pool);
@@ -1086,6 +1089,8 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
    for (uint32_t i = 0; i < ARRAY_SIZE(cmdbuf->state.cs); i++)
       cs_builder_fini(&cmdbuf->state.cs[i].builder);
 
+   panvk_per_arch(cmd_bc_release)(cmdbuf);
+   util_dynarray_fini(&cmdbuf->bc_timing);
    util_dynarray_fini(&cmdbuf->vmr_segs);
    panvk_pool_cleanup(&cmdbuf->cs_pool);
    panvk_pool_cleanup(&cmdbuf->desc_pool);

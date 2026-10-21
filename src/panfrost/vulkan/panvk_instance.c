@@ -67,6 +67,7 @@ static const struct debug_control panvk_debug_options[] = {
    {"robust_ssbo_vec", PANVK_DEBUG_ROBUST_SSBO_VEC},
    {"bc_compute", PANVK_DEBUG_BC_COMPUTE},
    {"bc_wide", PANVK_DEBUG_BC_WIDE},
+   {"bc_timing", PANVK_DEBUG_BC_TIMING},
    {NULL, 0},
 };
 

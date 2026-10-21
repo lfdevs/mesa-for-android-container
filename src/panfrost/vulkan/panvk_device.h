@@ -82,6 +82,15 @@ struct panvk_device {
 
    struct vk_meta_device meta;
 
+   /* BC emulation (csf-v11/200): PANVK_DEBUG=bc_timing GPU timestamps,
+    * under the lock in panvk_vX_cmd_meta.c. */
+   struct {
+      VkQueryPool timing_pool;
+      uint32_t timing_next;
+      uint64_t timing_ops;
+      double timing_us;
+   } bc;
+
    /* Bound in place of a missing FS so the depth bounds test still runs. */
    struct panvk_shader *depth_bounds_fs;
 
@@ -352,6 +361,10 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
 
 void panvk_per_arch(destroy_device)(struct panvk_device *device,
                                     const VkAllocationCallbacks *pAllocator);
+
+/* Device teardown of the BC emulation state (csf-v11/200), then of the
+ * vk_meta device (it replaces panvk_meta_cleanup() in destroy_device). */
+void panvk_per_arch(device_bc_finish)(struct panvk_device *dev);
 
 static inline VkResult
 panvk_common_check_status(struct panvk_device *dev)

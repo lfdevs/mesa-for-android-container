@@ -866,6 +866,9 @@ bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
  * here rather than at the top to keep the later series' hunks in place. */
 #include "bc/panvk_bc_etc2_spv.h"
 #include "panvk_cmd_alloc.h"
+#include "util/os_misc.h"
+#include "vk_enum_to_str.h"
+#include <stdio.h>
 
 struct panvk_bc_xcode_push {
    uint32_t src[2];
@@ -878,8 +881,6 @@ struct panvk_bc_xcode_push {
    uint32_t by0;
    uint32_t bw;
    uint32_t bh;
-   uint32_t mode;
-   uint32_t opts;
 };
 
 /* XC_* in panvk_bc_etc2.comp. */
@@ -911,9 +912,36 @@ bc_xcode_mode(VkFormat format)
    }
 }
 
+/* Transcoder workgroup size (csf-v11/200): PANVK_BC_LM_WG=<x>x<y>, default
+ * 8x8, x * y <= 256. A specialization constant of the shader. */
+static void
+bc_xcode_wg(uint32_t wg[2])
+{
+   static uint32_t cached[2];
+
+   if (!p_atomic_read(&cached[0])) {
+      const char *s = os_get_option("PANVK_BC_LM_WG");
+      unsigned x = 8, y = 8;
+
+      if (s && (sscanf(s, "%ux%u", &x, &y) != 2 || !x || !y ||
+                x * y > 256)) {
+         mesa_logw("panvk: bad PANVK_BC_LM_WG=%s, using 8x8", s);
+         x = 8;
+         y = 8;
+      }
+      cached[1] = y;
+      p_atomic_set(&cached[0], x);
+   }
+   wg[0] = p_atomic_read(&cached[0]);
+   wg[1] = cached[1];
+}
+
+/* One pipeline per transcode mode: the mode and PANVK_BC_LM_OPTS are
+ * specialization constants of panvk_bc_etc2.comp (2 and 3), next to the
+ * workgroup size (0, 1). */
 static VkResult
-get_bc_xcode_pipeline(struct panvk_device *dev, VkPipelineLayout *layout_out,
-                      VkPipeline *pipeline_out)
+get_bc_xcode_pipeline(struct panvk_device *dev, uint32_t mode,
+                      VkPipelineLayout *layout_out, VkPipeline *pipeline_out)
 {
    const enum panvk_meta_object_key_type layout_key =
       PANVK_META_OBJECT_KEY_BC_XCODE_LAYOUT;
@@ -928,14 +956,35 @@ get_bc_xcode_pipeline(struct panvk_device *dev, VkPipelineLayout *layout_out,
    if (result != VK_SUCCESS)
       return result;
 
-   const enum panvk_meta_object_key_type key =
-      PANVK_META_OBJECT_KEY_BC_XCODE_SHADER;
+   struct {
+      enum panvk_meta_object_key_type type;
+      uint32_t wg[2];
+      uint32_t mode;
+      uint32_t opts;
+   } key = {
+      .type = PANVK_META_OBJECT_KEY_BC_XCODE_SHADER,
+      .mode = mode,
+      .opts = panvk_bc_lm_opts(),
+   };
+   bc_xcode_wg(key.wg);
    VkPipeline cached = vk_meta_lookup_pipeline(&dev->meta, &key, sizeof(key));
    if (cached != VK_NULL_HANDLE) {
       *pipeline_out = cached;
       return VK_SUCCESS;
    }
 
+   const VkSpecializationMapEntry spec_map[4] = {
+      {.constantID = 0, .offset = offsetof(__typeof__(key), wg[0]), .size = 4},
+      {.constantID = 1, .offset = offsetof(__typeof__(key), wg[1]), .size = 4},
+      {.constantID = 2, .offset = offsetof(__typeof__(key), mode), .size = 4},
+      {.constantID = 3, .offset = offsetof(__typeof__(key), opts), .size = 4},
+   };
+   const VkSpecializationInfo spec = {
+      .mapEntryCount = 4,
+      .pMapEntries = spec_map,
+      .dataSize = sizeof(key),
+      .pData = &key,
+   };
    const VkShaderModuleCreateInfo module_info = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
       .codeSize = sizeof(panvk_bc_etc2_spv),
@@ -948,6 +997,7 @@ get_bc_xcode_pipeline(struct panvk_device *dev, VkPipelineLayout *layout_out,
          .pNext = &module_info,
          .stage = VK_SHADER_STAGE_COMPUTE_BIT,
          .pName = "main",
+         .pSpecializationInfo = &spec,
       },
       .layout = *layout_out,
    };
@@ -980,7 +1030,8 @@ bc_xcode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
 
    VkPipelineLayout layout;
    VkPipeline pipeline;
-   VkResult result = get_bc_xcode_pipeline(dev, &layout, &pipeline);
+   VkResult result = get_bc_xcode_pipeline(dev, bc_xcode_mode(img->vk.format),
+                                           &layout, &pipeline);
    if (result != VK_SUCCESS) {
       vk_command_buffer_set_error(&cmdbuf->vk, result);
       return;
@@ -1002,14 +1053,15 @@ bc_xcode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
       .by0 = y0 / 4,
       .bw = bw,
       .bh = bh,
-      .mode = bc_xcode_mode(img->vk.format),
-      .opts = panvk_bc_lm_opts(),
    };
 
    disp->CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
    disp->CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                           sizeof(push), &push);
-   disp->CmdDispatch(cmd, DIV_ROUND_UP(bw, 8), DIV_ROUND_UP(bh, 8), layers);
+   uint32_t wg[2];
+   bc_xcode_wg(wg);
+   disp->CmdDispatch(cmd, DIV_ROUND_UP(bw, wg[0]), DIV_ROUND_UP(bh, wg[1]),
+                     layers);
 }
 
 /* All-zero BC blocks for the decode of a bc_no_raw image leaving
@@ -1025,6 +1077,167 @@ bc_zero_src(struct panvk_cmd_buffer *cmdbuf, const struct panvk_image *img)
    if (ptr.cpu)
       memset(ptr.cpu, 0, size);
    return (struct bc_decode_src){.addr = ptr.gpu};
+}
+
+/* PANVK_DEBUG=bc_timing (csf-v11/200): GPU time of every BC upload / copy
+ * (raw copy + decode or transcode), from two ALL_COMMANDS timestamps in a
+ * device-wide query pool. The pairs are read back when the command buffer
+ * is reset or freed (it is no longer pending then) and logged one line per
+ * operation, plus a running total every 64 operations. Serializes the
+ * queue around each operation: for measurements only. */
+enum bc_timing_path {
+   BC_TIMING_DECODE, /* exact fragment/compute decode */
+   BC_TIMING_XCODE,  /* ETC2/EAC (or ASTC) transcode */
+};
+
+/* Guards panvk_device::bc (device-wide BC emulation state). */
+static simple_mtx_t bc_dev_lock = SIMPLE_MTX_INITIALIZER;
+
+#if PAN_ARCH >= 10
+#define BC_TIMING_SLOTS 4096
+
+struct bc_timing_rec {
+   uint32_t slot;
+   VkFormat format;
+   uint32_t w, h, regions, layers;
+   enum bc_timing_path path;
+};
+
+static uint32_t
+bc_timing_begin(struct panvk_cmd_buffer *cmdbuf)
+{
+   if (!PANVK_DEBUG(BC_TIMING))
+      return UINT32_MAX;
+
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const struct vk_device_dispatch_table *disp = &dev->vk.dispatch_table;
+   VkCommandBuffer cmd = panvk_cmd_buffer_to_handle(cmdbuf);
+   uint32_t slot;
+
+   simple_mtx_lock(&bc_dev_lock);
+   if (dev->bc.timing_pool == VK_NULL_HANDLE) {
+      const VkQueryPoolCreateInfo info = {
+         .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+         .queryType = VK_QUERY_TYPE_TIMESTAMP,
+         .queryCount = BC_TIMING_SLOTS,
+      };
+      if (disp->CreateQueryPool(panvk_device_to_handle(dev), &info, NULL,
+                                &dev->bc.timing_pool) != VK_SUCCESS)
+         dev->bc.timing_pool = VK_NULL_HANDLE;
+   }
+   slot = dev->bc.timing_next;
+   dev->bc.timing_next = (slot + 2) % BC_TIMING_SLOTS;
+   VkQueryPool pool = dev->bc.timing_pool;
+   simple_mtx_unlock(&bc_dev_lock);
+
+   if (pool == VK_NULL_HANDLE)
+      return UINT32_MAX;
+
+   disp->CmdResetQueryPool(cmd, pool, slot, 2);
+   disp->CmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, pool,
+                            slot);
+   return slot;
+}
+
+static void
+bc_timing_end(struct panvk_cmd_buffer *cmdbuf, uint32_t slot,
+              const struct panvk_image *img, VkExtent3D extent,
+              uint32_t regions, uint32_t layers, enum bc_timing_path path)
+{
+   if (slot == UINT32_MAX)
+      return;
+
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const struct vk_device_dispatch_table *disp = &dev->vk.dispatch_table;
+   VkCommandBuffer cmd = panvk_cmd_buffer_to_handle(cmdbuf);
+   const struct bc_timing_rec rec = {
+      .slot = slot,
+      .format = img->vk.format,
+      .w = extent.width,
+      .h = extent.height,
+      .regions = regions,
+      .layers = layers,
+      .path = path,
+   };
+
+   disp->CmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                            dev->bc.timing_pool, slot + 1);
+   util_dynarray_append_typed(&cmdbuf->bc_timing, struct bc_timing_rec, rec);
+}
+
+static void
+bc_timing_flush(struct panvk_cmd_buffer *cmdbuf)
+{
+   if (!util_dynarray_num_elements(&cmdbuf->bc_timing, struct bc_timing_rec))
+      return;
+
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const struct vk_device_dispatch_table *disp = &dev->vk.dispatch_table;
+   const struct panvk_physical_device *pdev =
+      to_panvk_physical_device(dev->vk.physical);
+   const double period_ns = panvk_get_gpu_system_timestamp_period(pdev);
+
+   util_dynarray_foreach(&cmdbuf->bc_timing, struct bc_timing_rec, rec) {
+      uint64_t ts[2];
+
+      /* Not ready: never submitted, or the slot was reused (more than
+       * BC_TIMING_SLOTS / 2 operations in flight). */
+      if (disp->GetQueryPoolResults(panvk_device_to_handle(dev),
+                                    dev->bc.timing_pool, rec->slot, 2,
+                                    sizeof(ts), ts, sizeof(ts[0]),
+                                    VK_QUERY_RESULT_64_BIT) != VK_SUCCESS ||
+          ts[1] < ts[0])
+         continue;
+
+      const double us = (double)(ts[1] - ts[0]) * period_ns / 1000.0;
+      uint64_t ops;
+      double total;
+
+      simple_mtx_lock(&bc_dev_lock);
+      ops = ++dev->bc.timing_ops;
+      total = dev->bc.timing_us += us;
+      simple_mtx_unlock(&bc_dev_lock);
+
+      mesa_logi("panvk: bc_timing %s %ux%u regions=%u layers=%u %s: %.1f us",
+                vk_Format_to_str(rec->format), rec->w, rec->h, rec->regions,
+                rec->layers,
+                rec->path == BC_TIMING_XCODE ? "xcode" : "decode", us);
+      if (!(ops % 64))
+         mesa_logi("panvk: bc_timing total %" PRIu64 " ops, %.3f ms", ops,
+                   total / 1000.0);
+   }
+   util_dynarray_clear(&cmdbuf->bc_timing);
+}
+
+void
+panvk_per_arch(cmd_bc_release)(struct panvk_cmd_buffer *cmdbuf)
+{
+   bc_timing_flush(cmdbuf);
+}
+#else
+static inline uint32_t
+bc_timing_begin(struct panvk_cmd_buffer *cmdbuf)
+{
+   return UINT32_MAX;
+}
+
+static inline void
+bc_timing_end(struct panvk_cmd_buffer *cmdbuf, uint32_t slot,
+              const struct panvk_image *img, VkExtent3D extent,
+              uint32_t regions, uint32_t layers, enum bc_timing_path path)
+{
+}
+#endif
+
+void
+panvk_per_arch(device_bc_finish)(struct panvk_device *dev)
+{
+   if (dev->bc.timing_pool != VK_NULL_HANDLE) {
+      dev->vk.dispatch_table.DestroyQueryPool(panvk_device_to_handle(dev),
+                                              dev->bc.timing_pool, NULL);
+      dev->bc.timing_pool = VK_NULL_HANDLE;
+   }
+   vk_meta_device_finish(&dev->vk, &dev->meta);
 }
 
 static void
@@ -1164,6 +1377,7 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
    const VkCopyDeviceMemoryImageInfoKHR* pCopyMemoryInfo)
 {
    VK_FROM_HANDLE(panvk_image, bc_img, pCopyMemoryInfo->image);
+   const VkDeviceMemoryImageCopyKHR *r0 = &pCopyMemoryInfo->pRegions[0];
 
    if (bc_img->bc_gfx) {
       VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
@@ -1171,6 +1385,7 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
       struct panvk_cmd_meta_compute_save_ctx csave = {0};
       const uint32_t blk_B = vk_format_get_blocksize(bc_img->vk.format);
       const bool xcode = bc_img->bc_lowmem == 1;
+      const uint32_t timing = bc_timing_begin(cmdbuf);
 
       /* bc_no_raw images keep no raw blocks: only the shadow is written. */
       if (!bc_img->bc_no_raw)
@@ -1207,12 +1422,18 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
          meta_compute_end(cmdbuf, &csave);
       else
          meta_gfx_end(cmdbuf, &save);
+      bc_timing_end(cmdbuf, timing, bc_img, r0->imageExtent,
+                    pCopyMemoryInfo->regionCount,
+                    vk_image_subresource_layer_count(&bc_img->vk,
+                                                     &r0->imageSubresource),
+                    xcode ? BC_TIMING_XCODE : BC_TIMING_DECODE);
       return;
    }
 
    if (bc_img->bc_emul) {
       VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
       struct panvk_cmd_meta_compute_save_ctx save = {0};
+      const uint32_t timing = bc_timing_begin(cmdbuf);
 
       copy_memory_to_image_raw(commandBuffer, pCopyMemoryInfo);
 
@@ -1223,6 +1444,11 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
                           r->imageExtent);
       }
       meta_compute_end(cmdbuf, &save);
+      bc_timing_end(cmdbuf, timing, bc_img, r0->imageExtent,
+                    pCopyMemoryInfo->regionCount,
+                    vk_image_subresource_layer_count(&bc_img->vk,
+                                                     &r0->imageSubresource),
+                    BC_TIMING_DECODE);
       return;
    }
 
@@ -1540,9 +1766,34 @@ bc_copy_image_no_raw(struct panvk_cmd_buffer *cmdbuf,
    STACK_ARRAY_FINISH(srcs);
 }
 
+static void cmd_copy_image(VkCommandBuffer commandBuffer,
+                           const VkCopyImageInfo2 *pCopyImageInfo);
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdCopyImage2)(VkCommandBuffer commandBuffer,
                               const VkCopyImageInfo2 *pCopyImageInfo)
+{
+   VK_FROM_HANDLE(panvk_image, dst, pCopyImageInfo->dstImage);
+
+   if (!dst->bc_emul || !PANVK_DEBUG(BC_TIMING)) {
+      cmd_copy_image(commandBuffer, pCopyImageInfo);
+      return;
+   }
+
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   const VkImageCopy2 *r0 = &pCopyImageInfo->pRegions[0];
+   const uint32_t timing = bc_timing_begin(cmdbuf);
+
+   cmd_copy_image(commandBuffer, pCopyImageInfo);
+   bc_timing_end(cmdbuf, timing, dst, r0->extent, pCopyImageInfo->regionCount,
+                 vk_image_subresource_layer_count(&dst->vk,
+                                                  &r0->dstSubresource),
+                 dst->bc_lowmem == 1 ? BC_TIMING_XCODE : BC_TIMING_DECODE);
+}
+
+static void
+cmd_copy_image(VkCommandBuffer commandBuffer,
+               const VkCopyImageInfo2 *pCopyImageInfo)
 {
    VK_FROM_HANDLE(panvk_image, bc_src, pCopyImageInfo->srcImage);
    VK_FROM_HANDLE(panvk_image, bc_dst, pCopyImageInfo->dstImage);

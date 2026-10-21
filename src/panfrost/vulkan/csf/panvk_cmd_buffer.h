@@ -624,6 +624,10 @@ struct panvk_cmd_buffer {
     * segments; the builders hold the last one, with gfx.render.vmr_samples.
     */
    struct util_dynarray vmr_segs;
+
+   /* BC emulation (csf-v11/200): PANVK_DEBUG=bc_timing records, read back
+    * when the command buffer is reset or freed. */
+   struct util_dynarray bc_timing;
 };
 
 struct panvk_vmr_segment {

@@ -42,6 +42,7 @@ enum panvk_debug_flags {
    PANVK_DEBUG_ROBUST_SSBO_VEC = 1 << 24,
    PANVK_DEBUG_BC_COMPUTE = 1 << 26,
    PANVK_DEBUG_BC_WIDE = 1 << 27,
+   PANVK_DEBUG_BC_TIMING = 1 << 29,
 };
 
 extern uint64_t panvk_debug;

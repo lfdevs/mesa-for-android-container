@@ -941,7 +941,7 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
 #endif
    if (device->depth_bounds_fs)
       vk_shader_destroy(&device->vk, &device->depth_bounds_fs->vk, NULL);
-   panvk_meta_cleanup(device);
+   panvk_per_arch(device_bc_finish)(device);
    vk_pipeline_cache_destroy(device->vk.mem_cache, NULL);
    pan_kmod_bo_put(device->sparse_mem.blackhole);
    u_printf_destroy(&device->printf.ctx);
