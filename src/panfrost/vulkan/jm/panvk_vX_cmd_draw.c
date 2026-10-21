@@ -1854,6 +1854,21 @@ v7_polygon_mode_draw(const struct panvk_cmd_buffer *cmdbuf, enum mesa_prim prim)
           !cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable;
 }
 
+/* Job indices a draw may use (the JM job index is 16 bits). Per layer, the
+ * worst case is a GS + xfb draw split per viewport: descriptor copy, vertex,
+ * restart list, GS, the xfb scan/copy jobs (up to 8) and one tiler job per
+ * viewport (16), about 27; plus per-draw jobs outside the layer loop
+ * (indirect helper, index min/max, vertex store dedup, pipeline statistics).
+ */
+#define PANVK_DRAW_JOBS_PER_LAYER 32
+#define PANVK_DRAW_JOBS_FIXED     16
+
+static uint32_t
+panvk_draw_jobs(uint32_t layers)
+{
+   return PANVK_DRAW_JOBS_FIXED + PANVK_DRAW_JOBS_PER_LAYER * MAX2(layers, 1);
+}
+
 static VkResult
 prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
 {
@@ -1873,8 +1888,13 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
     * pilot shader dealing with descriptor copies, and we need one
     * <vertex,tiler> pair per draw.
     */
-   if (batch->vtc_jc.job_index + ((5 + PANVK_GS_MAX_VIEWPORTS) * cmdbuf->state.gfx.render.layer_count) >=
-       UINT16_MAX) {
+   /* The tess eval draw of panvk_tess_draw() must stay in the chain of its
+    * tessellator jobs: panvk_tess_draw_jobs() reserved its jobs already.
+    */
+   if (draw->tess_phase != PANVK_TESS_PHASE_TES &&
+       batch->vtc_jc.job_index +
+             panvk_draw_jobs(cmdbuf->state.gfx.render.layer_count) >=
+          UINT16_MAX) {
       panvk_per_arch(cmd_close_batch)(cmdbuf);
       batch = panvk_per_arch(cmd_open_batch)(cmdbuf);
    }
@@ -3259,7 +3279,10 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
 static uint32_t
 panvk_tess_draw_jobs(uint32_t layers)
 {
-   return 32 + 24 * layers;
+   /* Two draws (prepare_draw() does not split the tess eval one) and the
+    * tessellator kernels.
+    */
+   return 16 + 2 * panvk_draw_jobs(layers);
 }
 
 /*
@@ -3821,7 +3844,7 @@ panvk_per_arch(CmdDrawIndirectByteCountEXT)(
    const uint32_t draw_jobs =
       panvk_get_client_prim(cmdbuf) == MESA_PRIM_PATCHES
          ? panvk_tess_draw_jobs(cmdbuf->state.gfx.render.layer_count)
-         : 4 * cmdbuf->state.gfx.render.layer_count;
+         : panvk_draw_jobs(cmdbuf->state.gfx.render.layer_count);
    if (cmdbuf->cur_batch->vtc_jc.job_index + draw_jobs + 1 >= UINT16_MAX) {
       panvk_per_arch(cmd_close_batch)(cmdbuf);
       panvk_per_arch(cmd_open_batch)(cmdbuf);
