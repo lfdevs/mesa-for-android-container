@@ -12,6 +12,7 @@
 #include <sys/sysmacros.h>
 
 #include "git_sha1.h"
+#include "util/u_debug.h"
 
 #include "vk_android.h"
 #include "vk_device.h"
@@ -166,7 +167,7 @@ panvk_per_arch(get_physical_device_extensions)(
 #ifdef VK_USE_PLATFORM_DISPLAY_KHR
       .EXT_display_control = true,
 #endif
-      .EXT_descriptor_indexing = PAN_ARCH >= 9,
+      .EXT_descriptor_indexing = true,
       .EXT_dynamic_rendering_unused_attachments = true,
       .EXT_extended_dynamic_state = true,
       .EXT_extended_dynamic_state2 = true,
@@ -196,7 +197,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_memory_priority = PAN_ARCH >= 10,
       .EXT_pageable_device_local_memory = PAN_ARCH >= 10,
       .EXT_non_seamless_cube_map = true,
-      .EXT_mutable_descriptor_type = PAN_ARCH >= 9,
+      .EXT_mutable_descriptor_type = true,
       .EXT_multisampled_render_to_single_sampled = true,
       .EXT_multi_draw = PAN_ARCH >= 10,
       .EXT_physical_device_drm = true,
@@ -255,7 +256,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .GOOGLE_user_type = true,
       .INTEL_shader_integer_functions2 = true,
 
-      .VALVE_mutable_descriptor_type = PAN_ARCH >= 9,
+      .VALVE_mutable_descriptor_type = true,
 
       .ARM_shader_core_builtins = true,
       .ARM_shader_core_properties = true,
@@ -424,10 +425,10 @@ panvk_per_arch(get_physical_device_features)(
       .shaderSharedInt64Atomics = true,
       .shaderFloat16 = PAN_ARCH >= 10,
       .shaderInt8 = true,
-      /* In theory, update-after-bind is supported on bifrost, but the
-       * descriptor limits would be too low for the descriptorIndexing feature.
+      /* v6/v7: update-after-bind and mutable bindings are bindless, see
+       * panvk_binding_is_bindless() (jm-v7 050).
        */
-      .descriptorIndexing = PAN_ARCH >= 9,
+      .descriptorIndexing = true,
       .shaderInputAttachmentArrayDynamicIndexing = true,
       .shaderUniformTexelBufferArrayDynamicIndexing = true,
       .shaderStorageTexelBufferArrayDynamicIndexing = true,
@@ -438,14 +439,14 @@ panvk_per_arch(get_physical_device_features)(
       .shaderInputAttachmentArrayNonUniformIndexing = true,
       .shaderUniformTexelBufferArrayNonUniformIndexing = true,
       .shaderStorageTexelBufferArrayNonUniformIndexing = true,
-      .descriptorBindingUniformBufferUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingSampledImageUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingStorageImageUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingStorageBufferUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingUniformTexelBufferUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingStorageTexelBufferUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingUpdateUnusedWhilePending = PAN_ARCH >= 9,
-      .descriptorBindingPartiallyBound = PAN_ARCH >= 9,
+      .descriptorBindingUniformBufferUpdateAfterBind = true,
+      .descriptorBindingSampledImageUpdateAfterBind = true,
+      .descriptorBindingStorageImageUpdateAfterBind = true,
+      .descriptorBindingStorageBufferUpdateAfterBind = true,
+      .descriptorBindingUniformTexelBufferUpdateAfterBind = true,
+      .descriptorBindingStorageTexelBufferUpdateAfterBind = true,
+      .descriptorBindingUpdateUnusedWhilePending = true,
+      .descriptorBindingPartiallyBound = true,
       .descriptorBindingVariableDescriptorCount = true,
       .runtimeDescriptorArray = true,
       .samplerFilterMinmax = PAN_ARCH >= 10,
@@ -703,7 +704,8 @@ panvk_per_arch(get_physical_device_features)(
        * checks on a device (jm-v7 020).
        */
       .robustBufferAccess2 = true,
-      .robustImageAccess2 = PAN_ARCH >= 9 || PANVK_DEBUG(RIA2),
+      .robustImageAccess2 = PAN_ARCH >= 9 || PANVK_DEBUG(RIA2) ||
+                            debug_get_bool_option("PANVK_V7_RIA2", true),
       .nullDescriptor = true,
 
       /* VK_EXT_shader_tile_image */
@@ -805,7 +807,7 @@ panvk_per_arch(get_physical_device_features)(
       .zeroInitializeDeviceMemory = true,
 
       /* VK_EXT_mutable_descriptor_type */
-      .mutableDescriptorType = PAN_ARCH >= 9,
+      .mutableDescriptorType = true,
 
       /* VK_KHR_shader_fma */
       .shaderFmaFloat16 = PAN_ARCH >= 10,
@@ -911,6 +913,21 @@ panvk_per_arch(get_physical_device_properties)(
    const bool has_disk_cache = device->vk.disk_cache != NULL;
    /* v6/v7: tessellation emulation (jm-v7 014), same limits as v9+. */
    const bool tess = PAN_ARCH >= 9 || !PANVK_DEBUG(NO_TESS);
+
+   /* v6/v7 update-after-bind limits (jm-v7 050): update-after-bind bindings
+    * are bindless. SSBOs and storage images/texel buffers are addressed from
+    * the set memory, textures and samplers are indexed relative to the
+    * lowest bound set (panvk_per_arch(cmd_desc_direct_base)). The texture
+    * index register is 32-bit; whether the hardware honours indices above
+    * the 16-bit RSD texture count is a device question, so
+    * PANVK_DI_TEX_MAX caps the sampled image/sampler limits.
+    */
+#define PANVK_V7_UAB_MAX (1u << 20)
+#define PANVK_V7_UAB_RESOURCES (4u << 20)
+   const uint32_t v7_uab_tex =
+      MIN2(debug_get_num_option("PANVK_DI_TEX_MAX", PANVK_V7_UAB_MAX),
+           PANVK_V7_UAB_MAX);
+   (void)v7_uab_tex;
 
    /* Ensure that the max threads count per workgroup is valid for Bifrost */
    assert(PAN_ARCH > 8 || device->kmod.dev->props.max_threads_per_wg <= 1024);
@@ -1144,7 +1161,7 @@ panvk_per_arch(get_physical_device_properties)(
       .maxMultiviewViewCount = pan_max_multiview_view_count(PAN_ARCH),
       .maxMultiviewInstanceIndex = UINT32_MAX,
       .protectedNoFault = false,
-      .maxPerSetDescriptors = UINT16_MAX,
+      .maxPerSetDescriptors = PAN_ARCH >= 9 ? UINT16_MAX : (1 << 22),
       /* Our buffer size fields allow only this much */
       .maxMemoryAllocationSize = UINT32_MAX,
 
@@ -1185,47 +1202,46 @@ panvk_per_arch(get_physical_device_properties)(
       .shaderRoundingModeRTZFloat16 = true,
       .shaderRoundingModeRTZFloat32 = true,
       .shaderRoundingModeRTZFloat64 = false,
-      .maxUpdateAfterBindDescriptorsInAllPools =
-         PAN_ARCH >= 9 ? UINT32_MAX : 0,
+      .maxUpdateAfterBindDescriptorsInAllPools = UINT32_MAX,
       /* VK_EXT_descriptor_indexing */
-      .maxUpdateAfterBindDescriptorsInAllPools = PAN_ARCH >= 9 ? UINT32_MAX : 0,
+      .maxUpdateAfterBindDescriptorsInAllPools = UINT32_MAX,
       .shaderUniformBufferArrayNonUniformIndexingNative = false,
       .shaderSampledImageArrayNonUniformIndexingNative = false,
       .shaderStorageBufferArrayNonUniformIndexingNative = false,
       .shaderStorageImageArrayNonUniformIndexingNative = false,
       .shaderInputAttachmentArrayNonUniformIndexingNative = false,
-      .robustBufferAccessUpdateAfterBind = PAN_ARCH >= 9,
+      .robustBufferAccessUpdateAfterBind = true,
       .quadDivergentImplicitLod = false,
       .maxPerStageDescriptorUpdateAfterBindSamplers =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_SAMPLERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_SAMPLERS : v7_uab_tex,
       .maxPerStageDescriptorUpdateAfterBindUniformBuffers =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_UNIFORM_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_UNIFORM_BUFFERS : MAX_PER_STAGE_UNIFORM_BUFFERS,
       .maxPerStageDescriptorUpdateAfterBindStorageBuffers =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_STORAGE_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_STORAGE_BUFFERS : PANVK_V7_UAB_MAX,
       .maxPerStageDescriptorUpdateAfterBindSampledImages =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_SAMPLED_IMAGES : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_SAMPLED_IMAGES : v7_uab_tex,
       .maxPerStageDescriptorUpdateAfterBindStorageImages =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_STORAGE_IMAGES : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_STORAGE_IMAGES : PANVK_V7_UAB_MAX,
       .maxPerStageDescriptorUpdateAfterBindInputAttachments =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_INPUT_ATTACHMENTS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_INPUT_ATTACHMENTS : MAX_PER_STAGE_INPUT_ATTACHMENTS,
       .maxPerStageUpdateAfterBindResources =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_RESOURCES : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_RESOURCES : PANVK_V7_UAB_RESOURCES,
       .maxDescriptorSetUpdateAfterBindSamplers =
-         PAN_ARCH >= 9 ? MAX_PER_SET_SAMPLERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_SAMPLERS : v7_uab_tex,
       .maxDescriptorSetUpdateAfterBindUniformBuffers =
-         PAN_ARCH >= 9 ? MAX_PER_SET_UNIFORM_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_UNIFORM_BUFFERS : MAX_PER_SET_UNIFORM_BUFFERS,
       .maxDescriptorSetUpdateAfterBindUniformBuffersDynamic =
-         PAN_ARCH >= 9 ? MAX_DYNAMIC_UNIFORM_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_DYNAMIC_UNIFORM_BUFFERS : MAX_DYNAMIC_UNIFORM_BUFFERS,
       .maxDescriptorSetUpdateAfterBindStorageBuffers =
-         PAN_ARCH >= 9 ? MAX_PER_SET_STORAGE_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_STORAGE_BUFFERS : PANVK_V7_UAB_MAX,
       .maxDescriptorSetUpdateAfterBindStorageBuffersDynamic =
-         PAN_ARCH >= 9 ? MAX_DYNAMIC_STORAGE_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_DYNAMIC_STORAGE_BUFFERS : MAX_DYNAMIC_STORAGE_BUFFERS,
       .maxDescriptorSetUpdateAfterBindSampledImages =
-         PAN_ARCH >= 9 ? MAX_PER_SET_SAMPLED_IMAGES : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_SAMPLED_IMAGES : v7_uab_tex,
       .maxDescriptorSetUpdateAfterBindStorageImages =
-         PAN_ARCH >= 9 ? MAX_PER_SET_STORAGE_IMAGES : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_STORAGE_IMAGES : PANVK_V7_UAB_MAX,
       .maxDescriptorSetUpdateAfterBindInputAttachments =
-         PAN_ARCH >= 9 ? MAX_PER_SET_INPUT_ATTACHMENTS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_INPUT_ATTACHMENTS : MAX_PER_SET_INPUT_ATTACHMENTS,
       .supportedDepthResolveModes = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT |
                                     VK_RESOLVE_MODE_AVERAGE_BIT |
                                     VK_RESOLVE_MODE_MIN_BIT |
