@@ -150,6 +150,13 @@ panvk_get_max_buffer_size(const struct panvk_physical_device *device);
 
 bool panvk_bc_emul_enabled(const struct panvk_physical_device *device);
 
+/* BC lowmem (csf-v11/197): BC1-BC5 images keep an ETC2/EAC shadow instead
+ * of an exact decoded one, and BC images that can never be read back drop
+ * the raw block plane. panvk_bc_lm_opts() is PANVK_BC_LM_OPTS, the
+ * transcoder search flags. */
+bool panvk_bc_lowmem_enabled(const struct panvk_physical_device *device);
+uint32_t panvk_bc_lm_opts(void);
+
 #ifdef PAN_ARCH
 void panvk_per_arch(get_physical_device_extensions)(
    const struct panvk_physical_device *device,

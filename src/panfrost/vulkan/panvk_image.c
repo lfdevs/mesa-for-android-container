@@ -488,6 +488,24 @@ panvk_bc_shadow_info(const struct panvk_image *image, VkImageCreateInfo *info,
    };
    const struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(image->vk.base.device->physical);
+
+   /* Lowmem ETC2/EAC shadow: only sampled, written by the transcoder in the
+    * U-interleaved layout it computes itself. */
+   static const uint64_t u_interleaved_mod =
+      DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED;
+   if (image->bc_lowmem == 1) {
+      info->usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+      *afrc = (VkImageDrmFormatModifierListCreateInfoEXT){
+         .sType =
+            VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
+         .drmFormatModifierCount = 1,
+         .pDrmFormatModifiers = &u_interleaved_mod,
+      };
+      info->tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+      info->pNext = afrc;
+      return;
+   }
+
    const bool bc12 = image->vk.format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK &&
                      image->vk.format <= VK_FORMAT_BC2_SRGB_BLOCK;
    /* BC1 RGB (no alpha) and BC7: 16 (8 bpp), sampling cost unchanged. */
@@ -606,7 +624,9 @@ panvk_image_init_layouts(struct panvk_image *image,
 
       image->bc_decoded = tmp.planes[0];
       image->bc_decoded.image.planes[0] = &image->bc_decoded.plane;
-      image->bc_decoded_offset = ALIGN_POT(plane_layout.offset_B, 4096);
+      /* Without a raw plane the shadow is all the memory the image has. */
+      image->bc_decoded_offset =
+         image->bc_no_raw ? 0 : ALIGN_POT(plane_layout.offset_B, 4096);
    } else if (image->bc_emul) {
       struct pan_image *dec = &image->bc_decoded.image;
       enum pipe_format dec_pfmt = vk_format_to_pipe_format(image->bc_format);
@@ -709,7 +729,10 @@ static uint64_t
 panvk_image_get_total_size(const struct panvk_image *image)
 {
    uint64_t size = 0;
-   for (uint8_t plane = 0; plane < image->plane_count; plane++)
+   /* bc_no_raw: planes[0] (raw blocks) is never accessed, so it gets no
+    * memory of its own and only aliases the start of the shadow. */
+   for (uint8_t plane = 0; plane < image->plane_count && !image->bc_no_raw;
+        plane++)
       size = MAX2(size, panvk_image_plane_size(image, plane));
    if (image->bc_emul) {
       const struct pan_image_layout *l = &image->bc_decoded.plane.layout;
@@ -752,6 +775,47 @@ panvk_image_get_sparse_size(const struct panvk_image *image)
    return ALIGN_POT(image_size, page_size);
 }
 
+/* Images the lowmem path may take: plain optimal-tiled 2D images whose
+ * memory nothing but panvk touches. Sparse, aliased, disjoint, external and
+ * host-transfer images, images with uncompressed (block-texel) views, and
+ * BC4/BC5 images that may be viewed with the other signedness keep the
+ * exact path. */
+static bool
+panvk_bc_lowmem_allowed(const struct panvk_image *image,
+                        const VkImageCreateInfo *info)
+{
+   const VkImageCreateFlags reject =
+      VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+      VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT |
+      VK_IMAGE_CREATE_SPARSE_ALIASED_BIT |
+      VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT |
+      VK_IMAGE_CREATE_DISJOINT_BIT | VK_IMAGE_CREATE_ALIAS_BIT;
+
+   /* Host image copies only see the raw plane. */
+   if (image->vk.tiling != VK_IMAGE_TILING_OPTIMAL ||
+       (image->vk.create_flags & reject) ||
+       (image->vk.usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT) ||
+       vk_find_struct_const(info->pNext,
+                            EXTERNAL_MEMORY_IMAGE_CREATE_INFO))
+      return false;
+
+   if ((image->vk.create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) &&
+       image->vk.format >= VK_FORMAT_BC4_UNORM_BLOCK &&
+       image->vk.format <= VK_FORMAT_BC5_SNORM_BLOCK) {
+      const VkImageFormatListCreateInfo *list =
+         vk_find_struct_const(info->pNext, IMAGE_FORMAT_LIST_CREATE_INFO);
+
+      if (!list || !list->viewFormatCount)
+         return false;
+      for (uint32_t i = 0; i < list->viewFormatCount; i++) {
+         if (list->pViewFormats[i] != image->vk.format)
+            return false;
+      }
+   }
+
+   return true;
+}
+
 VkResult
 panvk_image_init(struct panvk_image *image,
                  const VkImageCreateInfo *pCreateInfo)
@@ -773,6 +837,26 @@ panvk_image_init(struct panvk_image *image,
          image->bc_gfx
             ? panvk_bc_compact_format(image->vk.format, PANVK_DEBUG(BC_WIDE))
             : panvk_bc_decoded_format(image->vk.format);
+   }
+
+   /* BC lowmem. Decided on the application's flags and usage, before the
+    * meta adjustments below add MUTABLE/BLOCK_TEXEL_VIEW_COMPATIBLE. */
+   image->bc_lowmem = 0;
+   image->bc_no_raw = false;
+   if (image->bc_gfx && panvk_bc_lowmem_enabled(phys_dev) &&
+       panvk_bc_lowmem_allowed(image, pCreateInfo)) {
+      const VkFormat lm_format = panvk_bc_lowmem_format(image->vk.format);
+      const bool no_raw =
+         !(image->vk.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+
+      if (lm_format != VK_FORMAT_UNDEFINED) {
+         image->bc_lowmem = 1;
+         image->bc_format = lm_format;
+         image->bc_no_raw = no_raw;
+      } else if (no_raw) {
+         image->bc_lowmem = 2;
+         image->bc_no_raw = true;
+      }
    }
 
    /* Add any create/usage flags that might be needed for meta operations.

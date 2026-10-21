@@ -63,6 +63,16 @@ struct panvk_image {
    struct panvk_image_plane bc_decoded;
    uint64_t bc_decoded_offset;
    VkImage bc_shadow;
+
+   /* BC lowmem (csf-v11/197), on bc_gfx images only:
+    * 1: BC1-BC5, bc_shadow is an ETC2/EAC image (U-interleaved) written by
+    *    the panvk_bc_etc2 transcoder;
+    * 2: BC6H/BC7, the exact bc_shadow, only set together with bc_no_raw.
+    * bc_no_raw: the image can never be read back (no TRANSFER_SRC or
+    * HOST_TRANSFER usage), so planes[0] (the raw blocks) gets no memory and
+    * is never written: uploads and copies go straight to the shadow. */
+   uint8_t bc_lowmem;
+   bool bc_no_raw;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_image, vk.base, VkImage,
@@ -148,16 +158,61 @@ panvk_bc_compact_format(VkFormat format, bool wide)
    }
 }
 
+/* ETC2/EAC storage format of a lowmem shadow (UNORM for the sRGB pairs; the
+ * view picks sRGB), or VK_FORMAT_UNDEFINED for BC6H/BC7. */
+static inline VkFormat
+panvk_bc_lowmem_format(VkFormat format)
+{
+   switch (format) {
+   case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
+   case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+      return VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
+   case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
+   case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
+      return VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK;
+   case VK_FORMAT_BC2_UNORM_BLOCK:
+   case VK_FORMAT_BC2_SRGB_BLOCK:
+   case VK_FORMAT_BC3_UNORM_BLOCK:
+   case VK_FORMAT_BC3_SRGB_BLOCK:
+      return VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK;
+   case VK_FORMAT_BC4_UNORM_BLOCK:
+      return VK_FORMAT_EAC_R11_UNORM_BLOCK;
+   case VK_FORMAT_BC4_SNORM_BLOCK:
+      return VK_FORMAT_EAC_R11_SNORM_BLOCK;
+   case VK_FORMAT_BC5_UNORM_BLOCK:
+      return VK_FORMAT_EAC_R11G11_UNORM_BLOCK;
+   case VK_FORMAT_BC5_SNORM_BLOCK:
+      return VK_FORMAT_EAC_R11G11_SNORM_BLOCK;
+   default:
+      return VK_FORMAT_UNDEFINED;
+   }
+}
+
 /* Texture format for a BC view of an emulated image: the image's storage
- * format, with the view picking sRGB or UNORM for RGBA8 storage. */
+ * format, with the view picking sRGB or UNORM for RGBA8 and ETC2 storage. */
 static inline enum pipe_format
 panvk_bc_view_pfmt(const struct panvk_image *image, VkFormat view_format)
 {
    VkFormat f = image->bc_format;
+   const bool srgb = vk_format_is_srgb(view_format);
 
-   if (f == VK_FORMAT_R8G8B8A8_UNORM || f == VK_FORMAT_R8G8B8A8_SRGB)
-      f = vk_format_is_srgb(view_format) ? VK_FORMAT_R8G8B8A8_SRGB
-                                         : VK_FORMAT_R8G8B8A8_UNORM;
+   switch (f) {
+   case VK_FORMAT_R8G8B8A8_UNORM:
+   case VK_FORMAT_R8G8B8A8_SRGB:
+      f = srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+      break;
+   case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
+      f = srgb ? VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK : f;
+      break;
+   case VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK:
+      f = srgb ? VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK : f;
+      break;
+   case VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK:
+      f = srgb ? VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK : f;
+      break;
+   default:
+      break;
+   }
    return vk_format_to_pipe_format(f);
 }
 

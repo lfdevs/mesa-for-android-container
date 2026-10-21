@@ -1,0 +1,752 @@
+#version 450
+/*
+ * Copyright 2026 PanVK-kbase contributors
+ * SPDX-License-Identifier: MIT
+ *
+ * BC1-BC5 -> ETC2/EAC transcoder for the BC lowmem path (csf-v11/197).
+ *
+ * One invocation per 4x4 block. The BC block is decoded exactly (same
+ * arithmetic as panvk_bc_s3tc.comp / panvk_bc_rgtc.comp) and re-encoded:
+ *
+ *   BC1 RGB         -> ETC2 RGB8     (diff/individual, H and planar modes)
+ *   BC1 RGBA        -> ETC2 RGB8A1   (punch-through for blocks with alpha)
+ *   BC2, BC3        -> ETC2 RGBA8    (EAC alpha + ETC2 colour)
+ *   BC4 UNORM/SNORM -> EAC R11 (signed)
+ *   BC5 UNORM/SNORM -> EAC RG11 (signed)
+ *
+ * The output goes straight into the U-interleaved shadow plane: 4x4-block
+ * tiles, blocks inside a tile in the u-interleaved order of pan_tiling.c.
+ *
+ * The encoder is written in the GLSL subset that is also valid C (I()/U()/F()
+ * casts, CARR tables, no out parameters) so it can be unit tested on the
+ * host by including this file with PANVK_BC_C_TEST defined (skip line 1).
+ */
+
+#ifndef PANVK_BC_C_TEST
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference_uvec2 : require
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer InBuf {
+    uint data[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer OutBuf {
+    uint data[];
+};
+
+layout(push_constant) uniform Registers
+{
+    uvec2 src;        /* block (0, 0) of layer 0 of the region */
+    uvec2 dst;        /* shadow level base, layer 0 */
+    uint src_row_B;
+    uint src_slice_B;
+    uint dst_row_B;   /* bytes per row of 4x4-block tiles */
+    uint dst_slice_B; /* array stride */
+    uint bx0;         /* region origin in blocks (for the tiled address) */
+    uint by0;
+    uint bw;          /* region size in blocks */
+    uint bh;
+    uint mode;        /* PANVK_BC_XC_* */
+    uint opts;        /* PANVK_BC_LM_OPTS */
+} registers;
+
+#define I(x) int(x)
+#define U(x) uint(x)
+#define F(x) float(x)
+#define GLOBAL
+#define CARR(type, name, n) const type name[n] = type[n](
+#define CEND );
+#endif
+
+/* Must match panvk_vX_cmd_meta.c. */
+#define XC_BC1_RGB  0
+#define XC_BC1_RGBA 1
+#define XC_BC2      2
+#define XC_BC3      3
+#define XC_BC4_U    4
+#define XC_BC4_S    5
+#define XC_BC5_U    6
+#define XC_BC5_S    7
+
+/* PANVK_BC_LM_OPTS bits (default 0x30000). */
+#define OPT_PLANAR 0x10000u /* try the ETC2 planar mode */
+#define OPT_HMODE  0x20000u /* try the ETC2 H mode */
+#define OPT_EAC_REFINE 0x40000u /* EAC: also try base codeword +-1 */
+
+#define BIG_ERR 0x7fffffff
+
+CARR(int, ETC1_A, 8) 2, 5, 9, 13, 18, 24, 33, 47 CEND
+CARR(int, ETC1_B, 8) 8, 17, 29, 42, 60, 80, 106, 183 CEND
+CARR(int, ETC_DIFF_LUT, 8) 0, 1, 2, 3, -4, -3, -2, -1 CEND
+CARR(int, ETC_H_DIST, 8) 3, 6, 11, 16, 23, 32, 41, 64 CEND
+CARR(int, EAC_MOD, 128)
+   -3, -6, -9, -15, 2, 5, 8, 14,
+   -3, -7, -10, -13, 2, 6, 9, 12,
+   -2, -5, -8, -13, 1, 4, 7, 12,
+   -2, -4, -6, -13, 1, 3, 5, 12,
+   -3, -6, -8, -12, 2, 5, 7, 11,
+   -3, -7, -9, -11, 2, 6, 8, 10,
+   -4, -7, -8, -11, 3, 6, 7, 10,
+   -3, -5, -8, -11, 2, 4, 7, 10,
+   -2, -6, -8, -10, 1, 5, 7, 9,
+   -2, -5, -8, -10, 1, 4, 7, 9,
+   -2, -4, -8, -10, 1, 3, 7, 9,
+   -2, -5, -7, -10, 1, 4, 6, 9,
+   -3, -4, -7, -10, 2, 3, 6, 9,
+   -1, -2, -3, -10, 0, 1, 2, 9,
+   -4, -6, -8, -9, 3, 5, 7, 8,
+   -3, -5, -7, -9, 2, 4, 6, 8
+CEND
+
+/* Decoded block, pixel p = 4 * y + x. */
+GLOBAL int g_r[16];
+GLOBAL int g_g[16];
+GLOBAL int g_b[16];
+GLOBAL bool g_t[16];     /* transparent (BC1 punch-through) */
+GLOBAL int g_grp[16];    /* BC colour index group, seeds the H mode */
+GLOBAL int g_v[16];      /* EAC input, in the output domain */
+
+/* Results of the search helpers (no out parameters, see above). */
+GLOBAL int g_sub_t;
+GLOBAL uint g_sub_bits;
+GLOBAL uint g_w0;
+GLOBAL uint g_w1;
+
+int
+rnd(float x)
+{
+   return I(floor(x + 0.5));
+}
+
+int
+sq(int x)
+{
+   return x * x;
+}
+
+int
+clamp255(int x)
+{
+   return clamp(x, 0, 255);
+}
+
+int
+px_err(int p, int r, int g, int b)
+{
+   return sq(clamp255(r) - g_r[p]) + sq(clamp255(g) - g_g[p]) +
+          sq(clamp255(b) - g_b[p]);
+}
+
+uint
+bswap32(uint v)
+{
+   return (v >> 24) | ((v >> 8) & 0xff00u) | ((v << 8) & 0xff0000u) |
+          (v << 24);
+}
+
+/* ETC1 pixel index bits: per pixel 2-bit index idx at p = 4y + x, stored in
+ * 'bits' as idx << 2p. ETC wants the MSB plane at bit 16 + (4x + y) and the
+ * LSB plane at bit 4x + y of a big-endian 32-bit word. */
+uint
+etc_pack_indices(uint bits)
+{
+   uint v = 0u;
+   for (int p = 0; p < 16; p++) {
+      uint idx = (bits >> U(2 * p)) & 3u;
+      int pos = (p & 3) * 4 + (p >> 2);
+      v |= ((idx >> 1) << U(16 + pos)) | ((idx & 1u) << U(pos));
+   }
+   return bswap32(v);
+}
+
+/* Best ETC1 table for subblock 'sub' around base colour (br, bg, bb).
+ * punch: RGB8A1 with opaque = 0 (index 2 is transparent, small modifiers
+ * are 0). */
+int
+etc_sub_search(int sub, int flip, int br, int bg, int bb, bool punch)
+{
+   int best = BIG_ERR;
+
+   for (int t = 0; t < 8; t++) {
+      int a = punch ? 0 : ETC1_A[t];
+      int b = ETC1_B[t];
+      int err = 0;
+      uint bits = 0u;
+
+      for (int p = 0; p < 16; p++) {
+         int s = (flip != 0) ? ((p >> 2) >= 2 ? 1 : 0) : ((p & 3) >= 2 ? 1 : 0);
+         if (s != sub)
+            continue;
+
+         int idx = 2;
+         int e = 0;
+         if (!(punch && g_t[p])) {
+            int e0 = px_err(p, br + a, bg + a, bb + a);
+            int e1 = px_err(p, br + b, bg + b, bb + b);
+            int e2 = punch ? BIG_ERR : px_err(p, br - a, bg - a, bb - a);
+            int e3 = px_err(p, br - b, bg - b, bb - b);
+            idx = 0;
+            e = e0;
+            if (e1 < e) { e = e1; idx = 1; }
+            if (e2 < e) { e = e2; idx = 2; }
+            if (e3 < e) { e = e3; idx = 3; }
+         }
+         err += e;
+         bits |= U(idx) << U(2 * p);
+      }
+
+      if (err < best) {
+         best = err;
+         g_sub_t = t;
+         g_sub_bits = bits;
+      }
+   }
+   return best;
+}
+
+/* Differential (or individual) mode with the given flip. Writes g_w0/g_w1. */
+int
+etc_try_flip(int flip, bool punch_fmt, bool transparent)
+{
+   int sr0 = 0, sg0 = 0, sb0 = 0, n0 = 0;
+   int sr1 = 0, sg1 = 0, sb1 = 0, n1 = 0;
+
+   for (int p = 0; p < 16; p++) {
+      if (transparent && g_t[p])
+         continue;
+      int s = (flip != 0) ? ((p >> 2) >= 2 ? 1 : 0) : ((p & 3) >= 2 ? 1 : 0);
+      if (s == 0) {
+         sr0 += g_r[p]; sg0 += g_g[p]; sb0 += g_b[p]; n0++;
+      } else {
+         sr1 += g_r[p]; sg1 += g_g[p]; sb1 += g_b[p]; n1++;
+      }
+   }
+   n0 = max(n0, 1);
+   n1 = max(n1, 1);
+
+   /* 5-bit endpoints and their delta. */
+   int r0 = clamp(rnd(F(sr0) * 31.0 / (255.0 * F(n0))), 0, 31);
+   int g0 = clamp(rnd(F(sg0) * 31.0 / (255.0 * F(n0))), 0, 31);
+   int b0 = clamp(rnd(F(sb0) * 31.0 / (255.0 * F(n0))), 0, 31);
+   int r1 = clamp(rnd(F(sr1) * 31.0 / (255.0 * F(n1))), 0, 31);
+   int g1 = clamp(rnd(F(sg1) * 31.0 / (255.0 * F(n1))), 0, 31);
+   int b1 = clamp(rnd(F(sb1) * 31.0 / (255.0 * F(n1))), 0, 31);
+   int dr = r1 - r0, dg = g1 - g0, db = b1 - b0;
+   bool fits = dr >= -4 && dr <= 3 && dg >= -4 && dg <= 3 && db >= -4 &&
+               db <= 3;
+   bool diff = fits || punch_fmt;
+
+   uint b0w, b1w, b2w;
+   int er0, eg0, eb0, er1, eg1, eb1;
+   if (diff) {
+      dr = clamp(dr, -4, 3);
+      dg = clamp(dg, -4, 3);
+      db = clamp(db, -4, 3);
+      r1 = r0 + dr; g1 = g0 + dg; b1 = b0 + db;
+      er0 = (r0 << 3) | (r0 >> 2); eg0 = (g0 << 3) | (g0 >> 2);
+      eb0 = (b0 << 3) | (b0 >> 2);
+      er1 = (r1 << 3) | (r1 >> 2); eg1 = (g1 << 3) | (g1 >> 2);
+      eb1 = (b1 << 3) | (b1 >> 2);
+      b0w = U((r0 << 3) | (dr & 7));
+      b1w = U((g0 << 3) | (dg & 7));
+      b2w = U((b0 << 3) | (db & 7));
+   } else {
+      int ir0 = clamp(rnd(F(sr0) * 15.0 / (255.0 * F(n0))), 0, 15);
+      int ig0 = clamp(rnd(F(sg0) * 15.0 / (255.0 * F(n0))), 0, 15);
+      int ib0 = clamp(rnd(F(sb0) * 15.0 / (255.0 * F(n0))), 0, 15);
+      int ir1 = clamp(rnd(F(sr1) * 15.0 / (255.0 * F(n1))), 0, 15);
+      int ig1 = clamp(rnd(F(sg1) * 15.0 / (255.0 * F(n1))), 0, 15);
+      int ib1 = clamp(rnd(F(sb1) * 15.0 / (255.0 * F(n1))), 0, 15);
+      er0 = ir0 * 17; eg0 = ig0 * 17; eb0 = ib0 * 17;
+      er1 = ir1 * 17; eg1 = ig1 * 17; eb1 = ib1 * 17;
+      b0w = U((ir0 << 4) | ir1);
+      b1w = U((ig0 << 4) | ig1);
+      b2w = U((ib0 << 4) | ib1);
+   }
+
+   int err = etc_sub_search(0, flip, er0, eg0, eb0, transparent);
+   int t0 = g_sub_t;
+   uint bits = g_sub_bits;
+   err += etc_sub_search(1, flip, er1, eg1, eb1, transparent);
+   int t1 = g_sub_t;
+   bits |= g_sub_bits;
+
+   /* Bit 1 of byte 3 is the diff bit, or the opaque bit for RGB8A1. */
+   uint dbit = punch_fmt ? (transparent ? 0u : 2u) : (diff ? 2u : 0u);
+   uint b3w = (U(t0) << 5) | (U(t1) << 2) | dbit | U(flip);
+
+   g_w0 = b0w | (b1w << 8) | (b2w << 16) | (b3w << 24);
+   g_w1 = etc_pack_indices(bits);
+   return err;
+}
+
+/* Byte whose (top5 + lut[low3]) must stay in 0..31: only an underflow is
+ * possible with bit 7 clear, and setting bit 7 fixes it. */
+uint
+etc_no_overflow(uint byte_v)
+{
+   int s = I(byte_v >> 3) + ETC_DIFF_LUT[byte_v & 7u];
+   return s < 0 ? (byte_v | 0x80u) : byte_v;
+}
+
+/* Byte with bits 7..5 and 2 free whose (top5 + lut[low3]) must leave
+ * 0..31, which selects the H (G byte) or planar (B byte) mode. */
+uint
+etc_force_overflow(uint byte_v)
+{
+   uint v1 = (byte_v >> 3) & 3u, v2 = byte_v & 3u;
+   return (v1 + v2 < 4u) ? (byte_v | 0x04u) : (byte_v | 0xe0u);
+}
+
+/* H mode: two 444 base colours +- a distance. Seeds the two colours with
+ * the BC colour index groups (endpoint 0 side, endpoint 1 side). */
+int
+etc_try_h(bool punch_fmt)
+{
+   int s0r = 0, s0g = 0, s0b = 0, n0 = 0;
+   int s1r = 0, s1g = 0, s1b = 0, n1 = 0;
+
+   for (int p = 0; p < 16; p++) {
+      if (g_grp[p] == 0) {
+         s0r += g_r[p]; s0g += g_g[p]; s0b += g_b[p]; n0++;
+      } else {
+         s1r += g_r[p]; s1g += g_g[p]; s1b += g_b[p]; n1++;
+      }
+   }
+   if (n0 == 0 || n1 == 0)
+      return BIG_ERR;
+
+   int q0r = clamp(rnd(F(s0r) * 15.0 / (255.0 * F(n0))), 0, 15);
+   int q0g = clamp(rnd(F(s0g) * 15.0 / (255.0 * F(n0))), 0, 15);
+   int q0b = clamp(rnd(F(s0b) * 15.0 / (255.0 * F(n0))), 0, 15);
+   int q1r = clamp(rnd(F(s1r) * 15.0 / (255.0 * F(n1))), 0, 15);
+   int q1g = clamp(rnd(F(s1g) * 15.0 / (255.0 * F(n1))), 0, 15);
+   int q1b = clamp(rnd(F(s1b) * 15.0 / (255.0 * F(n1))), 0, 15);
+   int v0 = (q0r << 8) | (q0g << 4) | q0b;
+   int v1 = (q1r << 8) | (q1g << 4) | q1b;
+
+   int best = BIG_ERR, best_di = 0;
+   bool best_swap = false;
+   uint best_bits = 0u;
+
+   for (int di = 0; di < 8; di++) {
+      /* The distance LSB is (colour 1 >= colour 2): swap to match it. */
+      bool swap = (di & 1) != ((v0 >= v1) ? 1 : 0);
+      if (swap && v0 == v1)
+         continue;
+
+      int ar = (swap ? q1r : q0r) * 17, ag = (swap ? q1g : q0g) * 17,
+          ab = (swap ? q1b : q0b) * 17;
+      int cr = (swap ? q0r : q1r) * 17, cg = (swap ? q0g : q1g) * 17,
+          cb = (swap ? q0b : q1b) * 17;
+      int d = ETC_H_DIST[di];
+      int err = 0;
+      uint bits = 0u;
+
+      for (int p = 0; p < 16; p++) {
+         int e0 = px_err(p, ar + d, ag + d, ab + d);
+         int e1 = px_err(p, ar - d, ag - d, ab - d);
+         int e2 = px_err(p, cr + d, cg + d, cb + d);
+         int e3 = px_err(p, cr - d, cg - d, cb - d);
+         int idx = 0, e = e0;
+         if (e1 < e) { e = e1; idx = 1; }
+         if (e2 < e) { e = e2; idx = 2; }
+         if (e3 < e) { e = e3; idx = 3; }
+         err += e;
+         bits |= U(idx) << U(2 * p);
+      }
+      if (err < best) {
+         best = err;
+         best_di = di;
+         best_swap = swap;
+         best_bits = bits;
+      }
+   }
+   if (best == BIG_ERR)
+      return BIG_ERR;
+
+   uint r1 = U(best_swap ? q1r : q0r), g1 = U(best_swap ? q1g : q0g),
+        b1 = U(best_swap ? q1b : q0b);
+   uint r2 = U(best_swap ? q0r : q1r), g2 = U(best_swap ? q0g : q1g),
+        b2 = U(best_swap ? q0b : q1b);
+   uint di = U(best_di);
+
+   uint b0w = (r1 << 3) | (g1 >> 1);
+   uint b1w = ((g1 & 1u) << 4) | (b1 & 8u) | ((b1 >> 1) & 3u);
+   uint b2w = ((b1 & 1u) << 7) | (r2 << 3) | (g2 >> 1);
+   uint b3w = ((g2 & 1u) << 7) | (b2 << 3) | (((di >> 2) & 1u) << 2) | 2u |
+              ((di >> 1) & 1u);
+
+   b0w = etc_no_overflow(b0w);
+   b1w = etc_force_overflow(b1w);
+
+   g_w0 = b0w | (b1w << 8) | (b2w << 16) | (b3w << 24);
+   g_w1 = etc_pack_indices(best_bits);
+   return best;
+}
+
+/* Planar mode: least-squares plane per channel, O/H/V in 676. */
+int
+etc_planar_q(float v, int maxq)
+{
+   return clamp(rnd(v * F(maxq) / 255.0), 0, maxq);
+}
+
+int
+etc_planar_err(int o_r, int o_g, int o_b, int h_r, int h_g, int h_b, int v_r,
+               int v_g, int v_b)
+{
+   int err = 0;
+   for (int p = 0; p < 16; p++) {
+      int x = p & 3, y = p >> 2;
+      int r = (x * (h_r - o_r) + y * (v_r - o_r) + 4 * o_r + 2) >> 2;
+      int g = (x * (h_g - o_g) + y * (v_g - o_g) + 4 * o_g + 2) >> 2;
+      int b = (x * (h_b - o_b) + y * (v_b - o_b) + 4 * o_b + 2) >> 2;
+      err += px_err(p, r, g, b);
+   }
+   return err;
+}
+
+int
+etc_try_planar()
+{
+   float mr = 0.0, mg = 0.0, mb = 0.0;
+   float xr = 0.0, xg = 0.0, xb = 0.0;
+   float yr = 0.0, yg = 0.0, yb = 0.0;
+
+   for (int p = 0; p < 16; p++) {
+      float dx = F(p & 3) - 1.5, dy = F(p >> 2) - 1.5;
+      mr += F(g_r[p]); mg += F(g_g[p]); mb += F(g_b[p]);
+      xr += dx * F(g_r[p]); xg += dx * F(g_g[p]); xb += dx * F(g_b[p]);
+      yr += dy * F(g_r[p]); yg += dy * F(g_g[p]); yb += dy * F(g_b[p]);
+   }
+   /* c(x, y) = a + bx x + by y; sum (x - 1.5)^2 over the block is 20. */
+   float bxr = xr / 20.0, bxg = xg / 20.0, bxb = xb / 20.0;
+   float byr = yr / 20.0, byg = yg / 20.0, byb = yb / 20.0;
+   float ar = mr / 16.0 - 1.5 * (bxr + byr);
+   float ag = mg / 16.0 - 1.5 * (bxg + byg);
+   float ab = mb / 16.0 - 1.5 * (bxb + byb);
+
+   uint ro = U(etc_planar_q(ar, 63)), go = U(etc_planar_q(ag, 127)),
+        bo = U(etc_planar_q(ab, 63));
+   uint rh = U(etc_planar_q(ar + 4.0 * bxr, 63)),
+        gh = U(etc_planar_q(ag + 4.0 * bxg, 127)),
+        bh = U(etc_planar_q(ab + 4.0 * bxb, 63));
+   uint rv = U(etc_planar_q(ar + 4.0 * byr, 63)),
+        gv = U(etc_planar_q(ag + 4.0 * byg, 127)),
+        bv = U(etc_planar_q(ab + 4.0 * byb, 63));
+
+   int err = etc_planar_err(
+      I((ro << 2) | (ro >> 4)), I((go << 1) | (go >> 6)), I((bo << 2) | (bo >> 4)),
+      I((rh << 2) | (rh >> 4)), I((gh << 1) | (gh >> 6)), I((bh << 2) | (bh >> 4)),
+      I((rv << 2) | (rv >> 4)), I((gv << 1) | (gv >> 6)), I((bv << 2) | (bv >> 4)));
+
+   uint b0w = (ro << 1) | (go >> 6);
+   uint b1w = ((go & 63u) << 1) | (bo >> 5);
+   uint b2w = (((bo >> 3) & 3u) << 3) | ((bo >> 1) & 3u);
+   uint b3w = ((bo & 1u) << 7) | ((rh >> 1) << 2) | 2u | (rh & 1u);
+   uint b4w = (gh << 1) | (bh >> 5);
+   uint b5w = ((bh & 31u) << 3) | (rv >> 3);
+   uint b6w = ((rv & 7u) << 5) | (gv >> 2);
+   uint b7w = ((gv & 3u) << 6) | bv;
+
+   b0w = etc_no_overflow(b0w);
+   b1w = etc_no_overflow(b1w);
+   b2w = etc_force_overflow(b2w);
+
+   g_w0 = b0w | (b1w << 8) | (b2w << 16) | (b3w << 24);
+   g_w1 = b4w | (b5w << 8) | (b6w << 16) | (b7w << 24);
+   return err;
+}
+
+/* ETC2 RGB8 / RGB8A1 block for g_r/g_g/g_b (g_t, g_grp). Result in
+ * g_w0/g_w1. */
+void
+etc2_encode_rgb(bool punch_fmt, uint opts)
+{
+   bool transparent = false;
+   if (punch_fmt) {
+      for (int p = 0; p < 16; p++)
+         transparent = transparent || g_t[p];
+   }
+
+   int best = etc_try_flip(0, punch_fmt, transparent);
+   uint w0 = g_w0, w1 = g_w1;
+   int e;
+
+   if (best > 0) {
+      e = etc_try_flip(1, punch_fmt, transparent);
+      if (e < best) { best = e; w0 = g_w0; w1 = g_w1; }
+   }
+   /* H and planar have no transparent texels. */
+   if (!transparent && best > 0 && (opts & OPT_HMODE) != 0u) {
+      e = etc_try_h(punch_fmt);
+      if (e < best) { best = e; w0 = g_w0; w1 = g_w1; }
+   }
+   if (!transparent && best > 0 && (opts & OPT_PLANAR) != 0u) {
+      e = etc_try_planar();
+      if (e < best) { best = e; w0 = g_w0; w1 = g_w1; }
+   }
+   g_w0 = w0;
+   g_w1 = w1;
+}
+
+/* EAC block for g_v. kind 0: ETC2 alpha (0..255), 1: R11 (0..2047),
+ * 2: signed R11 (-1023..1023). Result in g_w0/g_w1. */
+int
+eac_value(int kind, int base, int mult, int mod)
+{
+   if (kind == 0)
+      return clamp(base + mod * mult, 0, 255);
+   if (kind == 1)
+      return clamp(base * 8 + 4 + mod * mult * 8, 0, 2047);
+   return clamp(base * 8 + mod * mult * 8, -1023, 1023);
+}
+
+void
+eac_encode(int kind, uint opts)
+{
+   int lo = g_v[0], hi = g_v[0];
+   for (int p = 1; p < 16; p++) {
+      lo = min(lo, g_v[p]);
+      hi = max(hi, g_v[p]);
+   }
+
+   int scale = kind == 0 ? 1 : 8;
+   int bmin = kind == 2 ? -127 : 0;
+   int bmax = kind == 2 ? 127 : 255;
+   int nb = (opts & OPT_EAC_REFINE) != 0u ? 3 : 1;
+   int best = BIG_ERR;
+   int best_base = 0, best_mult = 1, best_t = 0;
+   uint best_hi = 0u, best_lo = 0u;
+
+   for (int t = 0; t < 16; t++) {
+      int m3 = EAC_MOD[t * 8 + 3], m7 = EAC_MOD[t * 8 + 7];
+      int mult = clamp(rnd(F(hi - lo) / F(scale * (m7 - m3))), 1, 15);
+      float center = 0.5 * F(lo + hi) - 0.5 * F((m3 + m7) * mult * scale);
+      if (kind == 1)
+         center -= 4.0;
+      int base0 = rnd(center / F(scale));
+
+      for (int k = 0; k < nb; k++) {
+         int base = clamp(base0 + (k == 1 ? 1 : (k == 2 ? -1 : 0)), bmin, bmax);
+         int err = 0;
+         uint ihi = 0u, ilo = 0u;
+
+         for (int p = 0; p < 16; p++) {
+            int be = BIG_ERR, bi = 0;
+            for (int i = 0; i < 8; i++) {
+               int e = sq(eac_value(kind, base, mult, EAC_MOD[t * 8 + i]) -
+                          g_v[p]);
+               if (e < be) { be = e; bi = i; }
+            }
+            err += be;
+            /* Pixel (x, y) is the 3-bit field at 45 - 3 (4x + y). */
+            int pos = 45 - 3 * ((p & 3) * 4 + (p >> 2));
+            if (pos >= 32) {
+               ihi |= U(bi) << U(pos - 32);
+            } else {
+               ilo |= U(bi) << U(pos);
+               if (pos + 3 > 32)
+                  ihi |= U(bi) >> U(32 - pos);
+            }
+         }
+         if (err < best) {
+            best = err;
+            best_base = base;
+            best_mult = mult;
+            best_t = t;
+            best_hi = ihi;
+            best_lo = ilo;
+         }
+      }
+   }
+
+   /* Bytes: base, mult << 4 | table, then the 48 index bits big-endian. */
+   uint b0w = U(best_base) & 0xffu;
+   uint b1w = (U(best_mult) << 4) | U(best_t);
+   g_w0 = b0w | (b1w << 8) | (((best_hi >> 8) & 0xffu) << 16) |
+          ((best_hi & 0xffu) << 24);
+   g_w1 = bswap32(best_lo);
+}
+
+/* ---- BC decoders (same arithmetic as the exact decode shaders) ---- */
+
+int
+unorm8(float f)
+{
+   return clamp(rnd(f * 255.0), 0, 255);
+}
+
+/* BC1 colour block (words c0, c1) into g_r/g_g/g_b/g_t/g_grp. */
+void
+bc_decode_color(uint c0w, uint c1w, bool four)
+{
+   uint e0 = c0w & 0xffffu, e1 = c0w >> 16;
+   bool opaque = four || e0 > e1;
+   float r0 = F((e0 >> 11) & 31u) / 31.0, g0 = F((e0 >> 5) & 63u) / 63.0,
+         b0 = F(e0 & 31u) / 31.0;
+   float r1 = F((e1 >> 11) & 31u) / 31.0, g1 = F((e1 >> 5) & 63u) / 63.0,
+         b1 = F(e1 & 31u) / 31.0;
+
+   for (int p = 0; p < 16; p++) {
+      int bits = I((c1w >> U(2 * p)) & 3u);
+      float r, g, b;
+      bool t = false;
+
+      if (opaque) {
+         float f = bits == 0 ? 0.0 : (bits == 1 ? 1.0 : (1.0 / 3.0) * F(bits - 1));
+         r = r0 + (r1 - r0) * f;
+         g = g0 + (g1 - g0) * f;
+         b = b0 + (b1 - b0) * f;
+      } else if (bits == 3) {
+         r = 0.0; g = 0.0; b = 0.0;
+         t = true;
+      } else {
+         float f = bits == 0 ? 0.0 : (bits == 1 ? 1.0 : 0.5);
+         r = r0 + (r1 - r0) * f;
+         g = g0 + (g1 - g0) * f;
+         b = b0 + (b1 - b0) * f;
+      }
+      g_r[p] = unorm8(r);
+      g_g[p] = unorm8(g);
+      g_b[p] = unorm8(b);
+      g_t[p] = t;
+      /* Endpoint 0 side: index 0 and, in 4-colour mode, 2. */
+      g_grp[p] = (bits == 0 || (opaque && bits == 2)) ? 0 : 1;
+   }
+}
+
+/* RGTC/BC3 alpha channel (words a0, a1) as floats in [0, 1] / [-1, 1],
+ * converted to the EAC domain of 'kind'. */
+void
+bc_decode_rgtc(uint a0w, uint a1w, bool snorm, int kind)
+{
+   float ep0, ep1;
+   if (snorm) {
+      ep0 = max(F(I(a0w << 24) >> 24) / 127.0, -1.0);
+      ep1 = max(F(I(a0w << 16) >> 24) / 127.0, -1.0);
+   } else {
+      ep0 = F(a0w & 0xffu) / 255.0;
+      ep1 = F((a0w >> 8) & 0xffu) / 255.0;
+   }
+   bool range7 = ep0 > ep1;
+
+   for (int p = 0; p < 16; p++) {
+      int off = 16 + 3 * p;
+      uint bits;
+      if (off <= 29)
+         bits = (a0w >> U(off)) & 7u;
+      else if (off >= 32)
+         bits = (a1w >> U(off - 32)) & 7u;
+      else
+         bits = (a0w >> 31) | ((a1w & 3u) << 1);
+
+      float res;
+      if (bits < 2u)
+         res = bits != 0u ? ep1 : ep0;
+      else if (range7)
+         res = ep0 + (ep1 - ep0) * ((1.0 / 7.0) * F(bits - 1u));
+      else if (bits > 5u)
+         res = snorm ? (bits == 6u ? -1.0 : 1.0) : F(bits & 1u);
+      else
+         res = ep0 + (ep1 - ep0) * ((1.0 / 5.0) * F(bits - 1u));
+
+      if (kind == 0)
+         g_v[p] = unorm8(res);
+      else if (kind == 1)
+         g_v[p] = clamp(rnd(res * 2047.0), 0, 2047);
+      else
+         g_v[p] = clamp(rnd(res * 1023.0), -1023, 1023);
+   }
+}
+
+/* Transcode one BC block (w[0..3]) for 'mode'. Returns the ETC2/EAC words
+ * through g_out[]. */
+GLOBAL uint g_out[4];
+
+void
+transcode_block(uint mode, uint w0, uint w1, uint w2, uint w3, uint opts)
+{
+   if (mode == U(XC_BC1_RGB) || mode == U(XC_BC1_RGBA)) {
+      bc_decode_color(w0, w1, false);
+      etc2_encode_rgb(mode == U(XC_BC1_RGBA), opts);
+      g_out[0] = g_w0;
+      g_out[1] = g_w1;
+   } else if (mode == U(XC_BC2) || mode == U(XC_BC3)) {
+      if (mode == U(XC_BC2)) {
+         for (int p = 0; p < 16; p++) {
+            uint word = p < 8 ? w0 : w1;
+            g_v[p] = I((word >> U(4 * (p & 7))) & 15u) * 17;
+         }
+      } else {
+         bc_decode_rgtc(w0, w1, false, 0);
+      }
+      eac_encode(0, opts);
+      g_out[0] = g_w0;
+      g_out[1] = g_w1;
+      bc_decode_color(w2, w3, true);
+      etc2_encode_rgb(false, opts);
+      g_out[2] = g_w0;
+      g_out[3] = g_w1;
+   } else {
+      bool snorm = mode == U(XC_BC4_S) || mode == U(XC_BC5_S);
+      int kind = snorm ? 2 : 1;
+      bc_decode_rgtc(w0, w1, snorm, kind);
+      eac_encode(kind, opts);
+      g_out[0] = g_w0;
+      g_out[1] = g_w1;
+      if (mode >= U(XC_BC5_U)) {
+         bc_decode_rgtc(w2, w3, snorm, kind);
+         eac_encode(kind, opts);
+         g_out[2] = g_w0;
+         g_out[3] = g_w1;
+      }
+   }
+}
+
+#ifndef PANVK_BC_C_TEST
+void
+main()
+{
+   uint x = gl_GlobalInvocationID.x;
+   uint y = gl_GlobalInvocationID.y;
+   uint z = gl_GlobalInvocationID.z;
+
+   if (x >= registers.bw || y >= registers.bh)
+      return;
+
+   uint mode = registers.mode;
+   uint nw = (mode == U(XC_BC1_RGB) || mode == U(XC_BC1_RGBA) ||
+              mode == U(XC_BC4_U) || mode == U(XC_BC4_S)) ? 2u : 4u;
+
+   InBuf ibuf = InBuf(registers.src);
+   uint iw = (z * registers.src_slice_B + y * registers.src_row_B) / 4u +
+             x * nw;
+   uint w0 = ibuf.data[iw];
+   uint w1 = ibuf.data[iw + 1u];
+   uint w2 = nw == 4u ? ibuf.data[iw + 2u] : 0u;
+   uint w3 = nw == 4u ? ibuf.data[iw + 3u] : 0u;
+
+   transcode_block(mode, w0, w1, w2, w3, registers.opts);
+
+   /* U-interleaved: 4x4-block tiles stored linearly per tile row, blocks in
+    * a tile at | y1 | x1^y1 | y0 | x0^y0 |. */
+   uint bx = registers.bx0 + x, by = registers.by0 + y;
+   uint ix = bx & 3u, iy = by & 3u;
+   uint in_tile = ((iy >> 1) << 3) | (((ix ^ iy) >> 1) << 2) |
+                  ((iy & 1u) << 1) | ((ix ^ iy) & 1u);
+   uint ow = (z * registers.dst_slice_B + (by >> 2) * registers.dst_row_B) / 4u +
+             ((bx >> 2) * 16u + in_tile) * nw;
+
+   OutBuf obuf = OutBuf(registers.dst);
+   obuf.data[ow] = g_out[0];
+   obuf.data[ow + 1u] = g_out[1];
+   if (nw == 4u) {
+      obuf.data[ow + 2u] = g_out[2];
+      obuf.data[ow + 3u] = g_out[3];
+   }
+}
+#endif

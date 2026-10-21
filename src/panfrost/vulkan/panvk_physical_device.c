@@ -1435,8 +1435,8 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
    device->formats.all = pan_format_table(arch);
    device->formats.blendable = pan_blendable_format_table(arch);
 
-   mesa_logi("panvk: BC emulation %s (native compressed mask %#x)",
-             panvk_bc_emul_enabled(device) ? "on" : "off",
+   mesa_logi("panvk: BC emulation %s%s (native compressed mask %#x)",
+             panvk_bc_emul_enabled(device) ? "on" : "off", panvk_bc_lowmem_enabled(device) ? ", lowmem" : "",
              pan_query_compressed_formats(&device->kmod.dev->props));
 
    unsigned core_count =
@@ -1903,6 +1903,66 @@ panvk_bc_emul_enabled(const struct panvk_physical_device *physical_device)
    }
 
    return false;
+}
+
+/* BC lowmem: on v10+ (CSF) with BC emulation and the fragment decode path
+ * (no PANVK_DEBUG=bc_compute/no_gs), when every ETC2/EAC format is native.
+ * On by default; PANVK_BC_MODE=exact keeps the exact decoded shadows. */
+static int panvk_bc_mode_lowmem = -1;
+
+bool
+panvk_bc_lowmem_enabled(const struct panvk_physical_device *device)
+{
+   static const enum pipe_format etc_fmts[] = {
+      PIPE_FORMAT_ETC2_RGB8,  PIPE_FORMAT_ETC2_SRGB8,
+      PIPE_FORMAT_ETC2_RGB8A1, PIPE_FORMAT_ETC2_SRGB8A1,
+      PIPE_FORMAT_ETC2_RGBA8, PIPE_FORMAT_ETC2_SRGBA8,
+      PIPE_FORMAT_ETC2_R11_UNORM, PIPE_FORMAT_ETC2_R11_SNORM,
+      PIPE_FORMAT_ETC2_RG11_UNORM, PIPE_FORMAT_ETC2_RG11_SNORM,
+   };
+
+   if (panvk_bc_mode_lowmem < 0) {
+      const char *mode = os_get_option("PANVK_BC_MODE");
+
+      if (mode && strcmp(mode, "lowmem") && strcmp(mode, "exact"))
+         mesa_logw("panvk: unknown PANVK_BC_MODE=%s, using exact", mode);
+      panvk_bc_mode_lowmem = !mode || !strcmp(mode, "lowmem");
+   }
+
+   if (!panvk_bc_mode_lowmem ||
+       pan_arch(device->kmod.dev->props.gpu_id) < 10 ||
+       !panvk_bc_emul_enabled(device) || PANVK_DEBUG(BC_COMPUTE) ||
+       PANVK_DEBUG(NO_GS))
+      return false;
+
+   uint32_t supported_compr_fmts =
+      pan_query_compressed_formats(&device->kmod.dev->props);
+
+   for (unsigned i = 0; i < ARRAY_SIZE(etc_fmts); i++) {
+      const struct pan_format fmt = device->formats.all[etc_fmts[i]];
+      if (!fmt.hw || !(BITFIELD_BIT(fmt.texfeat_bit) & supported_compr_fmts))
+         return false;
+   }
+
+   return true;
+}
+
+/* PANVK_BC_LM_OPTS (default 0x30000): 0x10000 try the ETC2 planar mode,
+ * 0x20000 try the ETC2 H mode, 0x40000 try both ETC1 flips (otherwise
+ * picked by a half-block heuristic), 0x80000 search all 8 ETC1 tables
+ * (otherwise 3 around the colour spread), bits 20-21 EAC (table,
+ * multiplier) candidates per block minus one (max 3). The value is a
+ * specialization constant of the transcode pipeline. */
+uint32_t
+panvk_bc_lm_opts(void)
+{
+   static int64_t opts = -1;
+
+   if (opts < 0) {
+      const char *s = os_get_option("PANVK_BC_LM_OPTS");
+      opts = s ? (int64_t)(strtoul(s, NULL, 0) & 0xffffffffu) : 0x30000;
+   }
+   return opts;
 }
 
 static VkFormatFeatureFlags2
