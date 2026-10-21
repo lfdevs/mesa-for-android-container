@@ -8,6 +8,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <stdlib.h>
+
 #include "panvk_device.h"
 #include "panvk_image.h"
 #include "panvk_sampler.h"
@@ -525,6 +527,19 @@ get_resource_deref_binding(nir_deref_instr *deref, uint32_t *set,
    *binding = var->data.binding;
 }
 
+#if PAN_ARCH < 9
+static bool
+panvk_v7_desc_reorder(void)
+{
+   static int on = -1;
+   if (on < 0) {
+      const char *e = getenv("PANVK_V7_DESC_REORDER");
+      on = !(e && e[0] == '0');
+   }
+   return on;
+}
+#endif
+
 static nir_def *
 load_resource_deref_desc(nir_builder *b, nir_deref_instr *deref,
                          VkDescriptorType subdesc_type, unsigned desc_offset,
@@ -550,6 +565,9 @@ load_resource_deref_desc(nir_builder *b, nir_deref_instr *deref,
    unsigned subdesc_idx = get_subdesc_idx(bind_layout, subdesc);
 
    assert(index_ssa == NULL || index_imm == 0);
+#if PAN_ARCH < 9
+   const bool const_index = index_ssa == NULL;
+#endif
    if (index_ssa == NULL)
       index_ssa = nir_imm_int(b, index_imm);
 
@@ -570,9 +588,22 @@ load_resource_deref_desc(nir_builder *b, nir_deref_instr *deref,
 
    unsigned desc_align = 1 << (ffs(PANVK_DESCRIPTOR_SIZE + desc_offset) - 1);
 
+   /* jm-v7 086: descriptor set memory does not change while a shader runs,
+    * so a load at a constant offset (a descriptor of a bound set, valid even
+    * when hoisted) can be CSE'd and hoisted. Without this every
+    * robustImageAccess2 image access (jm-v7 048) and every textureSize /
+    * imageSize re-read the descriptor from memory, one more clause each
+    * (PanProbe robust_image_access2 bench: 16 loads, +199 instructions,
+    * 75 vs 28 clauses). Dynamic indices stay pinned: a hoisted load could
+    * leave the array. PANVK_V7_DESC_REORDER=0 restores the old loads.
+    */
+   enum gl_access_qualifier access = 0;
+   if (const_index && panvk_v7_desc_reorder())
+      access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER;
+
    return nir_load_global(b, num_components, bit_size,
                           nir_iadd(b, set_base_addr, nir_u2u64(b, set_offset)),
-                          .align_mul = desc_align);
+                          .align_mul = desc_align, .access = access);
 #else
    /* note that user sets start from index 1 */
    return nir_load_ubo(
