@@ -493,7 +493,7 @@ panvk_bc_shadow_info(const struct panvk_image *image, VkImageCreateInfo *info,
     * U-interleaved layout it computes itself. */
    static const uint64_t u_interleaved_mod =
       DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED;
-   if (image->bc_lowmem == 1) {
+   if (panvk_bc_xcoded(image)) {
       info->usage = VK_IMAGE_USAGE_SAMPLED_BIT;
       *afrc = (VkImageDrmFormatModifierListCreateInfoEXT){
          .sType =
@@ -833,6 +833,32 @@ static VkResult panvk_bc_raw_create(struct panvk_device *dev,
 static void panvk_bc_raw_destroy(struct panvk_image *image);
 static void panvk_bc_raw_rebind(struct panvk_image *image);
 
+/* csf-v11/202: BC6H UF16 lowmem shadows can be ASTC 4x4 HDR when the GPU
+ * samples that natively. PANVK_BC_BC6H=exact (default) | astc: the ASTC
+ * shadow is 4x smaller but filters at half rate (64 bpp decode, 2x the
+ * sampling cost of B10G11R11) and is lossier, so it is opt-in. */
+static bool
+panvk_bc_lowmem_astc(const struct panvk_physical_device *phys_dev)
+{
+   static int on = -1;
+
+   if (on < 0) {
+      const char *mode = os_get_option("PANVK_BC_BC6H");
+
+      if (mode && strcmp(mode, "astc") && strcmp(mode, "exact"))
+         mesa_logw("panvk: unknown PANVK_BC_BC6H=%s, using exact", mode);
+      p_atomic_set(&on, mode && !strcmp(mode, "astc"));
+   }
+   if (!p_atomic_read(&on))
+      return false;
+
+   const struct pan_format fmt =
+      phys_dev->formats.all[PIPE_FORMAT_ASTC_4x4_FLOAT];
+   return fmt.hw &&
+          (BITFIELD_BIT(fmt.texfeat_bit) &
+           pan_query_compressed_formats(&phys_dev->kmod.dev->props));
+}
+
 /* PANVK_BC_RAW=store (default) | plane, PANVK_BC_RAW_MIN (bytes, default
  * 64 KiB): raw block planes at least that big go to the raw store. */
 static bool
@@ -898,7 +924,17 @@ panvk_image_init(struct panvk_image *image,
        * in the raw store instead of the image memory. */
       const bool raw_store = !no_raw && panvk_bc_raw_store_wanted(image);
 
-      if (lm_format != VK_FORMAT_UNDEFINED) {
+      if (image->vk.format == VK_FORMAT_BC6H_UFLOAT_BLOCK &&
+          !(image->vk.create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) &&
+          panvk_bc_lowmem_astc(phys_dev)) {
+         /* csf-v11/202: BC6H UF16 -> ASTC 4x4 HDR (8 bpp). MUTABLE images
+          * stay exact: an SFLOAT view of the UF16 data would sample the
+          * ASTC shadow as signed. */
+         image->bc_lowmem = 3;
+         image->bc_format = VK_FORMAT_ASTC_4x4_SFLOAT_BLOCK;
+         image->bc_no_raw = no_raw;
+         image->bc_raw_store = raw_store;
+      } else if (lm_format != VK_FORMAT_UNDEFINED) {
          image->bc_lowmem = 1;
          image->bc_format = lm_format;
          image->bc_no_raw = no_raw;

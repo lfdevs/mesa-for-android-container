@@ -67,7 +67,10 @@ struct panvk_image {
    /* BC lowmem (csf-v11/197), on bc_gfx images only:
     * 1: BC1-BC5, bc_shadow is an ETC2/EAC image (U-interleaved) written by
     *    the panvk_bc_etc2 transcoder;
-    * 2: BC6H/BC7, the exact bc_shadow, only set together with bc_no_raw.
+    * 2: BC6H/BC7, the exact bc_shadow, only set together with bc_no_raw
+    *    or bc_raw_store (csf-v11/201);
+    * 3: BC6H UF16, bc_shadow is an ASTC 4x4 HDR image (U-interleaved)
+    *    written by the panvk_bc_astc transcoder (csf-v11/202).
     * bc_no_raw: the image can never be read back (no TRANSFER_SRC or
     * HOST_TRANSFER usage), so planes[0] (the raw blocks) gets no memory and
     * is never written: uploads and copies go straight to the shadow. */
@@ -88,6 +91,13 @@ struct panvk_image {
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_image, vk.base, VkImage,
                                VK_OBJECT_TYPE_IMAGE)
+
+/* The shadow is written by a transcoder (ETC2/EAC or ASTC). */
+static inline bool
+panvk_bc_xcoded(const struct panvk_image *image)
+{
+   return image->bc_lowmem == 1 || image->bc_lowmem == 3;
+}
 
 struct util_dynarray;
 

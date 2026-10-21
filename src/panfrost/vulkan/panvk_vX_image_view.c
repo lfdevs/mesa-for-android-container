@@ -434,6 +434,9 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
 
    if (image->bc_emul && panvk_format_is_bc(view->vk.view_format)) {
       view->pview.format = panvk_bc_view_pfmt(image, view->vk.view_format);
+      /* The BC6H ASTC shadow (csf-v11/202) is HDR: the flag computed from
+       * the BC view format above must follow the format swap. */
+      view->pview.astc.hdr = util_format_is_astc_hdr(view->pview.format);
       view->pview.planes[0] = (struct pan_image_plane_ref){
          .image = &image->bc_decoded.image,
          .plane_idx = 0,

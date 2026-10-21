@@ -11,4 +11,7 @@ done
 # BC1-BC5 -> ETC2/EAC transcoder of the lowmem path (compute only).
 glslangValidator -V --target-env vulkan1.1 --vn panvk_bc_etc2_spv \
    -o panvk_bc_etc2_spv.h panvk_bc_etc2.comp
+# BC6H UF16 -> ASTC 4x4 HDR transcoder (csf-v11/202, compute only).
+glslangValidator -V --target-env vulkan1.1 --vn panvk_bc_astc_spv \
+   -o panvk_bc_astc_spv.h panvk_bc_astc.comp
 sed -i 's/^const uint32_t/static const uint32_t/' panvk_bc_*_spv.h
