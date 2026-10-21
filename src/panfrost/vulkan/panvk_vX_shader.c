@@ -4232,7 +4232,8 @@ panvk_compile_shader(struct panvk_device *dev,
                      const struct vk_graphics_pipeline_state *state,
                      const struct pan_varying_layout *vs_varying_layout,
                      const uint32_t *noperspective_varyings,
-                     uint8_t scissor_loc, bool alt,
+                     uint8_t scissor_loc, const uint64_t *prev_gs_outputs,
+                     bool alt,
                      const VkAllocationCallbacks *pAllocator,
                      struct vk_shader **shader_out)
 {
@@ -4989,6 +4990,13 @@ panvk_compile_shader(struct panvk_device *dev,
             if (slot)
                prev_dist_outputs |= BITFIELD64_BIT(slot->location);
          }
+      } else if (prev_gs_outputs) {
+         /* jm-v7 079: behind a v6/v7 GS, only the clip/cull slots the
+          * emulation writes (CLIP_DIST1 also carries the multiViewport
+          * scissor). Defaulting to CLIP_DIST0/1 made every such FS
+          * discard, which costs early ZS and FPK.
+          */
+         prev_dist_outputs = *prev_gs_outputs;
       }
       NIR_PASS(_, nir, panvk_lower_clip_cull_fs, prev_dist_outputs,
                scissor_loc);
@@ -5234,10 +5242,19 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
        */
       const struct pan_varying_layout *vs_varying_layout = NULL;
       uint8_t scissor_loc = 0;
+      const uint64_t *prev_gs_outputs = NULL;
       if (infos[i].stage == MESA_SHADER_FRAGMENT && i > 0 &&
           infos[i - 1].next_stage_mask == VK_SHADER_STAGE_FRAGMENT_BIT) {
          struct panvk_shader *prev_shader =
             container_of(shaders_out[i - 1], struct panvk_shader, vk);
+#if PAN_ARCH < 9
+         /* jm-v7 079: a v6/v7 GS runs as a compute variant, so no VERTEX
+          * variant gives the FS its layout below. Its outputs still say
+          * which clip/cull slots the emulation writes.
+          */
+         if (prev_shader->vk.stage == MESA_SHADER_GEOMETRY)
+            prev_gs_outputs = &prev_shader->variants[0].gs.outputs_written;
+#endif
 
          /* The last geometry stage before the FS will always have a HW vertex
           * shader variant. Geometry's first vertex variant is the passthrough.
@@ -5279,7 +5296,7 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
 #endif
 
       result = panvk_compile_shader(dev, &infos[i], state, vs_varying_layout,
-                                    noperspective_varyings_ptr, scissor_loc,
+                                    noperspective_varyings_ptr, scissor_loc, prev_gs_outputs,
                                     false, pAllocator, &shaders_out[i]);
 
       if (result != VK_SUCCESS) {
@@ -5297,7 +5314,7 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
          struct vk_shader *alt_vk = NULL;
          /* Not fatal: without it the main compile is used for every draw. */
          if (panvk_compile_shader(dev, &alt_info, state, vs_varying_layout,
-                                  noperspective_varyings_ptr, scissor_loc,
+                                  noperspective_varyings_ptr, scissor_loc, prev_gs_outputs,
                                   true, pAllocator, &alt_vk) == VK_SUCCESS) {
             struct panvk_shader *main_shader =
                container_of(shaders_out[i], struct panvk_shader, vk);
@@ -6400,7 +6417,7 @@ VkResult panvk_per_arch(create_shader)(
    panvk_preprocess_nir(dev->vk.physical, nir, &rs);
 
    struct vk_shader *vk_shader;
-   VkResult result = panvk_compile_shader(dev, &info, NULL, NULL, NULL, 0, false, NULL,
+   VkResult result = panvk_compile_shader(dev, &info, NULL, NULL, NULL, 0, NULL, false, NULL,
                                           &vk_shader);
    if (result != VK_SUCCESS)
       return result;
