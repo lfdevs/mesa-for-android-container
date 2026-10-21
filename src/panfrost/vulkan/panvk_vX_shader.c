@@ -3567,6 +3567,8 @@ panvk_shader_destroy(struct vk_device *vk_dev, struct vk_shader *vk_shader,
             panvk_shader_destroy(vk_dev, &shader->polygon_gs[m][c]->vk, NULL);
       }
    }
+   if (shader->alt)
+      panvk_shader_destroy(vk_dev, &shader->alt->vk, pAllocator);
 #endif
 
    vk_shader_free(vk_dev, pAllocator, &shader->vk);
@@ -4230,7 +4232,7 @@ panvk_compile_shader(struct panvk_device *dev,
                      const struct vk_graphics_pipeline_state *state,
                      const struct pan_varying_layout *vs_varying_layout,
                      const uint32_t *noperspective_varyings,
-                     uint8_t scissor_loc,
+                     uint8_t scissor_loc, bool alt,
                      const VkAllocationCallbacks *pAllocator,
                      struct vk_shader **shader_out)
 {
@@ -5000,7 +5002,7 @@ panvk_compile_shader(struct panvk_device *dev,
                &variant->fs.tile_image_z_read,
                &variant->fs.tile_image_s_read);
 
-      if (panvk_depth_bounds_lowered(&dev->vk.enabled_features, state)) {
+      if (!alt && panvk_depth_bounds_lowered(&dev->vk.enabled_features, state)) {
          variant->fs.depth_bounds_app_mask = panvk_lower_depth_bounds(nir);
          variant->fs.depth_bounds = true;
       }
@@ -5149,6 +5151,41 @@ panvk_per_arch(create_shader_from_binary)(struct panvk_device *dev,
    return result;
 }
 
+#if PAN_ARCH < 9
+/* jm-v7 076: whether a shader gets an alternate compile (panvk_shader::alt).
+ * A fragment shader with the depth bounds lowering whose test may be off at
+ * draw time (dynamic enable, or no pipeline state): the lowering writes
+ * SampleMask, which costs FPK and early ZS, and makes even an empty FS
+ * required, for every draw while the test is off.
+ */
+static bool
+panvk_v7_wants_alt(const struct vk_features *features,
+                   const struct vk_shader_compile_info *info,
+                   const struct vk_graphics_pipeline_state *state)
+{
+   /* Not for driver-internal shaders (the device depth bounds FS, meta). */
+   if (info->nir->info.internal)
+      return false;
+
+   if (info->stage == MESA_SHADER_FRAGMENT)
+      return panvk_depth_bounds_lowered(features, state) &&
+             (!state || !state->ds ||
+              BITSET_TEST(state->dynamic,
+                          MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE));
+
+   return false;
+}
+
+/* The alternate's NIR: the fragment shader skips the depth bounds lowering
+ * (panvk_compile_shader(alt = true)), nothing to change here.
+ */
+static void
+panvk_v7_prepare_alt_nir(struct vk_shader_compile_info *info)
+{
+   (void)info;
+}
+#endif
+
 static VkResult
 compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
                 struct vk_shader_compile_info *infos,
@@ -5217,12 +5254,47 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
 #endif
       }
 
+#if PAN_ARCH < 9
+      /* jm-v7 076: the alternate compile picked per draw (see
+       * panvk_shader::alt). Cloned before the main compile consumes the NIR.
+       */
+      nir_shader *alt_nir = panvk_v7_wants_alt(enabled_features, &infos[i],
+                                               state)
+                               ? nir_shader_clone(NULL, infos[i].nir)
+                               : NULL;
+#endif
+
       result = panvk_compile_shader(dev, &infos[i], state, vs_varying_layout,
                                     noperspective_varyings_ptr, scissor_loc,
-                                    pAllocator, &shaders_out[i]);
+                                    false, pAllocator, &shaders_out[i]);
 
-      if (result != VK_SUCCESS)
+      if (result != VK_SUCCESS) {
+#if PAN_ARCH < 9
+         ralloc_free(alt_nir);
+#endif
          goto err_cleanup;
+      }
+
+#if PAN_ARCH < 9
+      if (alt_nir) {
+         struct vk_shader_compile_info alt_info = infos[i];
+         alt_info.nir = alt_nir;
+         panvk_v7_prepare_alt_nir(&alt_info);
+         struct vk_shader *alt_vk = NULL;
+         /* Not fatal: without it the main compile is used for every draw. */
+         if (panvk_compile_shader(dev, &alt_info, state, vs_varying_layout,
+                                  noperspective_varyings_ptr, scissor_loc,
+                                  true, pAllocator, &alt_vk) == VK_SUCCESS) {
+            struct panvk_shader *main_shader =
+               container_of(shaders_out[i], struct panvk_shader, vk);
+            struct panvk_shader *alt_shader =
+               container_of(alt_vk, struct panvk_shader, vk);
+            main_shader->alt = alt_shader;
+            alt_shader->alt_parent = main_shader;
+         }
+         ralloc_free(alt_nir);
+      }
+#endif
 
       /* Clean up NIR for the current shader */
       ralloc_free(infos[i].nir);
@@ -5489,6 +5561,27 @@ panvk_deserialize_shader(struct vk_device *vk_dev, struct blob_reader *blob,
       }
    }
 
+#if PAN_ARCH < 9
+   /* jm-v7 076: the alternate compile, nested. */
+   if (blob_read_uint8(blob)) {
+      struct vk_shader *alt_vk = NULL;
+      result = blob->overrun ? VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT
+                             : panvk_deserialize_shader(vk_dev, blob,
+                                                        binary_version,
+                                                        pAllocator, &alt_vk);
+      if (result != VK_SUCCESS) {
+         panvk_shader_destroy(vk_dev, &shader->vk, pAllocator);
+         return result;
+      }
+      shader->alt = container_of(alt_vk, struct panvk_shader, vk);
+      shader->alt->alt_parent = shader;
+   }
+   if (blob->overrun) {
+      panvk_shader_destroy(vk_dev, &shader->vk, pAllocator);
+      return vk_error(device, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
+   }
+#endif
+
    *shader_out = &shader->vk;
 
    return VK_SUCCESS;
@@ -5607,6 +5700,13 @@ panvk_shader_serialize(struct vk_device *vk_dev,
    panvk_shader_foreach_variant(shader, variant) {
       panvk_shader_serialize_variant(vk_dev, variant, blob);
    }
+
+#if PAN_ARCH < 9
+   /* jm-v7 076: the alternate compile, nested. */
+   blob_write_uint8(blob, shader->alt != NULL);
+   if (shader->alt && !panvk_shader_serialize(vk_dev, &shader->alt->vk, blob))
+      return false;
+#endif
 
    return !blob->out_of_memory;
 }
@@ -6286,7 +6386,7 @@ VkResult panvk_per_arch(create_shader)(
    panvk_preprocess_nir(dev->vk.physical, nir, &rs);
 
    struct vk_shader *vk_shader;
-   VkResult result = panvk_compile_shader(dev, &info, NULL, NULL, NULL, 0, NULL,
+   VkResult result = panvk_compile_shader(dev, &info, NULL, NULL, NULL, 0, false, NULL,
                                           &vk_shader);
    if (result != VK_SUCCESS)
       return result;

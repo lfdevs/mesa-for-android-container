@@ -2893,9 +2893,44 @@ v7_count_draw_queries(struct panvk_cmd_buffer *cmdbuf,
 #undef PSTAT
 }
 
+#if PAN_ARCH < 9
+/*
+ * jm-v7 076: pick the bound shaders' alternate compiles (panvk_shader::alt)
+ * for this draw. The bound shader stays in the state as whichever compile was
+ * last used; alt_parent leads back to the main one. A change marks the stage
+ * dirty, as a bind would.
+ */
+static void
+panvk_v7_select_alt_shaders(struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_shader *fs = cmdbuf->state.gfx.fs.shader;
+   if (fs) {
+      const struct panvk_shader *main_fs = fs->alt_parent ? fs->alt_parent : fs;
+      if (main_fs->alt) {
+         /* The unlowered FS while the depth bounds test is off; same
+          * condition as db_on in panvk_draw_prepare_fs_rsd().
+          */
+         const bool db_on =
+            cmdbuf->vk.dynamic_graphics_state.ds.depth.bounds_test.enable &&
+            has_depth_att(cmdbuf);
+         const struct panvk_shader *want = db_on ? main_fs : main_fs->alt;
+         if (want != fs) {
+            cmdbuf->state.gfx.fs.shader = want;
+            gfx_state_set_dirty(cmdbuf, FS);
+            gfx_state_set_dirty(cmdbuf, FS_PUSH_UNIFORMS);
+         }
+      }
+   }
+}
+#endif
+
 static void
 panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
 {
+#if PAN_ARCH < 9
+   if (!draw->tess_phase)
+      panvk_v7_select_alt_shaders(cmdbuf);
+#endif
    const struct panvk_shader_variant *vs = panvk_shader_hw_variant(cmdbuf->state.gfx.vs.shader);
    VkResult result;
 
@@ -3011,6 +3046,10 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
                         struct panvk_draw_data *draw)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+#if PAN_ARCH < 9
+   if (!draw->tess_phase)
+      panvk_v7_select_alt_shaders(cmdbuf);
+#endif
    const struct panvk_shader_variant *vs = panvk_shader_hw_variant(cmdbuf->state.gfx.vs.shader);
    VkResult result;
 
