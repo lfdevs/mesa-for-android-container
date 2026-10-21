@@ -766,6 +766,24 @@ panvk_draw_prepare_varyings(struct panvk_cmd_buffer *cmdbuf,
       cmdbuf->state.gfx.gs.out_offsets = offs.gpu + VARYING_SLOT_MAX * 4;
       cmdbuf->state.gfx.gs.out_vertex_count = out_verts;
       cmdbuf->state.gfx.gs.out_index_count = out_indices;
+      /* The FS gl_PrimitiveID is the tiler's primitive index modulo
+       * DRAW.instance_primitive_size (1 made it always 0). The output slots
+       * are instance-major: wrap per instance when that size is known and
+       * encodable exactly, else never.
+       */
+      {
+         const uint32_t out_prims =
+            MAX2(in_prims * gs->gs.max_output_prims, 1);
+         uint32_t wrap = pan_padded_vertex_count(out_prims);
+         const bool cpu_known =
+            !(draw->info.indirect.buffer_dev_addr && !draw->cpu_count);
+         const uint32_t inst =
+            draw->cpu_count ? draw->cpu_instances : draw->info.instance.count;
+         if (cpu_known && inst > 1 && out_prims % inst == 0 &&
+             pan_padded_vertex_count(out_prims / inst) == out_prims / inst)
+            wrap = out_prims / inst;
+         cmdbuf->state.gfx.gs.out_prims_per_instance = wrap;
+      }
       /* The emulation writes independent primitives: the tiler draws a
        * list, whatever strip the shader declared.
        */
@@ -1495,7 +1513,10 @@ panvk_emit_tiler_dcd(struct panvk_cmd_buffer *cmdbuf,
          /* One instance. Both sizes are "padded" fields: 0 does not encode. */
          cfg.offset_start = 0;
          cfg.instance_size = 1;
-         cfg.instance_primitive_size = 1;
+         cfg.instance_primitive_size =
+            cmdbuf->state.gfx.gs.out_prims_per_instance
+               ? cmdbuf->state.gfx.gs.out_prims_per_instance
+               : 1;
       } else if (!is_indirect_draw(draw)) {
          cfg.offset_start = draw->info.vertex.raw_offset;
          cfg.instance_size =

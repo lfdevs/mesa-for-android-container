@@ -278,6 +278,10 @@ struct panvk_cmd_graphics_state {
       uint64_t viewports;
       uint32_t out_vertex_count;
       uint32_t out_index_count;
+      /* DRAW.instance_primitive_size of the emulation's tiler jobs: the
+       * hardware primitive ID (FS gl_PrimitiveID) wraps at it (jm-v7 031).
+       */
+      uint32_t out_prims_per_instance;
       enum mesa_prim out_prim;
       /* Transform feedback: the counts and staging records the emulation
        * fills when the draw captures (see panvk_gs_push).
