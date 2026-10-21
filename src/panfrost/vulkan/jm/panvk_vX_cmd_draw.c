@@ -1875,6 +1875,21 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
       batch = panvk_per_arch(cmd_open_batch)(cmdbuf);
    }
 
+   /* variableMultisampleRate (jm-v7 042): an attachment-less pass takes the
+    * sample count of its draws. The FBD and tiler context of a batch have
+    * one, so a draw with another count closes the batch (its fragment job
+    * keeps the old count) and the new batch is laid out with the new
+    * count. Same as v9_attachmentless_samples(). */
+   if (!rs->rasterizer_discard_enable &&
+       !cmdbuf->state.gfx.render.bound_attachments && batch->fb.desc.gpu &&
+       MAX2(cmdbuf->vk.dynamic_graphics_state.ms.rasterization_samples, 1) !=
+          cmdbuf->state.gfx.render.fb.nr_samples) {
+      panvk_per_arch(cmd_close_batch)(cmdbuf);
+      batch = panvk_per_arch(cmd_open_batch)(cmdbuf);
+      /* cmd_select_tile_size() picks the tile size for the new count. */
+      cmdbuf->state.gfx.render.fb.layout.sample_count = 0;
+   }
+
    /* The geometry emulation runs the bound geometry shader, or for a vertex
     * shader compiled to feed it (transform feedback, or a shader object
     * linked to a geometry shader that is not bound) the passthrough
