@@ -1053,6 +1053,20 @@ lower_gs_instr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    }
 }
 
+static bool
+gs_reads_primitive_id(nir_function_impl *impl)
+{
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type == nir_instr_type_intrinsic &&
+             nir_instr_as_intrinsic(instr)->intrinsic ==
+                nir_intrinsic_load_primitive_id)
+            return true;
+      }
+   }
+   return false;
+}
+
 bool
 panvk_nir_lower_gs(nir_shader *nir, const struct panvk_gs_lower_options *opts)
 {
@@ -1251,9 +1265,10 @@ panvk_nir_lower_gs(nir_shader *nir, const struct panvk_gs_lower_options *opts)
     * patch ID, as the tess eval shader computes it: the TES draw is a
     * non-indexed list whose vertex i is tessellator index i, the raw id
     * (patch * POLY_TES_PATCH_ID_STRIDE + point) is index_buffer[i]
-    * (jm-v7 049).
+    * (jm-v7 049). Nothing gathered info on this NIR (system_values_read
+    * is empty), so look for the intrinsic itself (jm-v7 036).
     */
-   if (BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID)) {
+   if (gs_reads_primitive_id(impl)) {
       nir_def *ordinal = st.prim_id;
       nir_push_if(&b, nir_iand(&b, nir_ine_imm(&b, st.tess_params, 0),
                                nir_ult(&b, prim_global, actual_prims)));
