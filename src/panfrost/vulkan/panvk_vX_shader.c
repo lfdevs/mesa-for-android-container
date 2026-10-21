@@ -4286,10 +4286,8 @@ panvk_compile_shader(struct panvk_device *dev,
    };
 
 #if PAN_ARCH < 9
-   /* Bifrost: no IDVS. JimVulkan measured INDEXED_VERTEX jobs that complete
-    * without writing positions on G72/G76; the vendor driver also uses a
-    * plain VERTEX + TILER chain there. The geometry stage emulation needs
-    * the separate vertex job as well.
+   /* IDVS is decided below (jm-v7 075), once the shader is known to feed
+    * the emulation or not.
     */
    inputs.no_idvs = true;
 
@@ -4328,6 +4326,44 @@ panvk_compile_shader(struct panvk_device *dev,
        ((info->next_stage_mask & VK_SHADER_STAGE_GEOMETRY_BIT) ||
         vs_xfb_passthrough));
    inputs.skip_viewport_transform = vs_clip_space;
+
+   /* IDVS (jm-v7 075). jm-v7 006 turned it off for every Bifrost vertex
+    * shader, so every draw was a VERTEX + TILER pair that shades and writes
+    * the varyings of culled vertices too. It is only needed off when:
+    * - the shader feeds the geometry emulation, the tess control job or the
+    *   xfb/viewport passthrough (vs_clip_space): they read every vertex's
+    *   varyings from the vertex job's buffers;
+    * - a tess eval shader (drawn through the tessellator's indirect draw);
+    * - fillModeNonSolid may draw it in LINE/POINT mode: the polygon
+    *   passthrough reads its varyings too;
+    * - it writes memory: the vertex store dedup (jm-v7 046) guards the
+    *   vertex job's invocations;
+    * - G72/G76, where JimVulkan measured INDEXED_VERTEX jobs completing
+    *   without writing positions (the vendor driver uses VERTEX + TILER).
+    * PANVK_V7_IDVS=0 keeps it off everywhere (A/B), =1 also allows it on
+    * G72/G76.
+    */
+   if (info->stage == MESA_SHADER_VERTEX && !vs_clip_space) {
+      static int idvs_env = -2;
+      if (idvs_env == -2) {
+         const char *e = getenv("PANVK_V7_IDVS");
+         idvs_env = e ? (e[0] == '1' ? 1 : 0) : -1;
+      }
+      const uint32_t prod = (inputs.gpu_id >> 16) & 0xff0f;
+      const bool idvs_quirk = prod == 0x6201 /* G72 */ ||
+                              prod == 0x7201 /* G76 */;
+      const bool polygon_mode =
+         dev->vk.enabled_features.fillModeNonSolid &&
+         (!state || !state->rs ||
+          BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE) ||
+          state->rs->polygon_mode != VK_POLYGON_MODE_FILL);
+      nir_shader_gather_info(info->nir, nir_shader_get_entrypoint(info->nir));
+      const bool writes_memory = info->nir->info.writes_memory;
+
+      if (idvs_env != 0 && !polygon_mode && !writes_memory &&
+          (!idvs_quirk || idvs_env == 1))
+         inputs.no_idvs = false;
+   }
 
    struct panvk_tess_info tes_info = {0};
    if (info->stage == MESA_SHADER_TESS_EVAL)
