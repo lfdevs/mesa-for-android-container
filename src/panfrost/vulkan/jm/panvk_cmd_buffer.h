@@ -112,6 +112,11 @@ struct panvk_cmd_buffer {
          bool inherited;
          bool inverted;
          uint64_t addr;
+         /* Jobs of the current conditional draw that are never NULLed
+          * (the xfb scans, jm-v7 074): they read the predicate themselves.
+          */
+         struct mali_job_header_packed *keep[8];
+         uint32_t keep_count;
       } cond_render;
 #endif
    } state;

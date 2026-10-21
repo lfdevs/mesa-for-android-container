@@ -2587,6 +2587,10 @@ emit_xfb_jobs(struct panvk_cmd_buffer *cmdbuf, unsigned dep_job_id)
          .vpp = gs->gs.output_verts_per_prim,
          .record_dwords = k_dw,
          .query = query,
+         .cond = cmdbuf->state.cond_render.enabled
+                    ? cmdbuf->state.cond_render.addr
+                    : 0,
+         .cond_inverted = cmdbuf->state.cond_render.inverted,
       };
       for (unsigned b = 0; b < 4; b++) {
          d->buffer[b] = cmdbuf->state.gfx.xfb.buffers[b].addr;
@@ -2605,6 +2609,19 @@ emit_xfb_jobs(struct panvk_cmd_buffer *cmdbuf, unsigned dep_job_id)
          panlib_1d_with_jm_deps(1, dep_job_id, cmdbuf->state.gfx.xfb.last_job),
          PANLIB_BARRIER_JM_BARRIER, scan);
       const unsigned scanned = batch->vtc_jc.job_index;
+      /* Not NULLed by a failed predicate (jm-v7 074): it then passes the
+       * offsets through, else the next draw and the counters would read
+       * a slot nothing wrote.
+       */
+      if (cmdbuf->state.cond_render.enabled) {
+         if (cmdbuf->state.cond_render.keep_count <
+             ARRAY_SIZE(cmdbuf->state.cond_render.keep))
+            cmdbuf->state.cond_render
+               .keep[cmdbuf->state.cond_render.keep_count++] =
+               batch->vtc_jc.prev_job;
+         else
+            mesa_loge_once("panvk: too many xfb scans in a conditional draw");
+      }
 
       if (captures) {
          const struct panlib_xfb_copy_args copy = {.d = mem.gpu};
@@ -6744,6 +6761,7 @@ panvk_per_arch(cmd_cond_render_begin)(struct panvk_cmd_buffer *cmdbuf,
                                       struct panvk_cond_render_mark *m)
 {
    *m = (struct panvk_cond_render_mark){0};
+   cmdbuf->state.cond_render.keep_count = 0;
    if (!cmdbuf->state.cond_render.enabled)
       return;
 
@@ -6803,8 +6821,13 @@ jm_cond_render_collect(struct panvk_cmd_buffer *cmdbuf,
          return;
 
       pan_unpack(hdr, JOB_HEADER, h);
-      util_dynarray_append(jobs, next);
-      util_dynarray_append(jobs, (uint64_t)h.type);
+      bool keep = false;
+      for (uint32_t k = 0; k < cmdbuf->state.cond_render.keep_count; k++)
+         keep |= cmdbuf->state.cond_render.keep[k] == hdr;
+      if (!keep) {
+         util_dynarray_append(jobs, next);
+         util_dynarray_append(jobs, (uint64_t)h.type);
+      }
 
       if (pred_index) {
          if (!h.dependency_1)

@@ -1572,6 +1572,20 @@ panlib_xfb_scan(global struct libpan_xfb_draw *d)
    global uint32_t *off_in = (global uint32_t *)d->offsets_in;
    global uint32_t *off_out = (global uint32_t *)d->offsets_out;
 
+   /* Conditional rendering failed (jm-v7 074): the emulation did not run,
+    * so its counts are garbage. Capture nothing, keep the offsets.
+    */
+   if (d->cond &&
+       ((*(global uint32_t *)d->cond != 0) == (d->cond_inverted != 0))) {
+      for (uint32_t b = 0; b < 4; b++) {
+         d->start[b] = off_in[b];
+         off_out[b] = off_in[b];
+      }
+      d->written = 0;
+      d->needed = 0;
+      return;
+   }
+
    uint32_t total = 0;
    for (uint32_t i = 0; i < d->invocations; i++) {
       first[i] = total;

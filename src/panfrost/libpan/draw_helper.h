@@ -74,6 +74,14 @@ struct libpan_xfb_draw {
     uint32_t start[4];       /* scan: byte offset this draw writes from */
     uint32_t written;        /* scan: primitives captured */
     uint32_t needed;         /* scan: primitives emitted */
+    /* Conditional rendering (jm-v7 074): the predicate the other jobs of
+     * the draw are NULLed by, 0 when none. The scan job itself always runs
+     * and, when the predicate fails, passes offsets_in through to
+     * offsets_out so the next draw's chain stays valid.
+     */
+    uint64_t cond;
+    uint32_t cond_inverted;
+    uint32_t cond_pad;
 };
 
 /* Tessellation, one per tessellated draw (jm-v7 014). The draw path fills
