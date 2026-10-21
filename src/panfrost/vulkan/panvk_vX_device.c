@@ -46,6 +46,7 @@
 #include "util/os_file.h"
 #include "util/log.h"
 #include "util/os_misc.h"
+#include "util/u_debug.h"
 #include "util/u_printf.h"
 #include "pan_props.h"
 #include "pan_samples.h"
@@ -630,6 +631,7 @@ cleanup_va_heaps(struct panvk_device *device)
 }
 #if PAN_ARCH < 9
 #define PANVK_NULL_ZERO_SIZE (PANVK_NULL_UBO_ENTRIES * 16)
+#define PANVK_NULL_SCRATCH_SIZE 256
 
 /* See panvk_device::null_descs. The texture and storage image descriptors
  * come from the device's own entry points, so they are exactly what an
@@ -646,14 +648,18 @@ panvk_init_null_descs(struct panvk_device *dev)
    VkDevice h = panvk_device_to_handle(dev);
    VkResult result;
 
+   /* The zero page, then PANVK_NULL_SCRATCH_SIZE bytes for the
+    * PANVK_NULLIMG_INBOUNDS null storage image (see below). */
    result = panvk_priv_bo_create(
-      dev, PANVK_NULL_ZERO_SIZE,
+      dev, PANVK_NULL_ZERO_SIZE + PANVK_NULL_SCRATCH_SIZE,
       panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP),
       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &dev->null_descs.zero_bo);
    if (result != VK_SUCCESS)
       return result;
-   memset(dev->null_descs.zero_bo->addr.host, 0, PANVK_NULL_ZERO_SIZE);
-   panvk_priv_bo_flush(dev->null_descs.zero_bo, 0, PANVK_NULL_ZERO_SIZE);
+   memset(dev->null_descs.zero_bo->addr.host, 0,
+          PANVK_NULL_ZERO_SIZE + PANVK_NULL_SCRATCH_SIZE);
+   panvk_priv_bo_flush(dev->null_descs.zero_bo, 0,
+                       PANVK_NULL_ZERO_SIZE + PANVK_NULL_SCRATCH_SIZE);
    dev->null_descs.zero_addr = dev->null_descs.zero_bo->addr.dev;
 
    const VkImageCreateInfo ici = {
@@ -714,6 +720,31 @@ panvk_init_null_descs(struct panvk_device *dev)
    pan_pack(&img[0], ATTRIBUTE_BUFFER, cfg) {
       cfg = img_cfg;
       cfg.size = 0;
+      /* robustness2: a null storage image reads (0, 0, 0, 0). With the
+       * view's RGBA order an imageLoad returned alpha 1.0 on G52 (PanProbe
+       * robustness2 null_descriptors), so give the attribute format the
+       * 0000 component order (jm-v7 043). The format is packed above the
+       * texel stride and log2(samples), see prepare_attr_buf_descs(). */
+      uint32_t hw_fmt = cfg.stride >> 10;
+#if PAN_ARCH == 6
+      /* v6 formats carry a swizzle (3 bits per channel): 0, 0, 0, 0. */
+      const uint32_t zero_order =
+         MALI_CHANNEL_0 | (MALI_CHANNEL_0 << 3) | (MALI_CHANNEL_0 << 6) |
+         (MALI_CHANNEL_0 << 9);
+#else
+      const uint32_t zero_order = MALI_RGB_COMPONENT_ORDER_0000;
+#endif
+      hw_fmt = (hw_fmt & ~BITFIELD_MASK(12)) | zero_order;
+      cfg.stride = (cfg.stride & BITFIELD_MASK(10)) | (hw_fmt << 10);
+      /* Measurement: PANVK_NULLIMG_INBOUNDS=1 makes the null image a real
+       * 1x1 texel in a scratch area after the zero page (stores land
+       * there, loads go through the 0000 order) instead of a 0-byte
+       * buffer, in case the hardware out-of-bounds value ignores the
+       * component order. */
+      if (debug_get_bool_option("PANVK_NULLIMG_INBOUNDS", false)) {
+         cfg.pointer = dev->null_descs.zero_addr + PANVK_NULL_ZERO_SIZE;
+         cfg.size = PANVK_NULL_SCRATCH_SIZE;
+      }
    }
    memcpy(dev->null_descs.img, img, sizeof(img));
 
