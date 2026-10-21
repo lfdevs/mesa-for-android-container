@@ -448,7 +448,7 @@ gs_input_record(nir_builder *b, struct lower_gs_state *st, nir_def *i)
    /* TRIANGLE STRIP WITH ADJACENCY, in the shader's order
     * (v0, a01, v1, a12, v2, a20):
     *    even p:  2p, first ? 1 : 2p-2,  2p+2, last ? 2p+5 : 2p+6,  2p+4, 2p+3
-    *    odd p:   2p+2, 2p-2,  2p, 2p+3,  2p+4, last ? 2p+5 : 2p+6
+    *    odd p:   2p, 2p+3,  2p+4, last ? 2p+5 : 2p+6,  2p+2, 2p-2
     */
    nir_def *tsa = list;
    if (vpp == 6) {
@@ -466,9 +466,12 @@ gs_input_record(nir_builder *b, struct lower_gs_state *st, nir_def *i)
          nir_iadd_imm(b, p2, 4),
          nir_iadd_imm(b, p2, 3),
       };
+      /* Vulkan order (jm-v7 023), the OpenGL one rotated so that v0 is
+       * 2p like every other triangle of the strip.
+       */
       nir_def *odd_v[6] = {
-         nir_iadd_imm(b, p2, 2), nir_iadd_imm(b, p2, -2), p2,
-         nir_iadd_imm(b, p2, 3), nir_iadd_imm(b, p2, 4),  far,
+         p2, nir_iadd_imm(b, p2, 3), nir_iadd_imm(b, p2, 4),
+         far, nir_iadd_imm(b, p2, 2), nir_iadd_imm(b, p2, -2),
       };
       nir_def *pick = nir_bcsel(b, odd, odd_v[5], even_v[5]);
       for (int k = 4; k >= 0; k--)

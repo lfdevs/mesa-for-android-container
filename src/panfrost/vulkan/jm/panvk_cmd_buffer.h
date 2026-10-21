@@ -41,6 +41,10 @@ struct panvk_batch {
    /* The vertex/tiler chain writes SYSTEM_TIMESTAMP values (v9, and v6/v7
     * since jm-v7 021). */
    bool timestamps;
+   /* The vertex/tiler chain reads or writes query memory the fragment jobs
+    * of earlier batches count into (occlusion, pipeline statistics): it
+    * never takes the PANVK_OVERLAP path (jm-v7 023). */
+   bool after_frag;
    struct util_dynarray event_ops;
    struct pan_jc vtc_jc;
    struct pan_jc frag_jc;

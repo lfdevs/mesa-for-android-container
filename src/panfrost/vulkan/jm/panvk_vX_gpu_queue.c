@@ -107,7 +107,7 @@ note_submitted(struct panvk_gpu_queue *queue, uint64_t atom)
 static inline bool
 batch_has_timestamps(const struct panvk_batch *batch)
 {
-   return batch->timestamps;
+   return batch->timestamps || batch->after_frag;
 }
 
 /* Reset a batch that has already been issued. */

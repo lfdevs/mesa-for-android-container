@@ -3474,7 +3474,7 @@ panvk_v7_vs_writes_viewport(const struct vk_shader_compile_info *info)
 
 static void
 panvk_vs_store_xfb(struct panvk_shader_variant *variant,
-                   const nir_xfb_info *xfb)
+                   const nir_xfb_info *xfb, unsigned nclip, unsigned ncull)
 {
    /* panvk_gs_xfb_table() accepted it: at most one output per dword. */
    assert(xfb->output_count <= ARRAY_SIZE(variant->gs.xfb_outputs));
@@ -3487,14 +3487,46 @@ panvk_vs_store_xfb(struct panvk_shader_variant *variant,
       variant->gs.xfb_strides[b] = xfb->buffers[b].stride;
       variant->gs.xfb_buffer_stream[b] = xfb->buffer_to_stream[b];
    }
+   unsigned n = 0;
    for (unsigned i = 0; i < xfb->output_count; i++) {
-      variant->gs.xfb_outputs[i] = (struct panvk_xfb_output){
-         .buffer = xfb->outputs[i].buffer,
-         .location = xfb->outputs[i].location,
-         .component_mask = xfb->outputs[i].component_mask,
-         .offset = xfb->outputs[i].offset,
+      const nir_xfb_output_info *o = &xfb->outputs[i];
+      const bool dist = o->location == VARYING_SLOT_CLIP_DIST0 ||
+                        o->location == VARYING_SLOT_CLIP_DIST1;
+
+      /* jm-v7 023: the xfb info sees the merged clip+cull array (the cull
+       * distances right after the clip ones in CLIP_DIST0/1), the vertex
+       * shader writes them apart (panvk_lower_clip_cull_vs()): capture each
+       * cull component from CULL_DIST0/1.
+       */
+      if (dist && ncull) {
+         unsigned dw = o->offset / 4;
+         u_foreach_bit(c, o->component_mask) {
+            const unsigned idx = (o->location - VARYING_SLOT_CLIP_DIST0) * 4 + c;
+            unsigned loc = o->location, comp = c;
+            if (idx >= nclip) {
+               loc = VARYING_SLOT_CULL_DIST0 + (idx - nclip) / 4;
+               comp = (idx - nclip) % 4;
+            }
+            assert(n < ARRAY_SIZE(variant->gs.xfb_outputs));
+            variant->gs.xfb_outputs[n++] = (struct panvk_xfb_output){
+               .buffer = o->buffer,
+               .location = loc,
+               .component_mask = BITFIELD_BIT(comp),
+               .offset = dw++ * 4,
+            };
+         }
+         continue;
+      }
+
+      assert(n < ARRAY_SIZE(variant->gs.xfb_outputs));
+      variant->gs.xfb_outputs[n++] = (struct panvk_xfb_output){
+         .buffer = o->buffer,
+         .location = o->location,
+         .component_mask = o->component_mask,
+         .offset = o->offset,
       };
    }
+   variant->gs.xfb_output_count = n;
 }
 
 /* The passthrough geometry shader for a vertex shader's varying layout:
@@ -4063,7 +4095,9 @@ panvk_compile_shader(struct panvk_device *dev,
 #if PAN_ARCH < 9
          variant->gs.vs_clip_space = vs_clip_space;
          if (vs_xfb_passthrough)
-            panvk_vs_store_xfb(variant, info->nir->xfb_info);
+            panvk_vs_store_xfb(variant, info->nir->xfb_info,
+                               info->nir->info.clip_distance_array_size,
+                               info->nir->info.cull_distance_array_size);
          variant->gs.tess = tes_info;
 #endif
 

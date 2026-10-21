@@ -72,6 +72,11 @@ open_batch(struct panvk_cmd_buffer *cmd, bool *had_batch)
 
    *had_batch = res;
 
+   /* Query writes and reads must follow the fragment jobs of the earlier
+    * batches (they count occlusion samples and FS invocations), so this
+    * batch never overlaps them (jm-v7 023). */
+   cmd->cur_batch->after_frag = true;
+
    return cmd->cur_batch;
 }
 

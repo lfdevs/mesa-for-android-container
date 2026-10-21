@@ -38,6 +38,12 @@ struct nir_xfb_info;
  * Primitives past the cap are dropped.
  */
 #define PANVK_GS_INDIRECT_MAX_PRIMS 4096
+/* jm-v7 023: the real cap is PANVK_GS_INDIRECT_MAX_VERTS output vertices
+ * (growable memory) over the shader's output vertices per input primitive,
+ * clamped to [PANVK_GS_INDIRECT_MAX_PRIMS, PANVK_GS_INDIRECT_MAX_PRIMS_BIG].
+ */
+#define PANVK_GS_INDIRECT_MAX_VERTS     (1u << 22)
+#define PANVK_GS_INDIRECT_MAX_PRIMS_BIG (1u << 20)
 
 /* How the draw's vertices assemble into the input primitives. Lists, and
  * the list-with-adjacency topologies, are LIST.

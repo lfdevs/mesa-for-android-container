@@ -199,9 +199,19 @@ static uint32_t
 gs_input_prims(const struct panvk_draw_data *draw,
                const struct panvk_shader_variant *gs)
 {
-   if (draw->info.indirect.buffer_dev_addr && !draw->cpu_count)
-      return draw->gs_max_prims ? draw->gs_max_prims
-                                : PANVK_GS_INDIRECT_MAX_PRIMS;
+   if (draw->info.indirect.buffer_dev_addr && !draw->cpu_count) {
+      if (draw->gs_max_prims)
+         return draw->gs_max_prims;
+      /* jm-v7 023: a budget of output vertices (growable memory), not a
+       * fixed 4096 primitives: transform feedback of large indirect draws
+       * through the passthrough GS was cut at 4096 primitives.
+       */
+      const uint32_t per_prim = MAX2(gs->gs.max_output_verts, 1) *
+                                MAX2(gs->gs.invocations, 1);
+      return CLAMP(PANVK_GS_INDIRECT_MAX_VERTS / per_prim,
+                   PANVK_GS_INDIRECT_MAX_PRIMS,
+                   PANVK_GS_INDIRECT_MAX_PRIMS_BIG);
+   }
 
    const uint32_t n =
       draw->cpu_count ? draw->cpu_count : draw->info.vertex.count;
@@ -693,7 +703,13 @@ panvk_draw_prepare_varyings(struct panvk_cmd_buffer *cmdbuf,
       /* jm-v7 033: a tess eval draw's emulation is sized for
        * PANVK_TESS_GS_MAX_PRIMS, from growable memory.
        */
-      const bool growable = draw->tess_phase == PANVK_TESS_PHASE_TES;
+      /* jm-v7 023: so is a real indirect draw's, sized for
+       * PANVK_GS_INDIRECT_MAX_VERTS: only the pages its real count touches
+       * get committed.
+       */
+      const bool growable =
+         draw->tess_phase == PANVK_TESS_PHASE_TES ||
+         (draw->info.indirect.buffer_dev_addr && !draw->cpu_count);
       const bool gs_psiz = gs->gs.output_verts_per_prim == 1 &&
                            (gs->gs.outputs_written & VARYING_BIT_PSIZ);
 
