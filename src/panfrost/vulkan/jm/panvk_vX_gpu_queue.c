@@ -450,7 +450,7 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
       struct panvk_cmd_buffer *cmdbuf =
          container_of(submit->command_buffers[j], struct panvk_cmd_buffer, vk);
 
-#if PAN_ARCH == 9
+#if PAN_ARCH <= 9
       /* A conditional rendering predicate job rewrites job headers of the
        * later batches of its draw (cmd_cond_render_end()). Reset (CPU write
        * plus cache flush) every batch before any of them runs, so that no

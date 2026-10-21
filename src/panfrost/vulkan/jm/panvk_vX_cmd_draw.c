@@ -3513,7 +3513,10 @@ panvk_per_arch(CmdDraw)(VkCommandBuffer commandBuffer, uint32_t vertexCount,
          padded_vertex_count(cmdbuf, vertexCount, instanceCount),
    };
 
+   struct panvk_cond_render_mark cond;
+   panvk_per_arch(cmd_cond_render_begin)(cmdbuf, &cond);
    panvk_cmd_draw(cmdbuf, &draw);
+   panvk_per_arch(cmd_cond_render_end)(cmdbuf, &cond);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -3557,7 +3560,10 @@ panvk_per_arch(CmdDrawIndexed)(VkCommandBuffer commandBuffer,
       .cpu_instances = instanceCount,
    };
 
+   struct panvk_cond_render_mark cond;
+   panvk_per_arch(cmd_cond_render_begin)(cmdbuf, &cond);
    panvk_cmd_draw_indirect(cmdbuf, &draw);
+   panvk_per_arch(cmd_cond_render_end)(cmdbuf, &cond);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -3582,7 +3588,10 @@ panvk_per_arch(CmdDrawIndirect)(VkCommandBuffer commandBuffer, VkBuffer _buffer,
          },
       };
 
+      struct panvk_cond_render_mark cond;
+      panvk_per_arch(cmd_cond_render_begin)(cmdbuf, &cond);
       panvk_cmd_draw_indirect(cmdbuf, &draw);
+      panvk_per_arch(cmd_cond_render_end)(cmdbuf, &cond);
    }
 }
 
@@ -3616,7 +3625,10 @@ panvk_per_arch(CmdDrawIndexedIndirect)(VkCommandBuffer commandBuffer,
          },
       };
 
+      struct panvk_cond_render_mark cond;
+      panvk_per_arch(cmd_cond_render_begin)(cmdbuf, &cond);
       panvk_cmd_draw_indirect(cmdbuf, &draw);
+      panvk_per_arch(cmd_cond_render_end)(cmdbuf, &cond);
    }
 }
 
@@ -3729,6 +3741,11 @@ panvk_per_arch(CmdDrawIndirectByteCountEXT)(
    if (!cmd.gpu)
       return;
 
+   /* Before the count job, so that a batch split of the predicate job does
+    * not separate the count job from its draw. */
+   struct panvk_cond_render_mark cond;
+   panvk_per_arch(cmd_cond_render_begin)(cmdbuf, &cond);
+
    /* The draw may open a new batch (job index overflow), which would leave
     * this job behind in the old one: open it first.
     */
@@ -3767,6 +3784,7 @@ panvk_per_arch(CmdDrawIndirectByteCountEXT)(
    };
 
    panvk_cmd_draw_indirect(cmdbuf, &draw);
+   panvk_per_arch(cmd_cond_render_end)(cmdbuf, &cond);
 }
 #else /* PAN_ARCH == 9 */
 
@@ -6268,160 +6286,6 @@ v9_attachmentless_samples(struct panvk_cmd_buffer *cmdbuf)
    render->fb.layout.sample_count = 0;
 }
 
-/* VK_EXT_conditional_rendering on JM. A job chain has no predication, so a
- * draw or dispatch recorded in a conditional rendering block is preceded by
- * a panlib_v9_cond_render job that reads the predicate and gives each job of
- * the draw its recorded type (passes) or NULL (fails). The jobs are only
- * known after the draw is recorded: cmd_cond_render_end() walks the
- * vertex/tiler chains from the predicate job, makes the jobs of its batch
- * depend on it (the predicate job also suppresses prefetch, as the indirect
- * patch jobs do), and hands it the list. Jobs in batches the draw opened run
- * in later atoms. Pipeline state is emitted per draw on JM, so a skipped
- * draw consumes nothing later draws need. */
-void
-panvk_per_arch(cmd_cond_render_begin)(struct panvk_cmd_buffer *cmdbuf,
-                                      struct panvk_cond_render_mark *m)
-{
-   *m = (struct panvk_cond_render_mark){0};
-   if (!cmdbuf->state.cond_render.enabled)
-      return;
-
-   struct pan_ptr list_ptr =
-      panvk_cmd_alloc_dev_mem(cmdbuf, desc, sizeof(uint64_t), 8);
-   if (!list_ptr.gpu)
-      return;
-   *(uint64_t *)list_ptr.cpu = 0;
-
-   if (cmdbuf->cur_batch &&
-       cmdbuf->cur_batch->vtc_jc.job_index + 2 >= UINT16_MAX) {
-      panvk_per_arch(cmd_close_batch)(cmdbuf);
-      panvk_per_arch(cmd_open_batch)(cmdbuf);
-   }
-
-   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
-   panlib_v9_cond_render(&ctx, panlib_1d(1),
-                         PANLIB_BARRIER_JM_SUPPRESS_PREFETCH,
-                         cmdbuf->state.cond_render.addr,
-                         cmdbuf->state.cond_render.inverted, list_ptr.gpu);
-
-   m->batch = cmdbuf->cur_batch;
-   m->job = m->batch->vtc_jc.prev_job;
-   m->index = m->batch->vtc_jc.job_index;
-   m->list = list_ptr.cpu;
-}
-
-/* Job descriptors all come from desc_pool. */
-static struct mali_job_header_packed *
-v9_job_cpu(struct panvk_cmd_buffer *cmdbuf, uint64_t gpu)
-{
-   struct list_head *lists[] = {&cmdbuf->desc_pool.bos,
-                                &cmdbuf->desc_pool.big_bos};
-
-   for (unsigned l = 0; l < ARRAY_SIZE(lists); l++) {
-      list_for_each_entry(struct panvk_priv_bo, bo, lists[l], node) {
-         if (gpu >= bo->addr.dev &&
-             gpu < bo->addr.dev + pan_kmod_bo_size(bo->bo))
-            return (void *)((uint8_t *)bo->addr.host + (gpu - bo->addr.dev));
-      }
-   }
-
-   return NULL;
-}
-
-/* Appends (address, type) of the chain jobs from next on. pred_index != 0:
- * same chain as the predicate job, add a dependency on it. */
-static void
-v9_cond_render_collect(struct panvk_cmd_buffer *cmdbuf,
-                       struct util_dynarray *jobs, uint64_t next,
-                       unsigned pred_index)
-{
-   while (next) {
-      struct mali_job_header_packed *hdr = v9_job_cpu(cmdbuf, next);
-      assert(hdr);
-      if (!hdr)
-         return;
-
-      pan_unpack(hdr, JOB_HEADER, h);
-      util_dynarray_append(jobs, next);
-      util_dynarray_append(jobs, (uint64_t)h.type);
-
-      if (pred_index) {
-         if (!h.dependency_1)
-            h.dependency_1 = pred_index;
-         else if (!h.dependency_2)
-            h.dependency_2 = pred_index;
-         else if (h.dependency_1 < pred_index && h.dependency_2 < pred_index)
-            h.barrier = true;
-
-         pan_pack(hdr, JOB_HEADER, cfg) {
-            cfg = h;
-         }
-      }
-
-      next = h.next;
-   }
-}
-
-void
-panvk_per_arch(cmd_cond_render_end)(struct panvk_cmd_buffer *cmdbuf,
-                                    struct panvk_cond_render_mark *m)
-{
-   if (!m->batch)
-      return;
-
-   struct util_dynarray jobs = UTIL_DYNARRAY_INIT;
-   pan_unpack(m->job, JOB_HEADER, pred);
-   v9_cond_render_collect(cmdbuf, &jobs, pred.next, m->index);
-
-   /* The draw closed the predicate job's batch: add the batches after it. */
-   if (m->batch != cmdbuf->cur_batch) {
-      for (struct list_head *n = m->batch->node.next; n != &cmdbuf->batches;
-           n = n->next) {
-         struct panvk_batch *b = list_entry(n, struct panvk_batch, node);
-         v9_cond_render_collect(cmdbuf, &jobs, b->vtc_jc.first_job, 0);
-      }
-      if (cmdbuf->cur_batch)
-         v9_cond_render_collect(cmdbuf, &jobs,
-                                cmdbuf->cur_batch->vtc_jc.first_job, 0);
-   }
-
-   const uint32_t n = util_dynarray_num_elements(&jobs, uint64_t);
-   struct pan_ptr list =
-      panvk_cmd_alloc_dev_mem(cmdbuf, desc, (1 + n) * sizeof(uint64_t), 8);
-   if (list.gpu) {
-      uint64_t *l = list.cpu;
-      l[0] = n / 2;
-      if (n)
-         memcpy(&l[1], jobs.data, n * sizeof(uint64_t));
-      *m->list = list.gpu;
-   }
-
-   util_dynarray_fini(&jobs);
-}
-
-VKAPI_ATTR void VKAPI_CALL
-panvk_per_arch(CmdBeginConditionalRendering2EXT)(
-   VkCommandBuffer commandBuffer,
-   const VkConditionalRenderingBeginInfo2EXT *pConditionalRenderingBegin)
-{
-   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
-
-   cmdbuf->state.cond_render.enabled = true;
-   cmdbuf->state.cond_render.addr =
-      pConditionalRenderingBegin->addressRange.address;
-   cmdbuf->state.cond_render.inverted =
-      pConditionalRenderingBegin->flags &
-      VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT;
-}
-
-VKAPI_ATTR void VKAPI_CALL
-panvk_per_arch(CmdEndConditionalRenderingEXT)(VkCommandBuffer commandBuffer)
-{
-   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
-
-   cmdbuf->state.cond_render.enabled = false;
-}
-
 static void
 v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
 {
@@ -6745,6 +6609,160 @@ panvk_per_arch(CmdDrawIndirectByteCountEXT)(
 }
 
 #endif /* PAN_ARCH != 9 */
+
+/* VK_EXT_conditional_rendering on JM. A job chain has no predication, so a
+ * draw or dispatch recorded in a conditional rendering block is preceded by
+ * a panlib_v9_cond_render job that reads the predicate and gives each job of
+ * the draw its recorded type (passes) or NULL (fails). The jobs are only
+ * known after the draw is recorded: cmd_cond_render_end() walks the
+ * vertex/tiler chains from the predicate job, makes the jobs of its batch
+ * depend on it (the predicate job also suppresses prefetch, as the indirect
+ * patch jobs do), and hands it the list. Jobs in batches the draw opened run
+ * in later atoms. Pipeline state is emitted per draw on JM, so a skipped
+ * draw consumes nothing later draws need. */
+void
+panvk_per_arch(cmd_cond_render_begin)(struct panvk_cmd_buffer *cmdbuf,
+                                      struct panvk_cond_render_mark *m)
+{
+   *m = (struct panvk_cond_render_mark){0};
+   if (!cmdbuf->state.cond_render.enabled)
+      return;
+
+   struct pan_ptr list_ptr =
+      panvk_cmd_alloc_dev_mem(cmdbuf, desc, sizeof(uint64_t), 8);
+   if (!list_ptr.gpu)
+      return;
+   *(uint64_t *)list_ptr.cpu = 0;
+
+   if (cmdbuf->cur_batch &&
+       cmdbuf->cur_batch->vtc_jc.job_index + 2 >= UINT16_MAX) {
+      panvk_per_arch(cmd_close_batch)(cmdbuf);
+      panvk_per_arch(cmd_open_batch)(cmdbuf);
+   }
+
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+   panlib_v9_cond_render(&ctx, panlib_1d(1),
+                         PANLIB_BARRIER_JM_SUPPRESS_PREFETCH,
+                         cmdbuf->state.cond_render.addr,
+                         cmdbuf->state.cond_render.inverted, list_ptr.gpu);
+
+   m->batch = cmdbuf->cur_batch;
+   m->job = m->batch->vtc_jc.prev_job;
+   m->index = m->batch->vtc_jc.job_index;
+   m->list = list_ptr.cpu;
+}
+
+/* Job descriptors all come from desc_pool. */
+static struct mali_job_header_packed *
+jm_job_cpu(struct panvk_cmd_buffer *cmdbuf, uint64_t gpu)
+{
+   struct list_head *lists[] = {&cmdbuf->desc_pool.bos,
+                                &cmdbuf->desc_pool.big_bos};
+
+   for (unsigned l = 0; l < ARRAY_SIZE(lists); l++) {
+      list_for_each_entry(struct panvk_priv_bo, bo, lists[l], node) {
+         if (gpu >= bo->addr.dev &&
+             gpu < bo->addr.dev + pan_kmod_bo_size(bo->bo))
+            return (void *)((uint8_t *)bo->addr.host + (gpu - bo->addr.dev));
+      }
+   }
+
+   return NULL;
+}
+
+/* Appends (address, type) of the chain jobs from next on. pred_index != 0:
+ * same chain as the predicate job, add a dependency on it. */
+static void
+jm_cond_render_collect(struct panvk_cmd_buffer *cmdbuf,
+                       struct util_dynarray *jobs, uint64_t next,
+                       unsigned pred_index)
+{
+   while (next) {
+      struct mali_job_header_packed *hdr = jm_job_cpu(cmdbuf, next);
+      assert(hdr);
+      if (!hdr)
+         return;
+
+      pan_unpack(hdr, JOB_HEADER, h);
+      util_dynarray_append(jobs, next);
+      util_dynarray_append(jobs, (uint64_t)h.type);
+
+      if (pred_index) {
+         if (!h.dependency_1)
+            h.dependency_1 = pred_index;
+         else if (!h.dependency_2)
+            h.dependency_2 = pred_index;
+         else if (h.dependency_1 < pred_index && h.dependency_2 < pred_index)
+            h.barrier = true;
+
+         pan_pack(hdr, JOB_HEADER, cfg) {
+            cfg = h;
+         }
+      }
+
+      next = h.next;
+   }
+}
+
+void
+panvk_per_arch(cmd_cond_render_end)(struct panvk_cmd_buffer *cmdbuf,
+                                    struct panvk_cond_render_mark *m)
+{
+   if (!m->batch)
+      return;
+
+   struct util_dynarray jobs = UTIL_DYNARRAY_INIT;
+   pan_unpack(m->job, JOB_HEADER, pred);
+   jm_cond_render_collect(cmdbuf, &jobs, pred.next, m->index);
+
+   /* The draw closed the predicate job's batch: add the batches after it. */
+   if (m->batch != cmdbuf->cur_batch) {
+      for (struct list_head *n = m->batch->node.next; n != &cmdbuf->batches;
+           n = n->next) {
+         struct panvk_batch *b = list_entry(n, struct panvk_batch, node);
+         jm_cond_render_collect(cmdbuf, &jobs, b->vtc_jc.first_job, 0);
+      }
+      if (cmdbuf->cur_batch)
+         jm_cond_render_collect(cmdbuf, &jobs,
+                                cmdbuf->cur_batch->vtc_jc.first_job, 0);
+   }
+
+   const uint32_t n = util_dynarray_num_elements(&jobs, uint64_t);
+   struct pan_ptr list =
+      panvk_cmd_alloc_dev_mem(cmdbuf, desc, (1 + n) * sizeof(uint64_t), 8);
+   if (list.gpu) {
+      uint64_t *l = list.cpu;
+      l[0] = n / 2;
+      if (n)
+         memcpy(&l[1], jobs.data, n * sizeof(uint64_t));
+      *m->list = list.gpu;
+   }
+
+   util_dynarray_fini(&jobs);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdBeginConditionalRendering2EXT)(
+   VkCommandBuffer commandBuffer,
+   const VkConditionalRenderingBeginInfo2EXT *pConditionalRenderingBegin)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   cmdbuf->state.cond_render.enabled = true;
+   cmdbuf->state.cond_render.addr =
+      pConditionalRenderingBegin->addressRange.address;
+   cmdbuf->state.cond_render.inverted =
+      pConditionalRenderingBegin->flags &
+      VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdEndConditionalRenderingEXT)(VkCommandBuffer commandBuffer)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   cmdbuf->state.cond_render.enabled = false;
+}
 
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdBeginRendering)(VkCommandBuffer commandBuffer,

@@ -2268,7 +2268,11 @@ panlib_v9_vp_partition(global const struct panlib_vp_run_header *header,
    }
 }
 
-/* VK_EXT_conditional_rendering on v9 JM: queued before the jobs of a draw or
+#endif /* PAN_ARCH == 9 */
+
+/* JM (v6/v7/v9) */
+#if PAN_ARCH <= 9
+/* VK_EXT_conditional_rendering on JM (v6/v7/v9): queued before the jobs of a draw or
  * dispatch recorded inside a conditional rendering block. *list_ptr points
  * to { count, (job header address, recorded job type) x count }. Each job
  * gets its recorded type back when the predicate passes, so a resubmitted

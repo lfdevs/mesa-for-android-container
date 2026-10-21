@@ -105,7 +105,7 @@ struct panvk_cmd_buffer {
       struct panvk_cmd_compute_state compute;
       struct panvk_push_constant_state push_constants;
       bool uses_poly_heap;
-#if PAN_ARCH == 9
+#if PAN_ARCH <= 9
       struct {
          bool enabled;
          /* Saved by meta, secondaries replay into the primary on JM. */
@@ -117,7 +117,7 @@ struct panvk_cmd_buffer {
    } state;
 };
 
-#if PAN_ARCH == 9
+#if PAN_ARCH <= 9
 /* A draw or dispatch recorded while conditional rendering is active: the
  * predicate job queued before its jobs (see cmd_cond_render_begin). */
 struct panvk_cond_render_mark {
@@ -173,7 +173,7 @@ struct panvk_batch *
 
 void panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf);
 
-#if PAN_ARCH == 9
+#if PAN_ARCH <= 9
 void panvk_per_arch(cmd_cond_render_begin)(struct panvk_cmd_buffer *cmdbuf,
                                            struct panvk_cond_render_mark *m);
 void panvk_per_arch(cmd_cond_render_end)(struct panvk_cmd_buffer *cmdbuf,
