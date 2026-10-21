@@ -27,6 +27,7 @@
 #include "libpoly.h"
 #else
 /* Tessellation on v6/v7 (jm-v7 014). */
+#include "util/format/u_format.h"
 #include "poly/geometry.h"
 #include "poly/tessellator.h"
 #include "poly/nir/poly_nir.h"
@@ -2825,6 +2826,115 @@ glsl_type_size(const struct glsl_type *type, bool bindless)
    return glsl_count_attribute_slots(type, false);
 }
 
+#if PAN_ARCH < 9
+/* robustImageAccess2 for storage images on v6/v7 (jm-v7 048). Bifrost
+ * storage image accesses go through attribute buffers with 16-bit
+ * coordinates: x = 65537 aliases x = 1, out-of-bounds stores and atomics
+ * land in bounds, and the out-of-bounds load alpha is inverted (1 for
+ * rgba8, 0 for r32ui; the spec wants 0 with an alpha channel, else 1).
+ * Bounds-check against the image size: stores and atomics are skipped,
+ * loads go to x = width (out of bounds for the hardware too), RGB stays the
+ * hardware zero and alpha is fixed: from the format when the shader has
+ * one, else by inverting the hardware alpha.
+ */
+static bool
+panvk_v7_lower_robust_image2_intr(nir_builder *b, nir_intrinsic_instr *intr,
+                                  UNUSED void *data)
+{
+   switch (intr->intrinsic) {
+   case nir_intrinsic_image_deref_load:
+   case nir_intrinsic_image_deref_store:
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_deref_atomic_swap:
+      break;
+   default:
+      return false;
+   }
+
+   const enum glsl_sampler_dim dim = nir_intrinsic_image_dim(intr);
+   const bool array = nir_intrinsic_image_array(intr);
+   if (dim == GLSL_SAMPLER_DIM_MS || dim == GLSL_SAMPLER_DIM_SUBPASS ||
+       dim == GLSL_SAMPLER_DIM_SUBPASS_MS)
+      return false;
+
+   const unsigned ncoord = nir_image_intrinsic_coord_components(intr);
+   const bool cube = dim == GLSL_SAMPLER_DIM_CUBE;
+   const unsigned nsize = cube ? (array ? 3 : 2) : ncoord;
+
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def *coords = intr->src[1].ssa;
+   nir_def *size = nir_image_deref_size(b, nsize, 32, intr->src[0].ssa,
+                                        nir_imm_int(b, 0), .image_dim = dim,
+                                        .image_array = array);
+
+   nir_def *in_bounds = nir_imm_true(b);
+   for (unsigned c = 0; c < MIN2(ncoord, 3); c++) {
+      nir_def *lim;
+      if (cube && c == 2)
+         lim = array ? nir_imul_imm(b, nir_channel(b, size, 2), 6)
+                     : nir_imm_int(b, 6);
+      else
+         lim = nir_channel(b, size, c);
+      in_bounds = nir_iand(b, in_bounds,
+                           nir_ult(b, nir_channel(b, coords, c), lim));
+   }
+
+   if (intr->intrinsic == nir_intrinsic_image_deref_load) {
+      nir_def *x = nir_bcsel(b, in_bounds, nir_channel(b, coords, 0),
+                             nir_channel(b, size, 0));
+      nir_src_rewrite(&intr->src[1], nir_vector_insert_imm(b, coords, x, 0));
+      if (intr->def.num_components < 4)
+         return true;
+
+      b->cursor = nir_after_instr(&intr->instr);
+      const unsigned bit_size = intr->def.bit_size;
+      const bool is_float =
+         nir_alu_type_get_base_type(nir_intrinsic_dest_type(intr)) ==
+         nir_type_float;
+      const enum pipe_format format = nir_intrinsic_format(intr);
+      nir_def *hw_a = nir_channel(b, &intr->def, 3);
+      nir_def *oob_a;
+      if (format != PIPE_FORMAT_NONE) {
+         const bool one = !util_format_has_alpha(format);
+         oob_a = is_float ? nir_imm_floatN_t(b, one, bit_size)
+                          : nir_imm_intN_t(b, one, bit_size);
+      } else {
+         nir_def *no_alpha = nir_ieq_imm(b, hw_a, 0);
+         oob_a = is_float ? nir_b2fN(b, no_alpha, bit_size)
+                          : nir_b2iN(b, no_alpha, bit_size);
+      }
+      nir_def *res = nir_vector_insert_imm(
+         b, &intr->def, nir_bcsel(b, in_bounds, hw_a, oob_a), 3);
+      nir_def_rewrite_uses_after(&intr->def, res);
+      return true;
+   }
+
+   nir_push_if(b, in_bounds);
+   nir_instr *clone = nir_instr_clone(b->shader, &intr->instr);
+   nir_builder_instr_insert(b, clone);
+   nir_pop_if(b, NULL);
+   if (nir_intrinsic_infos[intr->intrinsic].has_dest) {
+      nir_def *zero =
+         nir_imm_zero(b, intr->def.num_components, intr->def.bit_size);
+      nir_def_rewrite_uses(&intr->def, nir_if_phi(b, nir_instr_def(clone), zero));
+   }
+   nir_instr_remove(&intr->instr);
+   return true;
+}
+
+static bool
+panvk_v7_lower_robust_image2(nir_shader *nir)
+{
+   if (!nir_shader_intrinsics_pass(nir, panvk_v7_lower_robust_image2_intr,
+                                   nir_metadata_none, NULL))
+      return false;
+   /* The guarded accesses use derefs from the block above. */
+   nir_foreach_function_impl(impl, nir)
+      nir_rematerialize_derefs_in_use_blocks_impl(impl);
+   return true;
+}
+#endif
+
 static void
 panvk_lower_nir(struct panvk_device *dev, nir_shader *nir,
                 uint32_t set_layout_count,
@@ -2861,6 +2971,12 @@ panvk_lower_nir(struct panvk_device *dev, nir_shader *nir,
     */
    if (PAN_ARCH < 9)
       NIR_PASS(_, nir, pan_nir_lower_image_ms);
+
+#if PAN_ARCH < 9
+   if (rs->images ==
+       VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT)
+      NIR_PASS(_, nir, panvk_v7_lower_robust_image2);
+#endif
 
    panvk_per_arch(nir_lower_descriptors)(nir, dev, rs, set_layout_count,
                                          set_layouts, state, desc_info);

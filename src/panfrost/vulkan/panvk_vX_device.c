@@ -736,12 +736,12 @@ panvk_init_null_descs(struct panvk_device *dev)
 #endif
       hw_fmt = (hw_fmt & ~BITFIELD_MASK(12)) | zero_order;
       cfg.stride = (cfg.stride & BITFIELD_MASK(10)) | (hw_fmt << 10);
-      /* Measurement: PANVK_NULLIMG_INBOUNDS=1 makes the null image a real
-       * 1x1 texel in a scratch area after the zero page (stores land
-       * there, loads go through the 0000 order) instead of a 0-byte
-       * buffer, in case the hardware out-of-bounds value ignores the
-       * component order. */
-      if (debug_get_bool_option("PANVK_NULLIMG_INBOUNDS", false)) {
+      /* The null image is a real 1x1 texel in a scratch area after the
+       * zero page (stores land there, loads go through the 0000 order)
+       * rather than a 0-byte buffer: the hardware out-of-bounds value
+       * ignores the component order (A06 robustness2, jm-v7 048).
+       * PANVK_NULLIMG_INBOUNDS=0 restores the 0-byte buffer. */
+      if (debug_get_bool_option("PANVK_NULLIMG_INBOUNDS", true)) {
          cfg.pointer = dev->null_descs.zero_addr + PANVK_NULL_ZERO_SIZE;
          cfg.size = PANVK_NULL_SCRATCH_SIZE;
       }
