@@ -2383,8 +2383,8 @@ panvk_gpu_prerast_gs_passthrough_nir(const nir_shader_compiler_options *options,
 #undef GS_PARAM
 #endif
 
-#if PAN_ARCH >= 9
-/* The FS tests the depth bounds against the tile-resident depth. Lowered
+/* The FS tests the depth bounds against the tile-resident depth (LD_TILE
+ * with the Z/S message on Bifrost, jm-v7 015). Lowered
  * whenever the test may be on: statically enabled, or dynamic.
  */
 static bool
@@ -2478,7 +2478,6 @@ panvk_lower_depth_bounds(nir_shader *nir)
    nir_progress(true, impl, nir_metadata_none);
    return app_mask != NULL;
 }
-#endif
 
 static void
 panvk_hash_state(struct vk_physical_device *device,
@@ -2514,9 +2513,9 @@ panvk_hash_state(struct vk_physical_device *device,
       if (state->ial)
          _mesa_blake3_update(&blake3_ctx, state->ial, sizeof(*state->ial));
 
-#if PAN_ARCH >= 9
       bool depth_bounds = panvk_depth_bounds_lowered(enabled_features, state);
       _mesa_blake3_update(&blake3_ctx, &depth_bounds, sizeof(depth_bounds));
+#if PAN_ARCH >= 9
       bool non_solid = (stages & VK_SHADER_STAGE_VERTEX_BIT) && state->rs &&
                        state->rs->polygon_mode != VK_POLYGON_MODE_FILL;
       _mesa_blake3_update(&blake3_ctx, &non_solid, sizeof(non_solid));
@@ -4462,12 +4461,10 @@ panvk_compile_shader(struct panvk_device *dev,
                &variant->fs.tile_image_z_read,
                &variant->fs.tile_image_s_read);
 
-#if PAN_ARCH >= 9
       if (panvk_depth_bounds_lowered(&dev->vk.enabled_features, state)) {
          variant->fs.depth_bounds_app_mask = panvk_lower_depth_bounds(nir);
          variant->fs.depth_bounds = true;
       }
-#endif
 
       /* Lower input intrinsics for fragment shaders early to get the max
        * number of varying loads, as this number is required during descriptor
@@ -5542,7 +5539,6 @@ static const struct vk_shader_ops panvk_shader_ops = {
 VkResult
 panvk_per_arch(create_depth_bounds_fs)(struct panvk_device *dev)
 {
-#if PAN_ARCH >= 9
    if (!dev->vk.enabled_features.depthBounds)
       return VK_SUCCESS;
 
@@ -5567,7 +5563,6 @@ panvk_per_arch(create_depth_bounds_fs)(struct panvk_device *dev)
 
    dev->depth_bounds_fs = container_of(shader, struct panvk_shader, vk);
    dev->depth_bounds_fs->variants[0].fs.depth_bounds_only = true;
-#endif
    return VK_SUCCESS;
 }
 

@@ -408,9 +408,17 @@ panvk_draw_prepare_fs_rsd(struct panvk_cmd_buffer *cmdbuf,
          uint8_t rt_written = color_attachment_written_mask(
             fs, &cmdbuf->vk.dynamic_graphics_state.cal);
          uint8_t rt_read = color_attachment_read_mask(fs, &dyns->ial, rt_mask);
+         /* Depth bounds emulation (jm-v7 015): the lowered FS reads the
+          * tile depth with LD_TILE, as an input attachment read would. Same
+          * condition as the ds.enable sysval.
+          */
+         const bool db_on = fs->fs.depth_bounds &&
+                            dyns->ds.depth.bounds_test.enable &&
+                            (cmdbuf->state.gfx.render.bound_attachments &
+                             MESA_VK_RP_ATTACHMENT_DEPTH_BIT);
          enum pan_earlyzs_zs_tilebuf_read zs_read =
             (z_attachment_read(fs, &dyns->ial) ||
-             s_attachment_read(fs, &dyns->ial))
+             s_attachment_read(fs, &dyns->ial) || db_on)
                ? PAN_EARLYZS_ZS_TILEBUF_READ_NO_OPT
                : PAN_EARLYZS_ZS_TILEBUF_NOT_READ;
 
@@ -435,6 +443,16 @@ panvk_draw_prepare_fs_rsd(struct panvk_cmd_buffer *cmdbuf,
 
          cfg.properties.pixel_kill_operation = earlyzs.kill;
          cfg.properties.zs_update_operation = earlyzs.update;
+         /* With EarlyFragmentTests, an early ZS update would let the depth
+          * bounds FS read its own depth and keep the writes of samples
+          * outside the bounds: test early, update after the FS (v9 JM
+          * jm-v9/018, csf-v11/116). Not when the app FS discards, writes
+          * SampleMask or uses alpha-to-coverage.
+          */
+         if (db_on && fs->info.fs.early_fragment_tests &&
+             (writes_zs || oq) && !fs->info.fs.can_discard &&
+             !fs->fs.depth_bounds_app_mask && !alpha_to_coverage)
+            cfg.properties.zs_update_operation = MALI_PIXEL_KILL_FORCE_LATE;
          cfg.multisample_misc.evaluate_per_sample =
             (fs->info.fs.sample_shading && dyns->ms.rasterization_samples > 1);
       } else {

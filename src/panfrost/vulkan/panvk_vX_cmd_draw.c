@@ -1028,7 +1028,6 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
    panvk_upload_prerast_viewports(cmdbuf, dirty_sysvals);
 #endif
 
-#if PAN_ARCH >= 9
    {
       const struct vk_depth_stencil_state *dss =
          &cmdbuf->vk.dynamic_graphics_state.ds;
@@ -1046,7 +1045,6 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
          cmdbuf, dirty_sysvals, ds.samples,
          MAX2(cmdbuf->vk.dynamic_graphics_state.ms.rasterization_samples, 1));
    }
-#endif
 
    if (dyn_gfx_state_dirty(cmdbuf, INPUT_ATTACHMENT_MAP))
       prepare_iam_sysvals(cmdbuf, dirty_sysvals);

@@ -340,7 +340,8 @@ panvk_per_arch(get_physical_device_features)(
       .depthClamp = true,
       .depthBiasClamp = true,
       .fillModeNonSolid = PAN_ARCH >= 9,
-      .depthBounds = PAN_ARCH >= 9,
+      /* v6/v7: emulated in the FS with LD_TILE of the depth (jm-v7 015). */
+      .depthBounds = true,
       .wideLines = true,
       .largePoints = true,
       .alphaToOne = PAN_ARCH >= 10,
