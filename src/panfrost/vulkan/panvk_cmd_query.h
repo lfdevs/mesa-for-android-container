@@ -22,7 +22,6 @@ struct panvk_occlusion_query_state {
    enum mali_occlusion_mode mode;
 };
 
-#if PAN_ARCH >= 9
 struct panvk_prims_generated_query_state {
    uint64_t syncobj;
    uint64_t ptr;
@@ -39,6 +38,14 @@ struct panvk_pstats_query_state {
    /* Stand-in occlusion query syncobj while the FS invocation counter
     * borrows the hardware occlusion counter. */
    uint64_t oq_sync;
+#if PAN_ARCH < 9
+   /* Bifrost: the occlusion counter writes one u64 per core, so the FS
+    * invocation counter borrows it into this per-query scratch, summed into
+    * the report when the query ends (jm-v7 016).
+    */
+   uint64_t oq_cores;
+   uint32_t oq_core_count;
+#endif
 };
 
 #define PANVK_PSTATS_MAX_PENDING 8
@@ -59,6 +66,5 @@ panvk_pstats_counter_addr(const struct panvk_pstats_query_state *q,
                    (kernel_half ? util_bitcount(q->mask) : 0);
    return q->report + slot * sizeof(uint64_t);
 }
-#endif
 
 #endif

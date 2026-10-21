@@ -731,6 +731,25 @@ lower_emit_vertex(nir_builder *b, nir_intrinsic_instr *intr,
    nir_pop_if(b, NULL);
 }
 
+/* *table[k] += val, a 64-bit counter from 32-bit atomics (jm-v7 016). */
+static void
+gs_pstats_add(nir_builder *b, nir_def *table, unsigned k, nir_def *val)
+{
+   nir_def *addr = nir_pack_64_2x32(
+      b, nir_load_global(b, 2, 32, nir_iadd_imm(b, table, k * 8),
+                         .align_mul = 8));
+   nir_push_if(b, nir_iand(b, nir_ine_imm(b, addr, 0), nir_ine_imm(b, val, 0)));
+   {
+      nir_def *old = nir_global_atomic(b, 32, addr, val,
+                                       .atomic_op = nir_atomic_op_iadd);
+      nir_push_if(b, nir_ult(b, nir_iadd(b, old, val), old));
+      nir_global_atomic(b, 32, nir_iadd_imm(b, addr, 4), nir_imm_int(b, 1),
+                        .atomic_op = nir_atomic_op_iadd);
+      nir_pop_if(b, NULL);
+   }
+   nir_pop_if(b, NULL);
+}
+
 /* EndPrimitive(), and the implicit one at the end of the shader: write the
  * index list that turns the strip into independent primitives.
  */
@@ -1098,6 +1117,26 @@ panvk_nir_lower_gs(nir_shader *nir, const struct panvk_gs_lower_options *opts)
 
    bool progress =
       nir_shader_intrinsics_pass(nir, lower_gs_instr, nir_metadata_none, &st);
+
+   /* Pipeline statistics: at the end of every invocation that ran. */
+   {
+      nir_function_impl *end_impl = nir_shader_get_entrypoint(nir);
+      nir_builder eb = nir_builder_at(nir_after_impl(end_impl));
+      nir_def *table = load_param_u64(&eb, opts,
+                                      offsetof(struct panvk_gs_push, pstats));
+      nir_push_if(&eb, nir_ine_imm(&eb, table, 0));
+      {
+         nir_def *all = nir_imm_int(&eb, 0);
+         u_foreach_bit(s, opts->stream_mask | 1)
+            all = nir_iadd(&eb, all, nir_load_var(&eb, st.prims_written[s]));
+         nir_def *rast = nir_load_var(&eb, st.prims_written[0]);
+         nir_def *vals[4] = {nir_imm_int(&eb, 1), all, rast, rast};
+         for (unsigned k = 0; k < 4; k++)
+            gs_pstats_add(&eb, table, k, vals[k]);
+      }
+      nir_pop_if(&eb, NULL);
+      progress = true;
+   }
 
    /* The output variables must stop being outputs: every EmitVertex is now
     * explicit global stores, and leftover store_deref on shader_out does not

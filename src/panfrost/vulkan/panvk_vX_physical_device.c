@@ -352,7 +352,8 @@ panvk_per_arch(get_physical_device_features)(
       .textureCompressionBC = has_texture_compression_bc(device) ||
                               panvk_bc_emul_enabled(device),
       .occlusionQueryPrecise = true,
-      .pipelineStatisticsQuery = PAN_ARCH >= 9,
+      /* v6/v7: GPU-counted as on v9 JM (jm-v7 016). */
+      .pipelineStatisticsQuery = true,
       /* On v13+, the hardware isn't speculatively referencing to invalid
          indices anymore. On v9-v12, pre-rasterization stages that write
          memory run through gpu_prerast compute instead of IDVS. On by default
@@ -1392,7 +1393,8 @@ panvk_per_arch(get_physical_device_properties)(
       .maxTransformFeedbackStreamDataSize = 512,
       .maxTransformFeedbackBufferDataSize = 512,
       .maxTransformFeedbackBufferDataStride = 2048,
-      .transformFeedbackQueries = PAN_ARCH >= 9,
+      /* v6/v7: from the capture scan (jm-v7 016). */
+      .transformFeedbackQueries = true,
       .transformFeedbackStreamsLinesTriangles = PAN_ARCH >= 9,
       .transformFeedbackRasterizationStreamSelect =
          PAN_ARCH >= 10 || (PAN_ARCH == 9 && !PANVK_DEBUG(NO_GS)),

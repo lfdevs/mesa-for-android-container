@@ -173,9 +173,9 @@ struct panvk_cmd_graphics_state {
    } dynamic;
 
    struct panvk_occlusion_query_state occlusion_query;
-#if PAN_ARCH >= 9
    struct panvk_prims_generated_query_state prims_generated_query;
    struct panvk_pstats_query_state pstats_query;
+#if PAN_ARCH >= 9
 
    struct {
       bool active;
@@ -200,6 +200,10 @@ struct panvk_cmd_graphics_state {
          uint32_t size;
       } buffers[4];
       unsigned last_job;
+      /* Active VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT reports, per
+       * vertex stream (jm-v7 016).
+       */
+      uint64_t queries[4];
    } xfb;
 #endif
    struct panvk_graphics_sysvals sysvals;

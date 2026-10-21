@@ -14,13 +14,16 @@
 
 #include "genxml/gen_macros.h"
 
+#include "pan_props.h"
 #include "panvk_buffer.h"
+#include "panvk_cmd_alloc.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_cmd_meta.h"
 #include "panvk_cmd_precomp.h"
 #include "panvk_device.h"
 #include "panvk_entrypoints.h"
 #include "panvk_macros.h"
+#include "panvk_physical_device.h"
 #include "panvk_query_pool.h"
 
 #include "libpan.h"
@@ -193,6 +196,30 @@ query_view_count(struct panvk_cmd_buffer *cmd, struct panvk_query_pool *pool,
    return MIN2(view_mask ? util_bitcount(view_mask) : 1,
                pool->vk.query_count - query);
 }
+#else
+/* Pipeline statistics on v6/v7 (jm-v7 016), as on v9 JM: the fragment
+ * shader invocation count is the sample count of the hardware occlusion
+ * counter while no occlusion query owns it. Bifrost writes that counter per
+ * core, so it points at a per-query scratch of one u64 per core, summed into
+ * the report by panlib_v7_pstats_sum_cores() when the query ends.
+ * ponytail: fragments killed by late depth/stencil tests are missed, MSAA
+ * counts samples, and draws made while an occlusion query is active are not
+ * counted.
+ */
+static void
+pstats_take_oq(struct panvk_cmd_buffer *cmd)
+{
+   const struct panvk_pstats_query_state *q = &cmd->state.gfx.pstats_query;
+
+   if (!q->oq_cores ||
+       cmd->state.gfx.occlusion_query.mode != MALI_OCCLUSION_MODE_DISABLED)
+      return;
+
+   cmd->state.gfx.occlusion_query.ptr = q->oq_cores;
+   cmd->state.gfx.occlusion_query.mode = MALI_OCCLUSION_MODE_COUNTER;
+   gfx_state_set_dirty(cmd, OQ);
+}
+
 #endif
 
 VKAPI_ATTR void VKAPI_CALL
@@ -242,6 +269,38 @@ panvk_per_arch(CmdBeginQueryIndexedEXT)(VkCommandBuffer commandBuffer,
       zero_queries = query_view_count(cmd, pool, query);
       pstats_take_oq(cmd);
       break;
+#else
+   case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
+      cmd->state.gfx.xfb.queries[index] = report_addr;
+      break;
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+      cmd->state.gfx.pstats_query = (struct panvk_pstats_query_state){
+         .report = report_addr,
+         .mask = pool->vk.pipeline_statistics,
+      };
+      if (pool->vk.pipeline_statistics &
+          VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT) {
+         const struct panvk_physical_device *phys_dev =
+            to_panvk_physical_device(cmd->vk.base.device->physical);
+         const uint32_t cores =
+            pan_query_core_id_range(&phys_dev->kmod.dev->props);
+         struct pan_ptr scratch = panvk_cmd_alloc_dev_mem(
+            cmd, desc, MAX2(cores, 1) * sizeof(uint64_t), 8);
+         if (scratch.gpu) {
+            /* Zeroed by the GPU: the command buffer may run again. The
+             * fragment jobs counting into it come after this chain.
+             */
+            for (uint32_t c = 0; c < MAX2(cores, 1); c++)
+               panvk_emit_write_job(cmd, batch,
+                                    MALI_WRITE_VALUE_TYPE_IMMEDIATE_64,
+                                    scratch.gpu + c * sizeof(uint64_t), 0);
+            cmd->state.gfx.pstats_query.oq_cores = scratch.gpu;
+            cmd->state.gfx.pstats_query.oq_core_count = MAX2(cores, 1);
+         }
+      }
+      pstats_take_oq(cmd);
+      break;
+   }
 #endif
    default:
       UNREACHABLE("Unsupported query type");
@@ -286,10 +345,8 @@ panvk_per_arch(CmdEndQueryIndexedEXT)(VkCommandBuffer commandBuffer,
       cmd->state.gfx.occlusion_query.ptr = 0;
       cmd->state.gfx.occlusion_query.mode = MALI_OCCLUSION_MODE_DISABLED;
       gfx_state_set_dirty(cmd, OQ);
-#if PAN_ARCH == 9
       /* Give the counter back to an active pipeline statistics query. */
       pstats_take_oq(cmd);
-#endif
       break;
    }
 #if PAN_ARCH == 9
@@ -312,6 +369,32 @@ panvk_per_arch(CmdEndQueryIndexedEXT)(VkCommandBuffer commandBuffer,
       }
       cmd->state.gfx.pstats_query = (struct panvk_pstats_query_state){0};
       view_count = query_view_count(cmd, pool, query);
+      break;
+   }
+#else
+   case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
+      cmd->state.gfx.xfb.queries[index] = 0;
+      break;
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+      const struct panvk_pstats_query_state q = cmd->state.gfx.pstats_query;
+      const uint64_t fs = panvk_pstats_counter_addr(
+         &q, VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT, true);
+
+      if (q.oq_cores && cmd->state.gfx.occlusion_query.ptr == q.oq_cores) {
+         cmd->state.gfx.occlusion_query.ptr = 0;
+         cmd->state.gfx.occlusion_query.mode = MALI_OCCLUSION_MODE_DISABLED;
+         gfx_state_set_dirty(cmd, OQ);
+      }
+      /* The batch closed above ran every fragment job counting into the
+       * scratch.
+       */
+      if (fs && q.oq_cores) {
+         struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmd);
+         panlib_v7_pstats_sum_cores(&precomp_ctx, panlib_1d(1),
+                                    PANLIB_BARRIER_JM_BARRIER, fs,
+                                    q.oq_cores, q.oq_core_count);
+      }
+      cmd->state.gfx.pstats_query = (struct panvk_pstats_query_state){0};
       break;
    }
 #endif
@@ -352,7 +435,6 @@ panvk_meta_copy_query_pool_results(struct panvk_cmd_buffer *cmd,
    bool had_batch;
    open_batch(cmd, &had_batch);
    struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmd);
-#if PAN_ARCH == 9
    if (pool->vk.query_type == VK_QUERY_TYPE_PIPELINE_STATISTICS ||
        pool->vk.query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) {
       const bool xfb =
@@ -373,7 +455,6 @@ panvk_meta_copy_query_pool_results(struct panvk_cmd_buffer *cmd,
       close_batch(cmd, had_batch);
       return;
    }
-#endif
    panlib_copy_query_result_struct(&precomp_ctx, panlib_1d(query_count),
                                    PANLIB_BARRIER_NONE, push);
    close_batch(cmd, had_batch);

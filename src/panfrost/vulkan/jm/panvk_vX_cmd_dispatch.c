@@ -100,6 +100,8 @@ prepare_driver_set(struct panvk_cmd_buffer *cmdbuf)
    return VK_SUCCESS;
 }
 
+#endif /* PAN_ARCH == 9 */
+
 /* Compute shader invocations of a pipeline statistics query, counted on the
  * GPU by panlib_update_pstats_dispatch() like CSF cmd_pstats_dispatch() does
  * for indirect dispatches (JM has no command stream to add the direct count
@@ -132,21 +134,28 @@ pstats_dispatch(struct panvk_cmd_buffer *cmdbuf,
       cmd = ptr.gpu;
    }
 
-   struct panlib_update_pstats_dispatch_args args = {
-      .counter = counter,
-      .cmd = cmd,
-      .local_size =
-         cs->cs.local_size.x * cs->cs.local_size.y * cs->cs.local_size.z,
-   };
+   const uint32_t local_size =
+      cs->cs.local_size.x * cs->cs.local_size.y * cs->cs.local_size.z;
    const bool had_batch = cmdbuf->cur_batch != NULL;
    struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
 
+#if PAN_ARCH == 9
+   const struct panlib_update_pstats_dispatch_args args = {
+      .counter = counter,
+      .cmd = cmd,
+      .local_size = local_size,
+   };
    panlib_update_pstats_dispatch_struct(&ctx, panlib_1d(1),
                                         PANLIB_BARRIER_JM_BARRIER, args);
+#else
+   /* v6/v7 (jm-v7 016): the same count, from a Bifrost kernel. */
+   panlib_v7_update_pstats_dispatch(&ctx, panlib_1d(1),
+                                    PANLIB_BARRIER_JM_BARRIER, counter, cmd,
+                                    local_size);
+#endif
    if (!had_batch)
       panvk_per_arch(cmd_close_batch)(cmdbuf);
 }
-#endif
 
 static void
 cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
@@ -155,11 +164,9 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
       panvk_shader_only_variant(cmdbuf->state.compute.shader);
    VkResult result;
 
-#if PAN_ARCH == 9
    /* Before the empty-shader skip below, as on CSF: a shader compiled to
     * nothing still has invocations. */
    pstats_dispatch(cmdbuf, cs, info);
-#endif
 
    /* If there's no compute shader, we can skip the dispatch. */
 #if PAN_ARCH < 9

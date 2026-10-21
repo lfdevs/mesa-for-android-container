@@ -79,6 +79,7 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       reports_per_query = 1;
       break;
    }
+#endif
    case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
       /* See panvk_pstats_query_state. */
       reports_per_query =
@@ -89,7 +90,6 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       reports_per_query = 4;
       break;
    }
-#endif
    default:
       UNREACHABLE("Unsupported query type");
    }
@@ -331,6 +331,7 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
                cpu_write_query_result(dst, 0, flags, src[0].value);
             break;
          }
+#endif
          case VK_QUERY_TYPE_PIPELINE_STATISTICS:
          case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
             for (uint32_t s = 0; write_results && s < result_count; s++) {
@@ -340,7 +341,6 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
             }
             break;
          }
-#endif
          default:
             UNREACHABLE("Unsupported query type");
          }

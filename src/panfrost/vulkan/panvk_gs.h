@@ -147,6 +147,12 @@ struct panvk_gs_push {
    uint32_t xfb_stream_idx;
    uint32_t xfb_invocations;
    uint32_t pad4;
+   /* Pipeline statistics (jm-v7 016), 0 when no query counts: four u64
+    * counter addresses, each 0 when not counted, that every live invocation
+    * adds to: geometry shader invocations (1), geometry shader primitives
+    * (all streams), clipping invocations and clipping primitives (stream 0).
+    */
+   uint64_t pstats;
 };
 
 /* gl_ViewportIndex, carried from the emulation to the fragment shader in a

@@ -93,7 +93,7 @@ panlib_copy_ts_query_result(uint64_t pool_addr, global uint32_t *available_addr,
 
 #endif
 
-#if PAN_ARCH >= 9
+#if PAN_ARCH >= 6
 /* Each report holds stat_count command stream counters followed by
  * stat_count shader/hardware counters; the result is their sum. The
  * availability objects are panvk_cs_sync32, two dwords each, on v10+ and

@@ -63,6 +63,10 @@ struct libpan_xfb_draw {
     uint32_t idx_per_invocation;
     uint32_t vpp;            /* vertices per output primitive */
     uint32_t record_dwords;
+    /* The active transform feedback stream query of this pass, 0 when none:
+     * scan adds written/needed to its shader half (jm-v7 016).
+     */
+    uint64_t query;
     uint32_t start[4];       /* scan: byte offset this draw writes from */
     uint32_t written;        /* scan: primitives captured */
     uint32_t needed;         /* scan: primitives emitted */

@@ -1589,6 +1589,16 @@ panlib_xfb_scan(global struct libpan_xfb_draw *d)
 
    d->written = fit;
    d->needed = total;
+
+   /* VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {written, needed} after
+    * the two words the command stream would own (panvk_pstats_query_state
+    * layout). The scans of a command buffer are serialized.
+    */
+   if (d->query) {
+      global uint64_t *q = (global uint64_t *)d->query;
+      q[2] += fit;
+      q[3] += total;
+   }
 }
 
 /* One thread per emulation invocation: its primitives' vertices, record
@@ -1757,6 +1767,123 @@ panlib_v7_tess_prefix(global struct panlib_v7_tess *t)
 
    p->nr_patches = n;
    t->draw[0] = sum;
+}
+
+/* Pipeline statistics on v6/v7 (jm-v7 016). The report of a query holds two
+ * u64 per enabled statistic; JM has no command stream, so only the second
+ * (shader) half is written, by these kernels, the geometry emulation and
+ * the FS invocation sum. 64-bit adds from 32-bit atomics, as on v9.
+ */
+static inline void
+v7_pstats_add(global uint32_t *counter, uint64_t value)
+{
+   uint32_t lo = value, hi = value >> 32;
+
+   if (!value)
+      return;
+
+   uint32_t old = atomic_fetch_add((global atomic_uint *)counter, lo);
+   hi += (uint32_t)(old + lo) < old;
+   if (hi)
+      atomic_fetch_add((global atomic_uint *)(counter + 1), hi);
+}
+
+static inline uint32_t
+v7_index_at(uint64_t index_buffer, uint32_t index_size_B, uint32_t i)
+{
+   if (index_size_B == 4)
+      return ((global uint32_t *)index_buffer)[i];
+   if (index_size_B == 2)
+      return ((global uint16_t *)index_buffer)[i];
+   return ((global uint8_t *)index_buffer)[i];
+}
+
+/* Primitives of an indexed draw with primitive restart, counted serially
+ * (Bifrost subgroups are too narrow for the v9 subgroup scan).
+ */
+static uint32_t
+v7_count_restart_prims(uint64_t index_buffer, uint32_t index_buffer_size_el,
+                       uint32_t index_size_B, uint32_t first, uint32_t count,
+                       uint32_t prim)
+{
+   const uint32_t restart_index =
+      index_size_B == 4 ? UINT32_MAX : (1u << (index_size_B * 8)) - 1;
+   uint32_t prims = 0, run = 0;
+
+   for (uint32_t i = 0; i < count; i++) {
+      const uint32_t at = first + i;
+      /* Out of range reads 0 (robustness), never a restart. */
+      const uint32_t v =
+         at < index_buffer_size_el
+            ? v7_index_at(index_buffer, index_size_B, at)
+            : 0;
+      if (v == restart_index) {
+         prims += u_decomposed_prims_for_vertices(prim, run);
+         run = 0;
+      } else {
+         run++;
+      }
+   }
+
+   return prims + u_decomposed_prims_for_vertices(prim, run);
+}
+
+/* One draw. cmd is a VkDraw[Indexed]IndirectCommand (the counts are the
+ * first two words, firstIndex the third). slots packs a 4-bit u64 slot per
+ * counter, 0xf when not counted: IA vertices, IA primitives, VS (or TES)
+ * invocations, clipping invocations, clipping primitives, TCS patches.
+ */
+KERNEL(1)
+panlib_v7_update_pstats_draw(global uint32_t *stats, uint32_t slots,
+                             constant uint32_t *cmd, uint64_t index_buffer,
+                             uint32_t index_buffer_size_el,
+                             uint32_t index_size_B, uint32_t restart,
+                             uint32_t prim, uint32_t view_count,
+                             uint32_t patch_size)
+{
+   const uint32_t count = cmd[0];
+   uint32_t prims;
+
+   if (prim == MESA_PRIM_PATCHES)
+      prims = count / max(patch_size, 1u);
+   else if (restart && index_size_B)
+      prims = v7_count_restart_prims(index_buffer, index_buffer_size_el,
+                                     index_size_B, cmd[2], count, prim);
+   else
+      prims = u_decomposed_prims_for_vertices(prim, count);
+
+   const uint64_t instances = (uint64_t)cmd[1] * view_count;
+   const uint64_t values[6] = {
+      count * instances, prims * instances, count * instances,
+      prims * instances, prims * instances, prims * instances,
+   };
+
+   for (uint32_t c = 0; c < 6; c++) {
+      const uint32_t slot = (slots >> (c * 4)) & 0xf;
+      if (slot != 0xf)
+         v7_pstats_add(stats + slot * 2, values[c]);
+   }
+}
+
+KERNEL(1)
+panlib_v7_update_pstats_dispatch(global uint32_t *counter,
+                                 constant uint32_t *cmd, uint32_t local_size)
+{
+   v7_pstats_add(counter, (uint64_t)cmd[0] * cmd[1] * cmd[2] * local_size);
+}
+
+/* The FS invocation counter borrowed the per-core occlusion counter: add
+ * its cores into the statistic.
+ */
+KERNEL(1)
+panlib_v7_pstats_sum_cores(global uint32_t *counter, constant uint64_t *cores,
+                           uint32_t core_count)
+{
+   uint64_t sum = 0;
+
+   for (uint32_t i = 0; i < core_count; i++)
+      sum += cores[i];
+   v7_pstats_add(counter, sum);
 }
 
 #endif

@@ -1864,6 +1864,32 @@ emit_gs_job(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw,
       viewports = vp.gpu;
    }
 
+   /* Pipeline statistics of the app's geometry shader (not of the xfb
+    * passthrough), counted by the emulation itself (jm-v7 016). Layered
+    * draws repeat per layer: count layer 0, every view with multiview.
+    */
+   uint64_t pstats = 0;
+   const struct panvk_pstats_query_state *pq = &cmdbuf->state.gfx.pstats_query;
+   if (pq->report && cmdbuf->state.gfx.gs.shader && !cmdbuf->state.gfx.vk_meta &&
+       (cmdbuf->state.gfx.render.view_mask || draw->info.layer_id == 0)) {
+#define PSTAT(name) VK_QUERY_PIPELINE_STATISTIC_##name##_BIT
+      const uint64_t addrs[4] = {
+         panvk_pstats_counter_addr(pq, PSTAT(GEOMETRY_SHADER_INVOCATIONS), true),
+         panvk_pstats_counter_addr(pq, PSTAT(GEOMETRY_SHADER_PRIMITIVES), true),
+         panvk_pstats_counter_addr(pq, PSTAT(CLIPPING_INVOCATIONS), true),
+         panvk_pstats_counter_addr(pq, PSTAT(CLIPPING_PRIMITIVES), true),
+      };
+#undef PSTAT
+      if (addrs[0] || addrs[1] || addrs[2] || addrs[3]) {
+         struct pan_ptr tbl =
+            panvk_cmd_alloc_dev_mem(cmdbuf, desc, sizeof(addrs), 8);
+         if (!tbl.gpu)
+            return 0;
+         memcpy(tbl.cpu, addrs, sizeof(addrs));
+         pstats = tbl.gpu;
+      }
+   }
+
    /* One invocation per (input primitive, gl_InvocationID) pair. */
    const uint32_t wg =
       DIV_ROUND_UP(in_prims * gs->gs.invocations, PANVK_GS_WORKGROUP_SIZE);
@@ -1930,6 +1956,7 @@ emit_gs_job(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw,
       .xfb_stream_idx = cmdbuf->state.gfx.gs.xfb_stream_idx,
       .xfb_invocations = cmdbuf->state.gfx.gs.xfb_invocations,
       .in_screen_space = !vs->gs.vs_clip_space,
+      .pstats = pstats,
       .viewports = viewports,
       .viewport_scale = {gfx_sysvals->viewport.scale.x,
                          gfx_sysvals->viewport.scale.y,
@@ -2012,7 +2039,12 @@ emit_xfb_jobs(struct panvk_cmd_buffer *cmdbuf, unsigned dep_job_id)
       bool captures = false;
       for (unsigned b = 0; b < 4; b++)
          captures |= gs->gs.xfb_strides[b] && gs->gs.xfb_buffer_stream[b] == s;
-      if (!captures)
+      /* A stream query still counts the primitives of a stream that
+       * captures nothing (jm-v7 016): scan only.
+       */
+      const uint64_t query =
+         cmdbuf->state.gfx.vk_meta ? 0 : cmdbuf->state.gfx.xfb.queries[s];
+      if (!captures && !query)
          continue;
 
       /* [draw block][16: offsets after this draw][k_dw: table]
@@ -2042,6 +2074,7 @@ emit_xfb_jobs(struct panvk_cmd_buffer *cmdbuf, unsigned dep_job_id)
          .idx_per_invocation = idx_per_invocation,
          .vpp = gs->gs.output_verts_per_prim,
          .record_dwords = k_dw,
+         .query = query,
       };
       for (unsigned b = 0; b < 4; b++) {
          d->buffer[b] = cmdbuf->state.gfx.xfb.buffers[b].addr;
@@ -2061,10 +2094,13 @@ emit_xfb_jobs(struct panvk_cmd_buffer *cmdbuf, unsigned dep_job_id)
          PANLIB_BARRIER_JM_BARRIER, scan);
       const unsigned scanned = batch->vtc_jc.job_index;
 
-      const struct panlib_xfb_copy_args copy = {.d = mem.gpu};
-      panlib_xfb_copy_struct(
-         &precomp_ctx, panlib_1d_with_jm_deps(DIV_ROUND_UP(n, 64), scanned, 0),
-         PANLIB_BARRIER_JM_BARRIER, copy);
+      if (captures) {
+         const struct panlib_xfb_copy_args copy = {.d = mem.gpu};
+         panlib_xfb_copy_struct(
+            &precomp_ctx,
+            panlib_1d_with_jm_deps(DIV_ROUND_UP(n, 64), scanned, 0),
+            PANLIB_BARRIER_JM_BARRIER, copy);
+      }
       cmdbuf->state.gfx.xfb.last_job = batch->vtc_jc.job_index;
    }
 }
@@ -2214,6 +2250,90 @@ emit_tess_tcs_job(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw,
 static void panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
                             const struct panvk_draw_data *draw);
 
+/* Pipeline statistics of one draw (jm-v7 016), counted on the GPU by
+ * panlib_v7_update_pstats_draw() from the draw's Vk[Indexed]DrawIndirect-
+ * Command (written here for vkCmdDraw). The API draw counts the input
+ * assembly, vertex shader and tess control patches; the tess eval draw of a
+ * tessellated draw counts the tess eval invocations. Clipping is counted
+ * here only without a geometry shader or tessellation: the geometry
+ * emulation counts its own output (panvk_nir_lower_gs.c). vk_meta draws are
+ * not counted.
+ */
+static void
+v7_count_draw_queries(struct panvk_cmd_buffer *cmdbuf,
+                      const struct panvk_draw_data *draw)
+{
+#define PSTAT(name) VK_QUERY_PIPELINE_STATISTIC_##name##_BIT
+   const struct panvk_pstats_query_state *q = &cmdbuf->state.gfx.pstats_query;
+
+   if (!q->report || cmdbuf->state.gfx.vk_meta ||
+       draw->tess_phase == PANVK_TESS_PHASE_VS_TCS)
+      return;
+
+   const bool tes = draw->tess_phase == PANVK_TESS_PHASE_TES;
+   const bool gs = cmdbuf->state.gfx.gs.shader != NULL;
+   const bool patches = draw->info.prim == MESA_PRIM_PATCHES;
+   /* IA vertices, IA primitives, VS invocations, clipping invocations,
+    * clipping primitives, TCS patches: see panlib_v7_update_pstats_draw.
+    */
+   uint32_t bits[6] = {0};
+   if (tes) {
+      bits[2] = PSTAT(TESSELLATION_EVALUATION_SHADER_INVOCATIONS);
+   } else {
+      bits[0] = PSTAT(INPUT_ASSEMBLY_VERTICES);
+      bits[1] = PSTAT(INPUT_ASSEMBLY_PRIMITIVES);
+      bits[2] = PSTAT(VERTEX_SHADER_INVOCATIONS);
+      if (patches)
+         bits[5] = PSTAT(TESSELLATION_CONTROL_SHADER_PATCHES);
+   }
+   if (!gs && !patches) {
+      bits[3] = PSTAT(CLIPPING_INVOCATIONS);
+      bits[4] = PSTAT(CLIPPING_PRIMITIVES);
+   }
+
+   uint32_t slots = 0;
+   bool any = false;
+   for (uint32_t i = 0; i < 6; i++) {
+      uint32_t slot = 0xf;
+      if (bits[i] && (q->mask & bits[i])) {
+         slot = util_bitcount(q->mask & (bits[i] - 1));
+         any = true;
+      }
+      slots |= slot << (i * 4);
+   }
+   if (!any)
+      return;
+
+   uint64_t cmd = draw->info.indirect.buffer_dev_addr;
+   if (!cmd) {
+      struct pan_ptr ptr = panvk_cmd_alloc_dev_mem(
+         cmdbuf, desc, sizeof(VkDrawIndexedIndirectCommand), 16);
+      if (!ptr.gpu)
+         return;
+      *(VkDrawIndexedIndirectCommand *)ptr.cpu = (VkDrawIndexedIndirectCommand){
+         .indexCount = draw->info.vertex.count,
+         .instanceCount = draw->info.instance.count,
+      };
+      cmd = ptr.gpu;
+   }
+
+   const uint32_t index_size = tes ? 0 : draw->info.index.index_size;
+   const uint32_t view_mask = cmdbuf->state.gfx.render.view_mask;
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+   /* A barrier: the command may come from earlier GPU work (indirect
+    * buffers, the tessellator, vkCmdDrawIndirectByteCountEXT).
+    */
+   panlib_v7_update_pstats_draw(
+      &ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER,
+      q->report + util_bitcount(q->mask) * sizeof(uint64_t), slots, cmd,
+      index_size ? cmdbuf->state.gfx.ib.dev_addr : 0,
+      index_size ? cmdbuf->state.gfx.ib.size / index_size : 0, index_size,
+      index_size && draw->info.index.restart_enable ? 1 : 0, draw->info.prim,
+      view_mask ? util_bitcount(view_mask) : 1,
+      cmdbuf->vk.dynamic_graphics_state.ts.patch_control_points);
+#undef PSTAT
+}
+
 static void
 panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
 {
@@ -2223,6 +2343,8 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
    /* If there's no vertex shader, we can skip the draw. */
    if (!panvk_priv_mem_check_alloc(vs->rsd))
       return;
+
+   v7_count_draw_queries(cmdbuf, draw);
 
    if (draw->info.prim == MESA_PRIM_PATCHES && !draw->tess_phase) {
       panvk_tess_draw(cmdbuf, draw);
@@ -2324,6 +2446,8 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
    /* If there's no vertex shader, we can skip the draw. */
    if (!panvk_priv_mem_check_alloc(vs->rsd))
       return;
+
+   v7_count_draw_queries(cmdbuf, draw);
 
    if (draw->info.prim == MESA_PRIM_PATCHES && !draw->tess_phase) {
       panvk_tess_draw(cmdbuf, draw);
