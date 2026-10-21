@@ -2070,12 +2070,27 @@ panlib_v7_gs_restart_list(global uint32_t *out_idx, global uint32_t *out_cmd,
  * did not fit), bit i of word 1 + i / 32 is raw vertex id i (index - min).
  */
 KERNEL(64)
-panlib_v7_vs_ref_clear(global uint32_t *bitmap, uint32_t words)
+panlib_v7_vs_ref_clear(global uint32_t *bitmap, uint32_t words,
+                       global struct libpan_draw_helper_index_min_max_result *mm)
 {
    const uint32_t i = cl_global_id.x;
 
-   if (i <= words)
-      bitmap[i] = 0;
+   if (i > words)
+      return;
+
+   /* jm-v7 080: runs after the min/max search, so only word 0 and the
+    * words of the [min, max] range the mark kernel and the VS can touch
+    * (the whole bitmap is 128 KB for 32-bit indices).
+    */
+   if (i > 0) {
+      const uint32_t lo = mm->min;
+      const uint32_t hi = mm->max;
+      if (hi < lo || (uint64_t)hi - lo >= (uint64_t)words * 32 ||
+          i - 1 > (hi - lo) / 32)
+         return;
+   }
+
+   bitmap[i] = 0;
 }
 
 KERNEL(64)
@@ -2109,13 +2124,23 @@ panlib_v7_vs_ref_mark(global uint8_t *index_buffer_ptr,
 #define VS_REF_MARK_CASE(sz)                                                   \
    case sz: {                                                                  \
       global uint##sz##_t *indices = (global uint##sz##_t *)index_buffer_ptr;  \
+      /* jm-v7 080: one atomic per run of indices in the same word. */         \
+      uint32_t cur = UINT32_MAX, acc = 0;                                      \
       for (uint32_t i = 0; i < count; i++) {                                   \
          uint32_t val = (uint32_t)indices[start + base_idx + i];               \
          if (primitive_restart__2 && val == UINT##sz##_MAX)                    \
             continue;                                                          \
          uint32_t rel = val - min_vertex;                                      \
-         atomic_fetch_or(&bitmap[1 + rel / 32], 1u << (rel % 32));             \
+         if (rel / 32 != cur) {                                                \
+            if (acc)                                                           \
+               atomic_fetch_or(&bitmap[1 + cur], acc);                         \
+            cur = rel / 32;                                                    \
+            acc = 0;                                                           \
+         }                                                                     \
+         acc |= 1u << (rel % 32);                                              \
       }                                                                        \
+      if (acc)                                                                 \
+         atomic_fetch_or(&bitmap[1 + cur], acc);                               \
       break;                                                                   \
    }
       VS_REF_MARK_CASE(32)

@@ -660,6 +660,9 @@ panvk_per_arch(BeginCommandBuffer)(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
 
    vk_command_buffer_begin(&cmdbuf->vk, pBeginInfo);
+   cmdbuf->one_time_submit =
+      cmdbuf->vk.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY &&
+      (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
    return VK_SUCCESS;
 }

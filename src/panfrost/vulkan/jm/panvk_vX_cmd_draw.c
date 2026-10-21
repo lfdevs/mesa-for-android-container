@@ -3217,18 +3217,36 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
       const uint32_t words = draw->info.index.index_size == 1   ? 8
                              : draw->info.index.index_size == 2 ? 2048
                                                                 : 32768;
-      vs_ref_bitmap =
-         panvk_cmd_alloc_dev_mem(cmdbuf, desc, (words + 1) * 4, 4).gpu;
+      struct pan_ptr bitmap =
+         panvk_cmd_alloc_dev_mem(cmdbuf, desc, (words + 1) * 4, 4);
+      vs_ref_bitmap = bitmap.gpu;
       if (vs_ref_bitmap) {
          const uint32_t index_count =
             draw->info.index.buffer_size / draw->info.index.index_size;
-         panlib_v7_vs_ref_clear(&precomp_ctx,
-                                panlib_1d(DIV_ROUND_UP(words + 1, 64)),
-                                PANLIB_BARRIER_JM_BARRIER, vs_ref_bitmap,
-                                words);
+         /* jm-v7 080: explicit dependencies instead of two full barrier
+          * jobs that serialized the draw with all earlier ones: clear after
+          * the min/max search (it clears only that range), mark after the
+          * clear, and the indirect helper (so the vertex job) after the
+          * mark. 8-bit and 16-bit bitmaps (36 B, 8 KB) of a one-time
+          * command buffer are cleared on the CPU instead.
+          */
+         unsigned mark_dep = job_before_indirect_helper;
+         if (cmdbuf->one_time_submit && draw->info.index.index_size <= 2) {
+            memset(bitmap.cpu, 0, (words + 1) * 4);
+         } else {
+            panlib_v7_vs_ref_clear(
+               &precomp_ctx,
+               panlib_1d_with_jm_deps(DIV_ROUND_UP(words + 1, 64),
+                                      job_before_indirect_helper, 0),
+               PANLIB_BARRIER_NONE, vs_ref_bitmap, words,
+               index_min_max_res_ptr);
+            mark_dep = batch->vtc_jc.job_index;
+         }
          panlib_v7_vs_ref_mark(
-            &precomp_ctx, panlib_1d(DIV_ROUND_UP(index_count, 65536)),
-            PANLIB_BARRIER_JM_BARRIER, draw->info.index.buffer_dev_addr,
+            &precomp_ctx,
+            panlib_1d_with_jm_deps(DIV_ROUND_UP(index_count, 65536),
+                                   mark_dep, 0),
+            PANLIB_BARRIER_NONE, draw->info.index.buffer_dev_addr,
             draw->info.indirect.buffer_dev_addr, index_min_max_res_ptr,
             vs_ref_bitmap, words, util_logbase2(draw->info.index.index_size),
             draw->info.index.restart_enable);

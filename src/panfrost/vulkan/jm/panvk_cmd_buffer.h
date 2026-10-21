@@ -99,6 +99,10 @@ struct panvk_cmd_buffer {
    struct list_head batches;
    struct list_head push_sets;
    struct panvk_batch *cur_batch;
+   /* VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: record-time CPU clears of
+    * GPU-written scratch are safe (jm-v7 080).
+    */
+   bool one_time_submit;
 
    struct {
       struct panvk_cmd_graphics_state gfx;

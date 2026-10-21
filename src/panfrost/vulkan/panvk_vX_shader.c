@@ -4141,9 +4141,12 @@ panvk_v7_lower_vs_ref_guard(nir_shader *nir)
       nir_builder_instr_insert(&b, instr);
       nir_pop_if(&b, NULL);
       if (nir_intrinsic_infos[intr->intrinsic].has_dest) {
-         nir_def *undef =
-            nir_undef(&b, intr->def.num_components, intr->def.bit_size);
-         nir_def *phi = nir_if_phi(&b, &intr->def, undef);
+         /* jm-v7 080: a skipped atomic returns 0, not undef: a VS spin
+          * lock on an unreferenced vertex must not loop on garbage.
+          */
+         nir_def *zero =
+            nir_imm_zero(&b, intr->def.num_components, intr->def.bit_size);
+         nir_def *phi = nir_if_phi(&b, &intr->def, zero);
          nir_def_rewrite_uses_after(&intr->def, phi);
       }
    }
