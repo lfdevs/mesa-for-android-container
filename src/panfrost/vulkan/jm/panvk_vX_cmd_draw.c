@@ -2105,9 +2105,16 @@ prepare_draw_layer(struct panvk_cmd_buffer *cmdbuf,
       /* A vertex shader that writes no gl_Position leaves the position
        * buffer undefined: rasterize nothing rather than garbage.
        */
+      /* Same for a geometry shader without gl_Position (jm-v7 025): its
+       * position buffer is not even allocated.
+       */
       const bool writes_pos =
          draw->gs_varying_bufs
-            ? cmdbuf->state.gfx.gs.out_index_count != 0
+            ? cmdbuf->state.gfx.gs.out_index_count != 0 &&
+                 cmdbuf->state.gfx.gs.out_pos != 0 &&
+                 (panvk_shader_only_variant(cmdbuf->state.gfx.gs.emu)
+                     ->gs.outputs_written &
+                  VARYING_BIT_POS)
             : pan_varying_layout_find_slot(&vs->info.varyings.formats,
                                            VARYING_SLOT_POS) != NULL;
       bool needs_tiling =
@@ -2803,8 +2810,14 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
    const struct panvk_shader_variant *vs = panvk_shader_hw_variant(cmdbuf->state.gfx.vs.shader);
    VkResult result;
 
-   /* If there's no vertex shader, we can skip the draw. */
-   if (!panvk_priv_mem_check_alloc(vs->rsd))
+   /* If there's no vertex shader, we can skip the draw, unless a geometry
+    * shader runs after it (jm-v7 025): an empty vertex shader (no binary,
+    * no RSD) still feeds one that only reads gl_PrimitiveIDIn & co. The
+    * vertex job is then left out.
+    */
+   const bool vs_job = panvk_priv_mem_check_alloc(vs->rsd);
+   if (!vs_job && (!cmdbuf->state.gfx.gs.shader ||
+                   draw->info.prim == MESA_PRIM_PATCHES || draw->tess_phase))
       return;
 
    v7_count_draw_queries(cmdbuf, draw);
@@ -2867,8 +2880,10 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
                         false, 0, copy_desc_job_id, &draw->jobs.idvs, false);
       } else {
          unsigned vjob_id =
-            pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_VERTEX, false, false,
-                           0, copy_desc_job_id, &draw->jobs.vertex, false);
+            vs_job ? pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_VERTEX,
+                                    false, false, 0, copy_desc_job_id,
+                                    &draw->jobs.vertex, false)
+                   : copy_desc_job_id;
 
          /* Tessellation: the tess control job instead of a tiler job. The
           * rest of the draw is recorded by panvk_tess_draw().
@@ -2904,8 +2919,14 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
    const struct panvk_shader_variant *vs = panvk_shader_hw_variant(cmdbuf->state.gfx.vs.shader);
    VkResult result;
 
-   /* If there's no vertex shader, we can skip the draw. */
-   if (!panvk_priv_mem_check_alloc(vs->rsd))
+   /* If there's no vertex shader, we can skip the draw, unless a geometry
+    * shader runs after it (jm-v7 025): an empty vertex shader (no binary,
+    * no RSD) still feeds one that only reads gl_PrimitiveIDIn & co. The
+    * vertex job is then left out.
+    */
+   const bool vs_job = panvk_priv_mem_check_alloc(vs->rsd);
+   if (!vs_job && (!cmdbuf->state.gfx.gs.shader ||
+                   draw->info.prim == MESA_PRIM_PATCHES || draw->tess_phase))
       return;
 
    v7_count_draw_queries(cmdbuf, draw);
@@ -3119,8 +3140,10 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
                         false, 0, prev_job, &draw->jobs.idvs, false);
       } else {
          unsigned vjob_id =
-            pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_VERTEX, false, true, 0,
-                           prev_job, &draw->jobs.vertex, false);
+            vs_job ? pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_VERTEX,
+                                    false, true, 0, prev_job,
+                                    &draw->jobs.vertex, false)
+                   : prev_job;
 
          /* Tessellation: the tess control job instead of a tiler job, the
           * rest of the draw is recorded by panvk_tess_draw(). No batch split
