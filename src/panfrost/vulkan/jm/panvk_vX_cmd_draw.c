@@ -2921,6 +2921,25 @@ panvk_v7_select_alt_shaders(struct panvk_cmd_buffer *cmdbuf)
          }
       }
    }
+
+   /* jm-v7 077: the screen-space VS without xfb while transform feedback is
+    * inactive and no geometry shader is bound; the clip-space one (drawn
+    * through the capturing passthrough GS) otherwise.
+    */
+   const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
+   if (vs && (vs->vk.stage == MESA_SHADER_VERTEX)) {
+      const struct panvk_shader *main_vs = vs->alt_parent ? vs->alt_parent : vs;
+      if (main_vs->alt) {
+         const bool plain =
+            !cmdbuf->state.gfx.xfb.active && !cmdbuf->state.gfx.gs.shader;
+         const struct panvk_shader *want = plain ? main_vs->alt : main_vs;
+         if (want != vs) {
+            cmdbuf->state.gfx.vs.shader = want;
+            gfx_state_set_dirty(cmdbuf, VS);
+            gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+         }
+      }
+   }
 }
 #endif
 

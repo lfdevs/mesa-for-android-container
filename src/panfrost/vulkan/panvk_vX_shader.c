@@ -5173,16 +5173,30 @@ panvk_v7_wants_alt(const struct vk_features *features,
               BITSET_TEST(state->dynamic,
                           MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE));
 
+   /* jm-v7 077: a last-stage vertex shader with xfb outputs is compiled for
+    * clip space and always drawn through the passthrough GS, even while
+    * transform feedback is inactive (DXVK declares xfb on many VS). Its
+    * alternate is the plain screen-space VS without xfb, drawn directly.
+    */
+   if (info->stage == MESA_SHADER_VERTEX)
+      return panvk_vs_wants_xfb_passthrough(info) &&
+             !(info->next_stage_mask &
+               (VK_SHADER_STAGE_GEOMETRY_BIT |
+                VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)) &&
+             !panvk_v7_vs_writes_viewport(info);
+
    return false;
 }
 
-/* The alternate's NIR: the fragment shader skips the depth bounds lowering
- * (panvk_compile_shader(alt = true)), nothing to change here.
+/* The alternate's NIR. The fragment shader skips the depth bounds lowering
+ * (panvk_compile_shader(alt = true)); the vertex shader loses its xfb info,
+ * so it is compiled for screen space with no passthrough.
  */
 static void
 panvk_v7_prepare_alt_nir(struct vk_shader_compile_info *info)
 {
-   (void)info;
+   if (info->stage == MESA_SHADER_VERTEX)
+      info->nir->xfb_info = NULL;
 }
 #endif
 
