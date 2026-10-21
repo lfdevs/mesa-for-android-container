@@ -131,9 +131,28 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       const char *e = getenv("PANVK_QUERY_UNCACHED");
       query_nc = e && e[0] == '1';
    }
-   pool->available_mem = panvk_pool_alloc_mem(
-      query_nc ? &device->mempools.rw_nc : &device->mempools.rw,
-      syncobjs_alloc_info);
+   if (query_nc) {
+      pool->available_mem =
+         panvk_pool_alloc_mem(&device->mempools.rw_nc, syncobjs_alloc_info);
+   } else {
+      /* Not from mempools.rw: with a WB (cached CPU) mapping, the host
+       * reset memsets and cleans whole cache lines, and 16 queries share
+       * one. A GPU availability write to a neighbouring query between the
+       * line fill and the clean would be overwritten, and a later WAIT
+       * spins into DEVICE_LOST (perf review H4). Use a BO of the pool's
+       * own, GPU-cached but write-combined on the CPU, so host writes only
+       * touch the words they store.
+       */
+      struct panvk_priv_bo *avail_bo = NULL;
+      if (panvk_priv_bo_create(device, syncobjs_alloc_info.size,
+                               panvk_device_adjust_bo_flags(device, 0),
+                               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
+                               &avail_bo) == VK_SUCCESS)
+         pool->available_mem = (struct panvk_priv_mem){
+            .bo = (uintptr_t)avail_bo,
+            .offset = 0,
+         };
+   }
 #else
    pool->available_mem =
       panvk_pool_alloc_mem(&device->mempools.rw_nc, syncobjs_alloc_info);
