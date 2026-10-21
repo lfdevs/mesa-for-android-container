@@ -89,6 +89,8 @@ struct panvk_cmd_buffer {
 
    struct panvk_pool desc_pool;
    struct panvk_pool varying_pool;
+   /* Growable GPU-only memory: geometry emulation of large tess draws. */
+   struct panvk_pool gs_pool;
    struct panvk_pool tls_pool;
    struct list_head batches;
    struct list_head push_sets;

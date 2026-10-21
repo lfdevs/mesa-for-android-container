@@ -154,6 +154,27 @@ struct panvk_gs_push {
     * (all streams), clipping invocations and clipping primitives (stream 0).
     */
    uint64_t pstats;
+   /* Per-viewport rasterization (jm-v7 031): when the selectable viewports'
+    * depth ranges differ, the tiler cannot clamp/clip with a union. vp_split
+    * viewports then each get a copy of the index list (index_region entries
+    * apart, after the full list at out_index) holding only their primitives,
+    * and a tiler job of their own. out_viewport holds the viewport index of
+    * every output vertex slot; the tiler jobs are tiler_job_stride bytes
+    * apart. vp_split 0: one tiler job with the union (jm-v7 017).
+    */
+   uint64_t out_viewport;
+   uint32_t vp_split;
+   uint32_t index_region;
+   uint32_t tiler_job_stride;
+   /* gl_PointSize (jm-v7 033): the vertex shader's fp16 point sizes,
+    * in_psiz_stride bytes apart (in_psiz 0: it writes none, reads 1.0; an
+    * indirect draw's buffer is in the patched descriptor in_psiz_desc), and
+    * the emulation's own for point output (0: none).
+    */
+   uint32_t in_psiz_stride;
+   uint64_t in_psiz;
+   uint64_t in_psiz_desc;
+   uint64_t out_psiz;
 };
 
 /* gl_ViewportIndex, carried from the emulation to the fragment shader in a
@@ -273,11 +294,11 @@ bool panvk_nir_lower_gs(struct nir_shader *nir,
  * live in one device arena (panvk_device::tess_arena), reused by every
  * tessellated draw: each draw's first arena write is a barrier job.
  */
-#define PANVK_TESS_HEAP_SIZE (64u << 20)
+#define PANVK_TESS_HEAP_SIZE (160u << 20)
 /* Tessellator indices one draw keeps, at most. Whole patches past it are
  * dropped (panlib_v7_tess_prefix).
  */
-#define PANVK_TESS_MAX_INDICES (1u << 20)
+#define PANVK_TESS_MAX_INDICES (1u << 23)
 /* Patches one draw tessellates, at most: the tessellator grid and the serial
  * prefix sum are sized for it.
  */
@@ -286,7 +307,7 @@ bool panvk_nir_lower_gs(struct nir_shader *nir,
  * the geometry emulation of the generated draw is sized for this many input
  * primitives (instead of PANVK_GS_INDIRECT_MAX_PRIMS).
  */
-#define PANVK_TESS_GS_MAX_PRIMS 8192u
+#define PANVK_TESS_GS_MAX_PRIMS (1u << 21)
 #define PANVK_TESS_UNSET 0xff
 
 /* What the draw path needs from a tess control or tess eval shader. The

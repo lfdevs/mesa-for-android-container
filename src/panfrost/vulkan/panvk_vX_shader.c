@@ -3452,6 +3452,26 @@ panvk_vs_wants_xfb_passthrough(const struct vk_shader_compile_info *info)
    return panvk_gs_xfb_table(info->nir->xfb_info, table) > 0;
 }
 
+/* A VS or TES that is the last pre-raster stage and writes gl_ViewportIndex
+ * (jm-v7 032, shaderOutputViewportIndex).
+ */
+static bool
+panvk_v7_vs_writes_viewport(const struct vk_shader_compile_info *info)
+{
+   if (info->stage != MESA_SHADER_VERTEX &&
+       info->stage != MESA_SHADER_TESS_EVAL)
+      return false;
+   if (info->next_stage_mask & (VK_SHADER_STAGE_GEOMETRY_BIT |
+                                VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT))
+      return false;
+
+   nir_foreach_shader_out_variable(var, info->nir) {
+      if (var->data.location == VARYING_SLOT_VIEWPORT)
+         return true;
+   }
+   return false;
+}
+
 static void
 panvk_vs_store_xfb(struct panvk_shader_variant *variant,
                    const nir_xfb_info *xfb)
@@ -3557,8 +3577,8 @@ panvk_build_passthrough_gs(const struct panvk_shader_variant *vs,
       nir->info.has_transform_feedback_varyings = true;
    }
 
-   nir_variable *in_vars[PAN_MAX_VARYINGS + 1], *out_vars[PAN_MAX_VARYINGS + 1];
-   nir_alu_type types[PAN_MAX_VARYINGS + 1];
+   nir_variable *in_vars[PAN_MAX_VARYINGS + 2], *out_vars[PAN_MAX_VARYINGS + 2];
+   nir_alu_type types[PAN_MAX_VARYINGS + 2];
    unsigned n = 0;
 
    /* gl_Position always: the emulation reads it from the position buffer. */
@@ -3599,8 +3619,24 @@ panvk_build_passthrough_gs(const struct panvk_shader_variant *vs,
          glsl_vector_type(nir_get_glsl_base_type_for_nir_type(base | 32),
                           ncomps),
          "out_slot");
-      out_vars[n]->data.location = slot->location;
+      /* A VS/TES gl_ViewportIndex (jm-v7 032) selects the viewport again. */
+      out_vars[n]->data.location =
+         slot->location == PANVK_GS_VIEWPORT_INDEX_SLOT ? VARYING_SLOT_VIEWPORT
+                                                        : slot->location;
       types[n++] = base | bits;
+   }
+
+   /* Points keep the vertex shader's gl_PointSize (jm-v7 033). */
+   if (cls == PANVK_XFB_GS_POINTS && !poly_line && !poly_point &&
+       vs->info.vs.writes_point_size) {
+      in_vars[n] = nir_variable_create(
+         nir, nir_var_shader_in, glsl_array_type(glsl_float_type(), 6, 0),
+         "in_psiz");
+      in_vars[n]->data.location = VARYING_SLOT_PSIZ;
+      out_vars[n] = nir_variable_create(nir, nir_var_shader_out,
+                                        glsl_float_type(), "out_psiz");
+      out_vars[n]->data.location = VARYING_SLOT_PSIZ;
+      types[n++] = nir_type_float32;
    }
 
    /* Polygon mode: the tiler only sees lines or points, so the faces are
@@ -3948,7 +3984,26 @@ panvk_compile_shader(struct panvk_device *dev,
     * geometry shader or transform feedback follows.
     */
    const bool vs_xfb_passthrough = panvk_vs_wants_xfb_passthrough(info);
+   /* shaderOutputViewportIndex (jm-v7 032): the tiler has one viewport, so a
+    * last pre-raster VS or TES writing gl_ViewportIndex feeds the geometry
+    * emulation through the passthrough, which selects the viewport per
+    * primitive as for a geometry shader. The index travels as a generic
+    * varying in PANVK_GS_VIEWPORT_INDEX_SLOT (Bifrost has no hardware
+    * slot for it); panvk_build_passthrough_gs() turns it back into
+    * gl_ViewportIndex.
+    */
+   const bool vs_writes_vp = panvk_v7_vs_writes_viewport(info);
+   if (vs_writes_vp) {
+      nir_foreach_shader_out_variable(var, info->nir) {
+         if (var->data.location == VARYING_SLOT_VIEWPORT)
+            var->data.location = PANVK_GS_VIEWPORT_INDEX_SLOT;
+      }
+      info->nir->info.outputs_written &= ~VARYING_BIT_VIEWPORT;
+      info->nir->info.outputs_written |=
+         BITFIELD64_BIT(PANVK_GS_VIEWPORT_INDEX_SLOT);
+   }
    const bool vs_clip_space =
+      vs_writes_vp ||
       (info->stage == MESA_SHADER_VERTEX &&
        ((info->next_stage_mask & (VK_SHADER_STAGE_GEOMETRY_BIT |
                                   VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)) ||

@@ -15,6 +15,8 @@ struct panvk_cmd_pool {
    struct panvk_bo_pool cs_bo_pool;
    struct panvk_bo_pool desc_bo_pool;
    struct panvk_bo_pool varying_bo_pool;
+   /* Growable GPU-only memory for large geometry emulation buffers (jm-v7 033). */
+   struct panvk_bo_pool gs_bo_pool;
    struct panvk_bo_pool tls_bo_pool;
    struct panvk_bo_pool tls_big_bo_pool;
    struct list_head push_sets;

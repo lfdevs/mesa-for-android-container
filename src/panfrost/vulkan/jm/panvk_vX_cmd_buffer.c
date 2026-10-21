@@ -520,6 +520,7 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
    panvk_pool_reset(&cmdbuf->desc_pool);
    panvk_pool_reset(&cmdbuf->tls_pool);
    panvk_pool_reset(&cmdbuf->varying_pool);
+   panvk_pool_reset(&cmdbuf->gs_pool);
    panvk_cmd_buffer_obj_list_reset(cmdbuf, push_sets);
 
    memset(&cmdbuf->state, 0, sizeof(cmdbuf->state));
@@ -550,6 +551,7 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
    panvk_pool_cleanup(&cmdbuf->desc_pool);
    panvk_pool_cleanup(&cmdbuf->tls_pool);
    panvk_pool_cleanup(&cmdbuf->varying_pool);
+   panvk_pool_cleanup(&cmdbuf->gs_pool);
    panvk_cmd_buffer_obj_list_cleanup(cmdbuf, push_sets);
    vk_command_buffer_finish(&cmdbuf->vk);
    vk_free(&dev->vk.alloc, cmdbuf);
@@ -623,6 +625,22 @@ panvk_create_cmdbuf(struct vk_command_pool *vk_pool, VkCommandBufferLevel level,
    };
    panvk_pool_init(&cmdbuf->varying_pool, device, &pool->varying_bo_pool, NULL,
                    &var_pool_props);
+
+   /* jm-v7 033: the geometry emulation of a large tessellated draw is sized
+    * for millions of primitives it rarely all emits. Growable GPU-only BOs:
+    * pages are committed when the GPU first touches them.
+    */
+   struct panvk_pool_properties gs_pool_props = {
+      .create_flags = panvk_device_adjust_bo_flags(
+         device, PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT),
+      .slab_size = 2 * 1024 * 1024,
+      .label = "GS emulation pool",
+      .prealloc = false,
+      .owns_bos = true,
+      .needs_locking = false,
+   };
+   panvk_pool_init(&cmdbuf->gs_pool, device, &pool->gs_bo_pool, NULL,
+                   &gs_pool_props);
 
    list_inithead(&cmdbuf->batches);
    *cmdbuf_out = &cmdbuf->vk;

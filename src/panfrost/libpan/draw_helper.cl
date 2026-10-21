@@ -1886,6 +1886,103 @@ panlib_v7_pstats_sum_cores(global uint32_t *counter, constant uint64_t *cores,
    v7_pstats_add(counter, sum);
 }
 
+/* Position, within a restart-free run, of vertex i of primitive p, as the
+ * geometry emulation assembles it (gs_input_record()). topology is a
+ * PANVK_GS_TOPO_* (1 strip, 2 fan, 3 triangle strip with adjacency), ppi the
+ * run's primitive count.
+ */
+static uint32_t
+v7_gs_restart_seq(uint32_t topology, uint32_t vpp, uint32_t p, uint32_t i,
+                  uint32_t ppi)
+{
+   if (topology == 2)
+      return i == 2 ? 0 : p + i + 1;
+
+   if (topology == 3) {
+      const uint32_t p2 = 2 * p;
+      const uint32_t far = p + 1 == ppi ? p2 + 5 : p2 + 6;
+      if (p & 1) {
+         const uint32_t odd_v[6] = {p2 + 2, p2 - 2, p2, p2 + 3, p2 + 4, far};
+         return odd_v[i];
+      }
+      const uint32_t even_v[6] = {p2, p ? p2 - 2 : 1, p2 + 2, far, p2 + 4,
+                                  p2 + 3};
+      return even_v[i];
+   }
+
+   /* Strips: triangle strips take p, p+2, p+1 on odd p. */
+   if (vpp == 3 && (p & 1) && i)
+      return p + 3 - i;
+   return p + i;
+}
+
+static uint32_t
+v7_gs_restart_ppi(uint32_t topology, uint32_t vpp, uint32_t n)
+{
+   if (topology == 2)
+      return n >= 3 ? n - 2 : 0;
+   if (topology == 3)
+      return n >= 6 ? (n - 4) / 2 : 0;
+   return n >= vpp ? n - (vpp - 1) : 0;
+}
+
+/* Primitive restart for the geometry emulation (jm-v7 030): an indexed
+ * strip, fan or triangle strip with adjacency is cut into restart-free runs
+ * and each run's primitives are written as a 32-bit list, vpp indices per
+ * primitive, in draw order. out_cmd is the draw's VkDrawIndexedIndirectCommand
+ * over that list (firstIndex 0), so the emulation assembles a plain list and
+ * gl_PrimitiveIDIn counts the primitives actually assembled. At most
+ * max_prims primitives are kept. Serial: one thread walks the indices.
+ */
+KERNEL(1)
+panlib_v7_gs_restart_list(global uint32_t *out_idx, global uint32_t *out_cmd,
+                          constant uint32_t *cmd, uint64_t index_buffer,
+                          uint32_t index_buffer_size_el, uint32_t index_size_B,
+                          uint32_t topology, uint32_t vpp, uint32_t max_prims)
+{
+   const uint32_t restart_index =
+      index_size_B == 4 ? UINT32_MAX : (1u << (index_size_B * 8)) - 1;
+   const uint32_t count = cmd[0];
+   const uint32_t first = cmd[2];
+   uint32_t prims = 0;
+   uint32_t run_start = 0;
+
+   for (uint32_t i = 0; i <= count; i++) {
+      bool cut = i == count;
+      if (!cut) {
+         const uint32_t at = first + i;
+         /* Out of range reads 0 (robustness), never a restart. */
+         const uint32_t v =
+            at < index_buffer_size_el
+               ? v7_index_at(index_buffer, index_size_B, at)
+               : 0;
+         cut = v == restart_index;
+      }
+      if (!cut)
+         continue;
+
+      const uint32_t n = i - run_start;
+      const uint32_t ppi = v7_gs_restart_ppi(topology, vpp, n);
+      for (uint32_t p = 0; p < ppi && prims < max_prims; p++, prims++) {
+         for (uint32_t k = 0; k < vpp; k++) {
+            const uint32_t at =
+               first + run_start + v7_gs_restart_seq(topology, vpp, p, k, ppi);
+            out_idx[prims * vpp + k] =
+               at < index_buffer_size_el
+                  ? v7_index_at(index_buffer, index_size_B, at)
+                  : 0;
+         }
+      }
+      run_start = i + 1;
+   }
+
+   out_cmd[0] = prims * vpp;
+   out_cmd[1] = cmd[1];
+   out_cmd[2] = 0;
+   out_cmd[3] = cmd[3];
+   out_cmd[4] = cmd[4];
+}
+
 #endif
 
 #if PAN_ARCH == 9

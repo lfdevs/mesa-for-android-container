@@ -366,7 +366,8 @@ panvk_per_arch(get_physical_device_features)(
          (PAN_ARCH >= 9 && instance->drirc.misc.enable_vertex_pipeline_stores_atomics) ||
          instance->drirc.misc.force_enable_shader_atomics,
       .fragmentStoresAndAtomics = true,
-      .shaderTessellationAndGeometryPointSize = PAN_ARCH >= 10,
+      /* v6/v7: jm-v7 033 (TES point size, GS point output size). */
+      .shaderTessellationAndGeometryPointSize = PAN_ARCH < 9 || PAN_ARCH >= 10,
       .shaderImageGatherExtended = true,
       .shaderStorageImageExtendedFormats = true,
       .shaderStorageImageMultisample = false,
@@ -459,7 +460,8 @@ panvk_per_arch(get_physical_device_features)(
       .vulkanMemoryModel = true,
       .vulkanMemoryModelDeviceScope = true,
       .vulkanMemoryModelAvailabilityVisibilityChains = true,
-      .shaderOutputViewportIndex = PAN_ARCH >= 9,
+      /* v6/v7: through the geometry emulation (jm-v7 032). */
+      .shaderOutputViewportIndex = true,
       .shaderOutputLayer = PAN_ARCH >= 10,
       .subgroupBroadcastDynamicId = true,
 

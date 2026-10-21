@@ -89,6 +89,10 @@ struct lower_gs_state {
    /* gl_ViewportIndex: the shader's variable, and the per-viewport table. */
    nir_variable *viewport_var;
    nir_def *viewports;
+   /* Per-viewport index lists (jm-v7 031), see panvk_gs_push::vp_split. */
+   nir_def *vp_split, *index_region, *out_viewport;
+   /* gl_PointSize (jm-v7 033), see panvk_gs_push::in_psiz. */
+   nir_def *in_psiz, *in_psiz_stride, *out_psiz;
    /* gl_PrimitiveIDIn (per instance) and gl_InvocationID. */
    nir_def *prim_id;
    nir_def *invocation_id;
@@ -394,6 +398,24 @@ load_direct_bias(nir_builder *b, const struct panvk_gs_lower_options *opts,
    return nir_if_phi(b, v, zero);
 }
 
+/* The vertex shader's point sizes (jm-v7 033): an indirect draw's from the
+ * patched descriptor. 0 when it writes none.
+ */
+static nir_def *
+load_in_psiz(nir_builder *b, const struct panvk_gs_lower_options *opts,
+             nir_def *indirect_cmd)
+{
+   nir_def *direct =
+      load_param_u64(b, opts, offsetof(struct panvk_gs_push, in_psiz));
+   nir_def *desc =
+      load_param_u64(b, opts, offsetof(struct panvk_gs_push, in_psiz_desc));
+   nir_push_if(b, nir_iand(b, nir_ine_imm(b, indirect_cmd, 0),
+                           nir_ine_imm(b, desc, 0)));
+   nir_def *ind = desc_pointer(b, desc);
+   nir_pop_if(b, NULL);
+   return nir_if_phi(b, ind, direct);
+}
+
 /* Which of the vertex shader's varying records is vertex i of this
  * invocation's input primitive: primitive assembly, then the index buffer,
  * then the instance.
@@ -518,6 +540,25 @@ lower_per_vertex_input(nir_builder *b, nir_intrinsic_instr *intr,
       return nir_vec(b, c, intr->def.num_components);
    }
 
+   /* gl_in[i].gl_PointSize (jm-v7 033): the fp16 point size buffer, 1.0
+    * when the vertex shader writes none.
+    */
+   if (sem.location == VARYING_SLOT_PSIZ && intr->def.bit_size == 32) {
+      nir_def *one = nir_imm_float(b, 1.0f);
+      nir_push_if(b, nir_ine_imm(b, st->in_psiz, 0));
+      nir_def *addr = nir_iadd(
+         b, st->in_psiz, nir_u2u64(b, nir_imul(b, vtx, st->in_psiz_stride)));
+      nir_def *word = nir_load_global(b, 1, 32, nir_iand_imm(b, addr, ~3ull),
+                                      .align_mul = 4);
+      nir_def *shift =
+         nir_imul_imm(b, nir_u2u32(b, nir_iand_imm(b, addr, 2)), 8);
+      nir_def *h = nir_u2u16(b, nir_ushr(b, word, shift));
+      nir_def *size = nir_f2f32(b, h);
+      nir_pop_if(b, NULL);
+      nir_def *v = nir_if_phi(b, size, one);
+      return nir_replicate(b, v, intr->def.num_components);
+   }
+
    /* An input array element: the io semantics name the variable's first
     * location and src[1] the slot within it. The geometry shader lowers
     * indirect input derefs first, a tess control shader may index an input
@@ -575,6 +616,35 @@ stream_index_entry(nir_builder *b, struct lower_gs_state *st, unsigned s,
       return nir_iadd(b, st->out_index, nir_u2u64(b, nir_imul_imm(b, e, 4)));
    e = nir_iadd(b, e, nir_imul_imm(b, st->stream_idx, s - 1));
    return nir_iadd(b, st->stream_index, nir_u2u64(b, nir_imul_imm(b, e, 4)));
+}
+
+/* Per-viewport index lists (jm-v7 031): with vp_split viewports, the
+ * rasterized index list is repeated after the full one (which transform
+ * feedback reads), once per viewport, and a primitive is also listed in the
+ * copy of the viewport its first vertex (vp_slot) selected. Each copy is
+ * drawn by its own tiler job, with that viewport's scissor and depth range.
+ */
+static void
+store_split_index(nir_builder *b, struct lower_gs_state *st, nir_def *vp_slot,
+                  nir_def *entry, nir_def *v)
+{
+   if (!st->viewport_var)
+      return;
+
+   nir_push_if(b, nir_ine_imm(b, st->vp_split, 0));
+   {
+      nir_def *vp = nir_load_global(
+         b, 1, 32,
+         nir_iadd(b, st->out_viewport, nir_u2u64(b, nir_imul_imm(b, vp_slot, 4))),
+         .align_mul = 4);
+      vp = nir_umin(b, vp, nir_iadd_imm(b, st->vp_split, -1));
+      nir_def *e = nir_iadd(b, nir_iadd(b, st->out_idx_base, entry),
+                            nir_imul(b, nir_iadd_imm(b, vp, 1), st->index_region));
+      nir_store_global(b, v,
+                       nir_iadd(b, st->out_index, nir_u2u64(b, nir_imul_imm(b, e, 4))),
+                       .align_mul = 4, .write_mask = 0x1);
+   }
+   nir_pop_if(b, NULL);
 }
 
 static nir_def *
@@ -641,6 +711,17 @@ lower_emit_vertex(nir_builder *b, nir_intrinsic_instr *intr,
                   load_components(b, xf, nir_imm_int(b, 12), 3, 32);
                val = clip_to_screen_xf(b, clip, scale, offset);
 
+               /* Per-viewport index lists: EndPrimitive needs the viewport
+                * of each vertex it lists.
+                */
+               nir_push_if(b, nir_ine_imm(b, st->vp_split, 0));
+               nir_store_global(
+                  b, idx,
+                  nir_iadd(b, st->out_viewport,
+                           nir_u2u64(b, nir_imul_imm(b, slot, 4))),
+                  .align_mul = 4, .write_mask = 0x1);
+               nir_pop_if(b, NULL);
+
                /* multiViewport (jm-v7 017): the tiler only has one scissor
                 * box (the union), so the selected viewport's scissor is a
                 * clip-distance kill in the FS. d >= 0 inside; times clip w
@@ -673,6 +754,25 @@ lower_emit_vertex(nir_builder *b, nir_intrinsic_instr *intr,
             val = nir_bcsel(b, nir_ine_imm(b, st->out_clip_space, 0), clip, val);
             store_components(b, st->out_pos,
                              nir_imul_imm(b, slot, opts->pos_stride), val);
+            continue;
+         }
+
+         /* gl_PointSize of an emitted point (jm-v7 033): fp32, the tiler
+          * reads it as a FP32 point size array.
+          */
+         if (loc == VARYING_SLOT_PSIZ) {
+            if (opts->output_verts_per_prim == 1 && !var->data.compact) {
+               nir_def *size = nir_channel(b, nir_load_var(b, var), 0);
+               if (size->bit_size == 32) {
+                  nir_push_if(b, nir_ine_imm(b, st->out_psiz, 0));
+                  nir_store_global(
+                     b, size,
+                     nir_iadd(b, st->out_psiz,
+                              nir_u2u64(b, nir_imul_imm(b, slot, 4))),
+                     .align_mul = 4, .write_mask = 0x1);
+                  nir_pop_if(b, NULL);
+               }
+            }
             continue;
          }
 
@@ -743,6 +843,7 @@ lower_emit_vertex(nir_builder *b, nir_intrinsic_instr *intr,
             nir_u2u64(b, nir_imul_imm(b, nir_iadd(b, st->out_idx_base, counter),
                                       4)));
          nir_store_global(b, slot, addr, .align_mul = 4, .write_mask = 0x1);
+         store_split_index(b, st, slot, counter, slot);
          nir_def *written = nir_iadd_imm(b, counter, 1);
          nir_store_var(b, st->prims_written[0], written, 1);
          if (st->xfb_dwords) {
@@ -835,6 +936,8 @@ lower_end_primitive(nir_builder *b, nir_intrinsic_instr *intr,
          nir_def *addr =
             stream_index_entry(b, st, stream, nir_iadd_imm(b, idx_entry, k));
          nir_store_global(b, v, addr, .align_mul = 4, .write_mask = 0x1);
+         if (stream == 0)
+            store_split_index(b, st, vbase, nir_iadd_imm(b, idx_entry, k), v);
       }
 
       nir_store_var(b, i, nir_iadd_imm(b, iv, 1), 1);
@@ -867,17 +970,29 @@ emit_degenerate_fill(nir_builder *b, struct lower_gs_state *st)
       nir_local_variable_create(b->impl, glsl_uint_type(), "gs_fill_i");
    nir_store_var(b, i, nir_imm_int(b, 0), 1);
 
+   /* The per-viewport copies too (store_split_index()). */
+   nir_def *limit = nir_imm_int(b, total);
+   if (st->viewport_var)
+      limit = nir_imul_imm(b, nir_iadd_imm(b, st->vp_split, 1), total);
+
    nir_push_loop(b);
    {
       nir_def *iv = nir_load_var(b, i);
-      nir_push_if(b, nir_uge_imm(b, iv, total));
+      nir_push_if(b, nir_uge(b, iv, limit));
       nir_jump(b, nir_jump_break);
       nir_pop_if(b, NULL);
+
+      nir_def *entry = iv;
+      if (st->viewport_var && total) {
+         nir_def *region = nir_udiv_imm(b, iv, total);
+         entry = nir_iadd(b, nir_isub(b, iv, nir_imul_imm(b, region, total)),
+                          nir_imul(b, region, st->index_region));
+      }
 
       /* All indices equal => zero area => culled. */
       nir_def *addr = nir_iadd(
          b, st->out_index,
-         nir_u2u64(b, nir_imul_imm(b, nir_iadd(b, st->out_idx_base, iv), 4)));
+         nir_u2u64(b, nir_imul_imm(b, nir_iadd(b, st->out_idx_base, entry), 4)));
       nir_store_global(b, st->out_vtx_base, addr, .align_mul = 4,
                        .write_mask = 0x1);
 
@@ -996,8 +1111,12 @@ panvk_nir_lower_gs(nir_shader *nir, const struct panvk_gs_lower_options *opts)
    st.out_clip_space = P32(out_clip_space);
    st.viewport_var = nir_find_variable_with_location(nir, nir_var_shader_out,
                                                      VARYING_SLOT_VIEWPORT);
-   if (st.viewport_var)
+   if (st.viewport_var) {
       st.viewports = P64(viewports);
+      st.vp_split = P32(vp_split);
+      st.index_region = P32(index_region);
+      st.out_viewport = P64(out_viewport);
+   }
    st.in_general_stride = P32(in_general_stride);
    st.out_general_stride = P32(out_general_stride);
    st.tess_params = P64(tess_params);
@@ -1099,6 +1218,9 @@ panvk_nir_lower_gs(nir_shader *nir, const struct panvk_gs_lower_options *opts)
    st.index_bias = nir_if_phi(&b, bias_ind, bias_direct);
    st.in_pos = nir_if_phi(&b, pos_ind, in_pos_direct);
    st.in_general = nir_if_phi(&b, gen_ind, in_general_direct);
+   st.in_psiz = load_in_psiz(&b, opts, indirect_cmd);
+   st.in_psiz_stride = P32(in_psiz_stride);
+   st.out_psiz = P64(out_psiz);
 
    /* A count only the GPU knows (the tessellator's index count). After the
     * phis above: nir_if_phi merges the if just closed.
@@ -1133,6 +1255,31 @@ panvk_nir_lower_gs(nir_shader *nir, const struct panvk_gs_lower_options *opts)
                        nir_imm_int(&b, MAX2(opts->output_verts_per_prim, 1)));
       nir_store_global(&b, nir_iadd_imm(&b, count, -1), tiler_count_addr,
                        .align_mul = 4, .write_mask = 0x1);
+
+      /* Per-viewport tiler jobs (jm-v7 031): an array, tiler_job_stride
+       * bytes apart, the first one at tiler_index_count.
+       */
+      if (st.viewport_var) {
+         nir_def *n = st.vp_split;
+         nir_def *stride = P32(tiler_job_stride);
+         nir_variable *k =
+            nir_local_variable_create(b.impl, glsl_uint_type(), "gs_tiler_k");
+         nir_store_var(&b, k, nir_imm_int(&b, 1), 1);
+         nir_push_loop(&b);
+         {
+            nir_def *kv = nir_load_var(&b, k);
+            nir_push_if(&b, nir_uge(&b, kv, n));
+            nir_jump(&b, nir_jump_break);
+            nir_pop_if(&b, NULL);
+            nir_store_global(
+               &b, nir_iadd_imm(&b, count, -1),
+               nir_iadd(&b, tiler_count_addr,
+                        nir_u2u64(&b, nir_imul(&b, kv, stride))),
+               .align_mul = 4, .write_mask = 0x1);
+            nir_store_var(&b, k, nir_iadd_imm(&b, kv, 1), 1);
+         }
+         nir_pop_loop(&b, NULL);
+      }
    }
    nir_pop_if(&b, NULL);
 #undef P64
@@ -1290,6 +1437,8 @@ panvk_nir_lower_tcs_inputs(nir_shader *nir,
    st.instance_stride = nir_if_phi(&b, in.stride, instance_stride);
    st.in_pos = nir_if_phi(&b, in.pos, in_pos);
    st.in_general = nir_if_phi(&b, in.gen, in_general);
+   st.in_psiz = load_in_psiz(&b, opts, indirect_cmd);
+   st.in_psiz_stride = P32(in_psiz_stride);
    st.tess_params = P64(tess_params);
 #undef P64
 #undef P32

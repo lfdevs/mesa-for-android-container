@@ -268,6 +268,11 @@ struct panvk_cmd_graphics_state {
       uint64_t out_general;
       uint64_t out_index;
       uint64_t in_general;
+      /* gl_PointSize (jm-v7 033): the vertex shader's fp16 point sizes
+       * (0 when it writes none) and the emulation's, for point output.
+       */
+      uint64_t in_psiz;
+      uint64_t out_psiz;
       uint64_t in_offsets;
       uint64_t out_offsets;
       uint64_t viewports;
