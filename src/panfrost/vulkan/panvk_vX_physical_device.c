@@ -361,9 +361,11 @@ panvk_per_arch(get_physical_device_features)(
          indices anymore. On v9-v12, pre-rasterization stages that write
          memory run through gpu_prerast compute instead of IDVS. On by default
          on v9+ (DXVK FL11_1); pan_enable_vertex_pipeline_stores_atomics=false
-         turns it off. */
+         turns it off. On v6/v7 there is no IDVS (jm-v7 006): the vertex job
+         runs the VS once per vertex of the draw's index range and instance
+         (jm-v7 045). */
       .vertexPipelineStoresAndAtomics =
-         (PAN_ARCH >= 9 && instance->drirc.misc.enable_vertex_pipeline_stores_atomics) ||
+         instance->drirc.misc.enable_vertex_pipeline_stores_atomics ||
          instance->drirc.misc.force_enable_shader_atomics,
       .fragmentStoresAndAtomics = true,
       /* v6/v7: jm-v7 033 (TES point size, GS point output size). */
