@@ -1971,7 +1971,7 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index)
       const xcb_rectangle_t *rects = n > 0 ? image->rects : &full;
       for (int i = 0; i < MAX2(n, 1); i++) {
          xcb_rectangle_t rect = rects[i];
-         /* app damage rects are unclipped: keep copies inside the segment */
+         /* clipped in x11_queue_present; re-checked to keep copies in the segment */
          if (rect.x < 0 || rect.y < 0 ||
              rect.x >= chain->extent.width || rect.y >= chain->extent.height)
             continue;
@@ -2371,17 +2371,34 @@ x11_queue_present(struct wsi_swapchain *wsi_chain,
        damage->rectangleCount <= MAX_DAMAGE_RECTS) {
       xcb_rectangle_t *rects = chain->images[image_index].rects;
 
-      update_area = chain->images[image_index].update_region;
+      /* Clip to the image: VkRectLayerKHR offsets may be negative, and a
+       * rect only partly inside must still update its visible part. The
+       * SW present paths index the image with these rects. */
+      unsigned count = 0;
       for (unsigned i = 0; i < damage->rectangleCount; i++) {
          const VkRectLayerKHR *rect = &damage->pRectangles[i];
          assert(rect->layer == 0);
-         rects[i].x = rect->offset.x;
-         rects[i].y = rect->offset.y;
-         rects[i].width = rect->extent.width;
-         rects[i].height = rect->extent.height;
+         const int64_t x0 = MAX2((int64_t)rect->offset.x, 0);
+         const int64_t y0 = MAX2((int64_t)rect->offset.y, 0);
+         const int64_t x1 = MIN2((int64_t)rect->offset.x + rect->extent.width,
+                                 (int64_t)chain->extent.width);
+         const int64_t y1 = MIN2((int64_t)rect->offset.y + rect->extent.height,
+                                 (int64_t)chain->extent.height);
+         if (x1 <= x0 || y1 <= y0)
+            continue;
+         rects[count].x = x0;
+         rects[count].y = y0;
+         rects[count].width = x1 - x0;
+         rects[count].height = y1 - y0;
+         count++;
       }
-      xcb_xfixes_set_region(chain->conn, update_area, damage->rectangleCount, rects);
-      chain->images[image_index].rectangle_count = damage->rectangleCount;
+      if (count > 0) {
+         update_area = chain->images[image_index].update_region;
+         xcb_xfixes_set_region(chain->conn, update_area, count, rects);
+      }
+      /* Nothing left inside the image: present it whole, as without
+       * damage. */
+      chain->images[image_index].rectangle_count = count;
    } else {
       chain->images[image_index].rectangle_count = 0;
    }
