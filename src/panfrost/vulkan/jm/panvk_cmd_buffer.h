@@ -37,9 +37,10 @@ struct panvk_batch {
 #if PAN_ARCH == 9
    /* MALLOC_VERTEX jobs, the GPU writes their vertex array pointer. */
    struct util_dynarray malloc_vertex_jobs;
-   /* The vertex/tiler chain writes SYSTEM_TIMESTAMP values. */
-   bool timestamps;
 #endif
+   /* The vertex/tiler chain writes SYSTEM_TIMESTAMP values (v9, and v6/v7
+    * since jm-v7 021). */
+   bool timestamps;
    struct util_dynarray event_ops;
    struct pan_jc vtc_jc;
    struct pan_jc frag_jc;

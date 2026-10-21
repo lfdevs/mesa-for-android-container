@@ -1086,10 +1086,10 @@ panvk_per_arch(get_physical_device_properties)(
       .sampledImageStencilSampleCounts = sample_counts,
       .storageImageSampleCounts = VK_SAMPLE_COUNT_1_BIT,
       .maxSampleMaskWords = 1,
+      /* v6/v7: WRITE_VALUE SYSTEM_TIMESTAMP jobs, as v9 JM (jm-v7 021). */
       .timestampComputeAndGraphics =
-         PAN_ARCH >= 9 && device->kmod.dev->props.gpu_can_query_timestamp,
-      .timestampPeriod =
-         PAN_ARCH >= 9 ? panvk_get_gpu_system_timestamp_period(device) : 0,
+         device->kmod.dev->props.gpu_can_query_timestamp,
+      .timestampPeriod = panvk_get_gpu_system_timestamp_period(device),
       .maxClipDistances = 8,
       .maxCullDistances = 8,
       .maxCombinedClipAndCullDistances = 8,

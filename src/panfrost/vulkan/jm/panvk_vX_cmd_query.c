@@ -127,7 +127,7 @@ panvk_per_arch(CmdWriteTimestamp2)(VkCommandBuffer commandBuffer,
    UNUSED VK_FROM_HANDLE(panvk_cmd_buffer, cmd, commandBuffer);
    UNUSED VK_FROM_HANDLE(panvk_query_pool, pool, queryPool);
 
-#if PAN_ARCH == 9
+#if PAN_ARCH <= 9
    /* Barrier write jobs: after every earlier job of the chain, the GPU
     * system timestamp (as gallium JM), then the availability. With
     * multiview, every view's query gets the timestamp (view_mask is reset at
@@ -472,13 +472,9 @@ panvk_per_arch(CmdCopyQueryPoolResults)(
 
    /* XXX: Do we really need that barrier when EndQuery already handle it? */
    if ((flags & VK_QUERY_RESULT_WAIT_BIT) && cmd->cur_batch != NULL) {
-#if PAN_ARCH == 9
       /* close_batch(cmd, true) is a no-op: really end the batch, so the copy
        * runs after the query writes (e.g. timestamps) recorded in it. */
       panvk_per_arch(cmd_close_batch)(cmd);
-#else
-      close_batch(cmd, true);
-#endif
    }
 
    uint64_t dst_addr = panvk_buffer_gpu_ptr(dst_buffer, dstOffset);

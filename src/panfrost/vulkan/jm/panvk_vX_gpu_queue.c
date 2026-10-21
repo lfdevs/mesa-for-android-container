@@ -107,11 +107,7 @@ note_submitted(struct panvk_gpu_queue *queue, uint64_t atom)
 static inline bool
 batch_has_timestamps(const struct panvk_batch *batch)
 {
-#if PAN_ARCH == 9
    return batch->timestamps;
-#else
-   return false;
-#endif
 }
 
 /* Reset a batch that has already been issued. */
@@ -179,11 +175,9 @@ panvk_queue_submit_batch(struct panvk_gpu_queue *queue,
 
    if (batch->vtc_jc.first_job) {
       uint32_t vtc_core_req = (BASE_JD_REQ_CS | BASE_JD_REQ_T | BASE_JD_REQ_V);
-#if PAN_ARCH == 9
       /* Without PERMON kbase leaves the GPU timestamp counter stopped. */
       if (batch->timestamps)
          vtc_core_req |= BASE_JD_REQ_PERMON;
-#endif
          if (unlikely(!queue->warmed_up)) {
             /* The first vertex/tiler/compute chain must be submitted too
              * (it can be a buffer upload the app relies on). Submit it

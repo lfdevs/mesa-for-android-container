@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <stdlib.h>
+
 #include "util/macros.h"
 #include "util/os_time.h"
 #include "vk_log.h"
@@ -67,9 +69,10 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       reports_per_query = PANVK_SUBQUEUE_COUNT + 1;
       break;
    }
-#elif PAN_ARCH == 9
+#else
    case VK_QUERY_TYPE_TIMESTAMP: {
-      /* One WRITE_VALUE SYSTEM_TIMESTAMP report. */
+      /* One WRITE_VALUE SYSTEM_TIMESTAMP report (JM: v9, v6/v7 since
+       * jm-v7 021). */
       reports_per_query = 1;
       break;
    }
@@ -114,8 +117,27 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       .size = sizeof(struct panvk_query_available_obj) * pool->vk.query_count,
       .alignment = 64,
    };
+#if PAN_ARCH < 9
+   /* Bifrost JM (jm-v7 021): GPU writes to a kbase BASE_MEM_UNCACHED_GPU
+    * region fault on Mali-G52 (the clear_query_result compute job is
+    * hard-stopped, event TERMINATED, and the context's later chains get
+    * JOB_READ_FAULT). Keep the availability words in the cached pool, as
+    * the reports already are; the CPU reads both through
+    * panvk_priv_mem_readback(). PANVK_QUERY_UNCACHED=1 restores the old
+    * placement for A/B testing.
+    */
+   static int query_nc = -1;
+   if (query_nc < 0) {
+      const char *e = getenv("PANVK_QUERY_UNCACHED");
+      query_nc = e && e[0] == '1';
+   }
+   pool->available_mem = panvk_pool_alloc_mem(
+      query_nc ? &device->mempools.rw_nc : &device->mempools.rw,
+      syncobjs_alloc_info);
+#else
    pool->available_mem =
       panvk_pool_alloc_mem(&device->mempools.rw_nc, syncobjs_alloc_info);
+#endif
    if (!pool->available_mem.bo) {
       panvk_pool_free_mem(&pool->mem);
       vk_query_pool_destroy(&device->vk, pAllocator, &pool->vk);
@@ -322,16 +344,17 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
             break;
          }
 #endif
-#if PAN_ARCH == 9
+#if PAN_ARCH < 10
          case VK_QUERY_TYPE_TIMESTAMP:
 #endif
 #if PAN_ARCH >= 9
-         case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
+         case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+#endif
+         {
             if (write_results)
                cpu_write_query_result(dst, 0, flags, src[0].value);
             break;
          }
-#endif
          case VK_QUERY_TYPE_PIPELINE_STATISTICS:
          case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
             for (uint32_t s = 0; write_results && s < result_count; s++) {

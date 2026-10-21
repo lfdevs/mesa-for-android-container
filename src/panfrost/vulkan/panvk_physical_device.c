@@ -1611,7 +1611,7 @@ panvk_GetPhysicalDeviceQueueFamilyProperties2(
             some CTS tests */
          .queueCount = arch >= 10 ? 2 : 1,
          .timestampValidBits =
-            arch >= 9 &&
+            arch >= 6 &&
                   physical_device->kmod.dev->props.gpu_can_query_timestamp
                ? 64
                : 0,
