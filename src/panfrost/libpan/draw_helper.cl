@@ -1987,6 +1987,71 @@ panlib_v7_gs_restart_list(global uint32_t *out_idx, global uint32_t *out_cmd,
    out_cmd[4] = cmd[4];
 }
 
+/* vertexPipelineStoresAndAtomics (jm-v7 046): the vertex job of an indexed
+ * draw shades the whole [min, max] index range. For a vertex shader that
+ * writes memory, these build the bitmap of the vertices the draw really
+ * references; panvk_v7_lower_vs_ref_guard() skips the stores and atomics of
+ * the others. Word 0 non-zero means every vertex is referenced (the range
+ * did not fit), bit i of word 1 + i / 32 is raw vertex id i (index - min).
+ */
+KERNEL(64)
+panlib_v7_vs_ref_clear(global uint32_t *bitmap, uint32_t words)
+{
+   const uint32_t i = cl_global_id.x;
+
+   if (i <= words)
+      bitmap[i] = 0;
+}
+
+KERNEL(64)
+panlib_v7_vs_ref_mark(global uint8_t *index_buffer_ptr,
+                      global VkDrawIndexedIndirectCommand *cmd,
+                      global struct libpan_draw_helper_index_min_max_result *mm,
+                      global atomic_uint *bitmap, uint32_t words,
+                      uint32_t index_bytes_log2__3,
+                      uint8_t primitive_restart__2)
+{
+   const uint32_t max_count_per_thread = 1024;
+   const uint32_t index_bit_size = (1 << index_bytes_log2__3) * 8;
+   const uint32_t start = cmd->firstIndex;
+   const uint32_t index_count = cmd->indexCount;
+   const uint32_t min_vertex = mm->min;
+   const uint32_t max_vertex = mm->max;
+
+   if (max_vertex < min_vertex ||
+       (uint64_t)max_vertex - min_vertex >= (uint64_t)words * 32) {
+      if (cl_global_id.x == 0)
+         atomic_fetch_or(&bitmap[0], 1u);
+      return;
+   }
+
+   const uint32_t base_idx = cl_global_id.x * max_count_per_thread;
+   if (base_idx >= index_count)
+      return;
+   const uint32_t count = MIN2(max_count_per_thread, index_count - base_idx);
+
+   switch (index_bit_size) {
+#define VS_REF_MARK_CASE(sz)                                                   \
+   case sz: {                                                                  \
+      global uint##sz##_t *indices = (global uint##sz##_t *)index_buffer_ptr;  \
+      for (uint32_t i = 0; i < count; i++) {                                   \
+         uint32_t val = (uint32_t)indices[start + base_idx + i];               \
+         if (primitive_restart__2 && val == UINT##sz##_MAX)                    \
+            continue;                                                          \
+         uint32_t rel = val - min_vertex;                                      \
+         atomic_fetch_or(&bitmap[1 + rel / 32], 1u << (rel % 32));             \
+      }                                                                        \
+      break;                                                                   \
+   }
+      VS_REF_MARK_CASE(32)
+      VS_REF_MARK_CASE(16)
+      VS_REF_MARK_CASE(8)
+#undef VS_REF_MARK_CASE
+   default:
+      assert(0 && "Invalid index size");
+   }
+}
+
 #endif
 
 #if PAN_ARCH == 9

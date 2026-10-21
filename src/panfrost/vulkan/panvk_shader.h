@@ -214,6 +214,11 @@ struct panvk_graphics_sysvals {
     * shader running as the vertex shader.
     */
    aligned_u64 tess_params;
+
+   /* Referenced-vertex bitmap of an indexed draw whose vertex shader writes
+    * memory, 0 otherwise (jm-v7 046, panvk_v7_lower_vs_ref_guard()).
+    */
+   aligned_u64 vs_ref_bitmap;
 #endif
 } __attribute__((aligned(FAU_WORD_SIZE)));
 

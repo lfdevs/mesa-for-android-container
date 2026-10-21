@@ -3890,6 +3890,106 @@ panvk_v7_lower_tes_index(nir_shader *nir)
    return nir_progress(true, impl, nir_metadata_control_flow);
 }
 
+/* vertexPipelineStoresAndAtomics on v6/v7 (jm-v7 046). The vertex job of
+ * an indexed draw shades every vertex of the [min, max] index range, also
+ * the ones no index references. For a vertex shader that writes memory,
+ * the draw builds a bitmap of the referenced vertices (panlib_v7_vs_ref_*,
+ * bit i = raw vertex id i, word 0 non-zero = all referenced) and passes it
+ * in vs_ref_bitmap (0: not an indexed draw, all referenced). Stores and
+ * atomics of an unreferenced vertex are skipped; its outputs are never
+ * read by the tiler.
+ */
+static bool
+panvk_v7_is_vs_side_effect(nir_intrinsic_op op)
+{
+   switch (op) {
+   case nir_intrinsic_store_ssbo:
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap:
+   case nir_intrinsic_store_global:
+   case nir_intrinsic_store_global_2x32:
+   case nir_intrinsic_global_atomic:
+   case nir_intrinsic_global_atomic_swap:
+   case nir_intrinsic_global_atomic_2x32:
+   case nir_intrinsic_global_atomic_swap_2x32:
+   case nir_intrinsic_image_store:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_image_atomic_swap:
+   case nir_intrinsic_image_deref_store:
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_deref_atomic_swap:
+   case nir_intrinsic_bindless_image_store:
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_bindless_image_atomic_swap:
+      return true;
+   default:
+      return false;
+   }
+}
+
+static bool
+panvk_v7_lower_vs_ref_guard(nir_shader *nir)
+{
+   if (nir->info.stage != MESA_SHADER_VERTEX)
+      return false;
+
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_shader_gather_info(nir, impl);
+   if (!nir->info.writes_memory)
+      return false;
+
+   nir_builder b = nir_builder_at(nir_before_impl(impl));
+
+   nir_def *addr = load_sysval(&b, graphics, 64, vs_ref_bitmap);
+   nir_push_if(&b, nir_ine_imm(&b, addr, 0));
+   nir_def *hdr = nir_load_global(&b, 1, 32, addr, .align_mul = 4);
+   nir_def *rid = nir_load_raw_vertex_id(&b);
+   nir_def *word_addr = nir_iadd(
+      &b, addr,
+      nir_u2u64(&b, nir_iadd_imm(&b, nir_ishl_imm(&b, nir_ushr_imm(&b, rid, 5),
+                                                  2),
+                                 4)));
+   nir_def *word = nir_load_global(&b, 1, 32, word_addr, .align_mul = 4);
+   nir_def *bit = nir_i2b(
+      &b, nir_iand_imm(&b, nir_ushr(&b, word, nir_iand_imm(&b, rid, 31)), 1));
+   nir_def *ref_in = nir_ior(&b, nir_ine_imm(&b, hdr, 0), bit);
+   nir_pop_if(&b, NULL);
+   nir_def *ref = nir_if_phi(&b, ref_in, nir_imm_true(&b));
+
+   /* Collect first: wrapping splits blocks. */
+   struct util_dynarray list = UTIL_DYNARRAY_INIT;
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type == nir_instr_type_intrinsic &&
+             panvk_v7_is_vs_side_effect(
+                nir_instr_as_intrinsic(instr)->intrinsic))
+            util_dynarray_append(&list, nir_instr_as_intrinsic(instr));
+      }
+   }
+
+   util_dynarray_foreach(&list, nir_intrinsic_instr *, it) {
+      nir_intrinsic_instr *intr = *it;
+      nir_instr *instr = &intr->instr;
+
+      b.cursor = nir_before_instr(instr);
+      nir_instr_remove(instr);
+      nir_push_if(&b, ref);
+      nir_builder_instr_insert(&b, instr);
+      nir_pop_if(&b, NULL);
+      if (nir_intrinsic_infos[intr->intrinsic].has_dest) {
+         nir_def *undef =
+            nir_undef(&b, intr->def.num_components, intr->def.bit_size);
+         nir_def *phi = nir_if_phi(&b, &intr->def, undef);
+         nir_def_rewrite_uses_after(&intr->def, phi);
+      }
+   }
+
+   const bool progress = util_dynarray_num_elements(&list,
+                                                    nir_intrinsic_instr *) > 0;
+   util_dynarray_fini(&list);
+   return nir_progress(progress, impl, nir_metadata_none);
+}
+
 /* TES inputs become loads from the tess control output buffer, then the TES
  * is a vertex shader (poly_nir_lower_tes(to_hw_vs)).
  */
@@ -4048,6 +4148,7 @@ panvk_compile_shader(struct panvk_device *dev,
    struct panvk_tess_info tes_info = {0};
    if (info->stage == MESA_SHADER_TESS_EVAL)
       panvk_v7_lower_tes(info->nir, &tes_info);
+
 #endif
 
 #if PAN_ARCH == 9
@@ -4139,6 +4240,14 @@ panvk_compile_shader(struct panvk_device *dev,
          panvk_lower_nir(dev, nir, info->set_layout_count,
                          info->set_layouts, info->robustness,
                           state, &shader->desc_info, false);
+
+#if PAN_ARCH < 9
+         /* After panvk_lower_nir(): SSBO and image accesses are explicit
+          * intrinsics only then (jm-v7 046). */
+         if (info->stage == MESA_SHADER_VERTEX &&
+             dev->vk.enabled_features.vertexPipelineStoresAndAtomics)
+            NIR_PASS(_, nir, panvk_v7_lower_vs_ref_guard);
+#endif
 
 #if PAN_ARCH >= 10 && PAN_ARCH < 14
          if (inputs.view_mask) {

@@ -2847,6 +2847,12 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
    cmdbuf->state.gfx.fs.required =
       fs_required(&cmdbuf->state.gfx, &cmdbuf->vk.dynamic_graphics_state);
 
+   /* Not indexed: every vertex of the range is referenced (jm-v7 046). */
+   if (cmdbuf->state.gfx.sysvals.vs_ref_bitmap) {
+      cmdbuf->state.gfx.sysvals.vs_ref_bitmap = 0;
+      gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+   }
+
    result = prepare_draw(cmdbuf, draw);
    if (result != VK_SUCCESS)
       return;
@@ -3044,6 +3050,37 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
          index_min_max_res_ptr +
          offsetof(struct libpan_draw_helper_index_min_max_result, min);
    }
+
+   /* vertexPipelineStoresAndAtomics (jm-v7 046): the vertex job shades the
+    * whole [min, max] range, so a vertex shader that writes memory gets the
+    * bitmap of the referenced vertices (panvk_v7_lower_vs_ref_guard()).
+    * Ranges past the cap (1M vertices for 32-bit indices) shade every
+    * vertex of the range with its side effects.
+    */
+   uint64_t vs_ref_bitmap = 0;
+   if (draw->info.index.index_size && vs->info.writes_global) {
+      const uint32_t words = draw->info.index.index_size == 1   ? 8
+                             : draw->info.index.index_size == 2 ? 2048
+                                                                : 32768;
+      vs_ref_bitmap =
+         panvk_cmd_alloc_dev_mem(cmdbuf, desc, (words + 1) * 4, 4).gpu;
+      if (vs_ref_bitmap) {
+         const uint32_t index_count =
+            draw->info.index.buffer_size / draw->info.index.index_size;
+         panlib_v7_vs_ref_clear(&precomp_ctx,
+                                panlib_1d(DIV_ROUND_UP(words + 1, 64)),
+                                PANLIB_BARRIER_JM_BARRIER, vs_ref_bitmap,
+                                words);
+         panlib_v7_vs_ref_mark(
+            &precomp_ctx, panlib_1d(DIV_ROUND_UP(index_count, 65536)),
+            PANLIB_BARRIER_JM_BARRIER, draw->info.index.buffer_dev_addr,
+            draw->info.indirect.buffer_dev_addr, index_min_max_res_ptr,
+            vs_ref_bitmap, words, util_logbase2(draw->info.index.index_size),
+            draw->info.index.restart_enable);
+         job_before_indirect_helper = batch->vtc_jc.job_index;
+      }
+   }
+   cmdbuf->state.gfx.sysvals.vs_ref_bitmap = vs_ref_bitmap;
 
    /* The vertex shader of a tessellated draw runs once. */
    if (draw->tess_phase == PANVK_TESS_PHASE_VS_TCS)
