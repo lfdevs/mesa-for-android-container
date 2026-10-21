@@ -163,6 +163,12 @@ struct panvk_graphics_sysvals {
       float bounds[2];
       uint32_t enable;
       uint32_t samples;
+#if PAN_ARCH < 9
+      /* INTERNAL_CONVERSION of the depth attachment for the LD_TILE of the
+       * depth: Bifrost faults on a zero conversion (jm-v7 022). */
+      uint32_t z_conv;
+      uint32_t _pad;
+#endif
    } ds;
 
    struct {

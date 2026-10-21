@@ -1044,6 +1044,22 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
       set_gfx_sysval(
          cmdbuf, dirty_sysvals, ds.samples,
          MAX2(cmdbuf->vk.dynamic_graphics_state.ms.rasterization_samples, 1));
+#if PAN_ARCH < 9
+      /* LD_TILE of the depth needs its format on Bifrost (jm-v7 022). */
+      uint32_t z_conv = 0;
+      if (db_enable) {
+         VkFormat zfmt = cmdbuf->state.gfx.render.z_attachment.fmt;
+         struct mali_internal_conversion_packed conv;
+
+         pan_pack(&conv, INTERNAL_CONVERSION, cfg) {
+            cfg.register_format = MALI_REGISTER_FILE_FORMAT_F32;
+            cfg.memory_format = GENX(pan_dithered_format_from_pipe_format)(
+               vk_format_to_pipe_format(zfmt), false);
+         }
+         z_conv = conv.opaque[0];
+      }
+      set_gfx_sysval(cmdbuf, dirty_sysvals, ds.z_conv, z_conv);
+#endif
    }
 
    if (dyn_gfx_state_dirty(cmdbuf, INPUT_ATTACHMENT_MAP))

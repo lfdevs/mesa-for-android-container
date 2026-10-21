@@ -2444,6 +2444,15 @@ panvk_lower_depth_bounds(nir_shader *nir)
        * between two triangles).
        */
       nir_def *samples = load_sysval(&b, graphics, 32, ds.samples);
+#if PAN_ARCH < 9
+      /* Bifrost LD_TILE needs the depth format: a zero conversion faults
+       * (INSTR_INVALID_ENC / DATA_INVALID_FAULT), as for depth input
+       * attachments (prepare_iam_sysvals()).
+       */
+      nir_def *z_conv = load_sysval(&b, graphics, 32, ds.z_conv);
+#else
+      nir_def *z_conv = nir_imm_int(&b, 0);
+#endif
       nir_store_var(&b, idx, nir_imm_int(&b, 0), 1);
       nir_push_loop(&b);
       {
@@ -2456,7 +2465,7 @@ panvk_lower_depth_bounds(nir_shader *nir)
                                  .num_slots = 1};
          nir_def *z = nir_load_tile_pan(
             &b, 1, 32, pan_nir_tile_location_sample(&b, FRAG_RESULT_DEPTH, s),
-            pan_nir_tile_default_coverage(&b), nir_imm_int(&b, 0),
+            pan_nir_tile_default_coverage(&b), z_conv,
             .dest_type = nir_type_float32, .access = 0, .io_semantics = sem);
          nir_def *fail =
             nir_ior(&b, nir_flt(&b, z, nir_channel(&b, bounds, 0)),
