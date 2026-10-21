@@ -195,7 +195,7 @@ gs_prims_per_instance(enum mesa_prim prim, uint32_t n,
 /* Input primitives the emulation is dispatched for: exact when the counts
  * are known on the CPU, the cap for a real indirect draw.
  */
-static uint32_t
+static uint64_t
 gs_input_prims(const struct panvk_draw_data *draw,
                const struct panvk_shader_variant *gs)
 {
@@ -217,8 +217,14 @@ gs_input_prims(const struct panvk_draw_data *draw,
       draw->cpu_count ? draw->cpu_count : draw->info.vertex.count;
    const uint32_t inst =
       draw->cpu_count ? draw->cpu_instances : draw->info.instance.count;
-   return gs_prims_per_instance(draw->info.prim, n, gs) * inst;
+   return (uint64_t)gs_prims_per_instance(draw->info.prim, n, gs) * inst;
 }
+
+/* jm-v7 073: the emulation buffers are sized for the worst case in 64 bits;
+ * past this (also the 32-bit ATTRIBUTE_BUFFER size) the draw fails with
+ * OOM instead of wrapping and letting the GPU write out of bounds.
+ */
+#define PANVK_GS_MAX_BUF_BYTES (1ull << 31)
 
 static bool
 has_depth_att(struct panvk_cmd_buffer *cmdbuf)
@@ -700,10 +706,33 @@ panvk_draw_prepare_varyings(struct panvk_cmd_buffer *cmdbuf,
    if (gs_shader) {
       const struct panvk_shader_variant *gs =
          panvk_shader_only_variant(gs_shader);
-      const uint32_t in_prims = gs_input_prims(draw, gs) * gs->gs.invocations;
-      const uint32_t out_verts = in_prims * gs->gs.max_output_verts;
-      const uint32_t out_indices =
-         in_prims * gs->gs.max_output_prims * gs->gs.output_verts_per_prim;
+      /* Worst case in 64 bits (jm-v7 073): an instanced draw with a large
+       * max_vertices wrapped in 32 bits and under-allocated.
+       */
+      const uint64_t in_prims64 =
+         gs_input_prims(draw, gs) * MAX2(gs->gs.invocations, 1);
+      const uint64_t out_verts64 = in_prims64 * gs->gs.max_output_verts;
+      const uint64_t out_indices64 = in_prims64 * gs->gs.max_output_prims *
+                                     gs->gs.output_verts_per_prim;
+      {
+         uint64_t vert_bytes = link->gs_out_stride + 4 /* psiz, viewport */ +
+                               4 * gs->gs.xfb_dwords * 4 /* streams */;
+         for (unsigned i = 0; i < PANVK_VARY_BUF_MAX; i++)
+            vert_bytes += link->buf_strides[i];
+         /* full list, per-viewport lists, extra stream lists */
+         const uint64_t index_bytes = 4 * (1 + PANVK_GS_MAX_VIEWPORTS + 3);
+         if (in_prims64 > UINT32_MAX ||
+             out_verts64 > PANVK_GS_MAX_BUF_BYTES / vert_bytes ||
+             out_indices64 > PANVK_GS_MAX_BUF_BYTES / index_bytes) {
+            mesa_logw_once("panvk: geometry emulation buffers of a draw "
+                           "exceed %llu bytes, draw dropped",
+                           (unsigned long long)PANVK_GS_MAX_BUF_BYTES);
+            return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+         }
+      }
+      const uint32_t in_prims = in_prims64;
+      const uint32_t out_verts = out_verts64;
+      const uint32_t out_indices = out_indices64;
       /* jm-v7 033: a tess eval draw's emulation is sized for
        * PANVK_TESS_GS_MAX_PRIMS, from growable memory.
        */
@@ -755,7 +784,7 @@ panvk_draw_prepare_varyings(struct panvk_cmd_buffer *cmdbuf,
       draw->gs_out_viewport = 0;
       if (draw->vp_split) {
          draw->gs_out_viewport =
-            gs_alloc(cmdbuf, growable, MAX2(out_verts, 1) * 4, 4)
+            gs_alloc(cmdbuf, growable, (uint64_t)MAX2(out_verts, 1) * 4, 4)
                .gpu;
          if (!draw->gs_out_viewport)
             return VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -830,13 +859,13 @@ panvk_draw_prepare_varyings(struct panvk_cmd_buffer *cmdbuf,
          const unsigned nstreams = util_last_bit(gs->gs.stream_mask);
          const uint32_t slots = MAX2(out_verts, 1);
          struct pan_ptr counts = gs_alloc(
-            cmdbuf, growable, nstreams * in_prims * 4, 4);
+            cmdbuf, growable, (uint64_t)nstreams * in_prims * 4, 4);
          struct pan_ptr staging = gs_alloc(
-            cmdbuf, growable, nstreams * slots * gs->gs.xfb_dwords * 4, 4);
+            cmdbuf, growable, (uint64_t)nstreams * slots * gs->gs.xfb_dwords * 4, 4);
          struct pan_ptr stream_index = {0};
          if (nstreams > 1)
             stream_index = gs_alloc(
-               cmdbuf, growable, (nstreams - 1) * MAX2(out_indices, 1) * 4, 4);
+               cmdbuf, growable, (uint64_t)(nstreams - 1) * MAX2(out_indices, 1) * 4, 4);
          if (!counts.gpu || !staging.gpu ||
              (nstreams > 1 && !stream_index.gpu))
             return VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -2254,7 +2283,7 @@ emit_gs_job(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw,
       return 0;
 
    const bool indirect = is_indirect_draw(draw);
-   const uint32_t in_prims = gs_input_prims(draw, gs);
+   const uint32_t in_prims = (uint32_t)gs_input_prims(draw, gs);
    if (!in_prims)
       return dep_job_id;
 
