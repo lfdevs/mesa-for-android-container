@@ -3149,8 +3149,29 @@ panvk_v7_waterfall_tex(nir_builder *b, nir_tex_instr *tex, int t, int s)
    nir_def_replace(&tex->def, res);
 }
 
+/* jm-v7 087: only NonUniform-qualified indices take the waterfall. Without
+ * the qualifier the index must be dynamically uniform (Vulkan "Uniformity"),
+ * so all active lanes agree and the hardware gets the right descriptor, even
+ * when divergence analysis cannot prove it (an index read from an SSBO, a
+ * phi of uniform values in divergent control flow). Those used to pay the
+ * ballot loop (at least two ballots, a read_invocation and a select per
+ * tex). PANVK_TEX_WATERFALL=all restores the jm-v7 085 behavior (every
+ * divergent index), PANVK_TEX_WATERFALL=0 turns the waterfall off.
+ */
 static bool
-panvk_v7_lower_divergent_tex(nir_shader *nir)
+panvk_v7_tex_idx_needs_waterfall(const nir_tex_instr *tex, int src, bool all)
+{
+   if (src < 0 || !nir_src_is_divergent(&tex->src[src].src))
+      return false;
+   if (all)
+      return true;
+   return tex->src[src].src_type == nir_tex_src_texture_offset
+             ? tex->texture_non_uniform
+             : tex->sampler_non_uniform;
+}
+
+static bool
+panvk_v7_lower_divergent_tex(nir_shader *nir, bool all)
 {
    bool progress = false;
 
@@ -3169,8 +3190,8 @@ panvk_v7_lower_divergent_tex(nir_shader *nir)
                continue;
             int t = nir_tex_instr_src_index(tex, nir_tex_src_texture_offset);
             int s = nir_tex_instr_src_index(tex, nir_tex_src_sampler_offset);
-            if ((t >= 0 && nir_src_is_divergent(&tex->src[t].src)) ||
-                (s >= 0 && nir_src_is_divergent(&tex->src[s].src)))
+            if (panvk_v7_tex_idx_needs_waterfall(tex, t, all) ||
+                panvk_v7_tex_idx_needs_waterfall(tex, s, all))
                util_dynarray_append(&texs, tex);
          }
       }
@@ -3181,9 +3202,9 @@ panvk_v7_lower_divergent_tex(nir_shader *nir)
             nir_tex_instr *tex = *texp;
             int t = nir_tex_instr_src_index(tex, nir_tex_src_texture_offset);
             int s = nir_tex_instr_src_index(tex, nir_tex_src_sampler_offset);
-            if (t >= 0 && !nir_src_is_divergent(&tex->src[t].src))
+            if (!panvk_v7_tex_idx_needs_waterfall(tex, t, all))
                t = -1;
-            if (s >= 0 && !nir_src_is_divergent(&tex->src[s].src))
+            if (!panvk_v7_tex_idx_needs_waterfall(tex, s, all))
                s = -1;
             panvk_v7_waterfall_tex(&b, tex, t, s);
          }
@@ -3196,8 +3217,16 @@ panvk_v7_lower_divergent_tex(nir_shader *nir)
       util_dynarray_fini(&texs);
    }
 
-   if (progress)
+   if (progress) {
       NIR_PASS(_, nir, nir_lower_vars_to_ssa);
+      /* jm-v7 087: clean the loop up (the wf_* variable copies, the dead
+       * original index math) before nir_lower_non_uniform_access walks it.
+       */
+      NIR_PASS(_, nir, nir_opt_copy_prop);
+      NIR_PASS(_, nir, nir_opt_algebraic);
+      NIR_PASS(_, nir, nir_opt_constant_folding);
+      NIR_PASS(_, nir, nir_opt_dce);
+   }
 
    return progress;
 }
@@ -3319,7 +3348,7 @@ panvk_lower_nir(struct panvk_device *dev, nir_shader *nir,
    {
       const char *wf = getenv("PANVK_TEX_WATERFALL");
       if (!wf || strcmp(wf, "0"))
-         panvk_v7_lower_divergent_tex(nir);
+         panvk_v7_lower_divergent_tex(nir, wf && !strcmp(wf, "all"));
    }
 #endif
 
