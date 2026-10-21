@@ -3040,7 +3040,12 @@ panvk_v7_lower_robust_txf_buf(nir_builder *b, nir_instr *instr, void *data)
    const bool is_float =
       nir_alu_type_get_base_type(tex->dest_type) == nir_type_float;
    nir_def *hw_a = nir_channel(b, &tex->def, 3);
-   nir_def *no_alpha = nir_ieq_imm(b, hw_a, 0);
+   /* jm-v7 084: a null texel buffer (panvk_device::null_descs.texel, a
+    * 0-element R32_UINT view) must read (0, 0, 0, 0) (PanProbe robustness2
+    * null_descriptors); only a real view, size >= 1, inverts the alpha.
+    */
+   nir_def *no_alpha = nir_iand(b, nir_ieq_imm(b, hw_a, 0),
+                                nir_ine_imm(b, size, 0));
    nir_def *oob_a = is_float ? nir_b2fN(b, no_alpha, bit_size)
                              : nir_b2iN(b, no_alpha, bit_size);
    nir_def *zero = nir_imm_zero(b, 1, bit_size);
