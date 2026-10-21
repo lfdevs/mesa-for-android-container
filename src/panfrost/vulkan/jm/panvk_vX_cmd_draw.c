@@ -347,6 +347,10 @@ panvk_draw_prepare_fs_rsd(struct panvk_cmd_buffer *cmdbuf,
                 dyn_gfx_state_dirty(cmdbuf, DS_DEPTH_WRITE_ENABLE) ||
                 dyn_gfx_state_dirty(cmdbuf, DS_DEPTH_COMPARE_OP) ||
                 dyn_gfx_state_dirty(cmdbuf, DS_DEPTH_COMPARE_OP) ||
+                /* zs_read and the late ZS update of the depth bounds FS
+                 * (jm-v7 015) depend on the enable.
+                 */
+                dyn_gfx_state_dirty(cmdbuf, DS_DEPTH_BOUNDS_TEST_ENABLE) ||
                 dyn_gfx_state_dirty(cmdbuf, DS_STENCIL_TEST_ENABLE) ||
                 dyn_gfx_state_dirty(cmdbuf, DS_STENCIL_OP) ||
                 dyn_gfx_state_dirty(cmdbuf, DS_STENCIL_COMPARE_MASK) ||
