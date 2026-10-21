@@ -191,6 +191,22 @@ panvk_image_can_use_mod(struct panvk_image *image,
           (VK_IMAGE_USAGE_2_STORAGE_BIT_KHR | VK_IMAGE_USAGE_2_HOST_TRANSFER_BIT_KHR))
          return false;
 
+      /* customBorderColorWithoutFormat on v7 (jm-v7 044): AFBC needs an
+       * RGB component order on v7, so an R/B-swapped format is sampled
+       * through a swizzle, which the hardware does not apply to the border
+       * color. A sampler without a format cannot pre-swizzle it, so keep
+       * these formats uncompressed when the feature is enabled.
+       */
+      if (arch == 7 &&
+          image->vk.base.device->enabled_features
+             .customBorderColorWithoutFormat) {
+         const struct util_format_description *fdesc =
+            util_format_description(vk_format_to_pipe_format(image->vk.format));
+         if (fdesc && fdesc->swizzle[0] == PIPE_SWIZZLE_Z &&
+             fdesc->swizzle[2] == PIPE_SWIZZLE_X)
+            return false;
+      }
+
       /* Can't do AFBC on v7- if mutable format is requested. */
       if ((image->vk.create_flags & VK_IMAGE_CREATE_2_MUTABLE_FORMAT_BIT_KHR) &&
           arch <= 7)

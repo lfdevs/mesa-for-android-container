@@ -672,9 +672,10 @@ panvk_per_arch(get_physical_device_features)(
       /* v7 doesn't support AFBC(BGR). We need to tweak the texture swizzle to
        * make it work, which forces us to apply the same swizzle on the border
        * color, meaning we need to know the format when preparing the border
-       * color.
+       * color. When the feature is enabled, R/B-swapped formats skip AFBC
+       * instead and keep their native order (jm-v7 044).
        */
-      .customBorderColorWithoutFormat = PAN_ARCH != 7,
+      .customBorderColorWithoutFormat = true,
 
       /* VK_KHR_pipeline_binary */
       .pipelineBinaries = true,

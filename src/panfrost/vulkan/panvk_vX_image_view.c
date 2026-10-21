@@ -97,9 +97,15 @@ prepare_tex_descs(struct panvk_image_view *view)
       util_format_compose_swizzles(r001, view->pview.swizzle, pview.swizzle);
    }
 #if PAN_ARCH == 7
-   /* v7 requires AFBC reswizzle. */
+   /* v7 requires AFBC reswizzle. With customBorderColorWithoutFormat
+    * enabled, only AFBC images get it (jm-v7 044): the sampler cannot
+    * pre-swizzle a border color without a format, so R/B-swapped formats
+    * do not use AFBC then (panvk_image_can_use_mod()) and keep their native
+    * component order, which the border color matches. */
    else if (!pan_format_is_yuv(view->pview.format) &&
-            pan_afbc_supports_format(PAN_ARCH, view->pview.format))
+            pan_afbc_supports_format(PAN_ARCH, view->pview.format) &&
+            (drm_is_afbc(image->vk.drm_format_mod) ||
+             !dev->vk.enabled_features.customBorderColorWithoutFormat))
       GENX(pan_texture_afbc_reswizzle)(&pview);
 #endif
 
