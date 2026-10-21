@@ -1288,6 +1288,10 @@ panlib_patch_attrib(struct panlib_draw_info *draw,
    pan_pack(desc, ATTRIBUTE, cfg) {
       cfg.buffer_index = unpacked_desc.buffer_index;
       cfg.offset = info.base_offset + draw->instance.base * info.stride;
+      /* Bifrost adds the DCD offset_start to the instanced attribute index
+       * too (pan_cmdstream.c undoes it the same way). */
+      if (draw->instance.count > 1)
+         cfg.offset -= (int32_t)(draw->vertex.raw_offset * info.start_stride);
       cfg.offset_enable = true;
       cfg.format = unpacked_desc.format;
    }

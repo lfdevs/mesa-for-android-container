@@ -957,10 +957,19 @@ panvk_draw_emit_attrib(const struct panvk_draw_data *draw,
       if (helper_attrib_info != NULL) {
          helper_attrib_info->base_offset = offset;
          helper_attrib_info->stride = per_instance ? buf_info->stride : 0;
+         helper_attrib_info->start_stride =
+            per_instance && buf_info->divisor ? buf_info->stride : 0;
       } else {
          cfg.offset = offset;
          if (per_instance)
             cfg.offset += draw->info.instance.base * buf_info->stride;
+         /* Bifrost adds the DCD offset_start (the raw vertex offset) to the
+          * index of instanced attributes as well: undo it, as gallium's
+          * panfrost_emit_vertex_data() does. Divisor 0 has a zero stride. */
+         if (per_instance && buf_info->divisor &&
+             draw->info.instance.count > 1)
+            cfg.offset -=
+               (int32_t)(draw->info.vertex.raw_offset * buf_info->stride);
       }
    }
 }

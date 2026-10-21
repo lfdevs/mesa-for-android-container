@@ -42,6 +42,10 @@ struct libpan_draw_helper_attrib_info {
 
     /* When the attribute is per instance, the stride otherwise 0 */
     uint32_t stride;
+
+    /* Per-instance attribute with a non-zero divisor: the stride the
+     * hardware's offset_start (raw vertex offset) is undone with, else 0. */
+    uint32_t start_stride;
 };
 
 /* Transform feedback captured from the geometry shader emulation, one per
