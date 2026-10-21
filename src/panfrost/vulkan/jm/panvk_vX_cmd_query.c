@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <stdlib.h>
+
 #include "util/os_time.h"
 
 #include "libpan_dgc.h"
@@ -63,7 +65,8 @@ panvk_emit_write_job(struct panvk_cmd_buffer *cmd, struct panvk_batch *batch,
 }
 
 static struct panvk_batch *
-open_batch(struct panvk_cmd_buffer *cmd, bool *had_batch)
+open_batch_flags(struct panvk_cmd_buffer *cmd, bool *had_batch,
+                 bool after_frag)
 {
    bool res = cmd->cur_batch != NULL;
 
@@ -75,10 +78,41 @@ open_batch(struct panvk_cmd_buffer *cmd, bool *had_batch)
    /* Query writes and reads must follow the fragment jobs of the earlier
     * batches (they count occlusion samples and FS invocations), so this
     * batch never overlaps them (jm-v7 023). */
-   cmd->cur_batch->after_frag = true;
+   if (after_frag)
+      cmd->cur_batch->after_frag = true;
 
    return cmd->cur_batch;
 }
+
+static struct panvk_batch *
+open_batch(struct panvk_cmd_buffer *cmd, bool *had_batch)
+{
+   return open_batch_flags(cmd, had_batch, true);
+}
+
+#if PAN_ARCH < 9
+/* jm-v7 088 (review M9): BeginQuery only zeroes the reports of the query
+ * it begins, and the batch is usually the render pass batch holding the
+ * counted draws, so after_frag there turned PANVK_OVERLAP off for every
+ * render pass with an occlusion or statistics query (DXVK). Nothing of an
+ * earlier batch's fragment work touches those reports: the query was reset
+ * since its last use, by vkCmdResetQueryPool (its own after_frag batch,
+ * which this batch's vertex/tiler chain follows) or on the host, after the
+ * last use completed; the pstats per-core scratch is a fresh allocation.
+ * EndQuery, timestamps, copies and resets keep after_frag.
+ * PANVK_V7_QUERY_BEGIN_SERIAL=1 restores after_frag on BeginQuery.
+ */
+static bool
+panvk_v7_begin_query_serial(void)
+{
+   static int on = -1;
+   if (on < 0) {
+      const char *e = getenv("PANVK_V7_QUERY_BEGIN_SERIAL");
+      on = e && e[0] == '1';
+   }
+   return on;
+}
+#endif
 
 static void
 close_batch(struct panvk_cmd_buffer *cmd, bool had_batch)
@@ -237,7 +271,12 @@ panvk_per_arch(CmdBeginQueryIndexedEXT)(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(panvk_query_pool, pool, queryPool);
 
    bool had_batch;
+#if PAN_ARCH < 9
+   struct panvk_batch *batch =
+      open_batch_flags(cmd, &had_batch, panvk_v7_begin_query_serial());
+#else
    struct panvk_batch *batch = open_batch(cmd, &had_batch);
+#endif
    uint64_t report_addr = panvk_query_report_dev_addr(pool, query);
    uint32_t zero_queries = 1;
 
