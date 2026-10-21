@@ -45,6 +45,10 @@ enum panvk_debug_flags {
    PANVK_DEBUG_BC_TIMING = 1 << 29,
    /* v6/v7: do not expose the tessellation emulation (jm-v7 014). */
    PANVK_DEBUG_NO_TESS = 1 << 28,
+   /* v6/v7: advertise robustImageAccess2 with no emulation, to measure
+    * what the hardware returns out of bounds (jm-v7 020).
+    */
+   PANVK_DEBUG_RIA2 = 1 << 30,
 };
 
 extern uint64_t panvk_debug;

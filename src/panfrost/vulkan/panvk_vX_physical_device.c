@@ -687,10 +687,16 @@ panvk_per_arch(get_physical_device_features)(
        * buffers, storage images and vertex attributes the hardware bounds
        * of their descriptors, and null descriptors are emulated
        * (panvk_device::null_descs), as in JimVulkan. robustImageAccess2
-       * stays off: the out-of-bounds alpha is unknown there.
+       * stays off: storage image loads are LD_ATTR_TEX/LEA_ATTR_TEX on
+       * attribute descriptors and texelFetch is TEX, and what Bifrost
+       * returns out of bounds (zero? the alpha of formats without one?)
+       * has not been measured. A fix-up like v10's needs the view format,
+       * which a Bifrost shader cannot read from its descriptor.
+       * PANVK_DEBUG=ria2 advertises it as is, to run the PanProbe/CTS
+       * checks on a device (jm-v7 020).
        */
       .robustBufferAccess2 = true,
-      .robustImageAccess2 = PAN_ARCH >= 9,
+      .robustImageAccess2 = PAN_ARCH >= 9 || PANVK_DEBUG(RIA2),
       .nullDescriptor = true,
 
       /* VK_EXT_shader_tile_image */
