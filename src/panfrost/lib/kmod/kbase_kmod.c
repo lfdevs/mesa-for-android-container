@@ -1514,7 +1514,17 @@ kbase_check_bifrost_atom_stride(int fd, bool *seq_nr)
                 "(seq_nr + base_jd_atom_v2)");
       return 64;
    }
-   mesa_logw("kbase: Bifrost JM atom strides 56 and 64 refused, keeping 56");
+   /* jm-v7 019: kbase before uAPI 11.22 (the G71/G72 era) has no
+    * renderpass_id, and its base_jd_atom_v2 is our first 48 bytes. Later
+    * kernels also take 48 as a compat size, so it is only tried last.
+    */
+   if (kbase_try_atom_stride(fd, 48, false)) {
+      mesa_logi("kbase: Bifrost JM atom strides 56 and 64 refused, stride 48 "
+                "(base_jd_atom_v2 without renderpass_id)");
+      return 48;
+   }
+   mesa_logw("kbase: Bifrost JM atom strides 56, 64 and 48 refused, "
+             "keeping 56");
    return 56;
 }
 
