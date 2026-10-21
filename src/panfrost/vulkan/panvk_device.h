@@ -91,6 +91,16 @@ struct panvk_device {
       double timing_us;
    } bc;
 
+   /* BC raw store (csf-v11/201), under the lock in panvk_image.c: the
+    * spill file (fd + 1, 0: not opened, -1: unavailable), its end, and the
+    * spill worker. */
+   struct {
+      int fd_plus1;
+      uint64_t file_end;
+      struct util_queue *queue;
+      uint64_t resident_B, spilled_B;
+   } bc_raw;
+
    /* Bound in place of a missing FS so the depth bounds test still runs. */
    struct panvk_shader *depth_bounds_fs;
 

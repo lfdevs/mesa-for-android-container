@@ -1213,6 +1213,7 @@ void
 panvk_per_arch(cmd_bc_release)(struct panvk_cmd_buffer *cmdbuf)
 {
    bc_timing_flush(cmdbuf);
+   panvk_bc_raw_release(&cmdbuf->bc_raw_refs);
 }
 #else
 static inline uint32_t
@@ -1237,7 +1238,56 @@ panvk_per_arch(device_bc_finish)(struct panvk_device *dev)
                                               dev->bc.timing_pool, NULL);
       dev->bc.timing_pool = VK_NULL_HANDLE;
    }
+   panvk_bc_raw_device_finish(dev);
    vk_meta_device_finish(&dev->vk, &dev->meta);
+}
+
+/* csf-v11/201: make the raw blocks of a raw-store image resident for this
+ * command buffer before any raw access. full: the access overwrites every
+ * block (no read-back of a spilled store). False if that failed (the
+ * command buffer error is set). */
+static bool
+bc_raw_use(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
+           bool write, bool full)
+{
+   if (!img->bc_raw)
+      return true;
+#if PAN_ARCH >= 10
+   VkResult result =
+      panvk_bc_raw_acquire(img, &cmdbuf->bc_raw_refs, write, full);
+   if (result != VK_SUCCESS) {
+      vk_command_buffer_set_error(&cmdbuf->vk, result);
+      return false;
+   }
+   return true;
+#else
+   UNREACHABLE("BC raw stores are v10+ only");
+#endif
+}
+
+/* 4x4 blocks a copy region writes. */
+static uint64_t
+bc_region_blocks(const struct panvk_image *img,
+                 const VkImageSubresourceLayers *subres, VkExtent3D extent)
+{
+   return (uint64_t)DIV_ROUND_UP(extent.width, 4) *
+          DIV_ROUND_UP(extent.height, 4) * extent.depth *
+          vk_image_subresource_layer_count(&img->vk, subres);
+}
+
+/* Copy regions never overlap, so they cover the whole image when their
+ * blocks add up to its block count. */
+static bool
+bc_blocks_full(const struct panvk_image *img, uint64_t blocks)
+{
+   uint64_t total = 0;
+
+   for (uint32_t l = 0; l < img->vk.mip_levels; l++) {
+      const VkExtent3D e = vk_image_mip_level_extent(&img->vk, l);
+      total += (uint64_t)DIV_ROUND_UP(e.width, 4) * DIV_ROUND_UP(e.height, 4) *
+               e.depth;
+   }
+   return blocks >= total * img->vk.array_layers;
 }
 
 static void
@@ -1314,7 +1364,7 @@ panvk_per_arch(cmd_bc_decode_zero_initialized)(
             /* Transcode zero blocks: from the zeroed raw plane, or from a
              * zero row when the image has none. */
             const struct bc_decode_src src =
-               img->bc_no_raw
+               (img->bc_no_raw || img->bc_raw)
                   ? bc_zero_src(cmdbuf, img)
                   : bc_raw_plane_src(img, &subres, (VkOffset3D){0, 0, 0});
             bc_xcode_region(cmdbuf, img, &subres, (VkOffset3D){0, 0, 0},
@@ -1353,7 +1403,7 @@ panvk_per_arch(cmd_bc_decode_zero_initialized)(
                   &img->vk, &b->subresourceRange),
             };
             const struct bc_decode_src src =
-               img->bc_no_raw
+               (img->bc_no_raw || img->bc_raw)
                   ? bc_zero_src(cmdbuf, img)
                   : bc_raw_plane_src(img, &subres, (VkOffset3D){0, 0, 0});
             bc_decode_region_gfx(cmdbuf, img, &subres, (VkOffset3D){0, 0, 0},
@@ -1387,8 +1437,15 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
       const bool xcode = bc_img->bc_lowmem == 1;
       const uint32_t timing = bc_timing_begin(cmdbuf);
 
+      uint64_t blocks = 0;
+      for (uint32_t i = 0; i < pCopyMemoryInfo->regionCount; i++)
+         blocks += bc_region_blocks(bc_img,
+                                    &pCopyMemoryInfo->pRegions[i].imageSubresource,
+                                    pCopyMemoryInfo->pRegions[i].imageExtent);
+
       /* bc_no_raw images keep no raw blocks: only the shadow is written. */
-      if (!bc_img->bc_no_raw)
+      if (!bc_img->bc_no_raw &&
+          bc_raw_use(cmdbuf, bc_img, true, bc_blocks_full(bc_img, blocks)))
          copy_memory_to_image_raw(commandBuffer, pCopyMemoryInfo);
 
       /* Decode (or transcode) straight from the copy source: the raw copy
@@ -1511,6 +1568,10 @@ panvk_per_arch(CmdCopyImageToMemoryKHR)(
    struct vk_meta_copy_image_properties img_props =
       panvk_meta_copy_get_image_properties(img, false, false);
    struct panvk_cmd_meta_compute_save_ctx save = {0};
+
+   /* Raw blocks of a raw-store image (csf-v11/201). */
+   if (!bc_raw_use(cmdbuf, img, false, false))
+      return;
 
    meta_compute_start(cmdbuf, &save);
    vk_meta_copy_image_to_memory(&cmdbuf->vk, &dev->meta, pCopyMemoryInfo,
@@ -1798,6 +1859,21 @@ cmd_copy_image(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(panvk_image, bc_src, pCopyImageInfo->srcImage);
    VK_FROM_HANDLE(panvk_image, bc_dst, pCopyImageInfo->dstImage);
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   /* Raw blocks of raw-store images (csf-v11/201): read from the source,
+    * written to the destination (unless it keeps none). */
+   /* A BC -> BC copy writes whole blocks of the copy extent. */
+   uint64_t blocks = 0;
+   if (panvk_format_is_bc(bc_src->vk.format)) {
+      for (uint32_t i = 0; i < pCopyImageInfo->regionCount; i++)
+         blocks += bc_region_blocks(bc_dst,
+                                    &pCopyImageInfo->pRegions[i].dstSubresource,
+                                    pCopyImageInfo->pRegions[i].extent);
+   }
+   if (!bc_raw_use(cmdbuf, bc_src, false, false) ||
+       (!bc_dst->bc_no_raw &&
+        !bc_raw_use(cmdbuf, bc_dst, true, bc_blocks_full(bc_dst, blocks))))
+      return;
 
    if (bc_dst->bc_emul && bc_dst->bc_no_raw) {
       bc_copy_image_no_raw(cmdbuf, pCopyImageInfo);

@@ -1091,6 +1091,7 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
 
    panvk_per_arch(cmd_bc_release)(cmdbuf);
    util_dynarray_fini(&cmdbuf->bc_timing);
+   util_dynarray_fini(&cmdbuf->bc_raw_refs);
    util_dynarray_fini(&cmdbuf->vmr_segs);
    panvk_pool_cleanup(&cmdbuf->cs_pool);
    panvk_pool_cleanup(&cmdbuf->desc_pool);

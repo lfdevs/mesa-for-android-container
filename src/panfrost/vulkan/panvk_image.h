@@ -73,10 +73,41 @@ struct panvk_image {
     * is never written: uploads and copies go straight to the shadow. */
    uint8_t bc_lowmem;
    bool bc_no_raw;
+
+   /* BC raw store (csf-v11/201): a lowmem image that can be read back
+    * (TRANSFER_SRC) keeps its raw blocks outside the image memory, in a
+    * driver BO that only exists while command buffers use it and is
+    * written to a spill file otherwise. planes[0].plane.base points at
+    * the BO while it exists (0 otherwise): every raw access must go
+    * through panvk_bc_raw_acquire() first. NULL for other images. */
+   struct panvk_bc_raw *bc_raw;
+   /* Set by panvk_image_init() when the image gets a raw store (bc_raw is
+    * created by vkCreateImage). The raw blocks take no image memory. */
+   bool bc_raw_store;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_image, vk.base, VkImage,
                                VK_OBJECT_TYPE_IMAGE)
+
+struct util_dynarray;
+
+/* Make the raw blocks of a bc_raw image resident for a command buffer that
+ * is being recorded: (re)creates the BO if needed (zeroed, or read back from
+ * the spill file), sets planes[0].plane.base and adds the store to 'refs'
+ * (an array of struct panvk_bc_raw *, released when the command buffer can
+ * no longer be pending). 'write': the command buffer writes raw blocks;
+ * 'full': it overwrites all of them (nothing to read back). */
+VkResult panvk_bc_raw_acquire(struct panvk_image *image,
+                              struct util_dynarray *refs, bool write,
+                              bool full);
+
+/* Drop the references of a command buffer that is reset or freed. Stores
+ * no command buffer uses any more are spilled by a worker thread. */
+void panvk_bc_raw_release(struct util_dynarray *refs);
+
+/* Device teardown: wait for pending spills, close the spill file. */
+struct panvk_device;
+void panvk_bc_raw_device_finish(struct panvk_device *dev);
 
 
 static inline void

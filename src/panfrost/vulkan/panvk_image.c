@@ -626,7 +626,9 @@ panvk_image_init_layouts(struct panvk_image *image,
       image->bc_decoded.image.planes[0] = &image->bc_decoded.plane;
       /* Without a raw plane the shadow is all the memory the image has. */
       image->bc_decoded_offset =
-         image->bc_no_raw ? 0 : ALIGN_POT(plane_layout.offset_B, 4096);
+         (image->bc_no_raw || image->bc_raw_store)
+         ? 0
+         : ALIGN_POT(plane_layout.offset_B, 4096);
    } else if (image->bc_emul) {
       struct pan_image *dec = &image->bc_decoded.image;
       enum pipe_format dec_pfmt = vk_format_to_pipe_format(image->bc_format);
@@ -730,8 +732,11 @@ panvk_image_get_total_size(const struct panvk_image *image)
 {
    uint64_t size = 0;
    /* bc_no_raw: planes[0] (raw blocks) is never accessed, so it gets no
-    * memory of its own and only aliases the start of the shadow. */
-   for (uint8_t plane = 0; plane < image->plane_count && !image->bc_no_raw;
+    * memory of its own and only aliases the start of the shadow.
+    * bc_raw_store: the raw blocks live in the raw store (csf-v11/201). */
+   for (uint8_t plane = 0;
+        plane < image->plane_count && !image->bc_no_raw &&
+        !image->bc_raw_store;
         plane++)
       size = MAX2(size, panvk_image_plane_size(image, plane));
    if (image->bc_emul) {
@@ -759,6 +764,13 @@ panvk_image_report_binding(struct panvk_device *dev, struct panvk_image *image,
                                       panvk_image_plane_size(image, plane),
                                       type);
       }
+   } else if (image->bc_raw_store) {
+      /* planes[0] points at the raw store: the memory starts with the
+       * shadow. */
+      if (image->bc_decoded.plane.base)
+         panvk_address_binding_report(dev, &image->vk.base,
+                                      image->bc_decoded.plane.base,
+                                      panvk_image_get_total_size(image), type);
    } else if (image->planes[0].plane.base) {
       panvk_address_binding_report(dev, &image->vk.base,
                                    image->planes[0].plane.base,
@@ -816,6 +828,39 @@ panvk_bc_lowmem_allowed(const struct panvk_image *image,
    return true;
 }
 
+static VkResult panvk_bc_raw_create(struct panvk_device *dev,
+                                    struct panvk_image *image);
+static void panvk_bc_raw_destroy(struct panvk_image *image);
+static void panvk_bc_raw_rebind(struct panvk_image *image);
+
+/* PANVK_BC_RAW=store (default) | plane, PANVK_BC_RAW_MIN (bytes, default
+ * 64 KiB): raw block planes at least that big go to the raw store. */
+static bool
+panvk_bc_raw_store_wanted(const struct panvk_image *image)
+{
+   static int64_t min_B = -1;
+
+   if (min_B < 0) {
+      const char *mode = os_get_option("PANVK_BC_RAW");
+      int64_t v = debug_get_num_option("PANVK_BC_RAW_MIN", 64 * 1024);
+
+      if (mode && strcmp(mode, "store") && strcmp(mode, "plane"))
+         mesa_logw("panvk: unknown PANVK_BC_RAW=%s, using store", mode);
+      p_atomic_set(&min_B,
+                   (mode && !strcmp(mode, "plane")) ? INT64_MAX : MAX2(v, 0));
+   }
+
+   const uint32_t blk_B = vk_format_get_blocksize(image->vk.format);
+   uint64_t size = 0;
+   for (uint32_t l = 0; l < image->vk.mip_levels; l++) {
+      const VkExtent3D e = vk_image_mip_level_extent(&image->vk, l);
+      size += (uint64_t)DIV_ROUND_UP(e.width, 4) * DIV_ROUND_UP(e.height, 4) *
+              blk_B;
+   }
+   size *= image->vk.array_layers;
+   return size >= (uint64_t)p_atomic_read(&min_B);
+}
+
 VkResult
 panvk_image_init(struct panvk_image *image,
                  const VkImageCreateInfo *pCreateInfo)
@@ -843,19 +888,25 @@ panvk_image_init(struct panvk_image *image,
     * meta adjustments below add MUTABLE/BLOCK_TEXEL_VIEW_COMPATIBLE. */
    image->bc_lowmem = 0;
    image->bc_no_raw = false;
+   image->bc_raw_store = false;
    if (image->bc_gfx && panvk_bc_lowmem_enabled(phys_dev) &&
        panvk_bc_lowmem_allowed(image, pCreateInfo)) {
       const VkFormat lm_format = panvk_bc_lowmem_format(image->vk.format);
       const bool no_raw =
          !(image->vk.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+      /* csf-v11/201: images that can be read back keep their raw blocks
+       * in the raw store instead of the image memory. */
+      const bool raw_store = !no_raw && panvk_bc_raw_store_wanted(image);
 
       if (lm_format != VK_FORMAT_UNDEFINED) {
          image->bc_lowmem = 1;
          image->bc_format = lm_format;
          image->bc_no_raw = no_raw;
-      } else if (no_raw) {
+         image->bc_raw_store = raw_store;
+      } else if (no_raw || raw_store) {
          image->bc_lowmem = 2;
-         image->bc_no_raw = true;
+         image->bc_no_raw = no_raw;
+         image->bc_raw_store = raw_store;
       }
    }
 
@@ -1103,6 +1154,14 @@ panvk_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
          goto err_destroy_image;
    }
 
+   if (image->bc_raw_store) {
+      result = panvk_bc_raw_create(dev, image);
+      if (result != VK_SUCCESS) {
+         panvk_DestroyImage(device, image->bc_shadow, pAllocator);
+         goto err_destroy_image;
+      }
+   }
+
    *pImage = panvk_image_to_handle(image);
    return VK_SUCCESS;
 
@@ -1127,6 +1186,7 @@ panvk_DestroyImage(VkDevice _device, VkImage _image,
       return;
 
    panvk_DestroyImage(_device, image->bc_shadow, pAllocator);
+   panvk_bc_raw_destroy(image);
 
    if (image->vk.create_flags &
        VK_IMAGE_CREATE_2_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT) {
@@ -1661,6 +1721,8 @@ panvk_image_bind(struct panvk_device *dev,
    } else {
       for (unsigned plane = 0; plane < image->plane_count; plane++)
          panvk_image_plane_bind_mem(dev, &image->planes[plane], mem, offset);
+      if (image->bc_raw)
+         panvk_bc_raw_rebind(image);
       if (image->bc_emul) {
          const uint64_t dec_offset = offset + image->bc_decoded_offset;
 
@@ -1700,4 +1762,403 @@ panvk_BindImageMemory2(VkDevice device, uint32_t bindInfoCount,
    }
 
    return result;
+}
+
+/* ---- BC raw store (csf-v11/201) ----
+ *
+ * Vulkan requires the raw BC blocks back from image -> buffer copies and
+ * from BC-source image copies, so a BC image with TRANSFER_SRC can not
+ * just drop them (DXVK sets TRANSFER_SRC on every texture). Instead of a
+ * plane in the image memory, such an image gets a panvk_bc_raw:
+ *
+ *  - the blocks live in a driver BO (CPU-cached mapping) while command
+ *    buffers that touch the raw blocks exist. Every such command buffer
+ *    takes a reference at record time (panvk_bc_raw_acquire()) and drops it
+ *    when it is reset or freed, i.e. when it can no longer be pending, so
+ *    the BO is never freed under queued GPU work;
+ *  - once no command buffer references it, a worker thread writes the
+ *    blocks to an unlinked spill file and frees the BO. A later raw access
+ *    reads them back at record time into a new BO (an image that never got
+ *    blocks gets a zeroed one). The GPU always sees one BO per image, so
+ *    raw reads and writes keep Vulkan's ordering whatever the submission
+ *    order of the command buffers.
+ *
+ * The spill copy is only committed if no acquire happened while the file
+ * was written (generation count), and a store read back from the file
+ * twice stays resident from then on (no ping-pong for images that are
+ * updated or copied from all the time). Without a usable spill directory
+ * ($PANVK_BC_RAW_DIR, $TMPDIR, the Android app cache directory,
+ * /data/local/tmp, /tmp; the one used is logged) stores stay resident,
+ * which costs what the in-image raw plane did.
+ */
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include "util/detect_os.h"
+#include "util/u_queue.h"
+#include "panvk_priv_bo.h"
+
+struct panvk_bc_raw {
+   struct panvk_device *dev;
+   struct panvk_image *image; /* NULL once the image is destroyed */
+   uint64_t size;
+   struct panvk_priv_bo *bo;
+   uint32_t refs;     /* image + command buffers + a queued spill job */
+   uint32_t cmd_refs; /* command buffers that reference bo */
+   uint32_t gen;      /* bumped by every acquire */
+   uint32_t remat;    /* times read back from the spill file */
+   bool written;      /* blocks were ever written (else all zero) */
+   bool on_disk;      /* the spill file holds the blocks */
+   bool pinned;       /* never spilled again */
+   bool spill_queued;
+   int64_t file_off;  /* -1: no space in the spill file yet */
+};
+
+static simple_mtx_t bc_raw_lock = SIMPLE_MTX_INITIALIZER;
+
+static uint64_t
+bc_raw_plane_size(const struct panvk_image *image)
+{
+   const struct pan_image_layout *l = &image->planes[0].plane.layout;
+   return l->slices[0].offset_B + l->data_size_B;
+}
+
+static VkResult
+panvk_bc_raw_create(struct panvk_device *dev, struct panvk_image *image)
+{
+   struct panvk_bc_raw *raw =
+      vk_zalloc(&dev->vk.alloc, sizeof(*raw), 8,
+                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!raw)
+      return panvk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   raw->dev = dev;
+   raw->image = image;
+   raw->size = bc_raw_plane_size(image);
+   raw->refs = 1;
+   raw->file_off = -1;
+   image->bc_raw = raw;
+   /* Nothing resident until the first raw access. */
+   image->planes[0].plane.base = 0;
+   return VK_SUCCESS;
+}
+
+/* Called with bc_raw_lock held, when refs drops to 0. */
+static void
+bc_raw_free(struct panvk_bc_raw *raw)
+{
+   struct panvk_device *dev = raw->dev;
+
+   if (raw->bo) {
+      dev->bc_raw.resident_B -= raw->size;
+      panvk_priv_bo_unref(raw->bo);
+   }
+   if (raw->file_off >= 0 && dev->bc_raw.fd_plus1 > 0) {
+#ifdef FALLOC_FL_PUNCH_HOLE
+      fallocate(dev->bc_raw.fd_plus1 - 1,
+                FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, raw->file_off,
+                raw->size);
+#endif
+      if (raw->on_disk)
+         dev->bc_raw.spilled_B -= raw->size;
+   }
+   vk_free(&dev->vk.alloc, raw);
+}
+
+static void
+panvk_bc_raw_destroy(struct panvk_image *image)
+{
+   struct panvk_bc_raw *raw = image->bc_raw;
+
+   if (!raw)
+      return;
+
+   simple_mtx_lock(&bc_raw_lock);
+   raw->image = NULL;
+   if (!--raw->refs)
+      bc_raw_free(raw);
+   simple_mtx_unlock(&bc_raw_lock);
+   image->bc_raw = NULL;
+}
+
+/* vkBindImageMemory set planes[0] to the image memory: point it back at the
+ * store (or at nothing). */
+static void
+panvk_bc_raw_rebind(struct panvk_image *image)
+{
+   simple_mtx_lock(&bc_raw_lock);
+   image->planes[0].plane.base =
+      image->bc_raw->bo ? image->bc_raw->bo->addr.dev : 0;
+   simple_mtx_unlock(&bc_raw_lock);
+}
+
+/* The Android app's cache directory, from the process name (the package,
+ * up to a ':' service suffix): /data/user/<user>/<package>/cache. Android
+ * app processes cannot write /data/local/tmp. */
+static const char *
+bc_raw_app_cache(char *buf, size_t size)
+{
+#if DETECT_OS_ANDROID
+   char name[256] = {0};
+   int fd = open("/proc/self/cmdline", O_RDONLY | O_CLOEXEC);
+
+   if (fd < 0)
+      return NULL;
+   const ssize_t n = read(fd, name, sizeof(name) - 1);
+   close(fd);
+   if (n <= 0 || !name[0] || name[0] == '/')
+      return NULL;
+   name[strcspn(name, ":")] = 0;
+   snprintf(buf, size, "/data/user/%u/%s/cache", (unsigned)(getuid() / 100000),
+            name);
+   return buf;
+#else
+   return NULL;
+#endif
+}
+
+/* Spill file: one unlinked file per device, opened at the first spill.
+ * Called with bc_raw_lock held. */
+static int
+bc_raw_file(struct panvk_device *dev)
+{
+   if (dev->bc_raw.fd_plus1)
+      return dev->bc_raw.fd_plus1 - 1;
+
+   char app_cache[320];
+   const char *dirs[] = {
+      os_get_option("PANVK_BC_RAW_DIR"),
+      getenv("TMPDIR"),
+      bc_raw_app_cache(app_cache, sizeof(app_cache)),
+      "/data/local/tmp",
+      "/tmp",
+   };
+   int fd = -1;
+
+   for (unsigned i = 0; i < ARRAY_SIZE(dirs) && fd < 0; i++) {
+      if (!dirs[i] || !dirs[i][0])
+         continue;
+#ifdef O_TMPFILE
+      fd = open(dirs[i], O_TMPFILE | O_RDWR | O_CLOEXEC, 0600);
+#endif
+      if (fd < 0) {
+         char path[4096];
+         snprintf(path, sizeof(path), "%s/panvk-bc-raw-XXXXXX", dirs[i]);
+         fd = mkostemp(path, O_CLOEXEC);
+         if (fd >= 0)
+            unlink(path);
+      }
+      if (fd >= 0)
+         mesa_logi("panvk: BC raw store spills to %s", dirs[i]);
+   }
+   if (fd < 0)
+      mesa_logw("panvk: no BC raw store spill directory, raw blocks stay "
+                "resident");
+   dev->bc_raw.fd_plus1 = fd < 0 ? -1 : fd + 1;
+   return fd;
+}
+
+static void
+bc_raw_spill_job(void *data, void *gdata, int thread_index)
+{
+   struct panvk_bc_raw *raw = data;
+   struct panvk_device *dev = raw->dev;
+   struct panvk_priv_bo *bo = NULL;
+   bool ok = false;
+   int fd = -1;
+
+   simple_mtx_lock(&bc_raw_lock);
+   raw->spill_queued = false;
+   if (raw->cmd_refs || !raw->bo || !raw->image || raw->pinned)
+      goto out;
+
+   const uint32_t gen = raw->gen;
+   const bool written = raw->written;
+   bo = raw->bo;
+   if (written) {
+      fd = bc_raw_file(dev);
+      if (fd < 0) {
+         raw->pinned = true;
+         goto out;
+      }
+      if (raw->file_off < 0) {
+         raw->file_off = dev->bc_raw.file_end;
+         dev->bc_raw.file_end += ALIGN_POT(raw->size, 4096);
+      }
+   }
+   const int64_t off = raw->file_off;
+   panvk_priv_bo_ref(bo);
+   simple_mtx_unlock(&bc_raw_lock);
+
+   /* GPU writes are complete (no command buffer references the BO). */
+   ok = true;
+   if (written) {
+      pan_kmod_queue_bo_map_sync(bo->bo, 0, bo->addr.host, raw->size,
+                                 PAN_KMOD_BO_SYNC_CPU_CACHE_FLUSH_AND_INVALIDATE);
+      pan_kmod_flush_bo_map_syncs(dev->kmod.dev);
+      ok = pwrite(fd, bo->addr.host, raw->size, off) == (ssize_t)raw->size;
+#ifdef SYNC_FILE_RANGE_WRITE
+      /* Start the writeback and drop the page cache copy: the point is to
+       * get the blocks out of RAM. */
+      if (ok)
+         sync_file_range(fd, off, raw->size,
+                         SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE |
+                            SYNC_FILE_RANGE_WAIT_AFTER);
+#endif
+      if (ok)
+         posix_fadvise(fd, off, raw->size, POSIX_FADV_DONTNEED);
+   }
+
+   simple_mtx_lock(&bc_raw_lock);
+   panvk_priv_bo_unref(bo);
+   if (!ok) {
+      mesa_logw("panvk: BC raw store spill failed (%s), keeping it resident",
+                strerror(errno));
+      raw->pinned = true;
+   } else if (raw->gen == gen && !raw->cmd_refs && raw->image &&
+              raw->bo == bo) {
+      raw->bo = NULL;
+      raw->image->planes[0].plane.base = 0;
+      dev->bc_raw.resident_B -= raw->size;
+      if (written && !raw->on_disk)
+         dev->bc_raw.spilled_B += raw->size;
+      if (!written && raw->on_disk)
+         dev->bc_raw.spilled_B -= raw->size;
+      raw->on_disk = written;
+      panvk_priv_bo_unref(bo);
+   }
+out:
+   if (!--raw->refs)
+      bc_raw_free(raw);
+   simple_mtx_unlock(&bc_raw_lock);
+}
+
+/* Called with bc_raw_lock held. full: the caller overwrites every block,
+ * so the old contents are neither read back nor zeroed. */
+static VkResult
+bc_raw_materialize(struct panvk_bc_raw *raw, bool full)
+{
+   struct panvk_device *dev = raw->dev;
+   struct panvk_priv_bo *bo;
+   VkResult result = panvk_priv_bo_create(
+      dev, raw->size, panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP),
+      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo);
+
+   if (result != VK_SUCCESS)
+      return result;
+
+   bool from_file = false;
+   if (full) {
+      /* The GPU copy writes every block: no CPU write to flush. */
+      raw->bo = bo;
+      dev->bc_raw.resident_B += raw->size;
+      return VK_SUCCESS;
+   }
+   if (raw->on_disk && dev->bc_raw.fd_plus1 > 0) {
+      from_file = pread(dev->bc_raw.fd_plus1 - 1, bo->addr.host, raw->size,
+                        raw->file_off) == (ssize_t)raw->size;
+      if (!from_file) {
+         mesa_loge("panvk: BC raw store read-back failed (%s)",
+                   strerror(errno));
+      } else if (++raw->remat >= 2) {
+         raw->pinned = true;
+      }
+   }
+   if (!from_file)
+      memset(bo->addr.host, 0, raw->size);
+   pan_kmod_queue_bo_map_sync(bo->bo, 0, bo->addr.host, raw->size,
+                              PAN_KMOD_BO_SYNC_CPU_CACHE_FLUSH);
+   pan_kmod_flush_bo_map_syncs(dev->kmod.dev);
+
+   raw->bo = bo;
+   dev->bc_raw.resident_B += raw->size;
+   return VK_SUCCESS;
+}
+
+VkResult
+panvk_bc_raw_acquire(struct panvk_image *image, struct util_dynarray *refs,
+                     bool write, bool full)
+{
+   struct panvk_bc_raw *raw = image->bc_raw;
+   VkResult result = VK_SUCCESS;
+
+   simple_mtx_lock(&bc_raw_lock);
+   if (!raw->bo) {
+      result = bc_raw_materialize(raw, write && full);
+      if (result != VK_SUCCESS)
+         goto out;
+   }
+   raw->gen++;
+   if (write)
+      raw->written = true;
+
+   bool found = false;
+   util_dynarray_foreach(refs, struct panvk_bc_raw *, r)
+      found = found || *r == raw;
+   if (!found) {
+      util_dynarray_append_typed(refs, struct panvk_bc_raw *, raw);
+      raw->cmd_refs++;
+      raw->refs++;
+   }
+   image->planes[0].plane.base = raw->bo->addr.dev;
+out:
+   simple_mtx_unlock(&bc_raw_lock);
+   return result;
+}
+
+void
+panvk_bc_raw_release(struct util_dynarray *refs)
+{
+   if (!util_dynarray_num_elements(refs, struct panvk_bc_raw *))
+      return;
+
+   simple_mtx_lock(&bc_raw_lock);
+   util_dynarray_foreach(refs, struct panvk_bc_raw *, r) {
+      struct panvk_bc_raw *raw = *r;
+      struct panvk_device *dev = raw->dev;
+
+      raw->cmd_refs--;
+      if (!--raw->refs) {
+         bc_raw_free(raw);
+         continue;
+      }
+      if (raw->cmd_refs || !raw->image || !raw->bo || raw->pinned ||
+          raw->spill_queued)
+         continue;
+
+      if (!dev->bc_raw.queue) {
+         struct util_queue *q =
+            vk_zalloc(&dev->vk.alloc, sizeof(*q), 8,
+                      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+         if (!q || !util_queue_init(q, "panvk_bcraw", 256, 1,
+                                    UTIL_QUEUE_INIT_RESIZE_IF_FULL |
+                                       UTIL_QUEUE_INIT_USE_MINIMUM_PRIORITY,
+                                    NULL)) {
+            vk_free(&dev->vk.alloc, q);
+            raw->pinned = true;
+            continue;
+         }
+         dev->bc_raw.queue = q;
+      }
+      raw->spill_queued = true;
+      raw->refs++;
+      util_queue_add_job(dev->bc_raw.queue, raw, NULL,
+                         bc_raw_spill_job, NULL, 0);
+   }
+   simple_mtx_unlock(&bc_raw_lock);
+   util_dynarray_clear(refs);
+}
+
+void
+panvk_bc_raw_device_finish(struct panvk_device *dev)
+{
+   if (dev->bc_raw.queue) {
+      util_queue_finish(dev->bc_raw.queue);
+      util_queue_destroy(dev->bc_raw.queue);
+      vk_free(&dev->vk.alloc, dev->bc_raw.queue);
+      dev->bc_raw.queue = NULL;
+   }
+   if (dev->bc_raw.fd_plus1 > 0)
+      close(dev->bc_raw.fd_plus1 - 1);
+   dev->bc_raw.fd_plus1 = 0;
 }
