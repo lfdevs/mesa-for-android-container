@@ -187,6 +187,15 @@ struct panvk_gs_push {
  * slot Vulkan never uses and pan lays out as generic.
  */
 #define PANVK_GS_VIEWPORT_INDEX_SLOT VARYING_SLOT_CLIP_VERTEX
+/* jm-v7 026: on v6/v7 a vertex shader's CULL_DIST0/1 hold the "cull < 0"
+ * flags the FS kill interpolates (panvk_lower_cull_dist_flags_intr()), not
+ * the distances. A VS or TES whose transform feedback captures
+ * gl_CullDistance also writes the raw distances to these two slots (unused
+ * by Vulkan, generic to pan, not passed on to the FS by the emulation), and
+ * its passthrough captures them from there.
+ */
+#define PANVK_XFB_RAW_CULL_SLOT0     VARYING_SLOT_TEX0
+#define PANVK_XFB_RAW_CULL_SLOT1     VARYING_SLOT_TEX1
 #define PANVK_GS_MAX_VIEWPORTS       16
 #define PANVK_GS_VIEWPORT_STRIDE     40
 

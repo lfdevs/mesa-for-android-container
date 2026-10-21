@@ -546,6 +546,31 @@ panvk_create_dist_var(nir_shader *nir, nir_variable_mode mode,
    return var;
 }
 
+#if PAN_ARCH < 9
+/* Whether a transform feedback capture takes a gl_CullDistance component:
+ * the xfb info sees the merged array (vk_spirv_to_nir() merges before
+ * gathering it), cull right after the nclip clip distances.
+ */
+static bool
+panvk_xfb_captures_cull(const nir_xfb_info *xfb, unsigned nclip)
+{
+   if (!xfb)
+      return false;
+
+   for (unsigned i = 0; i < xfb->output_count; i++) {
+      const nir_xfb_output_info *o = &xfb->outputs[i];
+      if (o->location != VARYING_SLOT_CLIP_DIST0 &&
+          o->location != VARYING_SLOT_CLIP_DIST1)
+         continue;
+      u_foreach_bit(c, o->component_mask) {
+         if ((o->location - VARYING_SLOT_CLIP_DIST0) * 4 + c >= nclip)
+            return true;
+      }
+   }
+   return false;
+}
+#endif
+
 static bool
 panvk_lower_clip_cull_vs(nir_shader *nir)
 {
@@ -597,6 +622,25 @@ panvk_lower_clip_cull_vs(nir_shader *nir)
                     nir_vec(&b, &cull_v[4], 4), 0xf);
    }
    panvk_store_cull_flags(&b, nir, cull, cull_v, ncull);
+#if PAN_ARCH < 9
+   /* jm-v7 026: CULL_DIST0/1 get the kill flags, keep the distances for a
+    * transform feedback capture (see PANVK_XFB_RAW_CULL_SLOT0).
+    */
+   if (ncull && panvk_xfb_captures_cull(nir->xfb_info, nclip)) {
+      nir_store_var(&b,
+                    panvk_create_dist_var(nir, nir_var_shader_out,
+                                          PANVK_XFB_RAW_CULL_SLOT0,
+                                          "xfb_cull0"),
+                    nir_vec(&b, &cull_v[0], 4), 0xf);
+      if (ncull > 4) {
+         nir_store_var(&b,
+                       panvk_create_dist_var(nir, nir_var_shader_out,
+                                             PANVK_XFB_RAW_CULL_SLOT1,
+                                             "xfb_cull1"),
+                       nir_vec(&b, &cull_v[4], 4), 0xf);
+      }
+   }
+#endif
    return nir_progress(true, nir_shader_get_entrypoint(nir),
                        nir_metadata_none);
 }
@@ -3611,8 +3655,10 @@ panvk_vs_store_xfb(struct panvk_shader_variant *variant,
 
       /* jm-v7 023: the xfb info sees the merged clip+cull array (the cull
        * distances right after the clip ones in CLIP_DIST0/1), the vertex
-       * shader writes them apart (panvk_lower_clip_cull_vs()): capture each
-       * cull component from CULL_DIST0/1.
+       * shader writes them apart (panvk_lower_clip_cull_vs()). jm-v7 026:
+       * CULL_DIST0/1 then hold the FS kill flags (1.0 for a negative
+       * distance), so capture each cull component from the raw copy in
+       * PANVK_XFB_RAW_CULL_SLOT0/1.
        */
       if (dist && ncull) {
          unsigned dw = o->offset / 4;
@@ -3620,7 +3666,7 @@ panvk_vs_store_xfb(struct panvk_shader_variant *variant,
             const unsigned idx = (o->location - VARYING_SLOT_CLIP_DIST0) * 4 + c;
             unsigned loc = o->location, comp = c;
             if (idx >= nclip) {
-               loc = VARYING_SLOT_CULL_DIST0 + (idx - nclip) / 4;
+               loc = PANVK_XFB_RAW_CULL_SLOT0 + (idx - nclip) / 4;
                comp = (idx - nclip) % 4;
             }
             assert(n < ARRAY_SIZE(variant->gs.xfb_outputs));
