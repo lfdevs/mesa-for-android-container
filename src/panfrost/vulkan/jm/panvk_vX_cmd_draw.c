@@ -1589,6 +1589,21 @@ panvk_cmd_prepare_draw_link_shaders(struct panvk_cmd_buffer *cmd)
    return VK_SUCCESS;
 }
 
+/* fillModeNonSolid (jm-v7 018): a triangle topology drawn in line or point
+ * polygon mode without a geometry shader.
+ */
+static bool
+v7_polygon_mode_draw(const struct panvk_cmd_buffer *cmdbuf, enum mesa_prim prim)
+{
+   const VkPolygonMode mode =
+      cmdbuf->vk.dynamic_graphics_state.rs.polygon_mode;
+   const int cls = panvk_xfb_gs_class(prim);
+
+   return (mode == VK_POLYGON_MODE_LINE || mode == VK_POLYGON_MODE_POINT) &&
+          (cls == PANVK_XFB_GS_TRIANGLES || cls == PANVK_XFB_GS_TRIANGLES_ADJ) &&
+          !cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable;
+}
+
 static VkResult
 prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
 {
@@ -1630,6 +1645,19 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
       /* The vertex shader writes clip space: without the emulation there is
        * nothing the tiler could draw.
        */
+      if (!emu) {
+         vk_command_buffer_set_error(&cmdbuf->vk,
+                                     VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+      }
+   } else if (!emu && v7_polygon_mode_draw(cmdbuf, draw->info.prim)) {
+      /* fillModeNonSolid (jm-v7 018): the tiler has no polygon mode, so
+       * the triangles go through a passthrough that emits their edges or
+       * vertices (and culls faces itself).
+       */
+      emu = panvk_per_arch(polygon_gs)(
+         to_panvk_device(cmdbuf->vk.base.device), cmdbuf->state.gfx.vs.shader,
+         draw->info.prim, cmdbuf->vk.dynamic_graphics_state.rs.polygon_mode);
       if (!emu) {
          vk_command_buffer_set_error(&cmdbuf->vk,
                                      VK_ERROR_OUT_OF_DEVICE_MEMORY);
@@ -1899,6 +1927,23 @@ emu_prepare_descs(struct panvk_cmd_buffer *cmdbuf,
    return true;
 }
 
+/* PANVK_GS_CULL_* of the polygon-mode passthrough (jm-v7 018). */
+static uint32_t
+v7_polygon_cull(const struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct vk_rasterization_state *rs =
+      &cmdbuf->vk.dynamic_graphics_state.rs;
+   uint32_t cull = 0;
+
+   if (rs->cull_mode & VK_CULL_MODE_FRONT_BIT)
+      cull |= PANVK_GS_CULL_FRONT;
+   if (rs->cull_mode & VK_CULL_MODE_BACK_BIT)
+      cull |= PANVK_GS_CULL_BACK;
+   if (rs->front_face == VK_FRONT_FACE_COUNTER_CLOCKWISE)
+      cull |= PANVK_GS_FRONT_CCW;
+   return cull;
+}
+
 /*
  * The geometry shader as a compute job between the vertex job (dep_job_id)
  * and the tiler job. Returns the job the tiler waits on, 0 on failure.
@@ -2053,6 +2098,7 @@ emit_gs_job(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw,
       .xfb_invocations = cmdbuf->state.gfx.gs.xfb_invocations,
       .in_screen_space = !vs->gs.vs_clip_space,
       .pstats = pstats,
+      .polygon_cull = gs->gs.polygon ? v7_polygon_cull(cmdbuf) : 0,
       .viewports = viewports,
       .viewport_scale = {gfx_sysvals->viewport.scale.x,
                          gfx_sysvals->viewport.scale.y,
@@ -2894,7 +2940,8 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
     * the geometry emulation of the tess eval draw is sized for
     * PANVK_TESS_GS_MAX_PRIMS input primitives, keep no more indices.
     */
-   const bool nested = gfx->gs.shader || tes_v->gs.vs_clip_space;
+   const bool nested = gfx->gs.shader || tes_v->gs.vs_clip_space ||
+                       v7_polygon_mode_draw(cmdbuf, out_prim);
    uint32_t max_indices = PANVK_TESS_MAX_INDICES;
    if (nested)
       max_indices = MIN2(max_indices, PANVK_TESS_GS_MAX_PRIMS * vpp);

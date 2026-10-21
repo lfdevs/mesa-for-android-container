@@ -339,7 +339,8 @@ panvk_per_arch(get_physical_device_features)(
       .drawIndirectFirstInstance = true,
       .depthClamp = true,
       .depthBiasClamp = true,
-      .fillModeNonSolid = PAN_ARCH >= 9,
+      /* v6/v7: a passthrough GS emits edges or vertices (jm-v7 018). */
+      .fillModeNonSolid = true,
       /* v6/v7: emulated in the FS with LD_TILE of the depth (jm-v7 015). */
       .depthBounds = true,
       .wideLines = true,

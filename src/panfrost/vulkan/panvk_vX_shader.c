@@ -3392,6 +3392,12 @@ panvk_shader_destroy(struct vk_device *vk_dev, struct vk_shader *vk_shader,
       if (shader->passthrough_gs[i])
          panvk_shader_destroy(vk_dev, &shader->passthrough_gs[i]->vk, NULL);
    }
+   for (unsigned m = 0; m < 2; m++) {
+      for (unsigned c = 0; c < 2; c++) {
+         if (shader->polygon_gs[m][c])
+            panvk_shader_destroy(vk_dev, &shader->polygon_gs[m][c]->vk, NULL);
+      }
+   }
 #endif
 
    vk_shader_free(vk_dev, pAllocator, &shader->vk);
@@ -3470,7 +3476,7 @@ panvk_vs_store_xfb(struct panvk_shader_variant *variant,
  */
 static nir_shader *
 panvk_build_passthrough_gs(const struct panvk_shader_variant *vs,
-                               enum panvk_xfb_gs_class cls)
+                           enum panvk_xfb_gs_class cls, VkPolygonMode poly)
 {
    static const struct {
       enum mesa_prim in, out;
@@ -3497,10 +3503,19 @@ panvk_build_passthrough_gs(const struct panvk_shader_variant *vs,
       "panvk xfb passthrough");
    nir_shader *nir = b.shader;
 
+   /* Polygon mode (jm-v7 018): the triangle's edges as a closed line
+    * strip, or its vertices as points.
+    */
+   const bool poly_line = poly == VK_POLYGON_MODE_LINE;
+   const bool poly_point = poly == VK_POLYGON_MODE_POINT;
+   assert(!(poly_line || poly_point) || classes[cls].nemit == 3);
+
    nir->info.gs.input_primitive = classes[cls].in;
-   nir->info.gs.output_primitive = classes[cls].out;
+   nir->info.gs.output_primitive = poly_line    ? MESA_PRIM_LINE_STRIP
+                                   : poly_point ? MESA_PRIM_POINTS
+                                                : classes[cls].out;
    nir->info.gs.vertices_in = classes[cls].vin;
-   nir->info.gs.vertices_out = classes[cls].nemit;
+   nir->info.gs.vertices_out = classes[cls].nemit + (poly_line ? 1 : 0);
    nir->info.gs.invocations = 1;
    nir->info.gs.active_stream_mask = 1;
 
@@ -3508,7 +3523,7 @@ panvk_build_passthrough_gs(const struct panvk_shader_variant *vs,
     * objects) still needs the emulation to rasterize, with nothing to
     * capture.
     */
-   if (vs->gs.xfb_passthrough) {
+   if (vs->gs.xfb_passthrough && !poly_line && !poly_point) {
       nir_xfb_info *xfb =
          rzalloc_size(nir, nir_xfb_info_size(vs->gs.xfb_output_count));
       xfb->buffers_written = vs->gs.xfb_buffers_written;
@@ -3579,10 +3594,47 @@ panvk_build_passthrough_gs(const struct panvk_shader_variant *vs,
       types[n++] = base | bits;
    }
 
-   for (unsigned v = 0; v < classes[cls].nemit; v++) {
+   /* Polygon mode: the tiler only sees lines or points, so the faces are
+    * culled here, with the Vulkan area rule in framebuffer coordinates
+    * (a = -1/2 sum(x_i y_i+1 - x_i+1 y_i); the viewport offset cancels).
+    */
+   const bool poly_mode = poly_line || poly_point;
+   if (poly_mode) {
+      nir_def *cull = load_sysval(&b, compute, 32, gs.polygon_cull);
+      nir_def *scale = load_sysval(&b, compute, 32, gs.viewport_scale);
+      nir_def *fx[3], *fy[3];
+      for (unsigned k = 0; k < 3; k++) {
+         nir_def *p = nir_load_array_var_imm(&b, in_vars[0],
+                                             classes[cls].emit[k]);
+         nir_def *rw = nir_frcp(&b, nir_channel(&b, p, 3));
+         fx[k] = nir_fmul(&b, nir_fmul(&b, nir_channel(&b, p, 0), rw),
+                          nir_channel(&b, scale, 0));
+         fy[k] = nir_fmul(&b, nir_fmul(&b, nir_channel(&b, p, 1), rw),
+                          nir_channel(&b, scale, 1));
+      }
+      nir_def *sum = nir_imm_float(&b, 0.0f);
+      for (unsigned k = 0; k < 3; k++) {
+         const unsigned l = (k + 1) % 3;
+         sum = nir_fadd(&b, sum,
+                        nir_fsub(&b, nir_fmul(&b, fx[k], fy[l]),
+                                 nir_fmul(&b, fx[l], fy[k])));
+      }
+      /* Positive Vulkan area is sum < 0. */
+      nir_def *ccw = nir_test_mask(&b, cull, PANVK_GS_FRONT_CCW);
+      nir_def *front = nir_bcsel(&b, ccw, nir_flt_imm(&b, sum, 0.0f),
+                                 nir_fgt_imm(&b, sum, 0.0f));
+      nir_def *kill = nir_ior(
+         &b, nir_iand(&b, nir_test_mask(&b, cull, PANVK_GS_CULL_FRONT), front),
+         nir_iand(&b, nir_test_mask(&b, cull, PANVK_GS_CULL_BACK),
+                  nir_inot(&b, front)));
+      nir_push_if(&b, nir_inot(&b, kill));
+   }
+
+   const unsigned nemit = classes[cls].nemit + (poly_line ? 1 : 0);
+   for (unsigned v = 0; v < nemit; v++) {
+      const unsigned src = classes[cls].emit[v % classes[cls].nemit];
       for (unsigned j = 0; j < n; j++) {
-         nir_def *val =
-            nir_load_array_var_imm(&b, in_vars[j], classes[cls].emit[v]);
+         nir_def *val = nir_load_array_var_imm(&b, in_vars[j], src);
          if (val->bit_size == 16) {
             switch (nir_alu_type_get_base_type(types[j])) {
             case nir_type_float:
@@ -3601,6 +3653,8 @@ panvk_build_passthrough_gs(const struct panvk_shader_variant *vs,
       nir_emit_vertex(&b, 0);
    }
    nir_end_primitive(&b, 0);
+   if (poly_mode)
+      nir_pop_if(&b, NULL);
 
    nir_validate_shader(nir, "panvk xfb passthrough");
    return nir;
@@ -3626,7 +3680,7 @@ panvk_per_arch(passthrough_gs)(struct panvk_device *dev,
    if (gs)
       return gs;
 
-   nir_shader *nir = panvk_build_passthrough_gs(vs, cls);
+   nir_shader *nir = panvk_build_passthrough_gs(vs, cls, VK_POLYGON_MODE_FILL);
    if (!nir)
       return NULL;
 
@@ -3636,6 +3690,50 @@ panvk_per_arch(passthrough_gs)(struct panvk_device *dev,
    ralloc_free(nir);
    if (result != VK_SUCCESS)
       return NULL;
+
+   struct panvk_shader *old = p_atomic_cmpxchg_ptr(slot, NULL, gs);
+   if (old) {
+      panvk_shader_destroy(&dev->vk, &gs->vk, NULL);
+      return old;
+   }
+
+   return gs;
+}
+
+const struct panvk_shader *
+panvk_per_arch(polygon_gs)(struct panvk_device *dev,
+                           const struct panvk_shader *vs_shader,
+                           enum mesa_prim prim, VkPolygonMode mode)
+{
+   const struct panvk_shader_variant *vs = panvk_shader_hw_variant(vs_shader);
+   const int cls = panvk_xfb_gs_class(prim);
+   const int c = cls == PANVK_XFB_GS_TRIANGLES       ? 0
+                 : cls == PANVK_XFB_GS_TRIANGLES_ADJ ? 1
+                                                     : -1;
+   const int m = mode == VK_POLYGON_MODE_LINE    ? 0
+                 : mode == VK_POLYGON_MODE_POINT ? 1
+                                                 : -1;
+   if (c < 0 || m < 0)
+      return NULL;
+
+   /* Created on first use, as panvk_passthrough_gs(). */
+   struct panvk_shader **slot =
+      (struct panvk_shader **)&vs_shader->polygon_gs[m][c];
+   struct panvk_shader *gs = p_atomic_read(slot);
+   if (gs)
+      return gs;
+
+   nir_shader *nir = panvk_build_passthrough_gs(vs, cls, mode);
+   if (!nir)
+      return NULL;
+
+   panvk_per_arch(compiler_lock)();
+   VkResult result = panvk_per_arch(create_shader)(dev, nir, &gs);
+   panvk_per_arch(compiler_unlock)();
+   ralloc_free(nir);
+   if (result != VK_SUCCESS)
+      return NULL;
+   gs->variants[0].gs.polygon = true;
 
    struct panvk_shader *old = p_atomic_cmpxchg_ptr(slot, NULL, gs);
    if (old) {

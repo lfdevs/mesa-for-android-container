@@ -464,6 +464,10 @@ struct panvk_shader_variant {
       enum mesa_prim output_prim;
       /* Writes gl_ViewportIndex. */
       bool writes_viewport;
+      /* A polygon-mode passthrough (jm-v7 018): it culls faces itself from
+       * panvk_gs_push::polygon_cull.
+       */
+      bool polygon;
       /* multiViewport (jm-v7 017): the generic slot the emulation writes the
        * four scissor edge distances of the selected viewport to, for the
        * FS clip-distance kill. 0 when none.
@@ -581,6 +585,10 @@ struct panvk_shader {
     * primitive class.
     */
    struct panvk_shader *passthrough_gs[PANVK_XFB_GS_CLASS_COUNT];
+   /* fillModeNonSolid (jm-v7 018): the polygon-mode passthroughs, by mode
+    * (line, point) and class (triangles, triangles with adjacency).
+    */
+   struct panvk_shader *polygon_gs[2][2];
 #endif
 
    struct panvk_shader_variant variants[];
@@ -767,6 +775,16 @@ VkResult panvk_per_arch(create_shader)(
 const struct panvk_shader *panvk_per_arch(passthrough_gs)(
    struct panvk_device *dev, const struct panvk_shader *vs,
    enum mesa_prim prim);
+
+/* fillModeNonSolid (jm-v7 018): the geometry shader a vertex shader draws a
+ * triangle topology through in VK_POLYGON_MODE_LINE or _POINT when no
+ * geometry shader is bound: it emits the edges or the vertices of every
+ * triangle it does not cull. NULL when prim is no triangle topology or it
+ * cannot be made.
+ */
+const struct panvk_shader *panvk_per_arch(polygon_gs)(
+   struct panvk_device *dev, const struct panvk_shader *vs,
+   enum mesa_prim prim, VkPolygonMode mode);
 #endif
 
 #endif
