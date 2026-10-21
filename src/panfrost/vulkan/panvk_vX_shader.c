@@ -3070,6 +3070,137 @@ panvk_v7_lower_robust_image2(nir_shader *nir,
       nir_rematerialize_derefs_in_use_blocks_impl(impl);
    return true;
 }
+
+/* jm-v7 085: the Bifrost texture unit takes one texture/sampler index per
+ * warp, also from lanes that are not active. nir_lower_non_uniform_access
+ * makes the index uniform over the active lanes only (the lanes that left
+ * the loop keep their old index), so a non-uniform bindless texelFetch read
+ * the descriptor of another lane (PanProbe vkd3d_heap image_heap on the A06:
+ * output[1] at heap index 500000 / 32767 got the value of index 0).
+ *
+ * Waterfall with every lane active instead: each iteration broadcasts the
+ * index of the first lane still waiting to the whole warp, runs the tex for
+ * all lanes with that uniform index and keeps the result where it matches.
+ * The break is uniform, so lanes never go inactive inside the loop. One
+ * iteration per distinct index, capped at 32 (the ballot width).
+ */
+static void
+panvk_v7_waterfall_tex(nir_builder *b, nir_tex_instr *tex, int t, int s)
+{
+   nir_function_impl *impl = b->impl;
+   const unsigned ncomp = tex->def.num_components;
+   const unsigned bit_size = tex->def.bit_size;
+   const struct glsl_type *res_type = glsl_vector_type(
+      bit_size == 16 ? GLSL_TYPE_UINT16 : GLSL_TYPE_UINT, ncomp);
+
+   nir_def *tidx = t >= 0 ? tex->src[t].src.ssa : NULL;
+   nir_def *sidx = s >= 0 ? tex->src[s].src.ssa : NULL;
+
+   b->cursor = nir_before_instr(&tex->instr);
+   nir_variable *rem_var =
+      nir_local_variable_create(impl, glsl_bool_type(), "wf_rem");
+   nir_variable *res_var = nir_local_variable_create(impl, res_type, "wf_res");
+   nir_variable *it_var =
+      nir_local_variable_create(impl, glsl_uint_type(), "wf_it");
+   nir_store_var(b, rem_var, nir_imm_true(b), 1);
+   nir_store_var(b, res_var, nir_imm_zero(b, ncomp, bit_size),
+                 BITFIELD_MASK(ncomp));
+   nir_store_var(b, it_var, nir_imm_int(b, 0), 1);
+
+   nir_push_loop(b);
+   {
+      nir_def *rem = nir_load_var(b, rem_var);
+      nir_def *it = nir_load_var(b, it_var);
+      nir_def *bal = nir_ballot(b, 1, 32, rem);
+      nir_break_if(b, nir_ior(b, nir_ieq_imm(b, bal, 0),
+                              nir_uge_imm(b, it, 32)));
+      nir_def *lane = nir_find_lsb(b, bal);
+
+      nir_def *hit = rem;
+      nir_def *tv = NULL, *sv = NULL;
+      if (tidx) {
+         tv = nir_read_invocation(b, tidx, lane);
+         hit = nir_iand(b, hit, nir_ieq(b, tidx, tv));
+      }
+      if (sidx) {
+         sv = nir_read_invocation(b, sidx, lane);
+         hit = nir_iand(b, hit, nir_ieq(b, sidx, sv));
+      }
+
+      nir_tex_instr *clone =
+         nir_instr_as_tex(nir_instr_clone(b->shader, &tex->instr));
+      clone->texture_non_uniform = false;
+      clone->sampler_non_uniform = false;
+      nir_builder_instr_insert(b, &clone->instr);
+      if (tv)
+         nir_src_rewrite(&clone->src[t].src, tv);
+      if (sv)
+         nir_src_rewrite(&clone->src[s].src, sv);
+
+      nir_store_var(b, res_var,
+                    nir_bcsel(b, hit, &clone->def, nir_load_var(b, res_var)),
+                    BITFIELD_MASK(ncomp));
+      nir_store_var(b, rem_var, nir_iand(b, rem, nir_inot(b, hit)), 1);
+      nir_store_var(b, it_var, nir_iadd_imm(b, it, 1), 1);
+   }
+   nir_pop_loop(b, NULL);
+
+   nir_def *res = nir_load_var(b, res_var);
+   nir_def_replace(&tex->def, res);
+}
+
+static bool
+panvk_v7_lower_divergent_tex(nir_shader *nir)
+{
+   bool progress = false;
+
+   nir_divergence_analysis(nir);
+
+   nir_foreach_function_impl(impl, nir) {
+      struct util_dynarray texs;
+      util_dynarray_init(&texs, NULL);
+
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_tex)
+               continue;
+            nir_tex_instr *tex = nir_instr_as_tex(instr);
+            if (tex->def.bit_size > 32)
+               continue;
+            int t = nir_tex_instr_src_index(tex, nir_tex_src_texture_offset);
+            int s = nir_tex_instr_src_index(tex, nir_tex_src_sampler_offset);
+            if ((t >= 0 && nir_src_is_divergent(&tex->src[t].src)) ||
+                (s >= 0 && nir_src_is_divergent(&tex->src[s].src)))
+               util_dynarray_append(&texs, tex);
+         }
+      }
+
+      if (util_dynarray_num_elements(&texs, nir_tex_instr *)) {
+         nir_builder b = nir_builder_create(impl);
+         util_dynarray_foreach(&texs, nir_tex_instr *, texp) {
+            nir_tex_instr *tex = *texp;
+            int t = nir_tex_instr_src_index(tex, nir_tex_src_texture_offset);
+            int s = nir_tex_instr_src_index(tex, nir_tex_src_sampler_offset);
+            if (t >= 0 && !nir_src_is_divergent(&tex->src[t].src))
+               t = -1;
+            if (s >= 0 && !nir_src_is_divergent(&tex->src[s].src))
+               s = -1;
+            panvk_v7_waterfall_tex(&b, tex, t, s);
+         }
+         nir_progress(true, impl, nir_metadata_none);
+         progress = true;
+      } else {
+         nir_no_progress(impl);
+      }
+
+      util_dynarray_fini(&texs);
+   }
+
+   if (progress)
+      NIR_PASS(_, nir, nir_lower_vars_to_ssa);
+
+   return progress;
+}
 #endif
 
 static void
@@ -3183,6 +3314,13 @@ panvk_lower_nir(struct panvk_device *dev, nir_shader *nir,
 #if PAN_ARCH < 9
    lower_non_uniform_access_types |=
       nir_lower_non_uniform_texture_offset_access;
+
+   /* jm-v7 085: divergent texture/sampler indices, all lanes active. */
+   {
+      const char *wf = getenv("PANVK_TEX_WATERFALL");
+      if (!wf || strcmp(wf, "0"))
+         panvk_v7_lower_divergent_tex(nir);
+   }
 #endif
 
    /* In practice, most shaders do not have non-uniform-qualified accesses
