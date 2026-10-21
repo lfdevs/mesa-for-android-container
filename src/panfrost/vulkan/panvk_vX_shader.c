@@ -4100,6 +4100,28 @@ panvk_v7_lower_vs_ref_guard(nir_shader *nir)
       }
    }
 
+   /* jm-v7 035: the intrinsic (then block) and its phi (block after the
+    * if) are in different blocks, so nir_def_rewrite_uses_after() above
+    * also rewrote the phi's own then source to the phi. Every guarded
+    * atomic then returned its else value, also for referenced vertices
+    * (vertex_stores iter*: outv 1000; draw_params: rec[undef]). Point the
+    * source back at the intrinsic.
+    */
+   util_dynarray_foreach(&list, nir_intrinsic_instr *, it) {
+      nir_intrinsic_instr *intr = *it;
+      if (!nir_intrinsic_infos[intr->intrinsic].has_dest)
+         continue;
+      nir_block *then_block = intr->instr.block;
+      nir_if *nif = nir_cf_node_as_if(then_block->cf_node.parent);
+      nir_block *after = nir_cf_node_as_block(nir_cf_node_next(&nif->cf_node));
+      nir_foreach_phi(phi, after) {
+         nir_foreach_phi_src(src, phi) {
+            if (src->pred == then_block && src->src.ssa == &phi->def)
+               nir_src_rewrite(&src->src, &intr->def);
+         }
+      }
+   }
+
    const bool progress = util_dynarray_num_elements(&list,
                                                     nir_intrinsic_instr *) > 0;
    util_dynarray_fini(&list);
