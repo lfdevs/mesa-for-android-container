@@ -632,6 +632,8 @@ cleanup_va_heaps(struct panvk_device *device)
 #if PAN_ARCH < 9
 #define PANVK_NULL_ZERO_SIZE (PANVK_NULL_UBO_ENTRIES * 16)
 #define PANVK_NULL_SCRATCH_SIZE 256
+#define PANVK_NULL_SAMPLER_OFFSET (PANVK_NULL_ZERO_SIZE + PANVK_NULL_SCRATCH_SIZE)
+#define PANVK_NULL_BO_SIZE (PANVK_NULL_SAMPLER_OFFSET + PANVK_DESCRIPTOR_SIZE)
 
 /* See panvk_device::null_descs. The texture and storage image descriptors
  * come from the device's own entry points, so they are exactly what an
@@ -651,16 +653,25 @@ panvk_init_null_descs(struct panvk_device *dev)
    /* The zero page, then PANVK_NULL_SCRATCH_SIZE bytes for the
     * PANVK_NULLIMG_INBOUNDS null storage image (see below). */
    result = panvk_priv_bo_create(
-      dev, PANVK_NULL_ZERO_SIZE + PANVK_NULL_SCRATCH_SIZE,
+      dev, PANVK_NULL_BO_SIZE,
       panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP),
       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &dev->null_descs.zero_bo);
    if (result != VK_SUCCESS)
       return result;
-   memset(dev->null_descs.zero_bo->addr.host, 0,
-          PANVK_NULL_ZERO_SIZE + PANVK_NULL_SCRATCH_SIZE);
-   panvk_priv_bo_flush(dev->null_descs.zero_bo, 0,
-                       PANVK_NULL_ZERO_SIZE + PANVK_NULL_SCRATCH_SIZE);
+   memset(dev->null_descs.zero_bo->addr.host, 0, PANVK_NULL_BO_SIZE);
+   static_assert(PANVK_NULL_SAMPLER_OFFSET % PANVK_DESCRIPTOR_SIZE == 0,
+                 "dummy sampler alignment");
+   static_assert(pan_size(SAMPLER) <= PANVK_DESCRIPTOR_SIZE,
+                 "dummy sampler size");
+   pan_cast_and_pack(dev->null_descs.zero_bo->addr.host +
+                        PANVK_NULL_SAMPLER_OFFSET,
+                     SAMPLER, cfg) {
+      cfg.clamp_integer_array_indices = false;
+   }
+   panvk_priv_bo_flush(dev->null_descs.zero_bo, 0, PANVK_NULL_BO_SIZE);
    dev->null_descs.zero_addr = dev->null_descs.zero_bo->addr.dev;
+   dev->null_descs.dummy_sampler_addr =
+      dev->null_descs.zero_addr + PANVK_NULL_SAMPLER_OFFSET;
 
    const VkImageCreateInfo ici = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,

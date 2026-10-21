@@ -15,6 +15,7 @@
 #include "panvk_cmd_alloc.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_cmd_desc_state.h"
+#include "panvk_device.h"
 #include "panvk_entrypoints.h"
 
 #include "pan_pool.h"
@@ -210,6 +211,20 @@ panvk_per_arch(cmd_prepare_shader_desc_tables)(
       desc_info->others.count[PANVK_BIFROST_DESC_TABLE_TEXTURE];
    uint32_t sampler_count =
       desc_info->others.count[PANVK_BIFROST_DESC_TABLE_SAMPLER];
+
+   if (desc_info->direct_mask) {
+      const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+      uint64_t base = panvk_desc_direct_base(dev);
+
+      if (desc_info->direct_mask & PANVK_DIRECT_TEX) {
+         shader_desc_state->tables[PANVK_BIFROST_DESC_TABLE_TEXTURE] = base;
+         tex_count = 1;
+      }
+      if (desc_info->direct_mask & PANVK_DIRECT_SAMPLER) {
+         shader_desc_state->tables[PANVK_BIFROST_DESC_TABLE_SAMPLER] = base;
+         sampler_count = 1;
+      }
+   }
 
    if (tex_count && !sampler_count) {
       struct pan_ptr sampler = panvk_cmd_alloc_desc(cmdbuf, SAMPLER);

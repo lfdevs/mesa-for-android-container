@@ -1096,6 +1096,24 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
                         desc_state->sets[i]->descs.dev);
       }
    }
+
+   /* Bindless textures/samplers (jm-v7 050). */
+   {
+      const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+      uint64_t base = panvk_desc_direct_base(dev);
+
+      u_foreach_bit(i, used_set_mask) {
+         const struct panvk_descriptor_set *set = desc_state->sets[i];
+
+         set_gfx_sysval(cmdbuf, dirty_sysvals, desc.direct_idx[i],
+                        set ? panvk_desc_direct_idx(base, set->descs.dev) : 0);
+      }
+      set_gfx_sysval(cmdbuf, dirty_sysvals, desc.dummy_sampler_idx,
+                     panvk_desc_direct_idx(
+                        base, dev->null_descs.dummy_sampler_addr));
+      set_gfx_sysval(cmdbuf, dirty_sysvals, desc.zero_addr,
+                     dev->null_descs.zero_addr);
+   }
 #endif
 
    /* We mask the dirty sysvals by the shader usage, and only flag

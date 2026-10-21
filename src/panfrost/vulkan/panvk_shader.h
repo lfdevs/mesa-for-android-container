@@ -208,6 +208,13 @@ struct panvk_graphics_sysvals {
 #if PAN_ARCH < 9
    struct {
       aligned_u64 sets[PANVK_DESC_TABLE_GFX_COUNT];
+      /* Bindless textures/samplers (jm-v7 050): index of each set's
+       * first descriptor relative to the direct base, the index of
+       * the device dummy sampler, and the zeroed page that
+       * out-of-bounds bindless image loads read. */
+      uint32_t direct_idx[MAX_SETS];
+      uint32_t dummy_sampler_idx;
+      aligned_u64 zero_addr;
    } desc;
 
    /* Tessellation: the draw's struct poly_tess_params, read by the tess eval
@@ -255,6 +262,13 @@ struct panvk_compute_sysvals {
 #if PAN_ARCH < 9
    struct {
       aligned_u64 sets[PANVK_DESC_TABLE_COMPUTE_COUNT];
+      /* Bindless textures/samplers (jm-v7 050): index of each set's
+       * first descriptor relative to the direct base, the index of
+       * the device dummy sampler, and the zeroed page that
+       * out-of-bounds bindless image loads read. */
+      uint32_t direct_idx[MAX_SETS];
+      uint32_t dummy_sampler_idx;
+      aligned_u64 zero_addr;
    } desc;
 
    /* Geometry shader emulation: a lowered geometry shader runs as compute
@@ -393,6 +407,9 @@ enum panvk_bifrost_desc_table_type {
 
    PANVK_BIFROST_DESC_TABLE_COUNT,
 };
+
+#define PANVK_DIRECT_TEX     BITFIELD_BIT(0)
+#define PANVK_DIRECT_SAMPLER BITFIELD_BIT(1)
 #endif
 
 #define COPY_DESC_HANDLE(table, idx)           ((table << 28) | (idx))
@@ -429,6 +446,9 @@ struct panvk_shader_desc_info {
       struct panvk_priv_mem map;
       uint32_t count[PANVK_BIFROST_DESC_TABLE_COUNT];
    } others;
+   /* PANVK_DIRECT_TEX/SAMPLER: texture/sampler accesses index the set
+    * memory directly, the table points at the direct base (jm-v7 050). */
+   uint32_t direct_mask;
 #else
    struct {
       uint32_t map[MAX_DYNAMIC_BUFFERS];

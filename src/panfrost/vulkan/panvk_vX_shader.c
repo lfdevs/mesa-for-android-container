@@ -2881,10 +2881,17 @@ glsl_type_size(const struct glsl_type *type, bool bindless)
  * hardware zero and alpha is fixed: from the format when the shader has
  * one, else by inverting the hardware alpha.
  */
+struct panvk_v7_ria2_state {
+   uint32_t set_layout_count;
+   struct vk_descriptor_set_layout *const *set_layouts;
+};
+
 static bool
 panvk_v7_lower_robust_image2_intr(nir_builder *b, nir_intrinsic_instr *intr,
-                                  UNUSED void *data)
+                                  void *data)
 {
+   const struct panvk_v7_ria2_state *state = data;
+
    switch (intr->intrinsic) {
    case nir_intrinsic_image_deref_load:
    case nir_intrinsic_image_deref_store:
@@ -2893,6 +2900,19 @@ panvk_v7_lower_robust_image2_intr(nir_builder *b, nir_intrinsic_instr *intr,
       break;
    default:
       return false;
+   }
+
+   /* Bindless images do their own bounds checks (jm-v7 050). */
+   nir_variable *var =
+      nir_deref_instr_get_variable(nir_src_as_deref(intr->src[0]));
+   if (var && var->data.descriptor_set < state->set_layout_count &&
+       state->set_layouts[var->data.descriptor_set]) {
+      const struct panvk_descriptor_set_layout *layout =
+         to_panvk_descriptor_set_layout(
+            state->set_layouts[var->data.descriptor_set]);
+      if (var->data.binding < layout->binding_count &&
+          panvk_binding_is_bindless(&layout->bindings[var->data.binding]))
+         return false;
    }
 
    const enum glsl_sampler_dim dim = nir_intrinsic_image_dim(intr);
@@ -2967,10 +2987,11 @@ panvk_v7_lower_robust_image2_intr(nir_builder *b, nir_intrinsic_instr *intr,
 }
 
 static bool
-panvk_v7_lower_robust_image2(nir_shader *nir)
+panvk_v7_lower_robust_image2(nir_shader *nir,
+                             const struct panvk_v7_ria2_state *state)
 {
    if (!nir_shader_intrinsics_pass(nir, panvk_v7_lower_robust_image2_intr,
-                                   nir_metadata_none, NULL))
+                                   nir_metadata_none, (void *)state))
       return false;
    /* The guarded accesses use derefs from the block above. */
    nir_foreach_function_impl(impl, nir)
@@ -3018,8 +3039,13 @@ panvk_lower_nir(struct panvk_device *dev, nir_shader *nir,
 
 #if PAN_ARCH < 9
    if (rs->images ==
-       VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT)
-      NIR_PASS(_, nir, panvk_v7_lower_robust_image2);
+       VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT) {
+      const struct panvk_v7_ria2_state ria2_state = {
+         .set_layout_count = set_layout_count,
+         .set_layouts = set_layouts,
+      };
+      NIR_PASS(_, nir, panvk_v7_lower_robust_image2, &ria2_state);
+   }
 #endif
 
    panvk_per_arch(nir_lower_descriptors)(nir, dev, rs, set_layout_count,
@@ -3278,6 +3304,13 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
       desc_info->others.count[PANVK_BIFROST_DESC_TABLE_TEXTURE];
    shader->info.sampler_count =
       desc_info->others.count[PANVK_BIFROST_DESC_TABLE_SAMPLER];
+
+   /* Direct (bindless) tables index the set memory relative to the direct
+    * base: give the hardware the maximum count (jm-v7 050). */
+   if (desc_info->direct_mask & PANVK_DIRECT_TEX)
+      shader->info.texture_count = UINT16_MAX;
+   if (desc_info->direct_mask & PANVK_DIRECT_SAMPLER)
+      shader->info.sampler_count = UINT16_MAX;
 
    /* Dummy sampler. */
    if (!shader->info.sampler_count && shader->info.texture_count)
@@ -5419,6 +5452,7 @@ shader_desc_info_deserialize(struct panvk_device *dev,
          return panvk_error(shader, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
       others_count += shader->desc_info.others.count[i];
    }
+   shader->desc_info.direct_mask = blob_read_uint32(blob);
 
    if (others_count) {
       struct panvk_pool_alloc_info alloc_info = {
@@ -5642,6 +5676,7 @@ shader_desc_info_serialize(struct blob *blob,
       blob_write_uint32(blob, shader->desc_info.others.count[i]);
       others_count += shader->desc_info.others.count[i];
    }
+   blob_write_uint32(blob, shader->desc_info.direct_mask);
 
    /* No need to wrap this one in panvk_priv_mem_readback(), because the
     * GPU is not supposed to touch it. */

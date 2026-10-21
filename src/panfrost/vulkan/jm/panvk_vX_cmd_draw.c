@@ -2248,6 +2248,20 @@ emu_prepare_descs(struct panvk_cmd_buffer *cmdbuf,
       if (i < MAX_SETS && desc_state->sets[i])
          sysvals->desc.sets[i] = desc_state->sets[i]->descs.dev;
    }
+   {
+      const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+      uint64_t base = panvk_desc_direct_base(dev);
+
+      u_foreach_bit(i, info->used_set_mask & BITFIELD_MASK(MAX_SETS)) {
+         const struct panvk_descriptor_set *set = desc_state->sets[i];
+
+         sysvals->desc.direct_idx[i] =
+            set ? panvk_desc_direct_idx(base, set->descs.dev) : 0;
+      }
+      sysvals->desc.dummy_sampler_idx =
+         panvk_desc_direct_idx(base, dev->null_descs.dummy_sampler_addr);
+      sysvals->desc.zero_addr = dev->null_descs.zero_addr;
+   }
    sysvals->desc.sets[PANVK_DESC_TABLE_CS_DYN_SSBOS] = ds->dyn_ssbos;
 
    struct pan_ptr job;

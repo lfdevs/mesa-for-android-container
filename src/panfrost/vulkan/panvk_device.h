@@ -143,6 +143,9 @@ struct panvk_device {
       uint32_t tex[8], img[8], texel[8];
       struct panvk_priv_bo *zero_bo;
       uint64_t zero_addr;
+      /* SAMPLER descriptor for samplerless texel fetches through the
+       * direct (bindless) sampler table (jm-v7 050). */
+      uint64_t dummy_sampler_addr;
       VkImage image;
       VkDeviceMemory image_mem;
       VkImageView view;
@@ -265,6 +268,19 @@ static inline struct panvk_device *
 to_panvk_device(struct vk_device *dev)
 {
    return container_of(dev, struct panvk_device, vk);
+}
+
+/* Base of the v6/v7 direct (bindless) texture and sampler tables, see
+ * PANVK_DIRECT_BASE_SPAN in panvk_cmd_desc_state.h (jm-v7 050). Kept 32-byte
+ * aligned like the descriptors.
+ */
+static inline uint64_t
+panvk_desc_direct_base(const struct panvk_device *dev)
+{
+   const uint64_t span = 64ull << 30;
+   uint64_t anchor = dev->null_descs.dummy_sampler_addr;
+
+   return anchor > span ? anchor - span : 0;
 }
 
 /* CSF interface information, sourced from the panthor uAPI or from the
