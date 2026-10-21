@@ -158,6 +158,17 @@ select_plane_pfmt(struct panvk_image *image, uint64_t mod, unsigned plane)
 }
 
 static bool
+panvk_v7_cbc_afbc(void)
+{
+   static int on = -1;
+   if (on < 0) {
+      const char *e = getenv("PANVK_V7_CBC_AFBC");
+      on = !(e && e[0] == '0');
+   }
+   return on;
+}
+
+static bool
 panvk_image_can_use_mod(struct panvk_image *image,
                         const struct pan_image_usage *iusage, uint64_t mod,
                         bool optimal_only)
@@ -197,9 +208,20 @@ panvk_image_can_use_mod(struct panvk_image *image,
        * color. A sampler without a format cannot pre-swizzle it, so keep
        * these formats uncompressed when the feature is enabled.
        */
+      /* jm-v7 089 (review M11): the border color only matters when the
+       * image is sampled, so an image without SAMPLED/INPUT_ATTACHMENT usage
+       * (render targets, backbuffers, transfer-only images) keeps AFBC; its
+       * views get the AFBC reswizzle from the image modifier. View usage
+       * can only be a subset of the image usage.
+       * PANVK_V7_CBC_AFBC=0 restores the old rule (no AFBC for any
+       * R/B-swapped image).
+       */
+      const VkImageUsageFlags cbc_sampled =
+         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
       if (arch == 7 &&
           image->vk.base.device->enabled_features
-             .customBorderColorWithoutFormat) {
+             .customBorderColorWithoutFormat &&
+          ((image->vk.usage & cbc_sampled) || !panvk_v7_cbc_afbc())) {
          const struct util_format_description *fdesc =
             util_format_description(vk_format_to_pipe_format(image->vk.format));
          if (fdesc && fdesc->swizzle[0] == PIPE_SWIZZLE_Z &&
