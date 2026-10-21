@@ -43,6 +43,7 @@
 #include "util/u_hexdump.h"
 #include "util/u_memory.h"
 #include "nir_builder.h"
+#include "nir_builtin_builder.h"
 #include "nir_conversion_builder.h"
 #include "nir_deref.h"
 #include "nir_xfb_info.h"
@@ -2990,13 +2991,75 @@ panvk_v7_lower_robust_image2_intr(nir_builder *b, nir_intrinsic_instr *intr,
    return true;
 }
 
+/* jm-v7 083: uniform texel buffer fetches (txf on a buffer texture) go
+ * through the same attribute path, with the same inverted out-of-bounds
+ * alpha (PanProbe robust_image_access2 tbuf_oob: r32ui (0,0,0,0), rgba8
+ * (0,0,0,1.0)) and 16-bit coordinates. Bounds-check against the buffer
+ * size: an out-of-bounds fetch goes to x = size, RGB is forced to 0 and
+ * the alpha is the inverted hardware alpha (no format in the shader).
+ */
+static bool
+panvk_v7_lower_robust_txf_buf(nir_builder *b, nir_instr *instr, void *data)
+{
+   const struct panvk_v7_ria2_state *state = data;
+
+   if (instr->type != nir_instr_type_tex)
+      return false;
+   nir_tex_instr *tex = nir_instr_as_tex(instr);
+   if (tex->op != nir_texop_txf || tex->sampler_dim != GLSL_SAMPLER_DIM_BUF ||
+       tex->def.num_components != 4 || tex->def.bit_size == 64)
+      return false;
+
+   const int tex_idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_deref);
+   const int coord_idx = nir_tex_instr_src_index(tex, nir_tex_src_coord);
+   if (tex_idx < 0 || coord_idx < 0)
+      return false;
+
+   /* Bindless texel buffers do their own bounds checks (jm-v7 050). */
+   nir_variable *var =
+      nir_deref_instr_get_variable(nir_src_as_deref(tex->src[tex_idx].src));
+   if (var && var->data.descriptor_set < state->set_layout_count &&
+       state->set_layouts[var->data.descriptor_set]) {
+      const struct panvk_descriptor_set_layout *layout =
+         to_panvk_descriptor_set_layout(
+            state->set_layouts[var->data.descriptor_set]);
+      if (var->data.binding < layout->binding_count &&
+          panvk_binding_is_bindless(&layout->bindings[var->data.binding]))
+         return false;
+   }
+
+   b->cursor = nir_before_instr(&tex->instr);
+   nir_def *size = nir_build_texture_query(b, tex, nir_texop_txs, 1,
+                                           nir_type_int32, false, false);
+   nir_def *x = nir_channel(b, tex->src[coord_idx].src.ssa, 0);
+   nir_def *in_bounds = nir_ult(b, x, size);
+   nir_src_rewrite(&tex->src[coord_idx].src, nir_bcsel(b, in_bounds, x, size));
+
+   b->cursor = nir_after_instr(&tex->instr);
+   const unsigned bit_size = tex->def.bit_size;
+   const bool is_float =
+      nir_alu_type_get_base_type(tex->dest_type) == nir_type_float;
+   nir_def *hw_a = nir_channel(b, &tex->def, 3);
+   nir_def *no_alpha = nir_ieq_imm(b, hw_a, 0);
+   nir_def *oob_a = is_float ? nir_b2fN(b, no_alpha, bit_size)
+                             : nir_b2iN(b, no_alpha, bit_size);
+   nir_def *zero = nir_imm_zero(b, 1, bit_size);
+   nir_def *oob = nir_vec4(b, zero, zero, zero, oob_a);
+   nir_def *res = nir_bcsel(b, in_bounds, &tex->def, oob);
+   nir_def_rewrite_uses_after(&tex->def, res);
+   return true;
+}
+
 static bool
 panvk_v7_lower_robust_image2(nir_shader *nir,
                              const struct panvk_v7_ria2_state *state)
 {
+   const bool tbuf = nir_shader_instructions_pass(
+      nir, panvk_v7_lower_robust_txf_buf, nir_metadata_control_flow,
+      (void *)state);
    if (!nir_shader_intrinsics_pass(nir, panvk_v7_lower_robust_image2_intr,
                                    nir_metadata_none, (void *)state))
-      return false;
+      return tbuf;
    /* The guarded accesses use derefs from the block above. */
    nir_foreach_function_impl(impl, nir)
       nir_rematerialize_derefs_in_use_blocks_impl(impl);
