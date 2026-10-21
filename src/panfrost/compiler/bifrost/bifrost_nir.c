@@ -987,6 +987,26 @@ static bool pan_nir_lower_buf_image_access(nir_shader *nir, unsigned arch);
 static bool bi_should_idvs(nir_shader *nir, const struct pan_compile_inputs *inputs);
 static bool bifrost_nir_lower_vs_atomics(nir_shader *nir);
 
+/* nir_lower_atomics filter: true = native. */
+static bool
+bi_atomic_i64_supported(const nir_instr *instr, const void *data)
+{
+   const nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+
+   if (intr->def.bit_size != 64)
+      return true;
+
+   /* Only xchg/cmpxchg (which build their staging vector explicitly) are
+    * trusted at 64 bits; every arithmetic op goes through the CAS loop. */
+   switch (nir_intrinsic_atomic_op(intr)) {
+   case nir_atomic_op_xchg:
+   case nir_atomic_op_cmpxchg:
+      return true;
+   default:
+      return false;
+   }
+}
+
 void
 bifrost_postprocess_nir(nir_shader *nir,
                         const struct pan_compile_inputs *inputs,
@@ -998,6 +1018,12 @@ bifrost_postprocess_nir(nir_shader *nir,
 
    if (gpu_arch >= 9)
       NIR_PASS(_, nir, pan_nir_lower_image_64bit);
+
+   /* Bifrost ATOM_C.i64 stores a value whose high word is the low word
+    * (jm-v7 047, A06 int64_atomics max = 0x13e7_000013e7). Lower 64-bit
+    * arithmetic atomics to a 64-bit ACMPXCHG loop. */
+   if (gpu_arch < 9)
+      NIR_PASS(_, nir, nir_lower_atomics, bi_atomic_i64_supported);
 
    if ((gpu_arch == 9 || gpu_arch == 10) &&
        (inputs->robust_modes & (nir_var_mem_ssbo | nir_var_mem_ubo))) {
