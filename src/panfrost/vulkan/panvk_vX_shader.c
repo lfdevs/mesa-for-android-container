@@ -4286,6 +4286,19 @@ panvk_compile_shader(struct panvk_device *dev,
          variant->gs.outputs_written |=
             BITFIELD64_BIT(PANVK_GS_VIEWPORT_INDEX_SLOT);
 
+      /* multiViewport (jm-v7 017): the selected viewport's scissor goes to
+       * the FS as four clip distances in CLIP_DIST1, which an FS compiled
+       * without the previous stage's layout always tests. The emulation
+       * does not carry the GS's own (compact) clip distances, so the slot
+       * is free unless a non-compact output sits there.
+       */
+      variant->gs.scissor_slot = 0;
+      if (variant->gs.writes_viewport && dev->vk.enabled_features.multiViewport &&
+          !(variant->gs.outputs_written & VARYING_BIT_CLIP_DIST1)) {
+         variant->gs.scissor_slot = VARYING_SLOT_CLIP_DIST1;
+         variant->gs.outputs_written |= VARYING_BIT_CLIP_DIST1;
+      }
+
       const int xfb_dwords =
          panvk_gs_xfb_table(nir->xfb_info, variant->gs.xfb_table);
       if (xfb_dwords < 0) {
@@ -4331,6 +4344,7 @@ panvk_compile_shader(struct panvk_device *dev,
          .pos_stride = sizeof(uint32_t) * 4,
          .params_base = SYSVALS_PUSH_CONST_BASE +
                         offsetof(struct panvk_compute_sysvals, gs),
+         .scissor_slot = variant->gs.scissor_slot,
       };
 
       if (!panvk_nir_lower_gs(nir, &gs_opts)) {
@@ -5991,6 +6005,16 @@ panvk_fs_cull_value(nir_builder *b, UNUSED nir_shader *nir,
 UNUSED static uint64_t
 panvk_fs_dist_defaults(UNUSED nir_shader *nir)
 {
+#if PAN_ARCH < 9
+   /* gl_ViewportIndex comes from the geometry emulation's copy
+    * (jm-v7 017). Without a GS writing it the slot reads constant 0, the
+    * value for an unwritten index.
+    */
+   nir_foreach_shader_in_variable(var, nir) {
+      if (var->data.location == VARYING_SLOT_VIEWPORT)
+         var->data.location = PANVK_GS_VIEWPORT_INDEX_SLOT;
+   }
+#endif
    return PANVK_FS_CULL_BITS;
 }
 

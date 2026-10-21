@@ -120,8 +120,9 @@ struct panvk_gs_push {
     * for the tiler): the emulation undoes the viewport transform.
     */
    uint32_t in_screen_space;
-   /* A shader writing gl_ViewportIndex: PANVK_GS_MAX_VIEWPORTS x
-    * {scale xyz, offset xyz}. 0 otherwise.
+   /* A shader writing gl_ViewportIndex: PANVK_GS_MAX_VIEWPORTS entries of
+    * PANVK_GS_VIEWPORT_STRIDE bytes, {scale xyz, offset xyz, scissor
+    * min x, min y, max x, max y (floats, max exclusive)}. 0 otherwise.
     */
    uint64_t viewports;
    /* Tessellation: the draw's struct poly_tess_params. */
@@ -160,6 +161,7 @@ struct panvk_gs_push {
  */
 #define PANVK_GS_VIEWPORT_INDEX_SLOT VARYING_SLOT_CLIP_VERTEX
 #define PANVK_GS_MAX_VIEWPORTS       16
+#define PANVK_GS_VIEWPORT_STRIDE     40
 
 #define PANVK_GS_CULL_FRONT (1u << 0)
 #define PANVK_GS_CULL_BACK  (1u << 1)
@@ -248,6 +250,12 @@ struct panvk_gs_lower_options {
    const struct nir_xfb_info *xfb;
    /* The vertex streams the shader emits on. */
    unsigned stream_mask;
+
+   /* multiViewport: with gl_ViewportIndex written, the output slot that
+    * gets the selected viewport's scissor edge distances (times clip w, so
+    * that perspective interpolation keeps their sign), 0 for none.
+    */
+   unsigned scissor_slot;
 };
 
 bool panvk_nir_lower_gs(struct nir_shader *nir,

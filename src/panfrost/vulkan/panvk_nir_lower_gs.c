@@ -633,12 +633,40 @@ lower_emit_vertex(nir_builder *b, nir_intrinsic_instr *intr,
                nir_def *idx =
                   nir_umin(b, nir_load_var(b, st->viewport_var),
                            nir_imm_int(b, PANVK_GS_MAX_VIEWPORTS - 1));
-               nir_def *xf = nir_iadd(b, st->viewports,
-                                      nir_u2u64(b, nir_imul_imm(b, idx, 24)));
+               nir_def *xf = nir_iadd(
+                  b, st->viewports,
+                  nir_u2u64(b, nir_imul_imm(b, idx, PANVK_GS_VIEWPORT_STRIDE)));
                nir_def *scale = load_components(b, xf, nir_imm_int(b, 0), 3, 32);
                nir_def *offset =
                   load_components(b, xf, nir_imm_int(b, 12), 3, 32);
                val = clip_to_screen_xf(b, clip, scale, offset);
+
+               /* multiViewport (jm-v7 017): the tiler only has one scissor
+                * box (the union), so the selected viewport's scissor is a
+                * clip-distance kill in the FS. d >= 0 inside; times clip w
+                * so that perspective interpolation keeps the sign.
+                */
+               if (opts->scissor_slot) {
+                  nir_def *sc = load_components(b, xf, nir_imm_int(b, 24), 4, 32);
+                  nir_def *sx = nir_channel(b, val, 0);
+                  nir_def *sy = nir_channel(b, val, 1);
+                  nir_def *w = nir_channel(b, clip, 3);
+                  nir_def *d = nir_vec4(
+                     b, nir_fsub(b, sx, nir_channel(b, sc, 0)),
+                     nir_fsub(b, nir_channel(b, sc, 2), sx),
+                     nir_fsub(b, sy, nir_channel(b, sc, 1)),
+                     nir_fsub(b, nir_channel(b, sc, 3), sy));
+                  d = nir_fmul(b, d, nir_replicate(b, w, 4));
+                  nir_def *soff =
+                     load_slot_offset(b, st->out_offsets, opts->scissor_slot);
+                  nir_push_if(b, nir_ine_imm(b, soff, PANVK_GS_SLOT_UNUSED));
+                  store_components(
+                     b, st->out_general,
+                     nir_iadd(b, nir_imul(b, slot, st->out_general_stride),
+                              soff),
+                     d);
+                  nir_pop_if(b, NULL);
+               }
             } else {
                val = clip_to_screen(b, st, clip);
             }

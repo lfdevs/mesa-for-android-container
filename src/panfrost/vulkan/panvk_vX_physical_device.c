@@ -345,7 +345,9 @@ panvk_per_arch(get_physical_device_features)(
       .wideLines = true,
       .largePoints = true,
       .alphaToOne = PAN_ARCH >= 10,
-      .multiViewport = PAN_ARCH >= 9,
+      /* v6/v7: a geometry shader selects the viewport in the emulation
+       * (jm-v7 017). */
+      .multiViewport = true,
       .samplerAnisotropy = true,
       .textureCompressionETC2 = has_texture_compression_etc2(device),
       .textureCompressionASTC_LDR = has_texture_compression_astc_ldr(device),
@@ -1044,7 +1046,7 @@ panvk_per_arch(get_physical_device_properties)(
       .maxDrawIndirectCount = PAN_ARCH >= 10 ? UINT32_MAX : UINT16_MAX,
       .maxSamplerLodBias = (float)INT16_MAX / 256.0f,
       .maxSamplerAnisotropy = 16,
-      .maxViewports = PAN_ARCH >= 9 ? 16 : 1,
+      .maxViewports = 16,
       .maxViewportDimensions = {MAX_FRAMEBUFFER_DIMENSION, MAX_FRAMEBUFFER_DIMENSION},
       .viewportBoundsRange = {-2.0f * MAX_FRAMEBUFFER_DIMENSION, 2.0f * MAX_FRAMEBUFFER_DIMENSION - 1.0f},
       .viewportSubPixelBits = 0,

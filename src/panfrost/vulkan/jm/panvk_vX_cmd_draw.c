@@ -994,6 +994,67 @@ panvk_draw_prepare_attributes(struct panvk_cmd_buffer *cmdbuf,
       cmdbuf->state.gfx.vs.indirect_attrib_bufs_infos;
 }
 
+/* The scissor box of viewport i: the viewport rectangle cut by scissor i,
+ * max exclusive.
+ */
+static void
+panvk_viewport_scissor_box(const struct vk_viewport_state *vp, unsigned i,
+                           int *minx, int *miny, int *maxx, int *maxy)
+{
+   const VkViewport *viewport = &vp->viewports[i];
+   const VkRect2D *scissor = &vp->scissors[MIN2(i, vp->scissor_count - 1)];
+
+   /* The spec says "width must be greater than 0.0" */
+   assert(viewport->width >= 0);
+   *minx = (int)viewport->x;
+   *maxx = (int)(viewport->x + viewport->width);
+
+   /* Viewport height can be negative */
+   *miny = MIN2((int)viewport->y, (int)(viewport->y + viewport->height));
+   *maxy = MAX2((int)viewport->y, (int)(viewport->y + viewport->height));
+
+   assert(scissor->offset.x >= 0 && scissor->offset.y >= 0);
+   *minx = MAX2(scissor->offset.x, *minx);
+   *miny = MAX2(scissor->offset.y, *miny);
+   *maxx = MIN2(scissor->offset.x + scissor->extent.width, *maxx);
+   *maxy = MIN2(scissor->offset.y + scissor->extent.height, *maxy);
+}
+
+/* multiViewport (jm-v7 017): the bound geometry emulation selects the
+ * viewport per primitive, so the tiler gets the union of the scissor boxes
+ * and depth ranges, and each primitive is cut to its own scissor in the FS
+ * (panvk_gs_lower_options::scissor_slot).
+ */
+static bool
+panvk_multi_viewport_draw(const struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_shader *emu = cmdbuf->state.gfx.gs.emu;
+
+   return emu && panvk_shader_only_variant(emu)->gs.writes_viewport &&
+          cmdbuf->vk.dynamic_graphics_state.vp.viewport_count > 1;
+}
+
+static void
+panvk_viewport_depth_range_i(const struct panvk_cmd_buffer *cmdbuf,
+                             unsigned i, float *z_min, float *z_max)
+{
+   const struct vk_viewport_state *vp = &cmdbuf->vk.dynamic_graphics_state.vp;
+
+   if (vp->depth_clamp_mode == VK_DEPTH_CLAMP_MODE_USER_DEFINED_RANGE_EXT) {
+      *z_min = vp->depth_clamp_range.minDepthClamp;
+      *z_max = vp->depth_clamp_range.maxDepthClamp;
+      return;
+   }
+
+   float scale, offset;
+   panvk_viewport_z_coeffs(vp, &cmdbuf->vk.dynamic_graphics_state.rs, i,
+                           &scale, &offset);
+   const float a = vp->depth_clip_negative_one_to_one ? offset - scale : offset;
+   const float b = offset + scale;
+   *z_min = MIN2(a, b);
+   *z_max = MAX2(a, b);
+}
+
 static void
 panvk_emit_viewport(struct panvk_cmd_buffer *cmdbuf,
                     struct mali_viewport_packed *vpd)
@@ -1003,26 +1064,34 @@ panvk_emit_viewport(struct panvk_cmd_buffer *cmdbuf,
    if (vp->viewport_count < 1)
       return;
 
-   const VkViewport *viewport = &vp->viewports[0];
-   const VkRect2D *scissor = &vp->scissors[0];
    float minz, maxz;
    panvk_depth_range(&cmdbuf->state.gfx, &cmdbuf->vk.dynamic_graphics_state.vp,
                      &minz, &maxz);
 
-   /* The spec says "width must be greater than 0.0" */
-   assert(viewport->width >= 0);
-   int minx = (int)viewport->x;
-   int maxx = (int)(viewport->x + viewport->width);
+   int minx, miny, maxx, maxy;
+   panvk_viewport_scissor_box(vp, 0, &minx, &miny, &maxx, &maxy);
 
-   /* Viewport height can be negative */
-   int miny = MIN2((int)viewport->y, (int)(viewport->y + viewport->height));
-   int maxy = MAX2((int)viewport->y, (int)(viewport->y + viewport->height));
+   if (panvk_multi_viewport_draw(cmdbuf)) {
+      for (unsigned i = 1; i < vp->viewport_count; i++) {
+         int x0, y0, x1, y1;
+         panvk_viewport_scissor_box(vp, i, &x0, &y0, &x1, &y1);
+         if (x1 <= x0 || y1 <= y0)
+            continue;
+         if (maxx <= minx || maxy <= miny) {
+            minx = x0, miny = y0, maxx = x1, maxy = y1;
+         } else {
+            minx = MIN2(minx, x0);
+            miny = MIN2(miny, y0);
+            maxx = MAX2(maxx, x1);
+            maxy = MAX2(maxy, y1);
+         }
 
-   assert(scissor->offset.x >= 0 && scissor->offset.y >= 0);
-   minx = MAX2(scissor->offset.x, minx);
-   miny = MAX2(scissor->offset.y, miny);
-   maxx = MIN2(scissor->offset.x + scissor->extent.width, maxx);
-   maxy = MIN2(scissor->offset.y + scissor->extent.height, maxy);
+         float z0, z1;
+         panvk_viewport_depth_range_i(cmdbuf, i, &z0, &z1);
+         minz = MIN2(minz, z0);
+         maxz = MAX2(maxz, z1);
+      }
+   }
 
    /* Make sure we don't end up with a max < min when width/height is 0 */
    maxx = maxx > minx ? maxx - 1 : maxx;
@@ -1055,6 +1124,8 @@ panvk_draw_prepare_viewport(struct panvk_cmd_buffer *cmdbuf,
    if (!cmdbuf->state.gfx.vpd || dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORTS) ||
        dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) ||
        dyn_gfx_state_dirty(cmdbuf, VP_SCISSORS) ||
+       /* The union of the viewports while a GS selects one (017). */
+       gfx_state_dirty(cmdbuf, GS) ||
        dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLIP_ENABLE) ||
        dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE) ||
        dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLAMP_RANGE)) {
@@ -1850,17 +1921,42 @@ emit_gs_job(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw,
    if (!in_prims)
       return dep_job_id;
 
-   /* gl_ViewportIndex: one viewport only (no multiViewport), so every
-    * entry of the table is viewport 0.
+   /* gl_ViewportIndex (jm-v7 017): each viewport's transform and scissor
+    * box. An index past viewportCount (undefined) uses the last viewport.
     */
    uint64_t viewports = 0;
    if (gs->gs.writes_viewport) {
+      const struct vk_viewport_state *vps =
+         &cmdbuf->vk.dynamic_graphics_state.vp;
       struct pan_ptr vp = panvk_cmd_alloc_dev_mem(
-         cmdbuf, desc, PANVK_GS_MAX_VIEWPORTS * 24, 4);
+         cmdbuf, desc, PANVK_GS_MAX_VIEWPORTS * PANVK_GS_VIEWPORT_STRIDE, 4);
       if (!vp.gpu)
          return 0;
-      for (unsigned i = 0; i < PANVK_GS_MAX_VIEWPORTS; i++)
-         memcpy((uint8_t *)vp.cpu + i * 24, &gfx_sysvals->viewport, 24);
+      for (unsigned i = 0; i < PANVK_GS_MAX_VIEWPORTS; i++) {
+         float *e = (float *)((uint8_t *)vp.cpu + i * PANVK_GS_VIEWPORT_STRIDE);
+         const unsigned v = MIN2(i, MAX2(vps->viewport_count, 1) - 1);
+         if (v == 0) {
+            memcpy(e, &gfx_sysvals->viewport, 24);
+         } else {
+            const VkViewport *w = &vps->viewports[v];
+            float z_scale, z_offset;
+            panvk_viewport_z_coeffs(vps, &cmdbuf->vk.dynamic_graphics_state.rs,
+                                    v, &z_scale, &z_offset);
+            e[0] = 0.5f * w->width;
+            e[1] = 0.5f * w->height;
+            e[2] = z_scale;
+            e[3] = 0.5f * w->width + w->x;
+            e[4] = 0.5f * w->height + w->y;
+            e[5] = z_offset;
+         }
+         int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+         if (vps->viewport_count)
+            panvk_viewport_scissor_box(vps, v, &x0, &y0, &x1, &y1);
+         e[6] = x0;
+         e[7] = y0;
+         e[8] = MAX2(x1, x0);
+         e[9] = MAX2(y1, y0);
+      }
       viewports = vp.gpu;
    }
 

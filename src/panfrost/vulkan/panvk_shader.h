@@ -464,6 +464,11 @@ struct panvk_shader_variant {
       enum mesa_prim output_prim;
       /* Writes gl_ViewportIndex. */
       bool writes_viewport;
+      /* multiViewport (jm-v7 017): the generic slot the emulation writes the
+       * four scissor edge distances of the selected viewport to, for the
+       * FS clip-distance kill. 0 when none.
+       */
+      uint8_t scissor_slot;
       /* Transform feedback, see panvk_gs_xfb_table(): the staging record
        * size in dwords (0 = captures nothing), each xfb buffer's stride in
        * bytes (0 = not captured to), and where every record dword goes.
