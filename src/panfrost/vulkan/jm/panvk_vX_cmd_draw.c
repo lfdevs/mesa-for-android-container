@@ -2413,6 +2413,10 @@ emit_gs_job(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw,
                          : 0,
       .in_psiz_stride = link->buf_strides[PANVK_VARY_BUF_PSIZ],
       .out_psiz = cmdbuf->state.gfx.gs.out_psiz,
+      /* gl_PrimitiveIDIn of a tess-fed GS is the patch ID (jm-v7 049). */
+      .tess_params = draw->tess_phase == PANVK_TESS_PHASE_TES
+                        ? cmdbuf->state.gfx.sysvals.tess_params
+                        : 0,
       .viewport_scale = {gfx_sysvals->viewport.scale.x,
                          gfx_sysvals->viewport.scale.y,
                          gfx_sysvals->viewport.scale.z},

@@ -33,6 +33,8 @@
  */
 
 #include "panvk_gs.h"
+#include "poly/geometry.h"
+#include "poly/tessellator.h"
 
 #include "nir.h"
 #include "nir_builder.h"
@@ -95,6 +97,9 @@ struct lower_gs_state {
    nir_def *in_psiz, *in_psiz_stride, *out_psiz;
    /* gl_PrimitiveIDIn (per instance) and gl_InvocationID. */
    nir_def *prim_id;
+   /* What load_primitive_id returns when it is not prim_id: the patch ID
+    * of a tess-fed geometry shader (jm-v7 049). */
+   nir_def *api_prim_id;
    nir_def *invocation_id;
    /* Input assembly. */
    nir_def *instance;
@@ -1034,7 +1039,8 @@ lower_gs_instr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       nir_instr_remove(&intr->instr);
       return true;
    case nir_intrinsic_load_primitive_id:
-      nir_def_replace(&intr->def, st->prim_id);
+      nir_def_replace(&intr->def,
+                      st->api_prim_id ? st->api_prim_id : st->prim_id);
       return true;
    case nir_intrinsic_load_invocation_id:
       nir_def_replace(&intr->def, st->invocation_id);
@@ -1240,6 +1246,39 @@ panvk_nir_lower_gs(nir_shader *nir, const struct panvk_gs_lower_options *opts)
    st.prims_per_instance = ppi;
    st.instance = nir_udiv(&b, prim_global, ppi);
    st.prim_id = nir_isub(&b, prim_global, nir_imul(&b, st.instance, ppi));
+
+   /* Fed by a tess eval shader (tess_params set), gl_PrimitiveIDIn is the
+    * patch ID, as the tess eval shader computes it: the TES draw is a
+    * non-indexed list whose vertex i is tessellator index i, the raw id
+    * (patch * POLY_TES_PATCH_ID_STRIDE + point) is index_buffer[i]
+    * (jm-v7 049).
+    */
+   if (BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID)) {
+      nir_def *ordinal = st.prim_id;
+      nir_push_if(&b, nir_iand(&b, nir_ine_imm(&b, st.tess_params, 0),
+                               nir_ult(&b, prim_global, actual_prims)));
+      nir_def *v0 = gs_input_record(&b, &st, nir_imm_int(&b, 0));
+      nir_def *ib = nir_load_global(
+         &b, 1, 64,
+         nir_iadd_imm(&b, st.tess_params,
+                      offsetof(struct poly_tess_params, index_buffer)),
+         .align_mul = 8);
+      nir_def *raw = nir_load_global(
+         &b, 1, 32, nir_iadd(&b, ib, nir_u2u64(&b, nir_imul_imm(&b, v0, 4))),
+         .align_mul = 4);
+      nir_def *ppi_tess = nir_umax(
+         &b,
+         nir_load_global(&b, 1, 32,
+                         nir_iadd_imm(&b, st.tess_params,
+                                      offsetof(struct poly_tess_params,
+                                               patches_per_instance)),
+                         .align_mul = 4),
+         nir_imm_int(&b, 1));
+      nir_def *patch = nir_umod(
+         &b, nir_udiv_imm(&b, raw, POLY_TES_PATCH_ID_STRIDE), ppi_tess);
+      nir_pop_if(&b, NULL);
+      st.api_prim_id = nir_if_phi(&b, patch, ordinal);
+   }
 
    emit_degenerate_fill(&b, &st);
 
