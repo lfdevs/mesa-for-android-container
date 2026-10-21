@@ -314,10 +314,13 @@ bool panvk_nir_lower_gs(struct nir_shader *nir,
  * dropped (panlib_v7_tess_prefix).
  */
 #define PANVK_TESS_MAX_INDICES (1u << 23)
-/* Patches one draw tessellates, at most: the tessellator grid and the serial
- * prefix sum are sized for it.
+/* Patches one draw tessellates, at most: the tess arena and an indirect
+ * draw's tessellator grid are sized for it. jm-v7 027: was 8192, the limit
+ * of the serial prefix sum; the workgroup prefix sum takes many more, and
+ * the arena (PANVK_TESS_HEAP_SIZE) bounds it further per tess control
+ * output size.
  */
-#define PANVK_TESS_MAX_PATCHES 8192u
+#define PANVK_TESS_MAX_PATCHES (1u << 18)
 /* With a geometry shader or transform feedback after the tess eval shader,
  * the geometry emulation of the generated draw is sized for this many input
  * primitives (instead of PANVK_GS_INDIRECT_MAX_PRIMS).

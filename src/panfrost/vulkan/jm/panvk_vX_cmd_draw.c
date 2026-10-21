@@ -3483,8 +3483,15 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
 
    /* 2. The tessellator. */
    struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+   /* jm-v7 027: a draw the CPU knows takes a grid for its own patches, not
+    * for max_patches (now up to PANVK_TESS_MAX_PATCHES).
+    */
+   const uint64_t grid_patches =
+      cpu_known ? MIN2((uint64_t)(cpu_vertices / ps) * cpu_instances,
+                       max_patches)
+                : max_patches;
    const struct panlib_precomp_grid tess_grid =
-      panlib_1d(DIV_ROUND_UP(max_patches, 64));
+      panlib_1d(MAX2(DIV_ROUND_UP(grid_patches, 64), 1));
    panlib_v7_tessellate(&precomp_ctx, tess_grid, PANLIB_BARRIER_JM_BARRIER,
                         TD(p), domain, POLY_TESS_MODE_COUNT);
    panlib_v7_tess_prefix(&precomp_ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER,

@@ -1741,12 +1741,29 @@ panlib_v7_tessellate(constant struct poly_tess_params *p, uint32_t domain__3,
  * while their indices fit max_indices and, with varying_info, the indirect
  * varying buffer the tess eval draw allocates from. The tessellator then
  * writes the kept patches only, and the tess eval draw covers them.
- * ponytail: serial, a draw holds at most PANVK_TESS_MAX_PATCHES patches.
+ *
+ * jm-v7 027: one workgroup of TESS_PREFIX_WG invocations (it was serial, for
+ * at most 8192 patches): each invocation sums a run of patches, a workgroup
+ * scan gives each run its start, then each run writes its prefix and finds
+ * the first patch past the budget. Sums saturate at UINT32_MAX, the budget
+ * is far below it.
  */
-KERNEL(1)
+#define TESS_PREFIX_WG 256
+
+static inline uint32_t
+tess_sat_add(uint32_t a, uint32_t b)
+{
+   return b > UINT32_MAX - a ? UINT32_MAX : a + b;
+}
+
+KERNEL(TESS_PREFIX_WG)
 panlib_v7_tess_prefix(global struct panlib_v7_tess *t)
 {
+   local uint32_t scan[TESS_PREFIX_WG];
+   local uint32_t cut[TESS_PREFIX_WG];
+   local uint32_t cut_sum[TESS_PREFIX_WG];
    global struct poly_tess_params *p = &t->p;
+   const uint32_t tid = cl_local_id.x;
    uint32_t budget = t->max_indices;
 
    if (t->varying_info && t->varying_bytes) {
@@ -1760,17 +1777,61 @@ panlib_v7_tess_prefix(global struct panlib_v7_tess *t)
       budget = min(budget, left / t->varying_bytes);
    }
 
-   uint32_t sum = 0, n = 0;
-   for (; n < p->nr_patches; n++) {
-      uint32_t c = p->counts[n];
-      if (c > budget - sum)
-         break;
-      sum += c;
-      p->counts[n] = sum;
-   }
+   const uint32_t nr = p->nr_patches;
+   const uint32_t seg = (nr + TESS_PREFIX_WG - 1) / TESS_PREFIX_WG;
+   const uint32_t b = min(tid * seg, nr), e = min(b + seg, nr);
 
-   p->nr_patches = n;
-   t->draw[0] = sum;
+   uint32_t own = 0;
+   for (uint32_t i = b; i < e; i++)
+      own = tess_sat_add(own, p->counts[i]);
+
+   /* Inclusive scan of the run sums. */
+   scan[tid] = own;
+   barrier(CLK_LOCAL_MEM_FENCE);
+   for (uint32_t o = 1; o < TESS_PREFIX_WG; o <<= 1) {
+      uint32_t v = tid >= o ? scan[tid - o] : 0;
+      barrier(CLK_LOCAL_MEM_FENCE);
+      scan[tid] = tess_sat_add(scan[tid], v);
+      barrier(CLK_LOCAL_MEM_FENCE);
+   }
+   const uint32_t total = scan[TESS_PREFIX_WG - 1];
+
+   /* The run's prefix, up to its first patch that does not fit. */
+   uint32_t sum = scan[tid] - own, my_cut = UINT32_MAX;
+   if (own == UINT32_MAX || scan[tid] == UINT32_MAX) {
+      /* Saturated: recount the start from the runs before. */
+      sum = 0;
+      for (uint32_t r = 0; r < tid; r++) {
+         uint32_t rb = min(r * seg, nr), re = min(rb + seg, nr);
+         for (uint32_t i = rb; i < re && sum <= budget; i++)
+            sum = tess_sat_add(sum, p->counts[i]);
+      }
+   }
+   for (uint32_t i = b; i < e; i++) {
+      uint32_t c = p->counts[i];
+      if (sum > budget || c > budget - sum) {
+         my_cut = i;
+         break;
+      }
+      sum += c;
+      p->counts[i] = sum;
+   }
+   cut[tid] = my_cut;
+   cut_sum[tid] = sum;
+   barrier(CLK_LOCAL_MEM_FENCE);
+
+   if (tid == 0) {
+      uint32_t n = nr, kept = total;
+      for (uint32_t r = 0; r < TESS_PREFIX_WG; r++) {
+         if (cut[r] != UINT32_MAX) {
+            n = cut[r];
+            kept = cut_sum[r];
+            break;
+         }
+      }
+      p->nr_patches = n;
+      t->draw[0] = kept;
+   }
 }
 
 /* Pipeline statistics on v6/v7 (jm-v7 016). The report of a query holds two
