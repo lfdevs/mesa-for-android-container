@@ -974,6 +974,39 @@ emit_degenerate_fill(nir_builder *b, struct lower_gs_state *st)
    const struct panvk_gs_lower_options *opts = st->opts;
    const unsigned total = opts->max_output_prims * opts->output_verts_per_prim;
 
+   /* jm-v7 082: the degenerate entries all name this invocation's first
+    * vertex slot. Zero area does not cull a point (or, on Mali, reliably a
+    * zero-length line): an invocation that emits nothing would draw that
+    * slot's stale position. Since jm-v7 078 the output buffers of direct
+    * draws come from the reused GPU-only pool instead of fresh (zeroed)
+    * desc BOs, so the slot holds a vertex of an earlier draw (fill_mode
+    * POINT/LINE cases with culled triangles: 2 stray pixels on the A06).
+    * Give it a zero position (what the fresh BOs held) and size before the
+    * shader body; a real EmitVertex overwrites it.
+    */
+   store_components(b, st->out_pos,
+                    nir_imul_imm(b, st->out_vtx_base, opts->pos_stride),
+                    nir_imm_vec4(b, 0.0f, 0.0f, 0.0f, 0.0f));
+   if (opts->output_verts_per_prim == 1) {
+      nir_push_if(b, nir_ine_imm(b, st->out_psiz, 0));
+      nir_store_global(b, nir_imm_float(b, 0.0f),
+                       nir_iadd(b, st->out_psiz,
+                                nir_u2u64(b, nir_imul_imm(b, st->out_vtx_base, 4))),
+                       .align_mul = 4, .write_mask = 0x1);
+      nir_pop_if(b, NULL);
+      /* Points have no EndPrimitive: an invocation that emits none would
+       * leave its xfb count unwritten (stream 0).
+       */
+      if (st->xfb_dwords) {
+         nir_push_if(b, nir_ine_imm(b, st->xfb_counts, 0));
+         nir_store_global(b, nir_imm_int(b, 0),
+                          nir_iadd(b, st->xfb_counts,
+                                   nir_u2u64(b, nir_imul_imm(b, st->gid, 4))),
+                          .align_mul = 4, .write_mask = 0x1);
+         nir_pop_if(b, NULL);
+      }
+   }
+
    nir_variable *i =
       nir_local_variable_create(b->impl, glsl_uint_type(), "gs_fill_i");
    nir_store_var(b, i, nir_imm_int(b, 0), 1);
