@@ -611,8 +611,29 @@ bi_lower_tex(nir_builder *b, nir_tex_instr *tex, unsigned arch)
             comps[i] = nir_get_scalar(nir_imm_int(b, 0), 0);
       }
 
-      sr[BI_TEX_SR_OFFSET] =
-         nir_pack_32_4x8(b, nir_i2i8(b, nir_vec_scalars(b, comps, 4)));
+      if (pan_arch(gpu_id) == 6) {
+         /* jm-v7 102: pack the u8vec4 with 32-bit shifts on v6. The 8-bit
+          * vector pack (MKVEC.v4i8 and friends) of a non-constant offset
+          * faulted with INSTR_INVALID_ENC (event 0x51) on the FTL Galaxy S9
+          * (Mali-G72): PanProbe sampler gather_offsets, whose only
+          * difference from the passing gather case is a dynamic
+          * textureGatherOffset. Constant offsets fold to the same
+          * immediate as before.
+          */
+         nir_def *packed = NULL;
+         for (unsigned i = 0; i < 4; i++) {
+            nir_def *c = nir_u2u32(b, nir_mov_scalar(b, comps[i]));
+            if (i < 3)
+               c = nir_iand_imm(b, c, 0xff);
+            if (i)
+               c = nir_ishl_imm(b, c, i * 8);
+            packed = packed ? nir_ior(b, packed, c) : c;
+         }
+         sr[BI_TEX_SR_OFFSET] = packed;
+      } else {
+         sr[BI_TEX_SR_OFFSET] =
+            nir_pack_32_4x8(b, nir_i2i8(b, nir_vec_scalars(b, comps, 4)));
+      }
       desc.offset_or_bias_disable = true;
    }
 
