@@ -356,11 +356,19 @@ panvk_jm_kbase_wait_atoms(void *data, const uint64_t targets[PANVK_KBASE_SYNC_TA
    struct pan_kmod_dev *kmod_dev = data;
 
    /* vk_sync deadlines are CLOCK_MONOTONIC (os_time). MONOTONIC_RAW drifts
-    * from it with uptime, which turned timeouts into DEVICE_LOST. */
+    * from it with uptime, which turned timeouts into DEVICE_LOST. This was
+    * fixed on v9 first; jm-v7 093 uses CLOCK_MONOTONIC on v6/v7 as well.
+    * PANVK_V7_RAW_CLOCK=1 restores MONOTONIC_RAW there (A/B only).
+    */
 #if PAN_ARCH == 9
    const clockid_t clk = CLOCK_MONOTONIC;
 #else
-   const clockid_t clk = CLOCK_MONOTONIC_RAW;
+   static int raw_clock = -1;
+   if (raw_clock < 0) {
+      const char *e = getenv("PANVK_V7_RAW_CLOCK");
+      raw_clock = e && e[0] == '1';
+   }
+   const clockid_t clk = raw_clock ? CLOCK_MONOTONIC_RAW : CLOCK_MONOTONIC;
 #endif
 
    for (unsigned i = 0; i < PANVK_KBASE_SYNC_TARGET_COUNT; i++) {
