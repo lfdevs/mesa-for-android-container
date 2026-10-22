@@ -277,6 +277,29 @@ panvk_per_arch(device_gpu_prerast_arena)(struct panvk_device *dev, bool tess)
    simple_mtx_unlock(&dev->gpu_prerast_lock);
    return ret;
 }
+
+struct panvk_priv_mem
+panvk_per_arch(device_gpu_prerast_tess_arena2)(struct panvk_device *dev)
+{
+   struct panvk_priv_mem *mem = &dev->gpu_prerast_tess_arena2;
+
+   if (!dev->gpu_prerast_tess_wanted || dev->tess_opt.arenas < 2)
+      return (struct panvk_priv_mem){0};
+
+   simple_mtx_lock(&dev->gpu_prerast_lock);
+   if (!panvk_priv_mem_check_alloc(*mem)) {
+      *mem = alloc_gpu_prerast_arena(dev, PANVK_GPU_PRERAST_TESS_ARENA_SIZE);
+      if (panvk_priv_mem_check_alloc(*mem))
+         mesa_logi("panvk: gpu_prerast second tessellation arena committed "
+                   "(%llu MiB)",
+                   (unsigned long long)(PANVK_GPU_PRERAST_TESS_ARENA_SIZE >> 20));
+      else
+         dev->tess_opt.arenas = 1; /* Do not retry on every draw. */
+   }
+   struct panvk_priv_mem ret = *mem;
+   simple_mtx_unlock(&dev->gpu_prerast_lock);
+   return ret;
+}
 #endif
 
 static VkResult
@@ -771,6 +794,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       debug_get_num_option("PANVK_TESS_FUSE_GEN_MAX", 64);
    device->tess_opt.setup_in_step =
       debug_get_num_option("PANVK_TESS_SETUP_STEP", 1) != 0;
+   device->tess_opt.arenas =
+      debug_get_num_option("PANVK_TESS_ARENAS", 2) >= 2 ? 2 : 1;
 
    /* v9, or PANVK_GPU_PRERAST_ARENA=eager: commit both arenas here, as
     * before csf-v11/205 (64 + 96 MiB per VkDevice with the features). */
@@ -799,6 +824,7 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       *syncs = (struct panvk_gpu_prerast_syncs){
          .arena = {1},
          .tess_arena = {1},
+         .tess_arena2 = {1},
       };
    }
 #endif
@@ -936,6 +962,7 @@ err_free_precomp:
 err_free_priv_bos:
    panvk_device_cleanup_tls(device);
    panvk_priv_bo_unref(device->gpu_prerast_syncs);
+   panvk_pool_free_mem(&device->gpu_prerast_tess_arena2);
    panvk_pool_free_mem(&device->gpu_prerast_tess_arena);
    panvk_pool_free_mem(&device->gpu_prerast_arena);
    if (device->printf.bo)
@@ -1003,6 +1030,7 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
    panvk_priv_bo_unref(device->indirect_varying_buffer);
    panvk_device_cleanup_tls(device);
    panvk_priv_bo_unref(device->gpu_prerast_syncs);
+   panvk_pool_free_mem(&device->gpu_prerast_tess_arena2);
    panvk_pool_free_mem(&device->gpu_prerast_tess_arena);
    panvk_pool_free_mem(&device->gpu_prerast_arena);
 #if PAN_ARCH >= 10

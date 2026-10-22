@@ -1942,6 +1942,23 @@ init_queue(struct panvk_gpu_queue *queue)
                         struct panvk_cs_sync32, sync) {
       *sync = (struct panvk_cs_sync32){.seqno = 1};
    }
+   /* Same for the second tessellation arena's pair. */
+   static_assert(PANVK_QUEUE_TESS_READY2_SYNC_OFFSET +
+                    sizeof(struct panvk_cs_sync32) <=
+                    PANVK_QUEUE_TESS_FREE_SYNC_OFFSET,
+                 "second tess ready sync overlaps the free sync");
+   static_assert(PANVK_QUEUE_TESS_FREE2_SYNC_OFFSET +
+                    sizeof(struct panvk_cs_sync32) <=
+                    PANVK_QUEUE_DESC_RINGBUF_SYNC_OFFSET,
+                 "second tess free sync overlaps the ringbuf sync");
+   panvk_priv_mem_write(queue->syncobjs, PANVK_QUEUE_TESS_READY2_SYNC_OFFSET,
+                        struct panvk_cs_sync32, sync) {
+      *sync = (struct panvk_cs_sync32){0};
+   }
+   panvk_priv_mem_write(queue->syncobjs, PANVK_QUEUE_TESS_FREE2_SYNC_OFFSET,
+                        struct panvk_cs_sync32, sync) {
+      *sync = (struct panvk_cs_sync32){.seqno = 1};
+   }
    /* The fragment subqueue releases RENDER_DESC_RINGBUF_SIZE back into this
     * counter; a reserve waits until it covers the request. */
    panvk_priv_mem_write(queue->syncobjs, PANVK_QUEUE_DESC_RINGBUF_SYNC_OFFSET,

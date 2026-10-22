@@ -399,6 +399,8 @@ struct panvk_gpu_prerast_arena {
 struct panvk_gpu_prerast_syncs {
    uint32_t arena[2];
    uint32_t tess_arena[2];
+   /* panvk_device::gpu_prerast_tess_arena2 (csf-v11 tess-arenas). */
+   uint32_t tess_arena2[2];
 };
 
 struct panvk_gpu_prerast_sync_contract {

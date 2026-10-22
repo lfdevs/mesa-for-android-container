@@ -149,6 +149,9 @@ struct panvk_device {
     * gpu_prerast_tess_wanted say whether the device may use them. */
    struct panvk_priv_mem gpu_prerast_arena;
    struct panvk_priv_mem gpu_prerast_tess_arena;
+   /* Second tessellation arena, CSF only, at the first draw that picks it
+    * (csf-v11 tess-arenas, see device_gpu_prerast_tess_arena2()). */
+   struct panvk_priv_mem gpu_prerast_tess_arena2;
    bool gpu_prerast_wanted;
    bool gpu_prerast_tess_wanted;
    simple_mtx_t gpu_prerast_lock;
@@ -164,6 +167,9 @@ struct panvk_device {
       uint32_t fuse_gen_max;
       /* PANVK_TESS_SETUP_STEP (default 1): panlib_tess_setup_step(). */
       bool setup_in_step;
+      /* PANVK_TESS_ARENAS (default 2): tessellation arenas a command
+       * buffer alternates its tess draws over. */
+      uint8_t arenas;
    } tess_opt;
 
    /* Device-wide thread local storage shared by all command buffers. The
@@ -407,6 +413,12 @@ void panvk_per_arch(device_bc_finish)(struct panvk_device *dev);
  * panvk_priv_mem if the device does not use it or the allocation failed. */
 struct panvk_priv_mem
 panvk_per_arch(device_gpu_prerast_arena)(struct panvk_device *dev, bool tess);
+
+/* The second tessellation arena (csf-v11 tess-arenas), allocated on first
+ * use like the first one. Zero when tessellation is off, PANVK_TESS_ARENAS
+ * is 1 or the allocation failed: the draw then uses the first arena. */
+struct panvk_priv_mem
+panvk_per_arch(device_gpu_prerast_tess_arena2)(struct panvk_device *dev);
 
 static inline VkResult
 panvk_common_check_status(struct panvk_device *dev)

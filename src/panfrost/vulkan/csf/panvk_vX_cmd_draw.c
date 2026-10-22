@@ -3712,6 +3712,11 @@ gpu_prerast_arena_sync(const struct panvk_device *dev, uint64_t arena)
    const bool tess =
       arena == panvk_priv_mem_dev_addr(dev->gpu_prerast_tess_arena);
 
+   if (panvk_priv_mem_check_alloc(dev->gpu_prerast_tess_arena2) &&
+       arena == panvk_priv_mem_dev_addr(dev->gpu_prerast_tess_arena2))
+      return dev->gpu_prerast_syncs->addr.dev +
+             offsetof(struct panvk_gpu_prerast_syncs, tess_arena2);
+
    assert(tess || arena == panvk_priv_mem_dev_addr(dev->gpu_prerast_arena));
    return dev->gpu_prerast_syncs->addr.dev +
           (tess ? offsetof(struct panvk_gpu_prerast_syncs, tess_arena)
@@ -5000,7 +5005,27 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
       }
    }
 
-   const uint64_t arena = panvk_priv_mem_dev_addr(dev->gpu_prerast_tess_arena);
+   /* csf-v11 tess-arenas: with one arena, the compute pre-pass of a tess
+    * draw cannot start before the vertex/tiler side of the previous one has
+    * drawn and released it, so the two queues take turns and never overlap.
+    * Odd tess draws of a command buffer use a second arena and ready/free
+    * pair: the compute side of draw N+1 then runs while draw N is drawn.
+    * Each pair is still taken and given in recording order on both queues,
+    * as is each arena's ownership sync, so the loops cannot deadlock.
+    * PANVK_TESS_ARENAS=1 keeps the single arena.
+    */
+   bool slot2 = false;
+   if (dev->tess_opt.arenas > 1 && (cmdbuf->state.tess_draws++ & 1)) {
+      slot2 = panvk_priv_mem_check_alloc(
+         panvk_per_arch(device_gpu_prerast_tess_arena2)(dev));
+   }
+   const uint64_t arena =
+      panvk_priv_mem_dev_addr(slot2 ? dev->gpu_prerast_tess_arena2
+                                    : dev->gpu_prerast_tess_arena);
+   const uint32_t ready_sync = slot2 ? PANVK_QUEUE_TESS_READY2_SYNC_OFFSET
+                                     : PANVK_QUEUE_TESS_READY_SYNC_OFFSET;
+   const uint32_t free_sync = slot2 ? PANVK_QUEUE_TESS_FREE2_SYNC_OFFSET
+                                    : PANVK_QUEUE_TESS_FREE_SYNC_OFFSET;
    const uint64_t prerast_arena =
       nested ? panvk_priv_mem_dev_addr(dev->gpu_prerast_arena) : 0;
    struct panvk_gpu_prerast_tess_layout l;
@@ -5218,7 +5243,7 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
    bool ok = true;
    cs_while(b, MALI_CS_CONDITION_ALWAYS, cs_undef()) {
       gpu_prerast_sync32_take(cmdbuf, PANVK_SUBQUEUE_COMPUTE,
-                              PANVK_QUEUE_TESS_FREE_SYNC_OFFSET);
+                              free_sync);
 
       /* First iteration only: setup has copied the API draw. Drop it when
        * the predicate says not to render. Later iterations already see
@@ -5374,7 +5399,7 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
       }
 
       gpu_prerast_sync32_give(cmdbuf, PANVK_SUBQUEUE_COMPUTE,
-                              PANVK_QUEUE_TESS_READY_SYNC_OFFSET);
+                              ready_sync);
       cs_loop_conditional_break(b, __loop, MALI_CS_CONDITION_EQUAL,
                                 gpu_prerast_load_flag(b, TD(more)));
    }
@@ -5389,7 +5414,7 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
    struct panvk_draw_info raster = out;
    cs_while(vt, MALI_CS_CONDITION_ALWAYS, cs_undef()) {
       gpu_prerast_sync32_take(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER,
-                              PANVK_QUEUE_TESS_READY_SYNC_OFFSET);
+                              ready_sync);
 
       cmdbuf->state.gfx.vs.shader = tes;
       gfx_state_set_dirty(cmdbuf, VS);
@@ -5415,7 +5440,7 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
       struct cs_index more_keep = cs_scratch_reg32(vt, 4);
       cs_add_imm32(vt, more_keep, more, 0);
       gpu_prerast_sync32_give(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER,
-                              PANVK_QUEUE_TESS_FREE_SYNC_OFFSET);
+                              free_sync);
       cs_loop_conditional_break(vt, __loop, MALI_CS_CONDITION_EQUAL,
                                 more_keep);
    }

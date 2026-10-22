@@ -65,6 +65,13 @@ struct panvk_cs_sync64 {
  */
 #define PANVK_QUEUE_TESS_READY_SYNC_OFFSET 64
 #define PANVK_QUEUE_TESS_FREE_SYNC_OFFSET  128
+/* Ready/free pair of the second tessellation arena (csf-v11 tess-arenas),
+ * in the same 64-byte slots. */
+#define PANVK_QUEUE_TESS2_SYNC_DELTA       16
+#define PANVK_QUEUE_TESS_READY2_SYNC_OFFSET \
+   (PANVK_QUEUE_TESS_READY_SYNC_OFFSET + PANVK_QUEUE_TESS2_SYNC_DELTA)
+#define PANVK_QUEUE_TESS_FREE2_SYNC_OFFSET \
+   (PANVK_QUEUE_TESS_FREE_SYNC_OFFSET + PANVK_QUEUE_TESS2_SYNC_DELTA)
 #define PANVK_QUEUE_DESC_RINGBUF_SYNC_OFFSET 192
 #define PANVK_QUEUE_SYNCOBJS_SIZE          256
 
@@ -615,6 +622,9 @@ struct panvk_cmd_buffer {
        * so gl_InstanceIndex and attribute divisors see the API instance.
        */
       uint32_t gpu_prerast_inst_base;
+      /* Tessellated draws recorded so far; with PANVK_TESS_ARENAS=2 the odd
+       * ones use the second tessellation arena (csf-v11 tess-arenas). */
+      uint32_t tess_draws;
 
       struct panvk_cond_render_state cond_render;
    } state;
