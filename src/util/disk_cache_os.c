@@ -37,6 +37,7 @@
 #include "util/u_debug.h"
 #include "util/disk_cache.h"
 #include "util/disk_cache_os.h"
+#include "util/u_android_app_dir.h"
 
 #if DETECT_OS_WINDOWS
 
@@ -1009,33 +1010,29 @@ disk_cache_generate_cache_dir(void *mem_ctx, const char *gpu_name,
       if (xdg_cache_home) {
          path = concatenate_and_mkdir(mem_ctx, xdg_cache_home, cache_dir_name,
                                       mkdir);
+#if !DETECT_OS_ANDROID
+         /* On Android an unwritable XDG_CACHE_HOME falls back to the app
+          * cache directory below. */
          if (!path)
             return NULL;
+#endif
       }
    }
 
 #if DETECT_OS_ANDROID
-   /* Android app processes have no writable $HOME/.cache, so without this
-    * the cache stayed off and every process compiled its pipelines again
-    * (panvk's BC transcoders cost seconds each). Use the app's cache
-    * directory /data/user/<user>/<package>/cache, from the process name
-    * (up to a ':' service suffix). Falls through to $HOME if it fails. */
+   /* Android app processes usually have no writable $HOME/.cache (HOME is
+    * often /data), so the cache stayed off and every process compiled its
+    * pipelines again (panvk's BC transcoders cost seconds each). Use the
+    * app's cache directory, /data/user/<user>/<package>/cache or
+    * /data/data/<package>/cache. The package comes from the process name,
+    * the parent's (for a helper the app execve()d, whose cmdline is its
+    * path), the /data/app path of the binary or an app directory in
+    * TMPDIR/cwd/HOME (u_android_app_dir.h). Falls through to $HOME. */
    if (!path) {
-      char name[256] = {0}, dir[320];
-      int fd = open("/proc/self/cmdline", O_RDONLY | O_CLOEXEC);
+      char dir[512];
 
-      if (fd >= 0) {
-         const ssize_t n = read(fd, name, sizeof(name) - 1);
-         close(fd);
-         if (n > 0 && name[0] && name[0] != '/') {
-            name[strcspn(name, ":")] = 0;
-            snprintf(dir, sizeof(dir), "/data/user/%u/%s/cache",
-                     (unsigned)(getuid() / 100000), name);
-            if (access(dir, W_OK) == 0)
-               path = concatenate_and_mkdir(mem_ctx, dir, cache_dir_name,
-                                            mkdir);
-         }
-      }
+      if (u_android_app_cache_dir(dir, sizeof(dir)))
+         path = concatenate_and_mkdir(mem_ctx, dir, cache_dir_name, mkdir);
    }
 #endif
 

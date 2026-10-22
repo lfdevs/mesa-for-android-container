@@ -1831,6 +1831,7 @@ panvk_BindImageMemory2(VkDevice device, uint32_t bindInfoCount,
 #include <fcntl.h>
 #include <unistd.h>
 #include "util/detect_os.h"
+#include "util/u_android_app_dir.h"
 #include "util/u_queue.h"
 #include "panvk_priv_bo.h"
 
@@ -1928,26 +1929,13 @@ panvk_bc_raw_rebind(struct panvk_image *image)
    simple_mtx_unlock(&bc_raw_lock);
 }
 
-/* The Android app's cache directory, from the process name (the package,
- * up to a ':' service suffix): /data/user/<user>/<package>/cache. Android
- * app processes cannot write /data/local/tmp. */
+/* The Android app's cache directory (u_android_app_dir.h). Android app
+ * processes cannot write /data/local/tmp. */
 static const char *
 bc_raw_app_cache(char *buf, size_t size)
 {
 #if DETECT_OS_ANDROID
-   char name[256] = {0};
-   int fd = open("/proc/self/cmdline", O_RDONLY | O_CLOEXEC);
-
-   if (fd < 0)
-      return NULL;
-   const ssize_t n = read(fd, name, sizeof(name) - 1);
-   close(fd);
-   if (n <= 0 || !name[0] || name[0] == '/')
-      return NULL;
-   name[strcspn(name, ":")] = 0;
-   snprintf(buf, size, "/data/user/%u/%s/cache", (unsigned)(getuid() / 100000),
-            name);
-   return buf;
+   return u_android_app_cache_dir(buf, size);
 #else
    return NULL;
 #endif
@@ -1961,7 +1949,7 @@ bc_raw_file(struct panvk_device *dev)
    if (dev->bc_raw.fd_plus1)
       return dev->bc_raw.fd_plus1 - 1;
 
-   char app_cache[320];
+   char app_cache[512];
    const char *dirs[] = {
       os_get_option("PANVK_BC_RAW_DIR"),
       getenv("TMPDIR"),
