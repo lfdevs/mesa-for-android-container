@@ -114,6 +114,16 @@ panvk_v7_tess_gs_tight(void)
    return panvk_v7_knob_on("PANVK_V7_TESS_GS_TIGHT", &v);
 }
 
+/* jm-v7 107: batches of a command buffer share one TLS and one WLS buffer
+ * per heap half. PANVK_V7_TLS_SHARE=0 = one per batch (old).
+ */
+static inline bool
+panvk_v7_tls_share(void)
+{
+   static int v = -1;
+   return panvk_v7_knob_on("PANVK_V7_TLS_SHARE", &v);
+}
+
 /* PANVK_OVERLAP (v67b, default on), as panvk_overlap_enabled(). */
 static inline bool
 panvk_v7_overlap_on(void)

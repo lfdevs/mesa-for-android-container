@@ -15,6 +15,8 @@
 #include "panvk_buffer.h"
 #include "panvk_cmd_alloc.h"
 #include "panvk_cmd_buffer.h"
+#include "panvk_v7_knobs.h"
+#include "util/log.h"
 #include "panvk_cmd_desc_state.h"
 #include "panvk_cmd_draw.h"
 #include "panvk_cmd_frame_shaders.h"
@@ -181,14 +183,51 @@ cmd_close_batch_impl(struct panvk_cmd_buffer *cmdbuf)
 
       unsigned size = pan_get_total_stack_size(batch->tlsinfo.tls.size,
                                                thread_tls_alloc, core_id_range);
-      batch->tlsinfo.tls.ptr =
-         panvk_cmd_alloc_dev_mem(cmdbuf, tls, size, 4096).gpu;
+      /* jm-v7 107: reuse this half's buffer when it is large enough. */
+      const unsigned h = batch->heap_half & 1;
+      if (panvk_v7_tls_share() && cmdbuf->tls_half[h].tls_ptr &&
+          cmdbuf->tls_half[h].tls_size >= size) {
+         batch->tlsinfo.tls.ptr = cmdbuf->tls_half[h].tls_ptr;
+      } else {
+         batch->tlsinfo.tls.ptr =
+            panvk_cmd_alloc_dev_mem(cmdbuf, tls, size, 4096).gpu;
+         if (batch->tlsinfo.tls.ptr) {
+            cmdbuf->tls_half[h].tls_ptr = batch->tlsinfo.tls.ptr;
+            cmdbuf->tls_half[h].tls_size = size;
+         }
+         static unsigned tls_logged;
+         if (tls_logged < 4) {
+            tls_logged++;
+            mesa_logi("panvk: v%u batch TLS %u KiB (stack %u B/thread), "
+                      "half %u%s", PAN_ARCH, size >> 10,
+                      batch->tlsinfo.tls.size, h,
+                      panvk_v7_tls_share() ? ", shared per half" : "");
+         }
+      }
    }
 
    if (batch->tlsinfo.wls.size) {
       assert(batch->wls_total_size);
-      batch->tlsinfo.wls.ptr =
-         panvk_cmd_alloc_dev_mem(cmdbuf, tls, batch->wls_total_size, 4096).gpu;
+      const unsigned h = batch->heap_half & 1;
+      if (panvk_v7_tls_share() && cmdbuf->tls_half[h].wls_ptr &&
+          cmdbuf->tls_half[h].wls_size >= batch->wls_total_size) {
+         batch->tlsinfo.wls.ptr = cmdbuf->tls_half[h].wls_ptr;
+      } else {
+         batch->tlsinfo.wls.ptr =
+            panvk_cmd_alloc_dev_mem(cmdbuf, tls, batch->wls_total_size, 4096)
+               .gpu;
+         if (batch->tlsinfo.wls.ptr) {
+            cmdbuf->tls_half[h].wls_ptr = batch->tlsinfo.wls.ptr;
+            cmdbuf->tls_half[h].wls_size = batch->wls_total_size;
+         }
+         static unsigned wls_logged;
+         if (wls_logged < 4) {
+            wls_logged++;
+            mesa_logi("panvk: v%u batch WLS %u KiB, half %u%s", PAN_ARCH,
+                      (unsigned)(batch->wls_total_size >> 10), h,
+                      panvk_v7_tls_share() ? ", shared per half" : "");
+         }
+      }
    }
 
    if (batch->tls.cpu)
@@ -583,6 +622,7 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
 
    panvk_pool_reset(&cmdbuf->desc_pool);
    panvk_pool_reset(&cmdbuf->tls_pool);
+   memset(cmdbuf->tls_half, 0, sizeof(cmdbuf->tls_half));
    panvk_pool_reset(&cmdbuf->varying_pool);
    panvk_pool_reset(&cmdbuf->gs_pool);
    panvk_cmd_buffer_obj_list_reset(cmdbuf, push_sets);

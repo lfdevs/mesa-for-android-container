@@ -106,6 +106,16 @@ struct panvk_cmd_buffer {
    /* Growable GPU-only memory: geometry emulation of large tess draws. */
    struct panvk_pool gs_pool;
    struct panvk_pool tls_pool;
+   /* jm-v7 107: the TLS and WLS buffers of this command buffer, one per
+    * PANVK_OVERLAP heap half, reused by every batch of that half that
+    * fits (a batch runs after the previous batch of its half completed).
+    * Before, every batch allocated its own, so splitting a frame into
+    * many batches multiplied them.
+    */
+   struct {
+      uint64_t tls_ptr, wls_ptr;
+      uint64_t tls_size, wls_size;
+   } tls_half[2];
    struct list_head batches;
    struct list_head push_sets;
    struct panvk_batch *cur_batch;

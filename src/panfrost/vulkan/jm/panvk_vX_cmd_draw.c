@@ -571,6 +571,22 @@ panvk_draw_prepare_tiler_context(struct panvk_cmd_buffer *cmdbuf,
    return VK_SUCCESS;
 }
 
+/* jm-v7 107: the heap half of the current batch is picked with its tiler
+ * context. Creating it early must not change which layer's context a draw
+ * already selected (batch->tiler.ctx), so that is kept.
+ */
+static VkResult
+panvk_v7_batch_pick_half(struct panvk_cmd_buffer *cmdbuf)
+{
+   struct panvk_batch *batch = cmdbuf->cur_batch;
+   if (batch->tiler.ctx_descs.gpu)
+      return VK_SUCCESS; /* half already picked */
+   const struct pan_tiler_context saved = batch->tiler.ctx;
+   VkResult result = panvk_per_arch(cmd_prepare_tiler_context)(cmdbuf, 0);
+   batch->tiler.ctx = saved;
+   return result;
+}
+
 /* The allocator indirect draws take their varyings from, see
  * panlib_patch_varying_bufs(). One per batch (or per ~1024 indirect draws).
  */
@@ -589,7 +605,7 @@ panvk_draw_get_indirect_varying_info(struct panvk_cmd_buffer *cmdbuf)
     */
    const struct panvk_priv_bo *vary_bo = dev->indirect_varying_buffer;
    if (dev->indirect_varying_buffer2 && cmdbuf->cur_batch) {
-      VkResult result = panvk_per_arch(cmd_prepare_tiler_context)(cmdbuf, 0);
+      VkResult result = panvk_v7_batch_pick_half(cmdbuf);
       if (result != VK_SUCCESS)
          return result;
       if (cmdbuf->cur_batch->heap_half & 1)
@@ -3842,8 +3858,7 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
    }
    if (dev->tess_gs_scratch[0] || dev->indirect_varying_buffer2) {
       /* The heap half picks the buffers this batch reuses. */
-      if (panvk_per_arch(cmd_prepare_tiler_context)(cmdbuf, 0) !=
-          VK_SUCCESS) {
+      if (panvk_v7_batch_pick_half(cmdbuf) != VK_SUCCESS) {
          vk_command_buffer_set_error(&cmdbuf->vk,
                                      VK_ERROR_OUT_OF_DEVICE_MEMORY);
          return;
@@ -3971,7 +3986,10 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
       .tess_phase = PANVK_TESS_PHASE_TES,
       .gs_max_prims = nested ? max_indices / vpp : 0,
    };
-   gfx->tess.gs_scratch = nested && dev->tess_gs_scratch[0];
+   /* Not with transform feedback: keep its buffers out of the per-batch
+    * reuse (jm-v7 107 review). */
+   gfx->tess.gs_scratch =
+      nested && dev->tess_gs_scratch[0] && !gfx->xfb.active;
    panvk_cmd_draw_indirect(cmdbuf, &out);
    gfx->tess.gs_scratch = false;
 #undef TD
