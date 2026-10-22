@@ -2084,7 +2084,17 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
     */
    panvk_draw_prepare_attributes(cmdbuf, draw);
 
-   if (gfx_state_dirty(cmdbuf, DESC_STATE) || gfx_state_dirty(cmdbuf, VS)) {
+   /* jm-v7 090: the VS storage-image attributes live in the attribute
+    * table, which panvk_draw_prepare_vs_attribs() allocates anew for every
+    * draw. The copy job is what fills them, so it must run for every draw
+    * of a VS with storage images, not only when the descriptors are dirty;
+    * otherwise the second draw reads an unwritten table.
+    */
+   const bool vs_has_imgs =
+      vs_desc_info->others.count[PANVK_BIFROST_DESC_TABLE_IMG] != 0;
+
+   if (gfx_state_dirty(cmdbuf, DESC_STATE) || gfx_state_dirty(cmdbuf, VS) ||
+       vs_has_imgs) {
       result = panvk_draw_prepare_vs_copy_desc_job(cmdbuf, draw);
       if (result != VK_SUCCESS)
          return result;
