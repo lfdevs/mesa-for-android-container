@@ -1398,6 +1398,22 @@ lower_img_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
    nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
 
 #if PAN_ARCH < 9
+   /* jm-v7 101: the 22-bit hardware format of a storage image or texel
+    * buffer, read from the set. Images pack it above the texel stride in
+    * word 2 (panvk_vX_image_view.c), texel buffers have it in their
+    * ATTRIBUTE word (word 4, bits 10..31).
+    */
+   if (intr->intrinsic == nir_intrinsic_image_deref_format) {
+      const bool buf = nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_BUF;
+      nir_def *w = load_resource_deref_desc(
+         b, deref,
+         buf ? VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER
+             : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+         buf ? 16 : 8, 1, 32, ctx);
+      nir_def_replace(&intr->def, nir_ushr_imm(b, w, 10));
+      return true;
+   }
+
    if (intr->intrinsic == nir_intrinsic_image_deref_size ||
        intr->intrinsic == nir_intrinsic_image_deref_samples) {
       const enum glsl_sampler_dim dim = nir_intrinsic_image_dim(intr);
@@ -1475,6 +1491,9 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
    case nir_intrinsic_image_deref_atomic_swap:
    case nir_intrinsic_image_deref_size:
    case nir_intrinsic_image_deref_samples:
+#if PAN_ARCH < 9
+   case nir_intrinsic_image_deref_format:
+#endif
       return lower_img_intrinsic(b, intr, ctx);
    default:
       return false;

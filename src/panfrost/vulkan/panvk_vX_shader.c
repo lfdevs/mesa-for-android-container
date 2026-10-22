@@ -2901,6 +2901,34 @@ struct panvk_v7_ria2_state {
    struct vk_descriptor_set_layout *const *set_layouts;
 };
 
+/* Whether the out-of-bounds alpha of a format-less access must be 1 (the
+ * view format has no alpha), from the hardware alpha hw_a of the same
+ * out-of-bounds access.
+ *
+ * jm-v7 101: v7 returns the inverted alpha (1 for rgba8, 0 for r32ui), so
+ * inverting it is right there. v6 does not: the FTL Galaxy S9 (G72,
+ * RC5-dev-v7K) returned 0 after the inversion for every r32ui case
+ * (tbuf_oob, tbuf_alias65537, r32ui_nofmt.load_*), while rgba8 passed, so
+ * the v6 hardware alpha is nonzero for both. v6 formats carry a swizzle
+ * (3 bits per channel, pan_format.h), so read the view's hardware format
+ * from the descriptor and give alpha 1 when the alpha swizzle is the
+ * constant 1 (R001, RG01, RGB1).
+ */
+static nir_def *
+panvk_v7_ria2_no_alpha(nir_builder *b, nir_def *deref,
+                       enum glsl_sampler_dim dim, bool array, nir_def *hw_a)
+{
+#if PAN_ARCH == 6
+   nir_def *fmt = nir_image_deref_format(b, 32, deref, .image_dim = dim,
+                                         .image_array = array);
+   nir_def *a_swz = nir_iand_imm(b, nir_ushr_imm(b, fmt, 9), 0x7);
+   (void)hw_a;
+   return nir_ieq_imm(b, a_swz, MALI_CHANNEL_1);
+#else
+   return nir_ieq_imm(b, hw_a, 0);
+#endif
+}
+
 static bool
 panvk_v7_lower_robust_image2_intr(nir_builder *b, nir_intrinsic_instr *intr,
                                   void *data)
@@ -2978,7 +3006,8 @@ panvk_v7_lower_robust_image2_intr(nir_builder *b, nir_intrinsic_instr *intr,
          oob_a = is_float ? nir_imm_floatN_t(b, one, bit_size)
                           : nir_imm_intN_t(b, one, bit_size);
       } else {
-         nir_def *no_alpha = nir_ieq_imm(b, hw_a, 0);
+         nir_def *no_alpha =
+            panvk_v7_ria2_no_alpha(b, intr->src[0].ssa, dim, array, hw_a);
          oob_a = is_float ? nir_b2fN(b, no_alpha, bit_size)
                           : nir_b2iN(b, no_alpha, bit_size);
       }
@@ -3058,8 +3087,11 @@ panvk_v7_lower_robust_txf_buf(nir_builder *b, nir_instr *instr, void *data)
     * 0-element R32_UINT view) must read (0, 0, 0, 0) (PanProbe robustness2
     * null_descriptors); only a real view, size >= 1, inverts the alpha.
     */
-   nir_def *no_alpha = nir_iand(b, nir_ieq_imm(b, hw_a, 0),
-                                nir_ine_imm(b, size, 0));
+   nir_def *no_alpha = nir_iand(
+      b,
+      panvk_v7_ria2_no_alpha(b, tex->src[tex_idx].src.ssa,
+                             GLSL_SAMPLER_DIM_BUF, false, hw_a),
+      nir_ine_imm(b, size, 0));
    nir_def *oob_a = is_float ? nir_b2fN(b, no_alpha, bit_size)
                              : nir_b2iN(b, no_alpha, bit_size);
    nir_def *zero = nir_imm_zero(b, 1, bit_size);
