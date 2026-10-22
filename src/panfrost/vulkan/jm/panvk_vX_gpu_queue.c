@@ -145,6 +145,10 @@ panvk_reset_issued_batch(struct panvk_cmd_buffer *cmdbuf,
             memcpy(&ctxs[i], &batch->tiler.ctx_templ, sizeof(*ctxs));
       }
 
+      /* jm-v7 106: the indirect varying allocators start over. */
+      util_dynarray_foreach(&batch->vary_infos, uint32_t *, offset)
+         **offset = 0;
+
       /* We don't keep track of BO <-> job relationship, so let's just flush the
        * whole desc pool for now. */
       panvk_pool_flush_maps(&cmdbuf->desc_pool);

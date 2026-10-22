@@ -75,6 +75,16 @@ struct panvk_batch {
    bool poly_heap_reset;
    /* v67b: tiler heap half used by this batch */
    unsigned heap_half;
+   /* jm-v7 106: worst-case indirect varying bytes of the tess draws in this
+    * batch, and the next free byte of tess_gs_scratch[heap_half].
+    */
+   uint64_t tess_vary_w;
+   uint64_t tess_gs_off;
+   /* jm-v7 106: the offset words (uint32_t *, CPU side) of the indirect
+    * varying allocators created in this batch, reset to 0 when the batch
+    * is issued again.
+    */
+   struct util_dynarray vary_infos;
 };
 
 enum panvk_cmd_event_op_type {

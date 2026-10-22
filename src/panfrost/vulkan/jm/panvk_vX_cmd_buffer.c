@@ -475,6 +475,13 @@ panvk_per_arch(cmd_open_batch)(struct panvk_cmd_buffer *cmdbuf)
    cmdbuf->cur_batch->malloc_vertex_jobs = UTIL_DYNARRAY_INIT;
 #endif
    cmdbuf->cur_batch->event_ops = UTIL_DYNARRAY_INIT;
+   cmdbuf->cur_batch->vary_infos = UTIL_DYNARRAY_INIT;
+   /* jm-v7 106: with per-half indirect varying buffers, every batch takes
+    * its own allocator, in the buffer of its heap half. */
+#if PAN_ARCH < 9
+   if (to_panvk_device(cmdbuf->vk.base.device)->indirect_varying_buffer2)
+      cmdbuf->state.gfx.vs.indirect_varying_bufs_infos = 0;
+#endif
    assert(cmdbuf->cur_batch);
    return cmdbuf->cur_batch;
 }
@@ -569,6 +576,7 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
       util_dynarray_fini(&batch->malloc_vertex_jobs);
 #endif
       util_dynarray_fini(&batch->event_ops);
+      util_dynarray_fini(&batch->vary_infos);
 
       vk_free(&cmdbuf->vk.pool->alloc, batch);
    }
@@ -596,6 +604,7 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
       util_dynarray_fini(&batch->malloc_vertex_jobs);
 #endif
       util_dynarray_fini(&batch->event_ops);
+      util_dynarray_fini(&batch->vary_infos);
 
       vk_free(&cmdbuf->vk.pool->alloc, batch);
    }

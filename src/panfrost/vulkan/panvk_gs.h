@@ -333,6 +333,11 @@ bool panvk_nir_lower_gs(struct nir_shader *nir,
  * whole patches past it, so a low bound loses patches, never memory).
  */
 #define PANVK_TESS_MAX_PRIMS_PER_PATCH 8704u
+/* jm-v7 106: VA of each tess_gs_scratch half (growable, committed up to
+ * the highest offset a batch used). A nested draw that does not fit what
+ * is left takes gs_pool BOs instead.
+ */
+#define PANVK_TESS_GS_SCRATCH_SIZE (256ull << 20)
 #define PANVK_TESS_UNSET 0xff
 
 /* What the draw path needs from a tess control or tess eval shader. The

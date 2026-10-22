@@ -90,6 +90,13 @@ struct panvk_device {
    struct panvk_priv_bo *indirect_varying_buffer;
    /* v6/v7 tessellation (jm-v7 014), see panvk_gs.h. NULL elsewhere. */
    struct panvk_priv_bo *tess_arena;
+   /* jm-v7 106: v6/v7 tessellation, one per PANVK_OVERLAP heap half (the
+    * batch's heap_half): the indirect varying buffer of odd-half batches,
+    * and the geometry emulation buffers of nested tess draws, bump
+    * allocated from 0 in every batch. NULL when unused.
+    */
+   struct panvk_priv_bo *indirect_varying_buffer2;
+   struct panvk_priv_bo *tess_gs_scratch[2];
    struct panvk_priv_bo *sample_positions;
 
    struct {

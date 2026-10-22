@@ -13,6 +13,7 @@
 #define PANVK_V7_KNOBS_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -111,6 +112,32 @@ panvk_v7_tess_gs_tight(void)
 {
    static int v = -1;
    return panvk_v7_knob_on("PANVK_V7_TESS_GS_TIGHT", &v);
+}
+
+/* PANVK_OVERLAP (v67b, default on), as panvk_overlap_enabled(). */
+static inline bool
+panvk_v7_overlap_on(void)
+{
+   static int v = -1;
+   return panvk_v7_knob_on("PANVK_OVERLAP", &v);
+}
+
+/* jm-v7 106: per-batch budget (MiB) of v6/v7 tessellation memory that is
+ * reused by the next batch of the same heap half: worst-case tess eval
+ * varyings and nested geometry emulation buffers. A tess draw that would
+ * go past it starts a new batch. 0 = no budget (one batch, as before).
+ */
+static inline uint64_t
+panvk_v7_tess_batch_budget(void)
+{
+   static int64_t v = -1;
+   if (v < 0) {
+      const char *e = getenv("PANVK_V7_TESS_BATCH_MB");
+      v = e ? atoll(e) : 32;
+      if (v < 0)
+         v = 0;
+   }
+   return (uint64_t)v << 20;
 }
 
 #endif /* PANVK_V7_KNOBS_H */

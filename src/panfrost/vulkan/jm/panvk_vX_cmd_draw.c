@@ -582,6 +582,20 @@ panvk_draw_get_indirect_varying_info(struct panvk_cmd_buffer *cmdbuf)
    if (cmdbuf->state.gfx.vs.indirect_varying_bufs_infos)
       return VK_SUCCESS;
 
+   /* jm-v7 106: odd heap half batches take the second buffer, so a batch
+    * reuses the memory of the previous batch of its half, never that of
+    * the batch whose fragment job may still run (PANVK_OVERLAP). The half
+    * is picked with the tiler context.
+    */
+   const struct panvk_priv_bo *vary_bo = dev->indirect_varying_buffer;
+   if (dev->indirect_varying_buffer2 && cmdbuf->cur_batch) {
+      VkResult result = panvk_per_arch(cmd_prepare_tiler_context)(cmdbuf, 0);
+      if (result != VK_SUCCESS)
+         return result;
+      if (cmdbuf->cur_batch->heap_half & 1)
+         vary_bo = dev->indirect_varying_buffer2;
+   }
+
    struct pan_ptr bufs_info_storage = panvk_cmd_alloc_dev_mem(
       cmdbuf, desc, sizeof(struct libpan_draw_helper_varying_buf_info), 8);
 
@@ -592,7 +606,14 @@ panvk_draw_get_indirect_varying_info(struct panvk_cmd_buffer *cmdbuf)
 
    struct libpan_draw_helper_varying_buf_info *vary_bufs_info =
       bufs_info_storage.cpu;
-   vary_bufs_info->address = dev->indirect_varying_buffer->addr.dev;
+   vary_bufs_info->address = vary_bo->addr.dev;
+   /* jm-v7 106: the GPU advances offset; a re-submitted batch must start
+    * from 0 again (panvk_reset_issued_batch()), or every submit of the
+    * same command buffer moves further into the buffer.
+    */
+   if (cmdbuf->cur_batch)
+      util_dynarray_append_typed(&cmdbuf->cur_batch->vary_infos, uint32_t *,
+                                 (uint32_t *)&vary_bufs_info->offset);
    vary_bufs_info->size = PANVK_JM_MAX_PER_VTX_ATTRIBUTES_INDIRECT_SIZE *
                           PANVK_JM_MAX_VERTICES_INDIRECT;
    vary_bufs_info->offset = 0;
@@ -617,6 +638,23 @@ gs_alloc(struct panvk_cmd_buffer *cmdbuf, bool growable, uint64_t size,
       const char *e = getenv("PANVK_V7_GS_DESC");
       gs_desc = e && e[0] == '1';
    }
+   /* jm-v7 106: a nested tess eval draw bump-allocates from the batch's
+    * half of the tess GS scratch, which the next batch of that half reuses.
+    */
+#if PAN_ARCH < 9
+   struct panvk_batch *batch = cmdbuf->cur_batch;
+   if (cmdbuf->state.gfx.tess.gs_scratch && batch) {
+      struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+      const struct panvk_priv_bo *bo =
+         dev->tess_gs_scratch[batch->heap_half & 1];
+      const uint64_t off =
+         ALIGN_POT(batch->tess_gs_off, MAX2(alignment, 64));
+      if (bo && off + size <= PANVK_TESS_GS_SCRATCH_SIZE) {
+         batch->tess_gs_off = off + size;
+         return (struct pan_ptr){.gpu = bo->addr.dev + off};
+      }
+   }
+#endif
    if (growable || !gs_desc)
       return panvk_cmd_alloc_dev_mem(cmdbuf, gs, size, alignment);
    return panvk_cmd_alloc_dev_mem(cmdbuf, desc, size, alignment);
@@ -3690,14 +3728,19 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
        * (gs_max_prims), so this bound is never exceeded on the GPU.
        * PANVK_V7_TESS_GS_TIGHT=0 = old.
        */
-      if (cpu_known && panvk_v7_tess_gs_tight()) {
-         const uint64_t patches =
-            MIN2((uint64_t)(cpu_vertices / ps) * cpu_instances,
-                 PANVK_TESS_MAX_PATCHES);
-         const uint64_t bound =
-            MAX2(patches, 1) * PANVK_TESS_MAX_PRIMS_PER_PATCH * vpp;
-         max_indices = MIN2((uint64_t)max_indices, bound);
-      }
+   }
+   /* jm-v7 106: the same bound for every draw the CPU knows, so the tess
+    * arena layout (and the arena pages the GPU commits by touching its
+    * index buffer) is sized for the draw, not for PANVK_TESS_MAX_INDICES.
+    */
+   const uint64_t cpu_patches =
+      cpu_known ? MIN2((uint64_t)(cpu_vertices / ps) * cpu_instances,
+                       PANVK_TESS_MAX_PATCHES)
+                : 0;
+   if (cpu_known && panvk_v7_tess_gs_tight()) {
+      const uint64_t bound =
+         MAX2(cpu_patches, 1) * PANVK_TESS_MAX_PRIMS_PER_PATCH * vpp;
+      max_indices = MIN2((uint64_t)max_indices, bound);
    }
 
    /* The tess arena: tess control output, counts and coordinate offsets per
@@ -3713,8 +3756,11 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
       heap_fixed_B + (uint64_t)max_indices * sizeof(uint32_t) + 5 * 64;
    const uint64_t per_patch_B =
       tcs_stride_B + 2 * sizeof(uint32_t) + 32 /* heap padding */;
-   const uint32_t max_patches = MIN2(
+   uint32_t max_patches = MIN2(
       PANVK_TESS_MAX_PATCHES, (PANVK_TESS_HEAP_SIZE - fixed_B) / per_patch_B);
+   /* jm-v7 106: no arena room for patches the draw does not have. */
+   if (cpu_known && panvk_v7_tess_gs_tight() && max_patches)
+      max_patches = MIN2((uint64_t)max_patches, MAX2(cpu_patches, 1));
    if (!max_patches) {
       mesa_logw_once("panvk: tess control output too large, draw skipped");
       return;
@@ -3756,6 +3802,54 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
       panvk_per_arch(cmd_close_batch)(cmdbuf);
       panvk_per_arch(cmd_open_batch)(cmdbuf);
    }
+
+   /* jm-v7 106: bound the tessellation memory one batch can touch, so
+    * that a frame of many tessellated draws reuses it batch after batch
+    * instead of growing it draw after draw. Counted per batch: the worst
+    * case of the tess eval varyings this draw may take from the indirect
+    * varying buffer, and what the nested draws so far took from the tess
+    * GS scratch. Past the budget the draw starts a new batch (render pass
+    * contents are kept, as for any batch split). Also split before the
+    * ~5k-job split of panvk_cmd_draw_indirect() could fall between the
+    * phases of this draw.
+    */
+   const uint64_t tess_budget = panvk_v7_tess_batch_budget();
+   const uint64_t vary_w =
+      (uint64_t)max_indices * layers *
+         (16 + 4 + tes_v->info.varyings.formats.generic_size_B) +
+      (uint64_t)layers * 3 * 64;
+   if (!draw->indirect_dep_job && tess_budget) {
+      struct panvk_batch *b = cmdbuf->cur_batch;
+      const bool used = b->tess_vary_w || b->tess_gs_off;
+      const bool over = used && (b->tess_vary_w + vary_w > tess_budget ||
+                                 b->tess_gs_off >= tess_budget);
+      const bool jobs = b->vtc_jc.job_index + panvk_tess_draw_jobs(layers) +
+                           64 > 5 * 1024;
+      if (over || jobs) {
+         static unsigned logged;
+         if (over && logged < 3) {
+            logged++;
+            mesa_logi("panvk: v%u tess batch budget %llu MiB: new batch "
+                      "(varyings %llu MiB worst case, GS scratch %llu MiB)",
+                      PAN_ARCH, (unsigned long long)(tess_budget >> 20),
+                      (unsigned long long)((b->tess_vary_w + vary_w) >> 20),
+                      (unsigned long long)(b->tess_gs_off >> 20));
+         }
+         panvk_per_arch(cmd_close_batch)(cmdbuf);
+         panvk_per_arch(cmd_open_batch)(cmdbuf);
+         gfx->vs.indirect_varying_bufs_infos = 0;
+      }
+   }
+   if (dev->tess_gs_scratch[0] || dev->indirect_varying_buffer2) {
+      /* The heap half picks the buffers this batch reuses. */
+      if (panvk_per_arch(cmd_prepare_tiler_context)(cmdbuf, 0) !=
+          VK_SUCCESS) {
+         vk_command_buffer_set_error(&cmdbuf->vk,
+                                     VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         return;
+      }
+   }
+   cmdbuf->cur_batch->tess_vary_w += vary_w;
 
    struct pan_ptr td =
       panvk_cmd_alloc_dev_mem(cmdbuf, desc, sizeof(struct panlib_v7_tess), 16);
@@ -3877,7 +3971,9 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
       .tess_phase = PANVK_TESS_PHASE_TES,
       .gs_max_prims = nested ? max_indices / vpp : 0,
    };
+   gfx->tess.gs_scratch = nested && dev->tess_gs_scratch[0];
    panvk_cmd_draw_indirect(cmdbuf, &out);
+   gfx->tess.gs_scratch = false;
 #undef TD
 
    gfx->vs.shader = vs;

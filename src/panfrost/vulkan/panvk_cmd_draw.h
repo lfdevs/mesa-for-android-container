@@ -337,6 +337,9 @@ struct panvk_cmd_graphics_state {
       uint64_t td;
       uint64_t src_draw;
       unsigned tcs_job;
+      /* jm-v7 106: the nested tess eval draw being recorded takes its
+       * geometry emulation buffers from the batch's tess_gs_scratch. */
+      bool gs_scratch;
    } tess;
 #endif
 
