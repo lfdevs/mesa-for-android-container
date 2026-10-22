@@ -35,6 +35,8 @@
  */
 
 #include <errno.h>
+#include <inttypes.h>
+#include <math.h>
 #include <fcntl.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
@@ -532,6 +534,128 @@ kbase_dev_query_props(struct kbase_kmod_dev *kbase_dev,
                                 PAN_KMOD_BO_FLAG_WB_MMAP |
                                 PAN_KMOD_BO_FLAG_GPU_UNCACHED |
                                 PAN_KMOD_BO_FLAG_CSF_EVENT;
+}
+
+/* jm-v7 109: GPU timestamp frequency calibration.
+ *
+ * timestamp_frequency is the CPU's cntfrq_el0, which assumes the GPU
+ * TIMESTAMP register counts the system counter. The FTL Galaxy A31
+ * (MT6768, Mali-G52 MC2) GPU counter runs at twice that (GPU timestamp
+ * deltas were 2.0x the wall time). KBASE_IOCTL_GET_CPU_GPU_TIMEINFO
+ * returns the GPU TIMESTAMP register (the counter the GPU writes for
+ * timestamp queries) and the kernel's monotonic time, sampled together.
+ * Three samples PANVK_KBASE_TS_CAL_MS apart give two rate estimates; they
+ * must agree within 2 % (a counter that stalled across a power transition
+ * would not), and the result is used only when it is more than 10 % away
+ * from cntfrq. A result within 3 % of cntfrq x 2^k (k = -2..2, k != 0)
+ * snaps to it.
+ *
+ * PANVK_KBASE_TS_CALIBRATE: unset = JM only, and only a counter faster
+ * than cntfrq is taken; 0 = off (cntfrq always); 1 = JM and CSF, faster
+ * or slower. PANVK_KBASE_TS_CAL_MS = window (default 5 ms, 1-1000).
+ */
+static bool
+kbase_ts_sample(int fd, uint64_t *ts, uint64_t *ns)
+{
+   union kbase_ioctl_get_cpu_gpu_timeinfo req = {
+      .in.request_flags =
+         BASE_TIMEINFO_MONOTONIC_FLAG | BASE_TIMEINFO_TIMESTAMP_FLAG,
+   };
+
+   if (ioctl(fd, KBASE_IOCTL_GET_CPU_GPU_TIMEINFO, &req))
+      return false;
+
+   *ts = req.out.timestamp;
+   *ns = req.out.sec * 1000000000ull + req.out.nsec;
+   return true;
+}
+
+static void
+kbase_calibrate_timestamp_frequency(int fd, bool is_csf,
+                                    struct pan_kmod_dev_props *props)
+{
+   const char *env = getenv("PANVK_KBASE_TS_CALIBRATE");
+   const int mode = (env && env[0]) ? atoi(env) : -1;
+
+   if (mode == 0 || (mode < 0 && is_csf))
+      return;
+   if (!props->gpu_can_query_timestamp || !props->timestamp_frequency)
+      return;
+
+   const char *ms_env = getenv("PANVK_KBASE_TS_CAL_MS");
+   int ms = (ms_env && ms_env[0]) ? atoi(ms_env) : 5;
+   if (ms < 1 || ms > 1000)
+      ms = 5;
+
+   /* Poll every ~100 us rather than sleep: each TIMEINFO keeps the GPU
+    * powered (kbase_pm_context_active), so a counter that would stop while
+    * the GPU is off cannot skew the window.
+    */
+   uint64_t ts[3], ns[3];
+   for (unsigned i = 0; i < 3; i++) {
+      unsigned polls = 0;
+      do {
+         if (polls++) {
+            struct timespec d = { .tv_nsec = 100000 };
+            while (nanosleep(&d, &d) && errno == EINTR)
+               ;
+         }
+         if (!kbase_ts_sample(fd, &ts[i], &ns[i])) {
+            mesa_logi("kbase: timestamp calibration: TIMEINFO failed (%s), "
+                      "keeping %" PRIu64 " Hz", strerror(errno),
+                      props->timestamp_frequency);
+            return;
+         }
+      } while (i && ns[i] < ns[i - 1] + (uint64_t)ms * 1000000ull &&
+               polls < 100000);
+   }
+
+   double f[2];
+   for (unsigned i = 0; i < 2; i++) {
+      if (ns[i + 1] <= ns[i] || ts[i + 1] <= ts[i]) {
+         mesa_logi("kbase: timestamp calibration: counter not advancing, "
+                   "keeping %" PRIu64 " Hz", props->timestamp_frequency);
+         return;
+      }
+      f[i] = (double)(ts[i + 1] - ts[i]) * 1e9 / (double)(ns[i + 1] - ns[i]);
+   }
+
+   const double cpu = (double)props->timestamp_frequency;
+   const double meas = (f[0] + f[1]) / 2.0;
+
+   if (fabs(f[0] - f[1]) > 0.02 * meas || meas < 1e6 || meas > 1e9) {
+      mesa_logi("kbase: timestamp calibration: unstable (%.0f / %.0f Hz), "
+                "keeping %" PRIu64 " Hz", f[0], f[1],
+                props->timestamp_frequency);
+      return;
+   }
+
+   /* Default: only a faster GPU counter (the A31 case). A slower reading
+    * could also be a counter that pauses, so it needs =1.
+    */
+   if (fabs(meas - cpu) <= 0.10 * cpu || (mode < 0 && meas < cpu)) {
+      mesa_logi("kbase: timestamp calibration: %.0f Hz, keeping cntfrq "
+                "%" PRIu64 " Hz", meas, props->timestamp_frequency);
+      return;
+   }
+
+   uint64_t freq = (uint64_t)(meas + 0.5);
+   for (int k = -2; k <= 2; k++) {
+      if (!k)
+         continue;
+      const double snap = k > 0 ? cpu * (1 << k) : cpu / (1 << -k);
+      if (fabs(meas - snap) <= 0.03 * snap) {
+         freq = (uint64_t)(snap + 0.5);
+         break;
+      }
+   }
+
+   mesa_logw("kbase: GPU timestamp counter measured at %.0f Hz (%.0f / "
+             "%.0f), cntfrq %" PRIu64 " Hz: using %" PRIu64 " Hz "
+             "(PANVK_KBASE_TS_CALIBRATE=0 = cntfrq)", meas, f[0], f[1],
+             props->timestamp_frequency, freq);
+   props->timestamp_frequency = freq;
+   props->timestamp_cycles_to_ns_factor = 1000000000.0 / freq;
 }
 
 /* -------------------------------------------------------------------------
@@ -1727,6 +1851,7 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
 
    kbase_dev_query_props(kbase_dev, props_buf, props_size);
    free(props_buf);
+   kbase_calibrate_timestamp_frequency(fd, is_csf, &kbase_dev->base.props);
 
    const char *dma_heap = getenv("PANVK_KBASE_DMA_HEAP");
    if (!dma_heap || !dma_heap[0])
