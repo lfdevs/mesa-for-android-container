@@ -34,6 +34,12 @@
 #include "util/timespec.h"
 #include "u_process.h"
 
+#include "util/detect_os.h"
+
+#if DETECT_OS_POSIX
+#include <pthread.h>
+#endif
+
 #if defined(__linux__)
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -46,6 +52,8 @@
 
 static void
 util_queue_kill_threads_locked(struct util_queue *queue, unsigned keep_num_threads);
+static bool
+util_queue_create_thread(struct util_queue *queue, unsigned index);
 
 /****************************************************************************
  * Wait for all queues to assert idle when exit() is called.
@@ -78,11 +86,119 @@ atexit_handler(void)
    mtx_unlock(&exit_mutex);
 }
 
+#if DETECT_OS_POSIX
+/****************************************************************************
+ * fork() support
+ *
+ * A fork() child has only the thread that called fork(). The queue workers
+ * stay in the parent, so without this a job added in the child is never run
+ * and util_queue_finish()/util_queue_destroy() in the child wait forever on
+ * workers that do not exist there. That is what hung PanProbe's vkd3d_heap:
+ * it creates the VkInstance (and with it the disk cache and its "disk$"
+ * worker) in the parent, then forks one child per case; the child's pipeline
+ * compile queues a cache write and its vkDestroyInstance blocks in
+ * disk_cache_destroy() -> util_queue_finish().
+ *
+ * prepare: hold exit_mutex and every queue lock across fork(), so the child
+ *          gets consistent queue state and unlocked mutexes.
+ * child:   forget the parent's workers and jobs (num_threads = 0, the
+ *          inherited jobs belong to the parent and are not run twice; their
+ *          fences are signalled so nobody in the child waits on them). The
+ *          condition variables are re-initialised without cnd_destroy(), as
+ *          they may still count the parent's waiters. The first
+ *          util_queue_add_job() in the child starts a new worker.
+ */
+static void
+atfork_prepare(void)
+{
+   struct util_queue *iter;
+
+   /* Wait out a CPU detection that another thread may still be running, so
+    * the child never inherits its once flag in the "in progress" state (see
+    * global_init). After the first call this is one atomic load. */
+   util_get_cpu_caps();
+
+   mtx_lock(&exit_mutex);
+   LIST_FOR_EACH_ENTRY(iter, &queue_list, head)
+      mtx_lock(&iter->lock);
+}
+
+static void
+atfork_parent(void)
+{
+   struct util_queue *iter;
+
+   LIST_FOR_EACH_ENTRY(iter, &queue_list, head)
+      mtx_unlock(&iter->lock);
+   mtx_unlock(&exit_mutex);
+}
+
+static void
+atfork_child(void)
+{
+   struct util_queue *iter;
+
+   LIST_FOR_EACH_ENTRY(iter, &queue_list, head) {
+      if (iter->jobs) {
+         /* num_queued, not write_idx: a full ring has read == write. */
+         for (int n = 0; n < iter->num_queued; n++) {
+            unsigned i = (iter->read_idx + n) % iter->max_jobs;
+            if (iter->jobs[i].job && iter->jobs[i].fence)
+               util_queue_fence_signal(iter->jobs[i].fence);
+            memset(&iter->jobs[i], 0, sizeof(iter->jobs[i]));
+         }
+      }
+      iter->read_idx = iter->write_idx = 0;
+      iter->num_queued = 0;
+      iter->total_jobs_size = 0;
+
+      /* A queue whose threads were already killed (atexit) stays dead. */
+      iter->respawn_after_fork = iter->num_threads > 0 ||
+                                 iter->respawn_after_fork;
+      iter->num_threads = 0;
+      iter->create_threads_on_demand = true;
+
+      cnd_init(&iter->has_queued_cond);
+      cnd_init(&iter->has_space_cond);
+      mtx_unlock(&iter->lock);
+   }
+   mtx_unlock(&exit_mutex);
+}
+
+/* Called with queue->lock held, in a fork() child, before the first job. */
+static bool
+util_queue_respawn_after_fork_locked(struct util_queue *queue)
+{
+   queue->respawn_after_fork = false;
+   memset(queue->threads, 0, queue->max_threads * sizeof(*queue->threads));
+
+   /* The new worker blocks on queue->lock until the caller drops it, and
+    * then sees thread_index < num_threads. */
+   queue->num_threads = 1;
+   if (!util_queue_create_thread(queue, 0)) {
+      queue->num_threads = 0;
+      return false;
+   }
+   return true;
+}
+#endif
+
 static void
 global_init(void)
 {
    mtx_init(&exit_mutex, mtx_plain);
    atexit(atexit_handler);
+#if DETECT_OS_POSIX
+   /* Run CPU detection here, before any queue worker exists. Otherwise the
+    * first worker (util_queue_thread_func -> util_get_cpu_caps) runs it at
+    * nice 19 / SCHED_BATCH, reading sysfs for every CPU, and a fork() in
+    * that window gives a child whose once flag is stuck "in progress":
+    * bionic's pthread_once (unlike glibc's) does not reset it in a fork
+    * child, so the child's respawned worker blocks forever and its
+    * disk_cache_destroy -> util_queue_finish never returns. */
+   util_get_cpu_caps();
+   pthread_atfork(atfork_prepare, atfork_parent, atfork_child);
+#endif
 }
 
 static void
@@ -556,6 +672,10 @@ util_queue_add_job_locked(struct util_queue *queue,
 {
    struct util_queue_job *ptr;
 
+#if DETECT_OS_POSIX
+   if (queue->num_threads == 0 && queue->respawn_after_fork)
+      util_queue_respawn_after_fork_locked(queue);
+#endif
    if (queue->num_threads == 0) {
       /* well no good option here, but any leaks will be
        * short-lived as things are shutting down..
