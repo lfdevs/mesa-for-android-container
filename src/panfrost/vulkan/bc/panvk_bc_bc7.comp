@@ -17,6 +17,16 @@ layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer Ou
     uint data[];
 };
 
+#ifdef PANVK_BC_FAST
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer InBuf4 {
+    uvec4 data[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer OutBuf4 {
+    uvec4 data[];
+};
+#endif
+
 layout(push_constant) uniform Registers
 {
     uvec2 src;
@@ -622,6 +632,273 @@ uvec4 interpolate_endpoint(DecodedInterpolation interp)
     return rgba;
 }
 
+#ifdef PANVK_BC_FAST
+/* interpolate_endpoint() in fp32 (exact: every term is an integer below
+ * 2^24), as the colour: on Valhall the integer form keeps the CVT unit busy
+ * while the FMA unit idles. */
+vec4 bc7f_color(DecodedInterpolation interp)
+{
+    vec4 e0 = vec4(interp.ep0), e1 = vec4(interp.ep1);
+    vec4 w = vec4(vec3(float(interp.color_weight)), float(interp.alpha_weight));
+    vec4 c = floor((e0 * 64.0 + (e1 - e0) * w + 32.0) * (1.0 / 64.0));
+
+    switch (interp.rotation)
+    {
+        default:
+        break;
+        case 1u:
+        c = c.agbr;
+        break;
+        case 2u:
+        c = c.rabg;
+        break;
+        case 3u:
+        c = c.rgab;
+        break;
+    }
+
+    return c * (1.0 / 255.0);
+}
+#endif
+
+#ifdef PANVK_BC_FAST
+/* csf-v11/211 (PANVK_BC_BC7_DECODE=fast): the same per-texel decode with
+ * every bit field at a constant offset. A channel's endpoints of all subsets
+ * are one field of at most 30 bits, read at once and shifted to the texel's
+ * subset; the index of a texel is one shift of a 32- or 64-bit window of
+ * the index bits; the weight tables are arithmetic. The results are
+ * bit-identical to the decoders above (tools/bc-glsl-host). */
+
+/* Bits [o, o + n) of the 64-bit window w (0 < o, o + n <= 64). */
+uint
+bc7f_win64(uvec2 w, int o, int n)
+{
+    uint v = o < 32 ? (w.x >> o) | (w.y << (32 - o)) : (w.y >> (o - 32));
+    return v & ((1u << n) - 1u);
+}
+
+/* weight_table2/3/4[idx], exact for every idx. */
+int bc7f_w2(int idx) { return (idx * 85 + 2) >> 2; }
+int bc7f_w3(int idx) { return (idx * 73 + 4) >> 3; }
+int bc7f_w4(int idx) { return (idx * 68 + 8) >> 4; }
+
+/* Endpoints e0/e1 of channel field f (all subsets, cb bits per endpoint)
+ * for the subset whose first endpoint is endpoint 2 sub. */
+ivec2
+bc7f_pair(uint f, int sub, int cb)
+{
+    uint v = f >> (2 * sub * cb);
+    return ivec2(int(v & ((1u << cb) - 1u)), int((v >> cb) & ((1u << cb) - 1u)));
+}
+
+DecodedInterpolation decode_bc7f_mode0(uvec4 payload, int p)
+{
+    int part_index = extract_bits(payload, 1, 4);
+    int sub = (partition_table3[part_index] >> (2 * p)) & 3;
+    ivec2 r = bc7f_pair(uint(extract_bits(payload, 5, 24)), sub, 4);
+    ivec2 g = bc7f_pair(uint(extract_bits(payload, 29, 24)), sub, 4);
+    ivec2 b = bc7f_pair(uint(extract_bits(payload, 53, 24)), sub, 4);
+    int pb = extract_bits(payload, 77, 6) >> (2 * sub);
+    int sep0 = pb & 1, sep1 = (pb >> 1) & 1;
+
+    ivec2 a = anchor_table3[part_index];
+    int off = max(82 + p * 3 - int(p > a.x) - int(p > a.y), 83);
+    int nb = (p == a.y || p == a.x || p == 0) ? 2 : 3;
+    int index = int(bc7f_win64(payload.zw, off - 64, nb));
+
+    ivec3 rgb0 = ivec3(r.x, g.x, b.x);
+    ivec3 rgb1 = ivec3(r.y, g.y, b.y);
+    rgb0 = (rgb0 << 4) | (sep0 << 3) | (rgb0 >> 1);
+    rgb1 = (rgb1 << 4) | (sep1 << 3) | (rgb1 >> 1);
+
+    int w = bc7f_w3(index);
+    return DecodedInterpolation(uvec4(rgb0, 0xff), uvec4(rgb1, 0xff), w, w, 0);
+}
+
+DecodedInterpolation decode_bc7f_mode1(uvec4 payload, int p)
+{
+    int part_index = extract_bits(payload, 2, 6);
+    int sub = (partition_table2[part_index] >> p) & 1;
+    ivec2 r = bc7f_pair(uint(extract_bits(payload, 8, 24)), sub, 6);
+    ivec2 g = bc7f_pair(uint(extract_bits(payload, 32, 24)), sub, 6);
+    ivec2 b = bc7f_pair(uint(extract_bits(payload, 56, 24)), sub, 6);
+    int sep = ((extract_bits(payload, 80, 2) >> sub) & 1) << 1;
+
+    int anchor = anchor_table2[part_index];
+    int off = max(81 + p * 3 - int(p > anchor), 82);
+    int nb = (p == anchor || p == 0) ? 2 : 3;
+    int index = int(bc7f_win64(payload.zw, off - 64, nb));
+
+    ivec3 rgb0 = ivec3(r.x, g.x, b.x);
+    ivec3 rgb1 = ivec3(r.y, g.y, b.y);
+    rgb0 = (rgb0 << 2) | sep | (rgb0 >> 5);
+    rgb1 = (rgb1 << 2) | sep | (rgb1 >> 5);
+
+    int w = bc7f_w3(index);
+    return DecodedInterpolation(uvec4(rgb0, 0xff), uvec4(rgb1, 0xff), w, w, 0);
+}
+
+DecodedInterpolation decode_bc7f_mode2(uvec4 payload, int p)
+{
+    int part_index = extract_bits(payload, 3, 6);
+    int sub = (partition_table3[part_index] >> (2 * p)) & 3;
+    ivec2 r = bc7f_pair(uint(extract_bits(payload, 9, 30)), sub, 5);
+    ivec2 g = bc7f_pair(uint(extract_bits(payload, 39, 30)), sub, 5);
+    ivec2 b = bc7f_pair(uint(extract_bits(payload, 69, 30)), sub, 5);
+
+    ivec2 a = anchor_table3[part_index];
+    int off = max(98 + p * 2 - int(p > a.x) - int(p > a.y), 99);
+    int nb = (p == a.y || p == a.x || p == 0) ? 1 : 2;
+    int index = int(bitfieldExtract(payload.w, off - 96, nb));
+
+    ivec3 rgb0 = ivec3(r.x, g.x, b.x);
+    ivec3 rgb1 = ivec3(r.y, g.y, b.y);
+    rgb0 = (rgb0 << 3) | (rgb0 >> 2);
+    rgb1 = (rgb1 << 3) | (rgb1 >> 2);
+
+    int w = bc7f_w2(index);
+    return DecodedInterpolation(uvec4(rgb0, 0xff), uvec4(rgb1, 0xff), w, w, 0);
+}
+
+DecodedInterpolation decode_bc7f_mode3(uvec4 payload, int p)
+{
+    int part_index = extract_bits(payload, 4, 6);
+    int sub = (partition_table2[part_index] >> p) & 1;
+    ivec2 r = bc7f_pair(uint(extract_bits(payload, 10, 28)), sub, 7);
+    ivec2 g = bc7f_pair(uint(extract_bits(payload, 38, 28)), sub, 7);
+    ivec2 b = bc7f_pair(uint(extract_bits(payload, 66, 28)), sub, 7);
+    int pb = extract_bits(payload, 94, 4) >> (2 * sub);
+    int sep0 = pb & 1, sep1 = (pb >> 1) & 1;
+
+    int anchor = anchor_table2[part_index];
+    int off = max(97 + p * 2 - int(p > anchor), 98);
+    int nb = (p == anchor || p == 0) ? 1 : 2;
+    int index = int(bitfieldExtract(payload.w, off - 96, nb));
+
+    ivec3 rgb0 = ivec3(r.x, g.x, b.x);
+    ivec3 rgb1 = ivec3(r.y, g.y, b.y);
+    rgb0 = (rgb0 << 1) | sep0;
+    rgb1 = (rgb1 << 1) | sep1;
+
+    int w = bc7f_w2(index);
+    return DecodedInterpolation(uvec4(rgb0, 0xff), uvec4(rgb1, 0xff), w, w, 0);
+}
+
+DecodedInterpolation decode_bc7f_mode4(uvec4 payload, int p)
+{
+    int rot = extract_bits(payload, 5, 2);
+    bool isb = (payload.x & 0x80u) != 0u;
+    int r0 = extract_bits(payload, 8, 5);
+    int r1 = extract_bits(payload, 13, 5);
+    int g0 = extract_bits(payload, 18, 5);
+    int g1 = extract_bits(payload, 23, 5);
+    int b0 = extract_bits(payload, 28, 5);
+    int b1 = extract_bits(payload, 33, 5);
+    int a0 = extract_bits(payload, 38, 6);
+    int a1 = extract_bits(payload, 44, 6);
+
+    /* Primary indices at 50 (texel 0: 1 bit), secondary at 81 (2 bits). */
+    int pi = int(bitfieldExtract(uint(extract_bits(payload, 50, 31)),
+                                 max(2 * p - 1, 0), p == 0 ? 1 : 2));
+    int si = int(bc7f_win64(payload.zw, max(80 + p * 3, 81) - 64,
+                            p == 0 ? 2 : 3));
+
+    int color_weight = bc7f_w2(pi);
+    int alpha_weight = bc7f_w3(si);
+
+    if (isb)
+    {
+        int tmp = color_weight;
+        color_weight = alpha_weight;
+        alpha_weight = tmp;
+    }
+
+    ivec3 rgb0 = ivec3(r0, g0, b0);
+    ivec3 rgb1 = ivec3(r1, g1, b1);
+    rgb0 = (rgb0 << 3) | (rgb0 >> 2);
+    rgb1 = (rgb1 << 3) | (rgb1 >> 2);
+    a0 = (a0 << 2) | (a0 >> 4);
+    a1 = (a1 << 2) | (a1 >> 4);
+    return DecodedInterpolation(uvec4(rgb0, a0), uvec4(rgb1, a1), color_weight, alpha_weight, rot);
+}
+
+DecodedInterpolation decode_bc7f_mode5(uvec4 payload, int p)
+{
+    int rot = extract_bits(payload, 6, 2);
+    int r0 = extract_bits(payload, 8, 7);
+    int r1 = extract_bits(payload, 15, 7);
+    int g0 = extract_bits(payload, 22, 7);
+    int g1 = extract_bits(payload, 29, 7);
+    int b0 = extract_bits(payload, 36, 7);
+    int b1 = extract_bits(payload, 43, 7);
+    int a0 = extract_bits(payload, 50, 8);
+    int a1 = extract_bits(payload, 58, 8);
+
+    /* Primary indices at 66, secondary at 97 (texel 0: 1 bit each). */
+    int pi = int(bitfieldExtract(uint(extract_bits(payload, 66, 31)),
+                                 max(2 * p - 1, 0), p == 0 ? 1 : 2));
+    int si = int(bitfieldExtract(payload.w, max(96 + p * 2, 97) - 96,
+                                 p == 0 ? 1 : 2));
+
+    int color_weight = bc7f_w2(pi);
+    int alpha_weight = bc7f_w2(si);
+
+    ivec3 rgb0 = ivec3(r0, g0, b0);
+    ivec3 rgb1 = ivec3(r1, g1, b1);
+    rgb0 = (rgb0 << 1) | (rgb0 >> 6);
+    rgb1 = (rgb1 << 1) | (rgb1 >> 6);
+    return DecodedInterpolation(uvec4(rgb0, a0), uvec4(rgb1, a1), color_weight, alpha_weight, rot);
+}
+
+DecodedInterpolation decode_bc7f_mode6(uvec4 payload, int p)
+{
+    int sep0 = extract_bits(payload, 63, 1);
+    int sep1 = extract_bits(payload, 64, 1);
+    int r0 = extract_bits(payload, 7, 7);
+    int r1 = extract_bits(payload, 14, 7);
+    int g0 = extract_bits(payload, 21, 7);
+    int g1 = extract_bits(payload, 28, 7);
+    int b0 = extract_bits(payload, 35, 7);
+    int b1 = extract_bits(payload, 42, 7);
+    int a0 = extract_bits(payload, 49, 7);
+    int a1 = extract_bits(payload, 56, 7);
+
+    ivec4 ep0 = ivec4(r0, g0, b0, a0) * 2 + sep0;
+    ivec4 ep1 = ivec4(r1, g1, b1, a1) * 2 + sep1;
+
+    int index = int(bc7f_win64(payload.zw, max(64 + p * 4, 65) - 64,
+                               p == 0 ? 3 : 4));
+
+    int w = bc7f_w4(index);
+    return DecodedInterpolation(ep0, ep1, w, w, 0);
+}
+
+DecodedInterpolation decode_bc7f_mode7(uvec4 payload, int p)
+{
+    int part_index = extract_bits(payload, 8, 6);
+    int sub = (partition_table2[part_index] >> p) & 1;
+    ivec2 r = bc7f_pair(uint(extract_bits(payload, 14, 20)), sub, 5);
+    ivec2 g = bc7f_pair(uint(extract_bits(payload, 34, 20)), sub, 5);
+    ivec2 b = bc7f_pair(uint(extract_bits(payload, 54, 20)), sub, 5);
+    ivec2 al = bc7f_pair(uint(extract_bits(payload, 74, 20)), sub, 5);
+    int pb = extract_bits(payload, 94, 4) >> (2 * sub);
+    int sep0 = pb & 1, sep1 = (pb >> 1) & 1;
+
+    int anchor = anchor_table2[part_index];
+    int off = max(97 + p * 2 - int(p > anchor), 98);
+    int nb = (p == anchor || p == 0) ? 1 : 2;
+    int index = int(bitfieldExtract(payload.w, off - 96, nb));
+
+    ivec4 rgba0 = ivec4(r.x, g.x, b.x, al.x);
+    ivec4 rgba1 = ivec4(r.y, g.y, b.y, al.y);
+    rgba0 = (rgba0 << 3) | (rgba0 >> 3) | (sep0 << 2);
+    rgba1 = (rgba1 << 3) | (rgba1 >> 3) | (sep1 << 2);
+
+    int w = bc7f_w2(index);
+    return DecodedInterpolation(rgba0, rgba1, w, w, 0);
+}
+#endif
+
 void main()
 {
     int format = registers.format;
@@ -640,6 +917,73 @@ void main()
         return;
 #endif
 
+#ifdef PANVK_BC_FAST
+    /* x, y, z are never negative: unsigned arithmetic, one 128-bit load
+     * (BC7 sources are 16-byte aligned). */
+    uint ux = uint(x), uy = uint(y), uz = uint(z);
+    int linear_pixel = int((uy & 3u) * 4u + (ux & 3u));
+    uvec4 payload = InBuf4(registers.src).data[
+        (uz * registers.src_slice_B + (uy >> 2) * registers.src_row_B) / 16u +
+        (ux >> 2)];
+#ifdef PANVK_BC_FS
+    /* Upload into an image that keeps raw blocks (dst = its raw plane or
+     * raw store, 0: none): the texel at the block origin writes the block
+     * there, so the upload needs no separate raw copy pass. */
+    if ((registers.dst.x | registers.dst.y) != 0u && ((ux | uy) & 3u) == 0u)
+    {
+        OutBuf4(registers.dst).data[
+            (uz * registers.dst_slice_B + (uy >> 2) * registers.dst_row_B) / 16u +
+            (ux >> 2)] = payload;
+    }
+#else
+    OutBuf obuf = OutBuf(registers.dst);
+    uint out_word = (uz * registers.dst_slice_B + uy * registers.dst_row_B) / 4u;
+#endif
+
+    /* Interpolated in each case: only the result is live after the
+     * switch (the endpoints would take 11 registers through it). */
+    vec4 color;
+
+    int mode = findLSB(payload.x);
+    switch (mode)
+    {
+        case 0:
+        color = bc7f_color(decode_bc7f_mode0(payload, linear_pixel));
+        break;
+
+        case 1:
+        color = bc7f_color(decode_bc7f_mode1(payload, linear_pixel));
+        break;
+
+        case 2:
+        color = bc7f_color(decode_bc7f_mode2(payload, linear_pixel));
+        break;
+
+        case 3:
+        color = bc7f_color(decode_bc7f_mode3(payload, linear_pixel));
+        break;
+
+        case 4:
+        color = bc7f_color(decode_bc7f_mode4(payload, linear_pixel));
+        break;
+
+        case 5:
+        color = bc7f_color(decode_bc7f_mode5(payload, linear_pixel));
+        break;
+
+        case 6:
+        color = bc7f_color(decode_bc7f_mode6(payload, linear_pixel));
+        break;
+
+        case 7:
+        color = bc7f_color(decode_bc7f_mode7(payload, linear_pixel));
+        break;
+
+        default:
+        color = vec4(0.0);
+        break;
+    }
+#else
     ivec2 pixel_coord = ivec2(x, y) % 4;
     int linear_pixel = 4 * pixel_coord.y + pixel_coord.x;
     InBuf ibuf = InBuf(registers.src);
@@ -694,7 +1038,12 @@ void main()
     }
 
     uvec4 rgba_result = interpolate_endpoint(interp);
+#endif
+#ifdef PANVK_BC_FAST
+    vec4 decompressed_color = color;
+#else
     vec4 decompressed_color = rgba_result / 255.0;
+#endif
 
 #ifdef PANVK_BC_FS
     o_color = decompressed_color;

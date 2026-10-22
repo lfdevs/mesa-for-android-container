@@ -600,6 +600,9 @@ get_bc_decode_pipeline(struct panvk_device *dev, uint32_t shader,
                                           sizeof(key), pipeline_out);
 }
 
+static bool bc_bc7_fast(void);
+static const uint32_t *bc_bc7_fast_spv(size_t *size);
+
 static VkResult
 get_bc_decode_gfx_pipeline(struct panvk_device *dev, uint32_t shader,
                            VkFormat format, VkPipelineLayout *layout_out,
@@ -613,7 +616,11 @@ get_bc_decode_gfx_pipeline(struct panvk_device *dev, uint32_t shader,
       {panvk_bc_rgtc_fs_spv, sizeof(panvk_bc_rgtc_fs_spv)},
       {panvk_bc_bc6_fs_spv, sizeof(panvk_bc_bc6_fs_spv)},
       {panvk_bc_bc7_fs_spv, sizeof(panvk_bc_bc7_fs_spv)},
+      {NULL, 0}, /* 4: fast BC7, bc_bc7_fast_spv() */
    };
+
+   if (shader == 3 && bc_bc7_fast())
+      shader = 4;
    const enum panvk_meta_object_key_type layout_key =
       PANVK_META_OBJECT_KEY_BC_DECODE_GFX_LAYOUT;
    const VkPushConstantRange push_range = {
@@ -638,10 +645,13 @@ get_bc_decode_gfx_pipeline(struct panvk_device *dev, uint32_t shader,
       return VK_SUCCESS;
    }
 
+   size_t code_size = spv[shader].size;
+   const uint32_t *code =
+      shader == 4 ? bc_bc7_fast_spv(&code_size) : spv[shader].code;
    const VkShaderModuleCreateInfo module_info = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = spv[shader].size,
-      .pCode = spv[shader].code,
+      .codeSize = code_size,
+      .pCode = code,
    };
    const VkPipelineShaderStageCreateInfo stage = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -673,11 +683,16 @@ get_bc_decode_gfx_pipeline(struct panvk_device *dev, uint32_t shader,
 /* Fragment decode of one region into bc_shadow: a layered draw over the
  * region, so the tile writeback produces whatever layout (AFBC,
  * U-interleaved) and format the shadow image got. Must run between
- * meta_gfx_start() and meta_gfx_end(). */
+ * meta_gfx_start() and meta_gfx_end(). raw (csf-v11/211, only for
+ * bc_gfx_fuses_raw() images): where the decoder also writes the source
+ * blocks. */
 static void
-bc_decode_region_gfx(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
-                     const VkImageSubresourceLayers *subres, VkOffset3D offset,
-                     VkExtent3D extent, const struct bc_decode_src *src)
+bc_decode_region_gfx_raw(struct panvk_cmd_buffer *cmdbuf,
+                         struct panvk_image *img,
+                         const VkImageSubresourceLayers *subres,
+                         VkOffset3D offset, VkExtent3D extent,
+                         const struct bc_decode_src *src,
+                         const struct bc_decode_src *raw)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    const struct vk_device_dispatch_table *disp = &dev->vk.dispatch_table;
@@ -750,6 +765,10 @@ bc_decode_region_gfx(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
       .src = {(uint32_t)src->addr, (uint32_t)(src->addr >> 32)},
       .src_row_B = src->row_B,
       .src_slice_B = src->slice_B,
+      .dst = {raw ? (uint32_t)raw->addr : 0,
+              raw ? (uint32_t)(raw->addr >> 32) : 0},
+      .dst_row_B = raw ? raw->row_B : 0,
+      .dst_slice_B = raw ? raw->slice_B : 0,
       .width = w,
       .height = h,
       .depth = layers,
@@ -770,6 +789,25 @@ bc_decode_region_gfx(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
                           sizeof(push), &push);
    dev->meta.cmd_draw_volume(&cmdbuf->vk, &dev->meta, &rect, layers);
    disp->CmdEndRendering(cmd);
+}
+
+static void
+bc_decode_region_gfx(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
+                     const VkImageSubresourceLayers *subres, VkOffset3D offset,
+                     VkExtent3D extent, const struct bc_decode_src *src)
+{
+   bc_decode_region_gfx_raw(cmdbuf, img, subres, offset, extent, src, NULL);
+}
+
+/* csf-v11/211: the fast BC7 fragment decoder writes the raw blocks of an
+ * upload itself, as the transcoders do (bc_xcode_fuses_raw()). */
+static bool
+bc_gfx_fuses_raw(const struct panvk_image *img)
+{
+   return img->bc_gfx && !panvk_bc_xcoded(img) &&
+          (img->vk.format == VK_FORMAT_BC7_UNORM_BLOCK ||
+           img->vk.format == VK_FORMAT_BC7_SRGB_BLOCK) &&
+          bc_bc7_fast();
 }
 
 /* Source of a decode that reads the raw plane of img itself. */
@@ -868,6 +906,16 @@ bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
 #include "bc/panvk_bc_astc_spv.h"
 #include "bc/panvk_bc_scopy_spv.h"
 #include "bc/panvk_bc_bc6_blk_spv.h"
+#include "bc/panvk_bc_bc7_fs_fast_spv.h"
+
+/* Defined here, next to the other late includes, so the hunks of the later
+ * series at the top of this file stay in place. */
+static const uint32_t *
+bc_bc7_fast_spv(size_t *size)
+{
+   *size = sizeof(panvk_bc_bc7_fs_fast_spv);
+   return panvk_bc_bc7_fs_fast_spv;
+}
 #define PANVK_BC_EAC_NO_DATA 1
 #include "bc/panvk_bc_eac_lut.h"
 #include "panvk_priv_bo.h"
@@ -875,6 +923,24 @@ bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
 #include "util/os_misc.h"
 #include "vk_enum_to_str.h"
 #include <stdio.h>
+
+/* csf-v11/211: PANVK_BC_BC7_DECODE=fast (default) decodes BC7 with every
+ * bit field at a constant offset (bit-identical, about 2.4x fewer ALU
+ * cycles per texel); granite keeps the csf-v11/150 decoder (bc5). */
+static bool
+bc_bc7_fast(void)
+{
+   static int on = -1;
+
+   if (p_atomic_read(&on) < 0) {
+      const char *mode = os_get_option("PANVK_BC_BC7_DECODE");
+
+      if (mode && strcmp(mode, "fast") && strcmp(mode, "granite"))
+         mesa_logw("panvk: unknown PANVK_BC_BC7_DECODE=%s, using fast", mode);
+      p_atomic_set(&on, !mode || strcmp(mode, "granite") != 0);
+   }
+   return p_atomic_read(&on);
+}
 
 struct panvk_bc_xcode_push {
    uint32_t src[2];
@@ -1562,8 +1628,10 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
                                     pCopyMemoryInfo->pRegions[i].imageExtent);
 
       /* bc_no_raw images keep no raw blocks: only the shadow is written.
-       * The ETC2/EAC transcoder writes the raw blocks itself. */
-      const bool fuse = xcode && bc_xcode_fuses_raw(bc_img);
+       * The ETC2/EAC transcoder, the BC6H block decoder and the fast BC7
+       * fragment decoder write the raw blocks themselves. */
+      const bool fuse = xcode ? bc_xcode_fuses_raw(bc_img)
+                              : bc_gfx_fuses_raw(bc_img);
       bool keep_raw = false;
       if (!bc_img->bc_no_raw &&
           bc_raw_use(cmdbuf, bc_img, true, bc_blocks_full(bc_img, blocks))) {
@@ -1593,18 +1661,19 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
             .slice_B = DIV_ROUND_UP(col_px, 4) * row_B,
          };
 
+         const struct bc_decode_src raw =
+            keep_raw ? bc_raw_plane_src(bc_img, &r->imageSubresource,
+                                        (VkOffset3D){r->imageOffset.x & ~3,
+                                                     r->imageOffset.y & ~3, 0})
+                     : (struct bc_decode_src){0};
          if (xcode) {
-            const struct bc_decode_src raw =
-               keep_raw ? bc_raw_plane_src(bc_img, &r->imageSubresource,
-                                           (VkOffset3D){r->imageOffset.x & ~3,
-                                                        r->imageOffset.y & ~3, 0})
-                        : (struct bc_decode_src){0};
             bc_xcode_region_raw(cmdbuf, bc_img, &r->imageSubresource,
                                 r->imageOffset, r->imageExtent, &src,
                                 keep_raw ? &raw : NULL);
          } else {
-            bc_decode_region_gfx(cmdbuf, bc_img, &r->imageSubresource,
-                                 r->imageOffset, r->imageExtent, &src);
+            bc_decode_region_gfx_raw(cmdbuf, bc_img, &r->imageSubresource,
+                                     r->imageOffset, r->imageExtent, &src,
+                                     keep_raw ? &raw : NULL);
          }
       }
       if (xcode)

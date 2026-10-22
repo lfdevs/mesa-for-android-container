@@ -19,6 +19,10 @@ sed -i 's/^const uint32_t/static const uint32_t/' panvk_bc_*_spv.h
 glslangValidator -V --target-env vulkan1.1 -DPANVK_BC_BLOCK \
    --vn panvk_bc_bc6_blk_spv -o panvk_bc_bc6_blk_spv.h panvk_bc_bc6.comp
 sed -i 's/^const uint32_t/static const uint32_t/' panvk_bc_bc6_blk_spv.h
+# BC7 fast per-texel fragment decode (csf-v11/211, PANVK_BC_BC7_DECODE=fast).
+glslangValidator -V --target-env vulkan1.1 -S frag -DPANVK_BC_FS -DPANVK_BC_FAST \
+   --vn panvk_bc_bc7_fs_fast_spv -o panvk_bc_bc7_fs_fast_spv.h panvk_bc_bc7.comp
+sed -i 's/^const uint32_t/static const uint32_t/' panvk_bc_bc7_fs_fast_spv.h
 # BC lowmem shadow -> shadow block copy (csf-v11/207, compute only).
 glslangValidator -V --target-env vulkan1.1 --vn panvk_bc_scopy_spv \
    -o panvk_bc_scopy_spv.h panvk_bc_scopy.comp
