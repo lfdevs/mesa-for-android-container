@@ -837,19 +837,24 @@ static void panvk_bc_raw_rebind(struct panvk_image *image);
  * samples that natively. PANVK_BC_BC6H=exact (default) | astc: the ASTC
  * shadow is 4x smaller but filters at half rate (64 bpp decode, 2x the
  * sampling cost of B10G11R11) and is lossier, so it is opt-in. */
+/* PANVK_BC_BC6H=exact (default) | astc (UF16 -> ASTC 4x4 HDR) | astc_sf
+ * (UF16 and SF16 -> ASTC 4x4 HDR, SF16 negatives become 0, csf-v11/208). */
 static bool
-panvk_bc_lowmem_astc(const struct panvk_physical_device *phys_dev)
+panvk_bc_lowmem_astc(const struct panvk_physical_device *phys_dev,
+                     VkFormat format)
 {
    static int on = -1;
 
-   if (on < 0) {
+   if (p_atomic_read(&on) < 0) {
       const char *mode = os_get_option("PANVK_BC_BC6H");
 
-      if (mode && strcmp(mode, "astc") && strcmp(mode, "exact"))
+      if (mode && strcmp(mode, "astc") && strcmp(mode, "astc_sf") &&
+          strcmp(mode, "exact"))
          mesa_logw("panvk: unknown PANVK_BC_BC6H=%s, using exact", mode);
-      p_atomic_set(&on, mode && !strcmp(mode, "astc"));
+      p_atomic_set(&on, !mode ? 0 : !strcmp(mode, "astc_sf") ? 2
+                                    : !strcmp(mode, "astc") ? 1 : 0);
    }
-   if (!p_atomic_read(&on))
+   if (p_atomic_read(&on) < (format == VK_FORMAT_BC6H_SFLOAT_BLOCK ? 2 : 1))
       return false;
 
    const struct pan_format fmt =
@@ -943,9 +948,10 @@ panvk_image_init(struct panvk_image *image,
        * in the raw store instead of the image memory. */
       const bool raw_store = !no_raw && panvk_bc_raw_store_wanted(image);
 
-      if (image->vk.format == VK_FORMAT_BC6H_UFLOAT_BLOCK &&
+      if ((image->vk.format == VK_FORMAT_BC6H_UFLOAT_BLOCK ||
+           image->vk.format == VK_FORMAT_BC6H_SFLOAT_BLOCK) &&
           !(image->vk.create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) &&
-          panvk_bc_lowmem_astc(phys_dev)) {
+          panvk_bc_lowmem_astc(phys_dev, image->vk.format)) {
          /* csf-v11/202: BC6H UF16 -> ASTC 4x4 HDR (8 bpp). MUTABLE images
           * stay exact: an SFLOAT view of the UF16 data would sample the
           * ASTC shadow as signed. */

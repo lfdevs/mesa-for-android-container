@@ -919,7 +919,9 @@ bc_xcode_mode(VkFormat format)
    case VK_FORMAT_BC5_UNORM_BLOCK:
       return 6;
    case VK_FORMAT_BC6H_UFLOAT_BLOCK:
-      return 8; /* panvk_bc_astc.comp, which ignores it */
+      return 8; /* panvk_bc_astc.comp */
+   case VK_FORMAT_BC6H_SFLOAT_BLOCK:
+      return 9; /* panvk_bc_astc.comp, csf-v11/208 */
    default:
       assert(format == VK_FORMAT_BC5_SNORM_BLOCK);
       return 7;
@@ -978,7 +980,7 @@ get_bc_xcode_pipeline(struct panvk_device *dev, bool astc, uint32_t mode,
       uint32_t astc;
    } key = {
       .type = PANVK_META_OBJECT_KEY_BC_XCODE_SHADER,
-      .mode = astc ? 0 : mode,
+      .mode = mode,
       .opts = astc ? 0 : panvk_bc_lm_opts(),
       .astc = astc,
    };
@@ -996,7 +998,7 @@ get_bc_xcode_pipeline(struct panvk_device *dev, bool astc, uint32_t mode,
       {.constantID = 3, .offset = offsetof(__typeof__(key), opts), .size = 4},
    };
    const VkSpecializationInfo spec = {
-      .mapEntryCount = astc ? 2 : 4,
+      .mapEntryCount = astc ? 3 : 4,
       .pMapEntries = spec_map,
       .dataSize = sizeof(key),
       .pData = &key,

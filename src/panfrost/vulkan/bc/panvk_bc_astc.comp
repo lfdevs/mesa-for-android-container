@@ -3,8 +3,8 @@
  * Copyright 2026 PanVK-kbase contributors
  * SPDX-License-Identifier: MIT
  *
- * BC6H UF16 -> ASTC 4x4 HDR transcoder for the BC lowmem path
- * (csf-v11/202). One invocation per 4x4 block: the BC6H block is decoded
+ * BC6H UF16 (and, opt-in since csf-v11/208, SF16 with negatives clamped
+ * to 0) -> ASTC 4x4 HDR transcoder for the BC lowmem path (csf-v11/202). One invocation per 4x4 block: the BC6H block is decoded
  * exactly (the decoder of panvk_bc_bc6.comp, below, unsigned only) and
  * re-encoded by panvk_bc_astc_enc.h (one partition, CEM 11 HDR RGB,
  * QUANT_256 endpoints, 4x4 QUANT_12 weights), written straight into the
@@ -25,6 +25,10 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer InB
 layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer OutBuf {
     uint data[];
 };
+
+/* csf-v11/208: 8 = BC6H UF16, 9 = BC6H SF16 (PANVK_BC_BC6H=astc_sf),
+ * whose negative texels become 0 (ASTC HDR has no sign). */
+layout(constant_id = 2) const uint XC_MODE = 8u;
 
 layout(push_constant) uniform Registers
 {
@@ -855,7 +859,7 @@ main()
    uvec4 payload = uvec4(ibuf.data[iw], ibuf.data[iw + 1u], ibuf.data[iw + 2u],
                          ibuf.data[iw + 3u]);
 
-   is_signed = false;
+   is_signed = XC_MODE == 9u;
    int mode = extract_bits(payload, 0, 5);
    int part_index = extract_bits(payload, 77, 5);
    int anchor_pixel = anchor_table2[part_index];
@@ -864,8 +868,12 @@ main()
       int part = (partition_table2[part_index] >> p) & 1;
       ivec3 rgb = interpolate_endpoint(
          bc6_decode_texel(payload, mode, p, part, anchor_pixel));
-      /* Same "squeeze" as the exact decoder: fp16 bits of the texel. */
-      rgb = (rgb * 31) >> 6;
+      /* Same "squeeze" as the exact decoder: fp16 bits of the texel
+       * (SF16: positive half only, negatives clamp to 0). */
+      if (XC_MODE == 9u)
+         rgb = (max(rgb, ivec3(0)) * 31) >> 5;
+      else
+         rgb = (rgb * 31) >> 6;
       g_h[3 * p] = rgb.r;
       g_h[3 * p + 1] = rgb.g;
       g_h[3 * p + 2] = rgb.b;
