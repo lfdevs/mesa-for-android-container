@@ -859,8 +859,25 @@ panvk_bc_lowmem_astc(const struct panvk_physical_device *phys_dev)
            pan_query_compressed_formats(&phys_dev->kmod.dev->props));
 }
 
-/* PANVK_BC_RAW=store (default) | plane, PANVK_BC_RAW_MIN (bytes, default
- * 64 KiB): raw block planes at least that big go to the raw store. */
+/* PANVK_BC_RAW=lazy (default since csf-v11/207) | store | plane: lazy
+ * gives readable BC1-BC5 images no raw blocks until the device first
+ * reads a BC image back (bc_raw_lazy), store keeps a raw store for every
+ * readable image (csf-v11/201-206), plane keeps the raw blocks in the
+ * image memory. */
+static bool
+panvk_bc_raw_lazy_mode(void)
+{
+   static int lazy = -1;
+
+   if (p_atomic_read(&lazy) < 0) {
+      const char *mode = os_get_option("PANVK_BC_RAW");
+      p_atomic_set(&lazy, !mode || !strcmp(mode, "lazy"));
+   }
+   return p_atomic_read(&lazy);
+}
+
+/* PANVK_BC_RAW_MIN (bytes, default 64 KiB): raw block planes at least that
+ * big go to the raw store. */
 static bool
 panvk_bc_raw_store_wanted(const struct panvk_image *image)
 {
@@ -870,8 +887,9 @@ panvk_bc_raw_store_wanted(const struct panvk_image *image)
       const char *mode = os_get_option("PANVK_BC_RAW");
       int64_t v = debug_get_num_option("PANVK_BC_RAW_MIN", 64 * 1024);
 
-      if (mode && strcmp(mode, "store") && strcmp(mode, "plane"))
-         mesa_logw("panvk: unknown PANVK_BC_RAW=%s, using store", mode);
+      if (mode && strcmp(mode, "store") && strcmp(mode, "plane") &&
+          strcmp(mode, "lazy"))
+         mesa_logw("panvk: unknown PANVK_BC_RAW=%s, using lazy", mode);
       p_atomic_set(&min_B,
                    (mode && !strcmp(mode, "plane")) ? INT64_MAX : MAX2(v, 0));
    }
@@ -915,6 +933,7 @@ panvk_image_init(struct panvk_image *image,
    image->bc_lowmem = 0;
    image->bc_no_raw = false;
    image->bc_raw_store = false;
+   image->bc_raw_lazy = false;
    if (image->bc_gfx && panvk_bc_lowmem_enabled(phys_dev) &&
        panvk_bc_lowmem_allowed(image, pCreateInfo)) {
       const VkFormat lm_format = panvk_bc_lowmem_format(image->vk.format);
@@ -935,10 +954,18 @@ panvk_image_init(struct panvk_image *image,
          image->bc_no_raw = no_raw;
          image->bc_raw_store = raw_store;
       } else if (lm_format != VK_FORMAT_UNDEFINED) {
+         struct panvk_device *dev = to_panvk_device(image->vk.base.device);
+         /* csf-v11/207: no raw blocks until the device reads one back. */
+         const bool lazy = raw_store &&
+                           image->vk.image_type != VK_IMAGE_TYPE_3D &&
+                           panvk_bc_raw_lazy_mode() &&
+                           !p_atomic_read(&dev->bc_raw.needed);
+
          image->bc_lowmem = 1;
          image->bc_format = lm_format;
-         image->bc_no_raw = no_raw;
-         image->bc_raw_store = raw_store;
+         image->bc_no_raw = no_raw || lazy;
+         image->bc_raw_store = raw_store && !lazy;
+         image->bc_raw_lazy = lazy;
       } else if (no_raw || raw_store) {
          image->bc_lowmem = 2;
          image->bc_no_raw = no_raw;

@@ -866,6 +866,7 @@ bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
  * here rather than at the top to keep the later series' hunks in place. */
 #include "bc/panvk_bc_etc2_spv.h"
 #include "bc/panvk_bc_astc_spv.h"
+#include "bc/panvk_bc_scopy_spv.h"
 #define PANVK_BC_EAC_NO_DATA 1
 #include "bc/panvk_bc_eac_lut.h"
 #include "panvk_priv_bo.h"
@@ -1659,6 +1660,18 @@ copy_memory_to_image_raw(
    }
 }
 
+/* csf-v11/207: the device read the raw blocks of a BC image that kept none
+ * (PANVK_BC_RAW=lazy). The read is skipped; BC images created from now on
+ * keep a raw store, so later reads of them are exact. */
+static void
+bc_raw_lazy_hit(struct panvk_device *dev, const char *what)
+{
+   if (!p_atomic_xchg(&dev->bc_raw.needed, 1))
+      mesa_logw("panvk: %s of a BC image without raw blocks skipped; BC "
+                "images created from now on keep them (PANVK_BC_RAW=store "
+                "keeps them from the start)", what);
+}
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdCopyImageToMemoryKHR)(
    VkCommandBuffer commandBuffer,
@@ -1670,6 +1683,12 @@ panvk_per_arch(CmdCopyImageToMemoryKHR)(
    struct vk_meta_copy_image_properties img_props =
       panvk_meta_copy_get_image_properties(img, false, false);
    struct panvk_cmd_meta_compute_save_ctx save = {0};
+
+   /* csf-v11/207: no raw blocks to read (PANVK_BC_RAW=lazy). */
+   if (img->bc_raw_lazy) {
+      bc_raw_lazy_hit(dev, "copy to memory");
+      return;
+   }
 
    /* Raw blocks of a raw-store image (csf-v11/201). */
    if (!bc_raw_use(cmdbuf, img, false, false))
@@ -1929,6 +1948,153 @@ bc_copy_image_no_raw(struct panvk_cmd_buffer *cmdbuf,
    STACK_ARRAY_FINISH(srcs);
 }
 
+struct panvk_bc_scopy_push {
+   uint32_t src[2];
+   uint32_t dst[2];
+   uint32_t src_row_B;
+   uint32_t src_slice_B;
+   uint32_t dst_row_B;
+   uint32_t dst_slice_B;
+   uint32_t sbx0, sby0, dbx0, dby0;
+   uint32_t bw, bh;
+};
+
+static VkResult
+get_bc_scopy_pipeline(struct panvk_device *dev, bool wide,
+                      VkPipelineLayout *layout_out, VkPipeline *pipeline_out)
+{
+   const enum panvk_meta_object_key_type layout_key =
+      PANVK_META_OBJECT_KEY_BC_SCOPY_LAYOUT;
+   const VkPushConstantRange push_range = {
+      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      .offset = 0,
+      .size = sizeof(struct panvk_bc_scopy_push),
+   };
+   VkResult result =
+      vk_meta_get_pipeline_layout(&dev->vk, &dev->meta, NULL, &push_range,
+                                  &layout_key, sizeof(layout_key), layout_out);
+   if (result != VK_SUCCESS)
+      return result;
+
+   struct {
+      enum panvk_meta_object_key_type type;
+      uint32_t wide;
+   } key = {
+      .type = PANVK_META_OBJECT_KEY_BC_SCOPY_SHADER,
+      .wide = wide,
+   };
+   VkPipeline cached = vk_meta_lookup_pipeline(&dev->meta, &key, sizeof(key));
+   if (cached != VK_NULL_HANDLE) {
+      *pipeline_out = cached;
+      return VK_SUCCESS;
+   }
+
+   const VkSpecializationMapEntry spec_map = {
+      .constantID = 0, .offset = offsetof(__typeof__(key), wide), .size = 4};
+   const VkSpecializationInfo spec = {
+      .mapEntryCount = 1,
+      .pMapEntries = &spec_map,
+      .dataSize = sizeof(key),
+      .pData = &key,
+   };
+   const VkShaderModuleCreateInfo module_info = {
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(panvk_bc_scopy_spv),
+      .pCode = panvk_bc_scopy_spv,
+   };
+   const VkComputePipelineCreateInfo info = {
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .stage = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .pNext = &module_info,
+         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+         .pName = "main",
+         .pSpecializationInfo = &spec,
+      },
+      .layout = *layout_out,
+   };
+
+   return vk_meta_create_compute_pipeline(&dev->vk, &dev->meta, &info, &key,
+                                          sizeof(key), pipeline_out);
+}
+
+/* A BC -> BC copy whose source keeps no raw blocks can copy the shadow
+ * blocks: same ETC2/EAC shadow format, 2D. */
+static bool
+bc_copy_shadow_ok(const struct panvk_image *src, const struct panvk_image *dst)
+{
+   return src->bc_lowmem == 1 && dst->bc_emul && dst->bc_lowmem == 1 &&
+          src->bc_format == dst->bc_format &&
+          src->vk.image_type != VK_IMAGE_TYPE_3D &&
+          dst->vk.image_type != VK_IMAGE_TYPE_3D;
+}
+
+/* csf-v11/207: BC -> BC copy of the ETC2/EAC shadow blocks (no raw blocks
+ * involved; the destination's raw store, if it has one, is not written). */
+static void
+bc_copy_image_shadow(struct panvk_cmd_buffer *cmdbuf,
+                     const VkCopyImageInfo2 *info)
+{
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const struct vk_device_dispatch_table *disp = &dev->vk.dispatch_table;
+   VkCommandBuffer cmd = panvk_cmd_buffer_to_handle(cmdbuf);
+   VK_FROM_HANDLE(panvk_image, src_img, info->srcImage);
+   VK_FROM_HANDLE(panvk_image, dst_img, info->dstImage);
+   const bool wide = vk_format_get_blocksize(dst_img->bc_format) == 16;
+   struct panvk_cmd_meta_compute_save_ctx save = {0};
+   VkPipelineLayout layout;
+   VkPipeline pipeline;
+
+   VkResult result = get_bc_scopy_pipeline(dev, wide, &layout, &pipeline);
+   if (result != VK_SUCCESS) {
+      vk_command_buffer_set_error(&cmdbuf->vk, result);
+      return;
+   }
+
+   /* The source shadow was written by a transcode or copy dispatch. */
+   bc_decode_barrier(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+   meta_compute_start(cmdbuf, &save);
+   disp->CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+   for (uint32_t i = 0; i < info->regionCount; i++) {
+      const VkImageCopy2 *r = &info->pRegions[i];
+      const struct pan_image_layout *sl = &src_img->bc_decoded.plane.layout;
+      const struct pan_image_layout *dl = &dst_img->bc_decoded.plane.layout;
+      const struct pan_image_slice_layout *ss =
+         &sl->slices[r->srcSubresource.mipLevel];
+      const struct pan_image_slice_layout *ds =
+         &dl->slices[r->dstSubresource.mipLevel];
+      const uint64_t sa = src_img->bc_decoded.plane.base + ss->offset_B +
+                          r->srcSubresource.baseArrayLayer * sl->array_stride_B;
+      const uint64_t da = dst_img->bc_decoded.plane.base + ds->offset_B +
+                          r->dstSubresource.baseArrayLayer * dl->array_stride_B;
+      const uint32_t layers =
+         vk_image_subresource_layer_count(&dst_img->vk, &r->dstSubresource);
+      const struct panvk_bc_scopy_push push = {
+         .src = {(uint32_t)sa, (uint32_t)(sa >> 32)},
+         .dst = {(uint32_t)da, (uint32_t)(da >> 32)},
+         .src_row_B = ss->tiled_or_linear.row_stride_B,
+         .src_slice_B = sl->array_stride_B,
+         .dst_row_B = ds->tiled_or_linear.row_stride_B,
+         .dst_slice_B = dl->array_stride_B,
+         .sbx0 = r->srcOffset.x / 4,
+         .sby0 = r->srcOffset.y / 4,
+         .dbx0 = r->dstOffset.x / 4,
+         .dby0 = r->dstOffset.y / 4,
+         .bw = DIV_ROUND_UP(r->extent.width, 4),
+         .bh = DIV_ROUND_UP(r->extent.height, 4),
+      };
+
+      if (!push.bw || !push.bh || !layers)
+         continue;
+      disp->CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                             sizeof(push), &push);
+      disp->CmdDispatch(cmd, DIV_ROUND_UP(push.bw, 8), DIV_ROUND_UP(push.bh, 8),
+                        layers);
+   }
+   meta_compute_end(cmdbuf, &save);
+}
+
 static void cmd_copy_image(VkCommandBuffer commandBuffer,
                            const VkCopyImageInfo2 *pCopyImageInfo);
 
@@ -1961,6 +2127,17 @@ cmd_copy_image(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(panvk_image, bc_src, pCopyImageInfo->srcImage);
    VK_FROM_HANDLE(panvk_image, bc_dst, pCopyImageInfo->dstImage);
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   /* csf-v11/207: a source without raw blocks (PANVK_BC_RAW=lazy). */
+   if (bc_src->bc_raw_lazy) {
+      if (bc_copy_shadow_ok(bc_src, bc_dst)) {
+         bc_copy_image_shadow(cmdbuf, pCopyImageInfo);
+      } else {
+         bc_raw_lazy_hit(to_panvk_device(cmdbuf->vk.base.device),
+                         "image copy");
+      }
+      return;
+   }
 
    /* Raw blocks of raw-store images (csf-v11/201): read from the source,
     * written to the destination (unless it keeps none). */

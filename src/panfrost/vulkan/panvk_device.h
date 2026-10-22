@@ -102,6 +102,10 @@ struct panvk_device {
       uint64_t file_end;
       struct util_queue *queue;
       uint64_t resident_B, spilled_B;
+      /* csf-v11/207, PANVK_BC_RAW=lazy: set (atomically) at the first read
+       * of a BC image that kept no raw blocks; BC images created after it
+       * keep a raw store again. */
+      int needed;
    } bc_raw;
 
    /* Bound in place of a missing FS so the depth bounds test still runs. */

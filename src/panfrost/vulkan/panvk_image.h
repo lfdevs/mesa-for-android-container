@@ -87,6 +87,13 @@ struct panvk_image {
    /* Set by panvk_image_init() when the image gets a raw store (bc_raw is
     * created by vkCreateImage). The raw blocks take no image memory. */
    bool bc_raw_store;
+   /* csf-v11/207, PANVK_BC_RAW=lazy (default): a readable (TRANSFER_SRC)
+    * 2D BC1-BC5 lowmem image created before the device ever read a BC
+    * image back keeps no raw blocks either (bc_no_raw is set too). A BC ->
+    * BC copy from it copies the shadow blocks; a read of its raw blocks
+    * (copy to memory, to a non-BC or differently shadowed image) is
+    * skipped, logged, and switches the device to raw stores. */
+   bool bc_raw_lazy;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_image, vk.base, VkImage,
