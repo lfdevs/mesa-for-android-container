@@ -1437,10 +1437,10 @@ panlib_draw_indirect_helper(
    *raw_vertex_offset_sysval = draw.vertex.raw_offset;
 }
 
-KERNEL(1)
-panlib_draw_indexed_indirect_helper(
+static void
+draw_indexed_indirect_body(
    global VkDrawIndexedIndirectCommand *cmd, global uint8_t *index_buffer_ptr,
-   global struct libpan_draw_helper_index_min_max_result *index_min_max_res,
+   uint32_t min_vertex, uint32_t max_vertex,
    uint32_t index_size, uint32_t primitive_vertex_count,
    uint32_t attrib_bufs_valid, uint32_t attribs_valid,
    global struct poly_heap *heap,
@@ -1458,8 +1458,6 @@ panlib_draw_indexed_indirect_helper(
    const uint32_t first_instance = cmd->firstInstance;
    const uint32_t instance_count = cmd->instanceCount;
    const int32_t vertex_offset = cmd->vertexOffset;
-   const uint32_t min_vertex = index_min_max_res->min;
-   const uint32_t max_vertex = index_min_max_res->max;
    const uint32_t vertex_range = max_vertex - min_vertex + 1;
 
    struct panlib_draw_info draw = {
@@ -1501,43 +1499,54 @@ panlib_draw_indexed_indirect_helper(
    *raw_vertex_offset_sysval = draw.vertex.raw_offset;
 }
 
-KERNEL(64)
-panlib_draw_index_minmax_search_helper(global uint8_t *index_buffer_ptr,
-                                       global VkDrawIndexedIndirectCommand *cmd,
-                                       global atomic_uint *min_ptr,
-                                       global atomic_uint *max_ptr,
-                                       uint32_t index_bytes_log2__3,
-                                       uint8_t primitive_restart__2)
+KERNEL(1)
+panlib_draw_indexed_indirect_helper(
+   global VkDrawIndexedIndirectCommand *cmd, global uint8_t *index_buffer_ptr,
+   global struct libpan_draw_helper_index_min_max_result *index_min_max_res,
+   uint32_t index_size, uint32_t primitive_vertex_count,
+   uint32_t attrib_bufs_valid, uint32_t attribs_valid,
+   global struct mali_attribute_buffer_packed *varying_bufs_descs,
+   global struct libpan_draw_helper_varying_buf_info *varying_bufs_info,
+   global struct mali_attribute_buffer_packed *attrib_bufs_descs,
+   global struct libpan_draw_helper_attrib_buf_info *attrib_bufs_infos,
+   global struct mali_attribute_packed *attribs_descs,
+   global struct libpan_draw_helper_attrib_info *attribs_infos,
+   global uint32_t *first_vertex_sysval, global uint32_t *first_instance_sysval,
+   global uint32_t *raw_vertex_offset_sysval, global uint8_t *idvs_job,
+   global uint8_t *vertex_job, global uint8_t *tiler_job)
 {
-   /* Max count of values to process per thread */
-   const uint32_t max_count_per_thread = 1024;
+   draw_indexed_indirect_body(
+      cmd, index_buffer_ptr, index_min_max_res->min, index_min_max_res->max,
+      index_size, primitive_vertex_count, attrib_bufs_valid, attribs_valid,
+      varying_bufs_descs, varying_bufs_info, attrib_bufs_descs,
+      attrib_bufs_infos, attribs_descs, attribs_infos, first_vertex_sysval,
+      first_instance_sysval, raw_vertex_offset_sysval, idvs_job, vertex_job,
+      tiler_job);
+}
 
-   const uint32_t index_bit_size = (1 << index_bytes_log2__3) * 8;
-   const uint32_t start = cmd->firstIndex;
-   const uint32_t index_count = cmd->indexCount;
-
-   uint32_t base_idx = cl_global_id.x * max_count_per_thread;
-
-   /* If the thread is out of range, bail out */
-   if (base_idx >= index_count)
-      return;
-
-   /* Compute expected max iteration to do in this thread */
-   uint32_t count = MIN2(max_count_per_thread, index_count - base_idx);
-
-   /* Sanity check so nothing weird will happen */
-   assert(base_idx + count <= index_count);
-
+/* jm-v7 096: index min/max, strided. Lane t of n reads indices t, t + n, ...
+ * so neighbouring lanes read neighbouring indices (the old kernel gave each
+ * thread 1024 consecutive indices: uncoalesced, and one thread for any draw
+ * under 1024 indices). Restart indices are skipped.
+ */
+static void
+index_minmax_strided(global uint8_t *index_buffer_ptr, uint32_t start,
+                     uint32_t count, uint32_t index_bytes_log2,
+                     bool primitive_restart, uint32_t lane, uint32_t nlanes,
+                     uint32_t *out_min, uint32_t *out_max)
+{
+   const uint32_t index_bit_size = (1 << index_bytes_log2) * 8;
    uint32_t local_min = ((uint64_t)1 << index_bit_size) - 1;
    uint32_t local_max = 0;
 
    switch (index_bit_size) {
 #define MINMAX_SEARCH_CASE(sz)                                                 \
    case sz: {                                                                  \
-      global uint##sz##_t *indices = (global uint##sz##_t *)index_buffer_ptr;  \
-      for (uint32_t i = 0; i < count; i++) {                                   \
-         uint32_t val = (uint32_t)indices[start + base_idx + i];               \
-         if (primitive_restart__2 && val == UINT##sz##_MAX)                    \
+      global uint##sz##_t *indices =                                           \
+         (global uint##sz##_t *)index_buffer_ptr + start;                      \
+      for (uint32_t i = lane; i < count; i += nlanes) {                        \
+         uint32_t val = (uint32_t)indices[i];                                  \
+         if (primitive_restart && val == UINT##sz##_MAX)                       \
             continue;                                                          \
          local_min = min(local_min, val);                                      \
          local_max = max(local_max, val);                                      \
@@ -1552,8 +1561,113 @@ panlib_draw_index_minmax_search_helper(global uint8_t *index_buffer_ptr,
       assert(0 && "Invalid index size");
    }
 
-   atomic_fetch_min(min_ptr, local_min);
-   atomic_fetch_max(max_ptr, local_max);
+   *out_min = local_min;
+   *out_max = local_max;
+}
+
+#define MINMAX_WG 64
+
+/* Workgroup min/max of every lane's (lmin, lmax), in tmin[0]/tmax[0]. */
+static void
+index_minmax_wg_reduce(local uint32_t *tmin, local uint32_t *tmax,
+                       uint32_t lmin, uint32_t lmax)
+{
+   const uint32_t tid = cl_local_id.x;
+   tmin[tid] = lmin;
+   tmax[tid] = lmax;
+   barrier(CLK_LOCAL_MEM_FENCE);
+   for (uint32_t s = MINMAX_WG / 2; s > 0; s >>= 1) {
+      if (tid < s) {
+         tmin[tid] = min(tmin[tid], tmin[tid + s]);
+         tmax[tid] = max(tmax[tid], tmax[tid + s]);
+      }
+      barrier(CLK_LOCAL_MEM_FENCE);
+   }
+}
+
+/* nthreads = the grid's workgroup count * MINMAX_WG. With one workgroup
+ * (single_wg__2), lane 0 stores the result itself and the caller needs no
+ * WRITE_VALUE job to initialise it; otherwise one atomic pair per
+ * workgroup into the initialised result.
+ */
+KERNEL(MINMAX_WG)
+panlib_draw_index_minmax_search_helper(global uint8_t *index_buffer_ptr,
+                                       global VkDrawIndexedIndirectCommand *cmd,
+                                       global atomic_uint *min_ptr,
+                                       global atomic_uint *max_ptr,
+                                       uint32_t nthreads,
+                                       uint32_t index_bytes_log2__3,
+                                       uint8_t primitive_restart__2,
+                                       uint8_t single_wg__2)
+{
+   local uint32_t tmin[MINMAX_WG];
+   local uint32_t tmax[MINMAX_WG];
+   uint32_t lmin, lmax;
+
+   index_minmax_strided(index_buffer_ptr, cmd->firstIndex, cmd->indexCount,
+                        index_bytes_log2__3, primitive_restart__2,
+                        cl_global_id.x, nthreads, &lmin, &lmax);
+   index_minmax_wg_reduce(tmin, tmax, lmin, lmax);
+
+   if (cl_local_id.x != 0)
+      return;
+
+   if (single_wg__2) {
+      *(global uint32_t *)min_ptr = tmin[0];
+      *(global uint32_t *)max_ptr = tmax[0];
+   } else {
+      atomic_fetch_min(min_ptr, tmin[0]);
+      atomic_fetch_max(max_ptr, tmax[0]);
+   }
+}
+
+/* jm-v7 096: a small direct indexed draw does its min/max search inside the
+ * indexed-indirect helper: one workgroup searches, lane 0 stores the result
+ * (other jobs of the draw read it, e.g. the geometry emulation) and patches
+ * the draw. One job instead of WRITE_VALUE + search + helper.
+ */
+KERNEL(MINMAX_WG)
+panlib_draw_indexed_indirect_minmax_helper(
+   global VkDrawIndexedIndirectCommand *cmd, global uint8_t *index_buffer_ptr,
+   global struct libpan_draw_helper_index_min_max_result *index_min_max_res,
+   uint32_t index_size, uint32_t primitive_vertex_count,
+   uint32_t attrib_bufs_valid, uint32_t attribs_valid,
+   global struct mali_attribute_buffer_packed *varying_bufs_descs,
+   global struct libpan_draw_helper_varying_buf_info *varying_bufs_info,
+   global struct mali_attribute_buffer_packed *attrib_bufs_descs,
+   global struct libpan_draw_helper_attrib_buf_info *attrib_bufs_infos,
+   global struct mali_attribute_packed *attribs_descs,
+   global struct libpan_draw_helper_attrib_info *attribs_infos,
+   global uint32_t *first_vertex_sysval, global uint32_t *first_instance_sysval,
+   global uint32_t *raw_vertex_offset_sysval, global uint8_t *idvs_job,
+   global uint8_t *vertex_job, global uint8_t *tiler_job,
+   uint32_t primitive_restart)
+{
+   local uint32_t tmin[MINMAX_WG];
+   local uint32_t tmax[MINMAX_WG];
+   uint32_t lmin, lmax;
+   const uint32_t log2_size = index_size == 4 ? 2 : index_size == 2 ? 1 : 0;
+
+   index_minmax_strided(index_buffer_ptr, cmd->firstIndex, cmd->indexCount,
+                        log2_size, primitive_restart != 0, cl_local_id.x,
+                        MINMAX_WG, &lmin, &lmax);
+   index_minmax_wg_reduce(tmin, tmax, lmin, lmax);
+
+   if (cl_local_id.x != 0)
+      return;
+
+   const uint32_t min_vertex = tmin[0];
+   const uint32_t max_vertex = tmax[0];
+   index_min_max_res->min = min_vertex;
+   index_min_max_res->max = max_vertex;
+
+   draw_indexed_indirect_body(
+      cmd, index_buffer_ptr, min_vertex, max_vertex, index_size,
+      primitive_vertex_count, attrib_bufs_valid, attribs_valid,
+      varying_bufs_descs, varying_bufs_info, attrib_bufs_descs,
+      attrib_bufs_infos, attribs_descs, attribs_infos, first_vertex_sysval,
+      first_instance_sysval, raw_vertex_offset_sysval, idvs_job, vertex_job,
+      tiler_job);
 }
 
 /* Transform feedback from the geometry shader emulation. Per invocation it

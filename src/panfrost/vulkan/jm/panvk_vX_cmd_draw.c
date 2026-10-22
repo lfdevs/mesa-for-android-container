@@ -3178,12 +3178,49 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
    struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmdbuf);
    uint64_t index_min_max_res_ptr = 0;
    uint32_t job_before_indirect_helper = copy_desc_job_id;
+
+   /* jm-v7 096: a direct indexed draw of at most PANVK_V7_MINMAX_FOLD_MAX
+    * indices searches its index range inside the indexed-indirect helper
+    * (one job instead of three). A vertex shader that writes memory keeps
+    * the separate search: its vs_ref clear/mark jobs need the range before
+    * the helper runs. PANVK_V7_MINMAX=nofold keeps the separate search,
+    * =0 also keeps the WRITE_VALUE init + atomics of every search (the
+    * pre-096 job layout, with the strided kernel).
+    */
+   static int minmax_mode = -1;
+   if (minmax_mode < 0) {
+      const char *e = getenv("PANVK_V7_MINMAX");
+      minmax_mode = !e ? 2 : !strcmp(e, "0") ? 0 : !strcmp(e, "nofold") ? 1 : 2;
+   }
+#define PANVK_V7_MINMAX_FOLD_MAX 4096
+   const bool fold_minmax = minmax_mode == 2 && draw->info.index.index_size &&
+                            draw->cpu_count &&
+                            draw->cpu_count <= PANVK_V7_MINMAX_FOLD_MAX &&
+                            !vs->info.writes_global;
+
    if (draw->info.index.index_size) {
-      index_min_max_res_ptr =
-         panvk_cmd_alloc_dev_mem(
-            cmdbuf, desc,
-            sizeof(struct libpan_draw_helper_index_min_max_result), 8)
-            .gpu;
+      struct pan_ptr res = panvk_cmd_alloc_dev_mem(
+         cmdbuf, desc, sizeof(struct libpan_draw_helper_index_min_max_result),
+         8);
+      index_min_max_res_ptr = res.gpu;
+      draw->index_min_addr =
+         index_min_max_res_ptr +
+         offsetof(struct libpan_draw_helper_index_min_max_result, min);
+   }
+
+   if (draw->info.index.index_size && !fold_minmax) {
+      /* Strided search: about 64 indices per lane, at most 64 workgroups
+       * (an indirect draw's count is only known on the GPU, so it is
+       * bounded by the index buffer).
+       */
+      const uint32_t index_count =
+         draw->cpu_count
+            ? draw->cpu_count
+            : draw->info.index.buffer_size / draw->info.index.index_size;
+      const uint32_t wg_count =
+         CLAMP(DIV_ROUND_UP(index_count, 64 * 64), 1, 64);
+      const bool single_wg = wg_count == 1 && minmax_mode != 0;
+
       const struct panlib_draw_index_minmax_search_helper_args args = {
          .index_buffer_ptr = draw->info.index.buffer_dev_addr,
          .cmd = draw->info.indirect.buffer_dev_addr,
@@ -3193,41 +3230,37 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
          .max_ptr =
             index_min_max_res_ptr +
             offsetof(struct libpan_draw_helper_index_min_max_result, max),
+         .nthreads = wg_count * 64,
       };
 
-      struct libpan_draw_helper_index_min_max_result val = {
-         .min = ((uint64_t)1 << (draw->info.index.index_size * 8)) - 1,
-         .max = 0,
-      };
-      uint64_t *raw_val = (uint64_t *)&val;
+      unsigned search_dep = copy_desc_job_id;
+      if (!single_wg) {
+         struct libpan_draw_helper_index_min_max_result val = {
+            .min = ((uint64_t)1 << (draw->info.index.index_size * 8)) - 1,
+            .max = 0,
+         };
+         uint64_t *raw_val = (uint64_t *)&val;
 
-      struct pan_ptr write_job =
-         pan_pool_alloc_desc(&cmdbuf->desc_pool.base, WRITE_VALUE_JOB);
+         struct pan_ptr write_job =
+            pan_pool_alloc_desc(&cmdbuf->desc_pool.base, WRITE_VALUE_JOB);
 
-      pan_section_pack(write_job.cpu, WRITE_VALUE_JOB, PAYLOAD, payload) {
-         payload.type = MALI_WRITE_VALUE_TYPE_IMMEDIATE_64;
-         payload.address = index_min_max_res_ptr;
-         payload.immediate_value = *raw_val;
-      };
+         pan_section_pack(write_job.cpu, WRITE_VALUE_JOB, PAYLOAD, payload) {
+            payload.type = MALI_WRITE_VALUE_TYPE_IMMEDIATE_64;
+            payload.address = index_min_max_res_ptr;
+            payload.immediate_value = *raw_val;
+         };
 
-      unsigned write_job_id =
-         pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_WRITE_VALUE, false, false,
-                        0, copy_desc_job_id, &write_job, false);
-      util_dynarray_append(&batch->jobs, write_job.cpu);
-
-      const uint32_t index_count =
-         draw->info.index.buffer_size / draw->info.index.index_size;
-      uint32_t wg_count = DIV_ROUND_UP(index_count, 65536);
-      assert(wg_count <= 65536);
+         search_dep =
+            pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_WRITE_VALUE, false,
+                           false, 0, copy_desc_job_id, &write_job, false);
+         util_dynarray_append(&batch->jobs, write_job.cpu);
+      }
 
       panlib_draw_index_minmax_search_helper_struct(
-         &precomp_ctx, panlib_1d_with_jm_deps(wg_count, 0, write_job_id),
+         &precomp_ctx, panlib_1d_with_jm_deps(wg_count, 0, search_dep),
          PANLIB_BARRIER_NONE, args, util_logbase2(draw->info.index.index_size),
-         draw->info.index.restart_enable);
+         draw->info.index.restart_enable, single_wg);
       job_before_indirect_helper = batch->vtc_jc.job_index;
-      draw->index_min_addr =
-         index_min_max_res_ptr +
-         offsetof(struct libpan_draw_helper_index_min_max_result, min);
    }
 
    /* vertexPipelineStoresAndAtomics (jm-v7 046): the vertex job shades the
@@ -3327,7 +3360,37 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
          1, draw->indirect_dep_job, job_before_indirect_helper);
 
       if (draw->info.indirect.buffer_dev_addr != 0 &&
-          draw->info.index.index_size) {
+          draw->info.index.index_size && fold_minmax) {
+         const struct panlib_draw_indexed_indirect_minmax_helper_args args = {
+            .cmd = draw->info.indirect.buffer_dev_addr,
+            .index_buffer_ptr = draw->info.index.buffer_dev_addr,
+            .index_min_max_res = index_min_max_res_ptr,
+            .index_size = draw->info.index.index_size,
+            .primitive_vertex_count =
+               mesa_vertices_per_prim(draw->info.prim),
+            .varying_bufs_descs = draw->varying_bufs,
+            .varying_bufs_info = draw->indirect_info.varying_bufs,
+            .attrib_bufs_descs = draw->vs.attribute_bufs,
+            .attrib_bufs_infos = draw->indirect_info.attrib_bufs,
+            .attrib_bufs_valid = attrib_bufs_valid,
+            .attribs_valid = attribs_valid,
+            .attribs_descs = draw->vs.attributes,
+            .attribs_infos = draw->indirect_info.attribs,
+            .first_vertex_sysval = first_vertex_sysval,
+            .first_instance_sysval = first_instance_sysval,
+            .raw_vertex_offset_sysval = raw_vertex_offset_sysval,
+            .idvs_job = vs->info.vs.idvs ? draw->jobs.idvs.gpu : 0,
+            .vertex_job = draw->jobs.vertex.gpu,
+            /* With a geometry shader the tiler draws what the emulation
+             * wrote, set up on the CPU.
+             */
+            .tiler_job = draw->gs_varying_bufs ? 0 : draw->jobs.tiler.gpu,
+            .primitive_restart = draw->info.index.restart_enable,
+         };
+         panlib_draw_indexed_indirect_minmax_helper_struct(
+            &precomp_ctx, indirect_grid, indirect_barrier, args);
+      } else if (draw->info.indirect.buffer_dev_addr != 0 &&
+                 draw->info.index.index_size) {
          const struct panlib_draw_indexed_indirect_helper_args args = {
             .cmd = draw->info.indirect.buffer_dev_addr,
             .heap = panvk_priv_mem_dev_addr(dev->poly_heap.state),
