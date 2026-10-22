@@ -1040,7 +1040,7 @@ bc_xcode_shader(const struct panvk_image *img)
  * only. */
 static VkResult
 get_bc_xcode_pipeline(struct panvk_device *dev, enum bc_xcode_shader shader,
-                      uint32_t mode, VkPipelineLayout *layout_out,
+                      uint32_t mode, bool batch, VkPipelineLayout *layout_out,
                       VkPipeline *pipeline_out)
 {
    const bool etc2 = shader == BC_XCODE_ETC2;
@@ -1063,11 +1063,13 @@ get_bc_xcode_pipeline(struct panvk_device *dev, enum bc_xcode_shader shader,
       uint32_t mode;
       uint32_t opts;
       uint32_t shader; /* enum bc_xcode_shader */
+      uint32_t batch;  /* csf-v11/218 XC_BATCH, ETC2 only */
    } key = {
       .type = PANVK_META_OBJECT_KEY_BC_XCODE_SHADER,
       .mode = mode,
       .opts = etc2 ? panvk_bc_lm_opts() : 0,
       .shader = shader,
+      .batch = etc2 && batch,
    };
    bc_xcode_wg(key.wg);
    VkPipeline cached = vk_meta_lookup_pipeline(&dev->meta, &key, sizeof(key));
@@ -1076,14 +1078,15 @@ get_bc_xcode_pipeline(struct panvk_device *dev, enum bc_xcode_shader shader,
       return VK_SUCCESS;
    }
 
-   const VkSpecializationMapEntry spec_map[4] = {
+   const VkSpecializationMapEntry spec_map[5] = {
       {.constantID = 0, .offset = offsetof(__typeof__(key), wg[0]), .size = 4},
       {.constantID = 1, .offset = offsetof(__typeof__(key), wg[1]), .size = 4},
       {.constantID = 2, .offset = offsetof(__typeof__(key), mode), .size = 4},
       {.constantID = 3, .offset = offsetof(__typeof__(key), opts), .size = 4},
+      {.constantID = 4, .offset = offsetof(__typeof__(key), batch), .size = 4},
    };
    const VkSpecializationInfo spec = {
-      .mapEntryCount = etc2 ? 4 : 3,
+      .mapEntryCount = etc2 ? 5 : 3,
       .pMapEntries = spec_map,
       .dataSize = sizeof(key),
       .pData = &key,
@@ -1145,7 +1148,7 @@ bc_xcode_region_raw(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
    VkPipelineLayout layout;
    VkPipeline pipeline;
    VkResult result = get_bc_xcode_pipeline(
-      dev, bc_xcode_shader(img), bc_xcode_mode(img->vk.format), &layout,
+      dev, bc_xcode_shader(img), bc_xcode_mode(img->vk.format), false, &layout,
       &pipeline);
    if (result != VK_SUCCESS) {
       vk_command_buffer_set_error(&cmdbuf->vk, result);
@@ -1209,6 +1212,144 @@ bc_xcode_fuses_raw(const struct panvk_image *img)
 {
    return panvk_bc_xcoded(img) && img->bc_lowmem != 3 &&
           img->vk.image_type != VK_IMAGE_TYPE_3D;
+}
+
+/* csf-v11/218: PANVK_BC_LM_BATCH=<blocks> (default 4096, 0: off). The
+ * whole-level, single-layer regions of an ETC2/EAC upload with at most
+ * this many blocks go through one dispatch (XC_BATCH) instead of one per
+ * level: a 2048^2 chain then takes 4 dispatches instead of 12. */
+#define BC_XCODE_BATCH_LEVELS 16
+
+static uint32_t
+bc_xcode_batch_max(void)
+{
+   static int64_t max = -1;
+
+   if (p_atomic_read(&max) < 0) {
+      const char *s = os_get_option("PANVK_BC_LM_BATCH");
+      p_atomic_set(&max, s ? (int64_t)strtoul(s, NULL, 0) : 4096);
+   }
+   return (uint32_t)p_atomic_read(&max);
+}
+
+struct panvk_bc_xcode_batch_tab {
+   uint32_t first[BC_XCODE_BATCH_LEVELS];
+   struct {
+      uint32_t src[2], dst[2];
+      uint32_t raw[2], src_row_B, dst_row_B;
+      uint32_t raw_row_B, bw, pad[2];
+   } lvl[BC_XCODE_BATCH_LEVELS];
+};
+
+static bool
+bc_xcode_batchable(const struct panvk_image *img,
+                   const VkDeviceMemoryImageCopyKHR *r, uint32_t max_blocks)
+{
+   if (!max_blocks || bc_xcode_shader(img) != BC_XCODE_ETC2 ||
+       img->vk.image_type != VK_IMAGE_TYPE_2D ||
+       vk_image_subresource_layer_count(&img->vk, &r->imageSubresource) != 1 ||
+       r->imageOffset.x || r->imageOffset.y || r->imageOffset.z)
+      return false;
+
+   const VkExtent3D mip =
+      vk_image_mip_level_extent(&img->vk, r->imageSubresource.mipLevel);
+   if (r->imageExtent.width < mip.width || r->imageExtent.height < mip.height)
+      return false;
+   return (uint64_t)DIV_ROUND_UP(mip.width, 4) * DIV_ROUND_UP(mip.height, 4) <=
+          max_blocks;
+}
+
+/* Transcode the batchable regions among the first 64 of an upload in one
+ * dispatch (src[i]: source of region i, raw: whether the raw blocks are
+ * kept). Returns the mask of the regions done. Must run between
+ * meta_compute_start() and meta_compute_end(). */
+static uint64_t
+bc_xcode_batch(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
+               const VkCopyDeviceMemoryImageInfoKHR *info,
+               const struct bc_decode_src *srcs, bool keep_raw)
+{
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const struct vk_device_dispatch_table *disp = &dev->vk.dispatch_table;
+   VkCommandBuffer cmd = panvk_cmd_buffer_to_handle(cmdbuf);
+   const uint32_t max_blocks = bc_xcode_batch_max();
+   const uint32_t n_regions = MIN2(info->regionCount, 64);
+   uint32_t idx[BC_XCODE_BATCH_LEVELS], n = 0;
+
+   for (uint32_t i = 0; i < n_regions && n < BC_XCODE_BATCH_LEVELS; i++) {
+      if (bc_xcode_batchable(img, &info->pRegions[i], max_blocks))
+         idx[n++] = i;
+   }
+   /* One small level gains nothing from the table lookup. */
+   if (n < 2)
+      return 0;
+
+   VkPipelineLayout layout;
+   VkPipeline pipeline;
+   VkResult result = get_bc_xcode_pipeline(
+      dev, BC_XCODE_ETC2, bc_xcode_mode(img->vk.format), true, &layout,
+      &pipeline);
+   if (result != VK_SUCCESS) {
+      vk_command_buffer_set_error(&cmdbuf->vk, result);
+      return 0;
+   }
+   const uint64_t lut = bc_eac_lut_addr(dev, bc_xcode_mode(img->vk.format));
+   if (lut == UINT64_MAX) {
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      return 0;
+   }
+   struct pan_ptr ptr = panvk_cmd_alloc_dev_mem(
+      cmdbuf, desc, sizeof(struct panvk_bc_xcode_batch_tab), 16);
+   if (!ptr.cpu)
+      return 0;
+
+   struct panvk_bc_xcode_batch_tab *tab = ptr.cpu;
+   const struct pan_image_layout *dl = &img->bc_decoded.plane.layout;
+   uint32_t total = 0;
+   uint64_t done = 0;
+
+   memset(tab, 0, sizeof(*tab));
+   for (uint32_t k = 0; k < n; k++) {
+      const VkDeviceMemoryImageCopyKHR *r = &info->pRegions[idx[k]];
+      const VkImageSubresourceLayers *subres = &r->imageSubresource;
+      const VkExtent3D mip =
+         vk_image_mip_level_extent(&img->vk, subres->mipLevel);
+      const struct pan_image_slice_layout *ds = &dl->slices[subres->mipLevel];
+      const uint64_t dst = img->bc_decoded.plane.base + ds->offset_B +
+                           subres->baseArrayLayer * dl->array_stride_B;
+      const struct bc_decode_src raw =
+         keep_raw ? bc_raw_plane_src(img, subres, (VkOffset3D){0, 0, 0})
+                  : (struct bc_decode_src){0};
+      const uint32_t bw = DIV_ROUND_UP(mip.width, 4);
+      const uint64_t src = srcs[idx[k]].addr;
+
+      tab->first[k] = total;
+      tab->lvl[k].src[0] = (uint32_t)src;
+      tab->lvl[k].src[1] = (uint32_t)(src >> 32);
+      tab->lvl[k].dst[0] = (uint32_t)dst;
+      tab->lvl[k].dst[1] = (uint32_t)(dst >> 32);
+      tab->lvl[k].raw[0] = (uint32_t)raw.addr;
+      tab->lvl[k].raw[1] = (uint32_t)(raw.addr >> 32);
+      tab->lvl[k].src_row_B = srcs[idx[k]].row_B;
+      tab->lvl[k].dst_row_B = ds->tiled_or_linear.row_stride_B;
+      tab->lvl[k].raw_row_B = raw.row_B;
+      tab->lvl[k].bw = bw;
+      total += bw * DIV_ROUND_UP(mip.height, 4);
+      done |= BITFIELD64_BIT(idx[k]);
+   }
+
+   const struct panvk_bc_xcode_push push = {
+      .lut = {(uint32_t)lut, (uint32_t)(lut >> 32)},
+      .src = {(uint32_t)ptr.gpu, (uint32_t)(ptr.gpu >> 32)},
+      .bw = total,
+      .bh = n,
+   };
+   uint32_t wg[2];
+   bc_xcode_wg(wg);
+   disp->CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+   disp->CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                          sizeof(push), &push);
+   disp->CmdDispatch(cmd, DIV_ROUND_UP(total, wg[0] * wg[1]), 1, 1);
+   return done;
 }
 
 /* All-zero BC blocks for the decode of a bc_no_raw image leaving
@@ -1605,6 +1746,23 @@ panvk_per_arch(cmd_bc_decode_zero_initialized)(
                         VK_ACCESS_2_MEMORY_READ_BIT);
 }
 
+/* Source blocks of one region of a memory -> BC image copy. */
+static struct bc_decode_src
+bc_copy_region_src(const VkDeviceMemoryImageCopyKHR *r, uint32_t blk_B)
+{
+   const uint32_t row_px =
+      r->addressRowLength ? r->addressRowLength : r->imageExtent.width;
+   const uint32_t col_px =
+      r->addressImageHeight ? r->addressImageHeight : r->imageExtent.height;
+   const uint32_t row_B = DIV_ROUND_UP(row_px, 4) * blk_B;
+
+   return (struct bc_decode_src){
+      .addr = r->addressRange.address,
+      .row_B = row_B,
+      .slice_B = DIV_ROUND_UP(col_px, 4) * row_B,
+   };
+}
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdCopyMemoryToImageKHR)(
    VkCommandBuffer commandBuffer,
@@ -1648,18 +1806,23 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
          meta_compute_start(cmdbuf, &csave);
       else
          meta_gfx_start(cmdbuf, &save);
+
+      /* csf-v11/218: the small whole levels first, in one dispatch. */
+      uint64_t batched = 0;
+      if (xcode && bc_xcode_batch_max()) {
+         struct bc_decode_src srcs[64];
+         const uint32_t n = MIN2(pCopyMemoryInfo->regionCount, 64);
+
+         for (uint32_t i = 0; i < n; i++)
+            srcs[i] = bc_copy_region_src(&pCopyMemoryInfo->pRegions[i], blk_B);
+         batched = bc_xcode_batch(cmdbuf, bc_img, pCopyMemoryInfo, srcs,
+                                  fuse && keep_raw);
+      }
       for (uint32_t i = 0; i < pCopyMemoryInfo->regionCount; i++) {
          const VkDeviceMemoryImageCopyKHR *r = &pCopyMemoryInfo->pRegions[i];
-         const uint32_t row_px =
-            r->addressRowLength ? r->addressRowLength : r->imageExtent.width;
-         const uint32_t col_px = r->addressImageHeight ? r->addressImageHeight
-                                                       : r->imageExtent.height;
-         const uint32_t row_B = DIV_ROUND_UP(row_px, 4) * blk_B;
-         const struct bc_decode_src src = {
-            .addr = r->addressRange.address,
-            .row_B = row_B,
-            .slice_B = DIV_ROUND_UP(col_px, 4) * row_B,
-         };
+         if (i < 64 && (batched & BITFIELD64_BIT(i)))
+            continue;
+         const struct bc_decode_src src = bc_copy_region_src(r, blk_B);
 
          const struct bc_decode_src raw =
             keep_raw ? bc_raw_plane_src(bc_img, &r->imageSubresource,
