@@ -30,6 +30,7 @@
 #include "panvk_physical_device.h"
 #include "panvk_precomp_cache.h"
 #include "panvk_priv_bo.h"
+#include "panvk_v7_knobs.h"
 #include "panvk_image_view.h"
 #include "panvk_queue.h"
 #include "panvk_utrace.h"
@@ -1014,8 +1015,19 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
 #endif
 
 #if PAN_ARCH <= 9
+#if PAN_ARCH < 9
+   /* jm-v7 099: with PANVK_OVERLAP each overlap half gets its own 64 MiB
+    * GROW_ON_GPF heap, as v9 does. Both halves in one 128 MiB BO meant the
+    * first fault of half 1 (at +64 MiB) committed every page below it, for
+    * the life of the device. PANVK_V7_SPLIT_HEAP=0 = one BO (old).
+    */
+   const bool split_heap = panvk_v7_split_heap();
+   const size_t heap_size = (split_heap ? 64 : 128) * 1024 * 1024;
+#else
+   const size_t heap_size = 128 * 1024 * 1024;
+#endif
    result = panvk_priv_bo_create(
-      device, 128 * 1024 * 1024,
+      device, heap_size,
       PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT,
       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &device->tiler_heap);
    if (result != VK_SUCCESS)
@@ -1028,6 +1040,15 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &device->tiler_heap2);
    if (result != VK_SUCCESS)
       goto err_free_priv_bos;
+#else
+   if (split_heap) {
+      result = panvk_priv_bo_create(
+         device, heap_size,
+         PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT,
+         VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &device->tiler_heap2);
+      if (result != VK_SUCCESS)
+         goto err_free_priv_bos;
+   }
 #endif
 
    result = panvk_priv_bo_create(

@@ -91,4 +91,15 @@ panvk_v7_knob_attr_cache(void)
    return panvk_v7_knob_on("PANVK_V7_ATTR_CACHE", &v);
 }
 
+/* jm-v7 099: one tiler heap BO per PANVK_OVERLAP half. Only with the
+ * overlap on (PANVK_OVERLAP, default on), else there is one half.
+ */
+static inline bool
+panvk_v7_split_heap(void)
+{
+   static int v = -1, ov = -1;
+   return panvk_v7_knob_on("PANVK_V7_SPLIT_HEAP", &v) &&
+          panvk_v7_knob_on("PANVK_OVERLAP", &ov);
+}
+
 #endif /* PANVK_V7_KNOBS_H */
