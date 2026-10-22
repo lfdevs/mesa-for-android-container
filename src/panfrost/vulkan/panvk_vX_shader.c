@@ -6525,6 +6525,24 @@ panvk_per_arch(create_depth_bounds_fs)(struct panvk_device *dev)
    return VK_SUCCESS;
 }
 
+#if PAN_ARCH < 9
+/* Whether binding @shader over @cur only re-selects the shader @cur already
+ * is an alternate compile of. PANVK_V7_ALT_REBIND_DIRTY=1 restores the old
+ * behaviour (every such rebind marks the stage dirty).
+ */
+static bool
+panvk_v7_same_shader_rebind(const struct panvk_shader *cur,
+                            const struct panvk_shader *shader)
+{
+   static int old = -1;
+   if (old < 0) {
+      const char *e = getenv("PANVK_V7_ALT_REBIND_DIRTY");
+      old = e && e[0] == '1';
+   }
+   return !old && cur && shader && cur != shader && cur->alt_parent == shader;
+}
+#endif
+
 static void
 panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stage,
                       struct panvk_shader *shader)
@@ -6538,6 +6556,14 @@ panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stag
       }
       break;
    case MESA_SHADER_VERTEX:
+#if PAN_ARCH < 9
+      /* jm-v7 098: the state may hold the alternate compile of this very
+       * shader (jm-v7 077), picked by the last draw; rebinding the main one
+       * is not a change, panvk_v7_select_alt_shaders() decides per draw.
+       */
+      if (panvk_v7_same_shader_rebind(cmd->state.gfx.vs.shader, shader))
+         break;
+#endif
       if (cmd->state.gfx.vs.shader != shader) {
          cmd->state.gfx.vs.shader = shader;
          gfx_state_set_dirty(cmd, VS);
@@ -6547,6 +6573,11 @@ panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stag
    case MESA_SHADER_FRAGMENT:
       if (!shader)
          shader = to_panvk_device(cmd->vk.base.device)->depth_bounds_fs;
+#if PAN_ARCH < 9
+      /* jm-v7 098: same for the jm-v7 076 unlowered FS. */
+      if (panvk_v7_same_shader_rebind(cmd->state.gfx.fs.shader, shader))
+         break;
+#endif
       if (cmd->state.gfx.fs.shader != shader) {
          cmd->state.gfx.fs.shader = shader;
          gfx_state_set_dirty(cmd, FS);
