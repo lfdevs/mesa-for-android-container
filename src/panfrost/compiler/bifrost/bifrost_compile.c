@@ -1997,6 +1997,16 @@ bi_emit_intrinsic(bi_builder *b, nir_intrinsic_instr *instr)
       enum bi_lane_op lane_op = BI_LANE_OP_NONE;
       enum bi_subgroup subgroup =
          bi_subgroup_from_cluster_size(pan_subgroup_size(b->shader->arch));
+      /* jm-v7 095: G71/G72/G31 only have the old CLPER encoding (the
+       * packer asserts on CLPER.i32 there). It is fixed to inactive=zero,
+       * subgroup4, no lane op, which is exactly read_invocation for the
+       * 4-wide v6 subgroup.
+       */
+      if (b->shader->quirks & BIFROST_LIMITED_CLPER) {
+         bi_clper_old_i32_to(b, dst, bi_src_index(&instr->src[0]),
+                             bi_src_index(&instr->src[1]));
+         break;
+      }
       bi_clper_i32_to(b, dst,
                       bi_src_index(&instr->src[0]),
                       bi_byte(bi_src_index(&instr->src[1]), 0),
