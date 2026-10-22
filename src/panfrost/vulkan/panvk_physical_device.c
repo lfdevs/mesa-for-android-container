@@ -1947,8 +1947,8 @@ panvk_bc_lowmem_enabled(const struct panvk_physical_device *device)
    return true;
 }
 
-/* PANVK_BC_LM_OPTS (default 0x1020000 since csf-v11/210, 0x20000 since
- * csf-v11/206, 0x30000 before):
+/* PANVK_BC_LM_OPTS (default 0x3020000 since csf-v11/217, 0x1020000 since
+ * csf-v11/210, 0x20000 since csf-v11/206, 0x30000 before):
  * 0x10000 try the ETC2 planar mode, 0x20000 try the ETC2 H mode,
  * 0x40000 try both ETC1 flips (otherwise picked by a half-block
  * heuristic), 0x80000 search all 8 ETC1 tables (otherwise 3 around the
@@ -1956,7 +1956,8 @@ panvk_bc_lowmem_enabled(const struct panvk_physical_device *device)
  * minus one (max 3, with 0x400000), 0x400000 EAC by search instead of the
  * endpoint pair table, 0x800000 H mode on every block (otherwise only
  * where ETC1 is poor), 0x1000000 BC1 RGB/RGBA through the luma-axis
- * palette fit (csf-v11/210, BC2/BC3 colour unaffected). 0x20000 is the
+ * palette fit (csf-v11/210), 0x2000000 BC2/BC3 colour through the same
+ * palette fit (csf-v11/217). 0x1020000 is the bc6 encoder, 0x20000 the
  * bc4 (csf-v11/206) encoder and 0xc30000 the bc3 (csf-v11/203) one,
  * bit-identical. The value is a specialization constant of the transcode
  * pipeline. */
@@ -1969,8 +1970,9 @@ panvk_bc_lm_opts(void)
       const char *s = os_get_option("PANVK_BC_LM_OPTS");
       /* csf-v11/206: H mode (skipped on blocks ETC1 fits well), no planar,
        * EAC from the endpoint pair table. csf-v11/210: BC1 palette fit.
-       * 0x20000 is the bc4 encoder, 0xc30000 the bc3 one. */
-      opts = s ? (int64_t)(strtoul(s, NULL, 0) & 0xffffffffu) : 0x1020000;
+       * csf-v11/217: BC2/BC3 colour too. 0x1020000 is the bc6 encoder,
+       * 0x20000 the bc4 one, 0xc30000 the bc3 one. */
+      opts = s ? (int64_t)(strtoul(s, NULL, 0) & 0xffffffffu) : 0x3020000;
    }
    return opts;
 }

@@ -47,7 +47,8 @@
  *
  * csf-v11/210: BC1 RGB / RGBA through a cheaper palette fit on the luma
  * axis (OPT_BC1_PAL, default), without the register spills of the
- * encoder BC2 / BC3 colour keeps; see etc2_encode_bc1_pal().
+ * full encoder; see etc2_encode_bc1_pal(). csf-v11/217: BC2 / BC3 colour
+ * through it as well (OPT_BC23_PAL, default).
  *
  * The encoder is written in the GLSL subset that is also valid C (I()/U()/F()
  * casts, CARR tables, no out parameters) so it can be unit tested on the
@@ -132,8 +133,11 @@ layout(push_constant) uniform Registers
  * ETC1 error is above H_SKIP_ERR. */
 #define OPT_H_ALL 0x800000u
 /* csf-v11/210: BC1 RGB / RGBA through the palette fit on the luma axis
- * (etc2_encode_bc1_pal()); BC2 / BC3 colour is not affected. */
+ * (etc2_encode_bc1_pal()). */
 #define OPT_BC1_PAL 0x1000000u
+/* csf-v11/217: BC2 / BC3 colour through the same palette fit (BC2 / BC3
+ * colour blocks are always 4-colour, so it is the opaque BC1 case). */
+#define OPT_BC23_PAL 0x2000000u
 #ifndef H_SKIP_ERR
 #define H_SKIP_ERR 1024
 #endif
@@ -1874,7 +1878,10 @@ transcode_block(uint mode, uint w0, uint w1, uint w2, uint w3, uint opts)
       g_out0 = g_w0;
       g_out1 = g_w1;
       bc_decode_color(w2, w3, true);
-      etc2_encode_rgb(false, opts);
+      if ((opts & OPT_BC23_PAL) != 0u)
+         etc2_encode_bc1_pal(false, opts);
+      else
+         etc2_encode_rgb(false, opts);
       g_out2 = g_w0;
       g_out3 = g_w1;
    } else {
