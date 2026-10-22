@@ -14,6 +14,7 @@
 #include "panvk_image.h"
 #include "panvk_sampler.h"
 #include "panvk_shader.h"
+#include "panvk_v7_knobs.h"
 
 #include "vk_format.h"
 #include "vk_graphics_state.h"
@@ -531,12 +532,7 @@ get_resource_deref_binding(nir_deref_instr *deref, uint32_t *set,
 static bool
 panvk_v7_desc_reorder(void)
 {
-   static int on = -1;
-   if (on < 0) {
-      const char *e = getenv("PANVK_V7_DESC_REORDER");
-      on = !(e && e[0] == '0');
-   }
-   return on;
+   return panvk_v7_knob_desc_reorder();
 }
 #endif
 

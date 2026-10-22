@@ -20,6 +20,7 @@
 #include "panvk_physical_device.h"
 #include "panvk_sampler.h"
 #include "panvk_shader.h"
+#include "panvk_v7_knobs.h"
 #if PAN_ARCH >= 9
 #include "panvk_gpu_prerast.h"
 #include "libpan/draw_helper_vp.h"
@@ -2551,6 +2552,19 @@ panvk_hash_state(struct vk_physical_device *device,
    const bool robust_ssbo_vec = PANVK_DEBUG(ROBUST_SSBO_VEC);
    _mesa_blake3_update(&blake3_ctx, &robust_ssbo_vec, sizeof(robust_ssbo_vec));
 #endif
+#if PAN_ARCH < 9
+   /* jm-v7 091: the compile knobs (panvk_v7_knobs.h), resolved, so an A/B
+    * run with a knob toggled never reuses a cached binary of the other
+    * setting. The tag versions the knob set.
+    */
+   const int32_t v7_knobs[] = {
+      0x76370091, /* knob set version */
+      panvk_v7_knob_tex_waterfall(),
+      panvk_v7_knob_idvs(),
+      panvk_v7_knob_desc_reorder(),
+   };
+   _mesa_blake3_update(&blake3_ctx, v7_knobs, sizeof(v7_knobs));
+#endif
 
    if (state != NULL) {
       /* This doesn't impact the shader compile but it does go in the
@@ -3346,9 +3360,9 @@ panvk_lower_nir(struct panvk_device *dev, nir_shader *nir,
 
    /* jm-v7 085: divergent texture/sampler indices, all lanes active. */
    {
-      const char *wf = getenv("PANVK_TEX_WATERFALL");
-      if (!wf || strcmp(wf, "0"))
-         panvk_v7_lower_divergent_tex(nir, wf && !strcmp(wf, "all"));
+      const int wf = panvk_v7_knob_tex_waterfall();
+      if (wf)
+         panvk_v7_lower_divergent_tex(nir, wf == 2);
    }
 #endif
 
@@ -4620,11 +4634,7 @@ panvk_compile_shader(struct panvk_device *dev,
     * G72/G76.
     */
    if (info->stage == MESA_SHADER_VERTEX && !vs_clip_space) {
-      static int idvs_env = -2;
-      if (idvs_env == -2) {
-         const char *e = getenv("PANVK_V7_IDVS");
-         idvs_env = e ? (e[0] == '1' ? 1 : 0) : -1;
-      }
+      const int idvs_env = panvk_v7_knob_idvs();
       const uint32_t prod = (inputs.gpu_id >> 16) & 0xff0f;
       const bool idvs_quirk = prod == 0x6201 /* G72 */ ||
                               prod == 0x7201 /* G76 */;
