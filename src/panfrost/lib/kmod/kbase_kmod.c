@@ -2163,11 +2163,18 @@ kbase_kmod_import_dmabuf(struct pan_kmod_dev *dev,
     * its own (cached) dma-buf mapping. When the kernel did not grant
     * COHERENT_SYSTEM, HOST_COHERENT writes can sit in the CPU cache while
     * the GPU reads memory (faux123: black dashes in 32-bit DXVK games).
-    * WB_MMAP BOs are flushed by vkFlushMappedMemoryRanges instead. */
-   if (!kbase_dev->is_csf && pan_arch(dev->props.gpu_id) == 9 &&
+    * WB_MMAP BOs are flushed by vkFlushMappedMemoryRanges instead.
+    *
+    * jm-v7 094: v6/v7 take the same path, but only with
+    * PANVK_KBASE_IMPORT_SYNC=1. The clean is a full DMA_BUF_IOCTL_SYNC of
+    * every listed BO on every submit, O(BO size), and DXVK host-visible
+    * chunks are 32-256 MiB; the A06 (v7) passes without it. Enable it when
+    * a v6/v7 device shows the black-dash symptom, then measure. */
+   const unsigned bo_arch = pan_arch(dev->props.gpu_id);
+   if (!kbase_dev->is_csf && bo_arch <= 9 &&
        !kbase_bo->cpu_gpu_coherent && kbase_bo->cpu_ptr &&
        !(kmod_flags & PAN_KMOD_BO_FLAG_WB_MMAP) &&
-       debug_get_bool_option("PANVK_KBASE_IMPORT_SYNC", true)) {
+       debug_get_bool_option("PANVK_KBASE_IMPORT_SYNC", bo_arch == 9)) {
       mesa_logw_once("kbase: dma-buf imports are not CPU-coherent; cleaning "
                      "them before each submit (PANVK_KBASE_IMPORT_SYNC=0 "
                      "disables)");

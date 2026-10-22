@@ -411,9 +411,11 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
 
 #if PAN_ARCH == 9
    BITSET_ZERO(queue->submit_atoms);
+#endif
+   /* The list is empty unless imports were listed (v9 by default, v6/v7
+    * with PANVK_KBASE_IMPORT_SYNC=1, jm-v7 094): then only a lock. */
    if (submit->command_buffer_count)
       kbase_kmod_jm_clean_imports(dev->kmod.dev);
-#endif
 
    if (submit->wait_count) {
       (void)0;
