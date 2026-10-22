@@ -79,6 +79,12 @@ panlib_tess_gen(constant struct poly_tess_params *p, uint32_t domain__3)
  * run its start, then invocation 0 writes the draw as panlib_tess_draw()
  * does. With gen set, the same workgroup also runs the WITH_COUNTS pass, so
  * a small chunk takes one dispatch instead of three. p is &t->p.
+ *
+ * gen is a variant (csf-v11 tess-fuse-stack): the COUNT-only one inlines a
+ * single tessellator and keeps the stack of panlib_tessellate(COUNT). The
+ * gen variant inlines two tessellator contexts; for quads that is a 5.2 KiB
+ * stack (8 KiB per thread), which the driver does not run (see
+ * gpu_prerast_tess()).
  */
 #define TESS_FUSE_WG 64
 
@@ -86,7 +92,7 @@ KERNEL(TESS_FUSE_WG)
 panlib_tess_count_draw(global struct panlib_tess_draw *t,
                        constant struct poly_tess_params *p,
                        global uint32_t *c_invs, global uint32_t *c_prims,
-                       global uint32_t *prims_generated, uint32_t gen,
+                       global uint32_t *prims_generated, uint32_t gen__2,
                        uint32_t domain__3)
 {
    local uint32_t scan[TESS_FUSE_WG];
@@ -124,7 +130,7 @@ panlib_tess_count_draw(global struct panlib_tess_draw *t,
 
       /* WITH_COUNTS reads the prefix of the patch before its own. */
       barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
-      if (gen) {
+      if (gen__2) {
          for (uint32_t i = tid; i < n; i += TESS_FUSE_WG)
             tess_fast_patch(p, domain__3, i, POLY_TESS_MODE_WITH_COUNTS);
       }

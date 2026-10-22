@@ -33,6 +33,7 @@
 #include "panvk_instance.h"
 #include "panvk_instr.h"
 #include "panvk_priv_bo.h"
+#include "panvk_precomp_cache.h"
 #include "panvk_query_pool.h"
 #include "panvk_shader.h"
 #include "panvk_tracepoints.h"
@@ -5175,7 +5176,21 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
    const uint64_t direct_patches =
       indirect ? UINT64_MAX
                : (uint64_t)(draw->vertex.count / ps) * draw->instance.count;
-   const bool fuse_gen = fuse && direct_patches <= dev->tess_opt.fuse_gen_max;
+   bool fuse_gen = fuse && direct_patches <= dev->tess_opt.fuse_gen_max;
+   /* csf-v11 tess-fuse-stack: the fused workgroup only tessellates while its
+    * kernel needs at most 4 KiB of stack per thread, as much as the largest
+    * other libpan kernel. With the two tessellator contexts it inlines, the
+    * quad variant needs 5.2 KiB (8 KiB per thread): on G615 it wrote broken
+    * interior domain points (bc6c: 13 of 24 tessellation cases, all quads)
+    * and it doubled the device-wide TLS. Quads therefore count in the fused
+    * workgroup and tessellate in panlib_tess_gen().
+    */
+   if (fuse_gen) {
+      const struct panvk_shader_variant *cd = panvk_per_arch(precomp_cache_get)(
+         dev->precomp_cache, PANLIB_TESS_COUNT_DRAW(1, domain));
+
+      fuse_gen = cd && cd->info.tls_size <= 4096;
+   }
    const uint64_t prims_generated =
       gs ? 0 : cmdbuf->state.gfx.prims_generated_query.ptr;
    const uint32_t view_count =
