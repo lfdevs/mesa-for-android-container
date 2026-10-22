@@ -54,4 +54,41 @@ panvk_v7_knob_desc_reorder(void)
    return v;
 }
 
+/* Runtime-only knobs (no effect on a compile, so not hashed). */
+
+/* Read "<name>=0" as off; default on. */
+static inline bool
+panvk_v7_knob_on(const char *name, int *cache)
+{
+   if (*cache < 0) {
+      const char *e = getenv(name);
+      *cache = !(e && e[0] == '0');
+   }
+   return *cache;
+}
+
+/* jm-v7 097: per-set descriptor dirty tracking, identical rebinds skipped. */
+static inline bool
+panvk_v7_knob_desc_dirty(void)
+{
+   static int v = -1;
+   return panvk_v7_knob_on("PANVK_V7_DESC_DIRTY", &v);
+}
+
+/* jm-v7 097: push uniforms uploaded only when dirty. */
+static inline bool
+panvk_v7_knob_push_cache(void)
+{
+   static int v = -1;
+   return panvk_v7_knob_on("PANVK_V7_PUSH_CACHE", &v);
+}
+
+/* jm-v7 097: direct-draw attribute tables reused while unchanged. */
+static inline bool
+panvk_v7_knob_attr_cache(void)
+{
+   static int v = -1;
+   return panvk_v7_knob_on("PANVK_V7_ATTR_CACHE", &v);
+}
+
 #endif /* PANVK_V7_KNOBS_H */

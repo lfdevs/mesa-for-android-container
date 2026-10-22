@@ -17,6 +17,7 @@
 #include "panvk_cmd_desc_state.h"
 #include "panvk_device.h"
 #include "panvk_entrypoints.h"
+#include "panvk_v7_knobs.h"
 
 #include "pan_pool.h"
 
@@ -26,14 +27,20 @@
 #include "vk_command_buffer.h"
 #include "vk_command_pool.h"
 
-static void
+/* Returns the mask of the sets whose binding (handle or dynamic offsets)
+ * changed.
+ */
+static uint32_t
 cmd_desc_state_bind_sets(struct panvk_descriptor_state *desc_state,
                          const VkBindDescriptorSetsInfoKHR *info)
 {
+   uint32_t changed = 0;
    unsigned dynoffset_idx = 0;
    for (unsigned i = 0; i < info->descriptorSetCount; ++i) {
       unsigned set_idx = i + info->firstSet;
       VK_FROM_HANDLE(panvk_descriptor_set, set, info->pDescriptorSets[i]);
+
+      bool same = desc_state->sets[set_idx] == set;
 
       /* Invalidate the push set. */
       if (desc_state->sets[set_idx] &&
@@ -44,15 +51,47 @@ cmd_desc_state_bind_sets(struct panvk_descriptor_state *desc_state,
 
       if (set) {
          for (unsigned b = 0; b < set->layout->dyn_buf_count; b++) {
-            desc_state->dyn_buf_offsets[set_idx][b] =
-               info->pDynamicOffsets[dynoffset_idx++];
+            const uint32_t off = info->pDynamicOffsets[dynoffset_idx++];
+            if (desc_state->dyn_buf_offsets[set_idx][b] != off)
+               same = false;
+            desc_state->dyn_buf_offsets[set_idx][b] = off;
          }
          desc_state->dyn_ssbos[set_idx] = set->layout->dyn_ssbos;
       }
+
+      if (!same)
+         changed |= BITFIELD_BIT(set_idx);
    }
 
    assert(dynoffset_idx == info->dynamicOffsetCount);
+   return changed;
 }
+
+#if PAN_ARCH < 9
+/* jm-v7 097: DESC_STATE for the graphics sets in @sets only. The mask stays
+ * exact while every DESC_STATE dirtying since the last draw came through
+ * here; any other one (meta restore, ...) makes DESC_STATE mean every set,
+ * and those also dirty VS and FS, which rebuild both sides anyway.
+ */
+static void
+v7_gfx_desc_dirty_sets(struct panvk_cmd_buffer *cmdbuf, uint32_t sets)
+{
+   if (!panvk_v7_knob_desc_dirty()) {
+      gfx_state_set_dirty(cmdbuf, DESC_STATE);
+      return;
+   }
+
+   if (!sets)
+      return;
+
+   if (!gfx_state_dirty(cmdbuf, DESC_STATE)) {
+      cmdbuf->state.gfx.v7_dirty_sets = 0;
+      cmdbuf->state.gfx.v7_dirty_sets_valid = true;
+   }
+   cmdbuf->state.gfx.v7_dirty_sets |= sets;
+   gfx_state_set_dirty(cmdbuf, DESC_STATE);
+}
+#endif
 
 static struct panvk_descriptor_set *
 cmd_get_push_desc_set(struct vk_command_buffer *vk_cmdbuf,
@@ -366,10 +405,15 @@ panvk_per_arch(CmdBindDescriptorSets2KHR)(
 
    /* TODO: Invalidate only if the shader tables are disturbed */
    if (pBindDescriptorSetsInfo->stageFlags & VK_SHADER_STAGE_ALL_GRAPHICS) {
-      cmd_desc_state_bind_sets(&cmdbuf->state.gfx.desc_state,
-                               pBindDescriptorSetsInfo);
+      const uint32_t changed = cmd_desc_state_bind_sets(
+         &cmdbuf->state.gfx.desc_state, pBindDescriptorSetsInfo);
 
+#if PAN_ARCH < 9
+      v7_gfx_desc_dirty_sets(cmdbuf, changed);
+#else
+      (void)changed;
       gfx_state_set_dirty(cmdbuf, DESC_STATE);
+#endif
    }
 
    if (pBindDescriptorSetsInfo->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) {
@@ -417,7 +461,12 @@ panvk_per_arch(CmdPushDescriptorSet2KHR)(
       push_desc_set_write(cmdbuf, &cmdbuf->state.gfx.desc_state,
                           pPushDescriptorSetInfo);
 
+#if PAN_ARCH < 9
+      v7_gfx_desc_dirty_sets(cmdbuf,
+                             BITFIELD_BIT(pPushDescriptorSetInfo->set));
+#else
       gfx_state_set_dirty(cmdbuf, DESC_STATE);
+#endif
    }
 
    if (pPushDescriptorSetInfo->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) {
@@ -458,7 +507,11 @@ panvk_per_arch(CmdPushDescriptorSetWithTemplate2KHR)(
    push_set->layout = NULL;
 
    if (template->bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS)
+#if PAN_ARCH < 9
+      v7_gfx_desc_dirty_sets(cmdbuf, BITFIELD_BIT(set));
+#else
       gfx_state_set_dirty(cmdbuf, DESC_STATE);
+#endif
    else
       compute_state_set_dirty(cmdbuf, DESC_STATE);
 }

@@ -166,6 +166,14 @@ enum panvk_cmd_graphics_dirty_state {
 
 struct panvk_cmd_graphics_state {
    struct panvk_descriptor_state desc_state;
+#if PAN_ARCH < 9
+   /* jm-v7 097: the sets changed since the last draw, valid only while
+    * every DESC_STATE dirtying since then came through a set bind or push
+    * (otherwise DESC_STATE means every set).
+    */
+   uint32_t v7_dirty_sets;
+   bool v7_dirty_sets_valid;
+#endif
 
    struct {
       struct vk_vertex_input_state vi;
@@ -237,6 +245,18 @@ struct panvk_cmd_graphics_state {
       uint64_t attrib_bufs;
       uint64_t indirect_attribs_infos;
       uint64_t indirect_attrib_bufs_infos;
+      uint64_t indirect_varying_bufs_infos;
+      /* jm-v7 097: what the direct draw's attribute tables (attribs,
+       * attrib_bufs) were built for, so an identical draw reuses them.
+       */
+      struct {
+         uint32_t padded_vertex_count;
+         uint32_t instance_base;
+         uint32_t instance_count;
+         int32_t raw_offset;
+         uint32_t attrib_count;
+         bool valid;
+      } attr_key;
 #else
       /* The number of times desc is repeated.  Zero means that it is not
        * repeated but also that it's re-usable across draws and we're not
