@@ -839,6 +839,26 @@ static void panvk_bc_raw_rebind(struct panvk_image *image);
  * sampling cost of B10G11R11) and is lossier, so it is opt-in. */
 /* PANVK_BC_BC6H=exact (default) | astc (UF16 -> ASTC 4x4 HDR) | astc_sf
  * (UF16 and SF16 -> ASTC 4x4 HDR, SF16 negatives become 0, csf-v11/208). */
+/* csf-v11/210: PANVK_BC_BC6H_DECODE=block (default) decodes the exact BC6H
+ * shadow with one compute invocation per 4x4 block, written straight into
+ * a U-interleaved shadow; fragment keeps the per-texel fragment decode of
+ * csf-v11/150 (bc5). */
+static bool
+panvk_bc_bc6h_block_decode(void)
+{
+   static int on = -1;
+
+   if (p_atomic_read(&on) < 0) {
+      const char *mode = os_get_option("PANVK_BC_BC6H_DECODE");
+
+      if (mode && strcmp(mode, "block") && strcmp(mode, "fragment"))
+         mesa_logw("panvk: unknown PANVK_BC_BC6H_DECODE=%s, using block",
+                   mode);
+      p_atomic_set(&on, !mode || strcmp(mode, "fragment") != 0);
+   }
+   return p_atomic_read(&on);
+}
+
 static bool
 panvk_bc_lowmem_astc(const struct panvk_physical_device *phys_dev,
                      VkFormat format)
@@ -972,6 +992,14 @@ panvk_image_init(struct panvk_image *image,
          image->bc_no_raw = no_raw || lazy;
          image->bc_raw_store = raw_store && !lazy;
          image->bc_raw_lazy = lazy;
+      } else if ((image->vk.format == VK_FORMAT_BC6H_UFLOAT_BLOCK ||
+                  image->vk.format == VK_FORMAT_BC6H_SFLOAT_BLOCK) &&
+                 panvk_bc_bc6h_block_decode()) {
+         /* csf-v11/210: BC6H decoded once per block by a compute shader
+          * into the same B10G11R11 / RGBA16F shadow, U-interleaved. */
+         image->bc_lowmem = 4;
+         image->bc_no_raw = no_raw;
+         image->bc_raw_store = raw_store;
       } else if (no_raw || raw_store) {
          image->bc_lowmem = 2;
          image->bc_no_raw = no_raw;

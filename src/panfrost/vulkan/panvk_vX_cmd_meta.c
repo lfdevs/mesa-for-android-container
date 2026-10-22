@@ -867,6 +867,7 @@ bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
 #include "bc/panvk_bc_etc2_spv.h"
 #include "bc/panvk_bc_astc_spv.h"
 #include "bc/panvk_bc_scopy_spv.h"
+#include "bc/panvk_bc_bc6_blk_spv.h"
 #define PANVK_BC_EAC_NO_DATA 1
 #include "bc/panvk_bc_eac_lut.h"
 #include "panvk_priv_bo.h"
@@ -952,13 +953,31 @@ bc_xcode_wg(uint32_t wg[2])
    wg[1] = cached[1];
 }
 
+/* Shader of a transcoded (panvk_bc_xcoded()) image. */
+enum bc_xcode_shader {
+   BC_XCODE_ETC2,   /* BC1-BC5 -> ETC2/EAC, panvk_bc_etc2.comp */
+   BC_XCODE_ASTC,   /* BC6H -> ASTC 4x4 HDR, panvk_bc_astc.comp */
+   BC_XCODE_BC6BLK, /* BC6H block decode, panvk_bc_bc6.comp (csf-v11/210) */
+};
+
+static enum bc_xcode_shader
+bc_xcode_shader(const struct panvk_image *img)
+{
+   return img->bc_lowmem == 3   ? BC_XCODE_ASTC
+          : img->bc_lowmem == 4 ? BC_XCODE_BC6BLK
+                                : BC_XCODE_ETC2;
+}
+
 /* One pipeline per transcode mode: the mode and PANVK_BC_LM_OPTS are
  * specialization constants of panvk_bc_etc2.comp (2 and 3), next to the
- * workgroup size (0, 1). */
+ * workgroup size (0, 1). The ASTC and BC6H block shaders take the mode
+ * only. */
 static VkResult
-get_bc_xcode_pipeline(struct panvk_device *dev, bool astc, uint32_t mode,
-                      VkPipelineLayout *layout_out, VkPipeline *pipeline_out)
+get_bc_xcode_pipeline(struct panvk_device *dev, enum bc_xcode_shader shader,
+                      uint32_t mode, VkPipelineLayout *layout_out,
+                      VkPipeline *pipeline_out)
 {
+   const bool etc2 = shader == BC_XCODE_ETC2;
    const enum panvk_meta_object_key_type layout_key =
       PANVK_META_OBJECT_KEY_BC_XCODE_LAYOUT;
    const VkPushConstantRange push_range = {
@@ -977,12 +996,12 @@ get_bc_xcode_pipeline(struct panvk_device *dev, bool astc, uint32_t mode,
       uint32_t wg[2];
       uint32_t mode;
       uint32_t opts;
-      uint32_t astc;
+      uint32_t shader; /* enum bc_xcode_shader */
    } key = {
       .type = PANVK_META_OBJECT_KEY_BC_XCODE_SHADER,
       .mode = mode,
-      .opts = astc ? 0 : panvk_bc_lm_opts(),
-      .astc = astc,
+      .opts = etc2 ? panvk_bc_lm_opts() : 0,
+      .shader = shader,
    };
    bc_xcode_wg(key.wg);
    VkPipeline cached = vk_meta_lookup_pipeline(&dev->meta, &key, sizeof(key));
@@ -998,15 +1017,23 @@ get_bc_xcode_pipeline(struct panvk_device *dev, bool astc, uint32_t mode,
       {.constantID = 3, .offset = offsetof(__typeof__(key), opts), .size = 4},
    };
    const VkSpecializationInfo spec = {
-      .mapEntryCount = astc ? 3 : 4,
+      .mapEntryCount = etc2 ? 4 : 3,
       .pMapEntries = spec_map,
       .dataSize = sizeof(key),
       .pData = &key,
    };
+   static const struct {
+      const uint32_t *code;
+      size_t size;
+   } spv[] = {
+      [BC_XCODE_ETC2] = {panvk_bc_etc2_spv, sizeof(panvk_bc_etc2_spv)},
+      [BC_XCODE_ASTC] = {panvk_bc_astc_spv, sizeof(panvk_bc_astc_spv)},
+      [BC_XCODE_BC6BLK] = {panvk_bc_bc6_blk_spv, sizeof(panvk_bc_bc6_blk_spv)},
+   };
    const VkShaderModuleCreateInfo module_info = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = astc ? sizeof(panvk_bc_astc_spv) : sizeof(panvk_bc_etc2_spv),
-      .pCode = astc ? panvk_bc_astc_spv : panvk_bc_etc2_spv,
+      .codeSize = spv[shader].size,
+      .pCode = spv[shader].code,
    };
    const VkComputePipelineCreateInfo info = {
       .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -1052,7 +1079,7 @@ bc_xcode_region_raw(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
    VkPipelineLayout layout;
    VkPipeline pipeline;
    VkResult result = get_bc_xcode_pipeline(
-      dev, img->bc_lowmem == 3, bc_xcode_mode(img->vk.format), &layout,
+      dev, bc_xcode_shader(img), bc_xcode_mode(img->vk.format), &layout,
       &pipeline);
    if (result != VK_SUCCESS) {
       vk_command_buffer_set_error(&cmdbuf->vk, result);
@@ -1065,7 +1092,7 @@ bc_xcode_region_raw(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
                         subres->baseArrayLayer * dl->array_stride_B;
    const uint32_t bw = DIV_ROUND_UP(w, 4), bh = DIV_ROUND_UP(h, 4);
    uint64_t lut = 0;
-   if (img->bc_lowmem != 3) {
+   if (img->bc_lowmem == 1) {
       lut = bc_eac_lut_addr(dev, bc_xcode_mode(img->vk.format));
       if (lut == UINT64_MAX) {
          vk_command_buffer_set_error(&cmdbuf->vk,
@@ -1110,7 +1137,7 @@ bc_xcode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
 /* csf-v11/203: the ETC2/EAC transcoder (not the BC6H ASTC one) writes the
  * raw blocks of an upload itself, so the upload reads its source once and
  * needs no separate raw copy pass. 2D images only (the raw plane address
- * steps by array layer). */
+ * steps by array layer). csf-v11/210: so does the BC6H block decoder. */
 static bool
 bc_xcode_fuses_raw(const struct panvk_image *img)
 {

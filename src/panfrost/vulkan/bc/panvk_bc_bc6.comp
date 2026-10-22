@@ -2,9 +2,21 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference_uvec2 : require
 
+#ifdef PANVK_BC_BLOCK
+#extension GL_EXT_control_flow_attributes : require
+#endif
+
 #ifdef PANVK_BC_FS
 /* Fragment variant (-DPANVK_BC_FS -S frag): decode into a colour attachment. */
 layout(location = 0) out vec4 o_color;
+#elif defined(PANVK_BC_BLOCK)
+/* Block variant (-DPANVK_BC_BLOCK, csf-v11/210): one invocation per 4x4
+ * block decodes the header once and writes its 16 texels straight into the
+ * U-interleaved shadow (panvk_bc_xcode_push, like panvk_bc_etc2.comp). */
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1,
+       local_size_x_id = 0, local_size_y_id = 1) in;
+/* 8: UF16 -> B10G11R11_UFLOAT, 9: SF16 -> R16G16B16A16_SFLOAT. */
+layout(constant_id = 2) const uint XC_MODE = 8u;
 #else
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #endif
@@ -17,6 +29,33 @@ layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer Ou
     uint data[];
 };
 
+#ifdef PANVK_BC_BLOCK
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer In4 {
+    uvec4 data[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer Out4 {
+    uvec4 data[];
+};
+
+layout(push_constant) uniform Registers
+{
+    uvec2 src;        /* block (0, 0) of layer 0 of the region */
+    uvec2 dst;        /* shadow level base, layer 0 */
+    uint src_row_B;
+    uint src_slice_B;
+    uint dst_row_B;   /* bytes per row of 16x16-texel tiles */
+    uint dst_slice_B; /* array stride */
+    uint bx0;         /* region origin in blocks (for the tiled address) */
+    uint by0;
+    uint bw;          /* region size in blocks */
+    uint bh;
+    uvec2 raw;        /* raw store copy of the source blocks (0: none) */
+    uint raw_row_B;
+    uint raw_slice_B;
+    uvec2 lut;        /* unused */
+} registers;
+#else
 layout(push_constant) uniform Registers
 {
     uvec2 src;
@@ -32,6 +71,7 @@ layout(push_constant) uniform Registers
     int x0;
     int y0;
 } registers;
+#endif
 
 /* Copyright (c) 2020-2024 Hans-Kristian Arntzen
  *
@@ -795,6 +835,7 @@ DecodedInterpolation decode_bc6_mode30(uvec4 payload, int linear_pixel, int part
     return DecodedInterpolation(ep0, ep1, w);
 }
 
+#ifndef PANVK_BC_BLOCK
 void main()
 {
     int format = registers.format;
@@ -912,3 +953,182 @@ void main()
     obuf.data[out_word + 2u * uint(x) + 1u] = packed_ba;
 #endif
 }
+#else /* PANVK_BC_BLOCK */
+
+/* Endpoints of both subsets of a block: the per-texel decoders above at
+ * texel 0 with part 0 and 1, so the endpoint arithmetic is the exact same
+ * code. Their weight (texel 0's index) is not used. */
+#define BC6_EPS(f) { s0 = f(payload, 0, 0, 15); s1 = f(payload, 0, 1, 15); }
+#define BC6_EP1(f) { s0 = f(payload, 0); s1 = s0; }
+void
+bc6_block_endpoints(uvec4 payload, int mode, out DecodedInterpolation s0,
+                    out DecodedInterpolation s1)
+{
+    if ((mode & 2) == 0)
+    {
+        if ((mode & 1) != 0)
+            BC6_EPS(decode_bc6_mode1)
+        else
+            BC6_EPS(decode_bc6_mode0)
+    }
+    else
+    {
+        switch (mode)
+        {
+            case 2: BC6_EPS(decode_bc6_mode2) break;
+            case 3: BC6_EP1(decode_bc6_mode3) break;
+            case 6: BC6_EPS(decode_bc6_mode6) break;
+            case 7: BC6_EP1(decode_bc6_mode7) break;
+            case 10: BC6_EPS(decode_bc6_mode10) break;
+            case 11: BC6_EP1(decode_bc6_mode11) break;
+            case 14: BC6_EPS(decode_bc6_mode14) break;
+            case 15: BC6_EP1(decode_bc6_mode15) break;
+            case 18: BC6_EPS(decode_bc6_mode18) break;
+            case 22: BC6_EPS(decode_bc6_mode22) break;
+            case 26: BC6_EPS(decode_bc6_mode26) break;
+            case 30: BC6_EPS(decode_bc6_mode30) break;
+            default:
+                s0 = DecodedInterpolation(ivec3(0), ivec3(0), 0);
+                s1 = s0;
+                break;
+        }
+    }
+}
+
+/* Round a positive half (no sign, below 0x7c00) to an unsigned float with
+ * the same 5-bit exponent and 10 - s mantissa bits: round to nearest even,
+ * saturating at the largest finite value (a finite texel never becomes
+ * infinite). */
+uint
+half_to_uf(uint h, uint s, uint max_finite)
+{
+    return min((h + ((1u << (s - 1u)) - 1u) + ((h >> s) & 1u)) >> s, max_finite);
+}
+
+/* a + m0 * m1 for a 64-bit address a. */
+uvec2
+addr_mad(uvec2 a, uint m0, uint m1)
+{
+    uint hi, lo, c;
+    umulExtended(m0, m1, hi, lo);
+    a.x = uaddCarry(a.x, lo, c);
+    a.y += hi + c;
+    return a;
+}
+
+void main()
+{
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+    uint z = gl_GlobalInvocationID.z;
+
+    if (x >= registers.bw || y >= registers.bh)
+        return;
+
+    uvec2 sa = addr_mad(addr_mad(registers.src, z, registers.src_slice_B), y,
+                        registers.src_row_B);
+    uvec4 payload = In4(sa).data[x];
+
+    /* Upload into a raw-store image: keep the BC blocks here instead of a
+     * separate copy pass over the source (as csf-v11/203 does for ETC2). */
+    if ((registers.raw.x | registers.raw.y) != 0u)
+    {
+        uvec2 ra = addr_mad(addr_mad(registers.raw, z, registers.raw_slice_B),
+                            y, registers.raw_row_B);
+        Out4(ra).data[x] = payload;
+    }
+
+    is_signed = XC_MODE == 9u;
+
+    int mode = extract_bits(payload, 0, 5);
+    int part_index = extract_bits(payload, 77, 5);
+    /* Modes 3, 7, 11 and 15 have one subset and 4-bit indices from bit 65;
+     * the others two subsets and 3-bit indices from bit 82. */
+    bool one = mode == 3 || mode == 7 || mode == 11 || mode == 15;
+    uint pmask = one ? 0u : uint(partition_table2[part_index]);
+    int anchor = one ? 0 : anchor_table2[part_index];
+
+    DecodedInterpolation s0, s1;
+    bc6_block_endpoints(payload, mode, s0, s1);
+
+    /* Index bits from the first index (bit 65 or 82), as 64 bits. Texel p
+     * has k (4 or 3) bits at k p - 1 - (p > anchor), texel 0 and the anchor
+     * one bit less. A one-subset block takes anchor 16 (none). */
+    uint sh = one ? 1u : 18u;
+    uvec2 st = uvec2((payload.z >> sh) | (payload.w << (32u - sh)),
+                     payload.w >> sh);
+    int k = one ? 4 : 3;
+    if (one)
+        anchor = 16;
+    /* weight_table4 / weight_table3 = (idx wa + 16) >> 5, exact. */
+    int wa = one ? 136 : 292;
+
+    /* Block (bx, by) of the level: tile row by / 4, tile bx / 4, block
+     * | by1 | bx1^by1 | by0 | bx0^by0 | in the tile; its 16 texels are 16
+     * consecutive elements, texel (px, py) at | py1 | px1^py1 | py0 |
+     * px0^py0 |: 4 (B10G11R11) or 8 (R16G16B16A16) uvec4s, written in that
+     * order so only one uvec4 of results is live. */
+    uint bx = registers.bx0 + x, by = registers.by0 + y;
+    uint ix = bx & 3u, iy = by & 3u;
+    uint in_tile = ((iy >> 1) << 3) | (((ix ^ iy) >> 1) << 2) |
+                   ((iy & 1u) << 1) | ((ix ^ iy) & 1u);
+    uvec2 da = addr_mad(addr_mad(registers.dst, z, registers.dst_slice_B),
+                        by >> 2, registers.dst_row_B);
+    const uint T = is_signed ? 8u : 4u;
+    Out4 obuf = Out4(da);
+    uint ob = (bx >> 2) * 16u * T + in_tile * T;
+
+    uint o[4];
+    [[unroll]] for (int slot = 0; slot < 16; slot++)
+    {
+        /* Texel of this slot (the slot formula is its own inverse in y). */
+        int py = ((slot >> 2) & 2) | ((slot >> 1) & 1);
+        int px = (((slot >> 1) & 2) | (slot & 1)) ^ py;
+        int p = 4 * py + px;
+
+        int off = p == 0 ? 0 : k * p - 1 - int(p > anchor);
+        int nb = (p == 0 ? k - 1 : k) - int(p == anchor);
+        uint lo = off < 32 ? st.x : st.y;
+        uint hi = off < 32 ? st.y : 0u;
+        uint r = uint(off) & 31u;
+        uint v = (lo >> r) | ((hi << 1u) << (31u - r));
+        int idx = int(v & ((1u << nb) - 1u));
+        int w = (idx * wa + 16) >> 5;
+
+        bool sub = ((pmask >> p) & 1u) != 0u;
+        DecodedInterpolation interp = DecodedInterpolation(
+            sub ? s1.ep0 : s0.ep0, sub ? s1.ep1 : s0.ep1, w);
+        ivec3 rgba_result = interpolate_endpoint(interp);
+
+        // Squeeze range.
+        if (is_signed)
+        {
+            ivec3 neg_result = 0x8000 | (((-rgba_result) * 31) >> 5);
+            ivec3 pos_result = (rgba_result * 31) >> 5;
+            rgba_result = mix(pos_result, neg_result, lessThan(rgba_result, ivec3(0)));
+
+            // Fixup for -0.0. Seems to not be emitted by hardware decoder.
+            rgba_result = mix(rgba_result, ivec3(0), equal(rgba_result, ivec3(0x8000)));
+
+            /* R16G16B16A16_SFLOAT, as the fragment variant's output. */
+            o[(2 * slot) & 3] = (uint(rgba_result.r) & 0xFFFFu) |
+                                ((uint(rgba_result.g) & 0xFFFFu) << 16);
+            o[(2 * slot + 1) & 3] =
+                (uint(rgba_result.b) & 0xFFFFu) | (0x3C00u << 16);
+            if ((slot & 1) == 1)
+                obuf.data[ob + uint(slot >> 1)] = uvec4(o[0], o[1], o[2], o[3]);
+        }
+        else
+        {
+            rgba_result = (rgba_result * 31) >> 6;
+
+            uvec3 h = uvec3(rgba_result);
+            o[slot & 3] = half_to_uf(h.r, 4u, 0x7bfu) |
+                          (half_to_uf(h.g, 4u, 0x7bfu) << 11) |
+                          (half_to_uf(h.b, 5u, 0x3dfu) << 22);
+            if ((slot & 3) == 3)
+                obuf.data[ob + uint(slot >> 2)] = uvec4(o[0], o[1], o[2], o[3]);
+        }
+    }
+}
+#endif
