@@ -766,6 +766,9 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    device->gpu_prerast_tess_wanted =
       device->vk.enabled_features.tessellationShader;
    simple_mtx_init(&device->gpu_prerast_lock, mtx_plain);
+   device->tess_opt.fuse = debug_get_num_option("PANVK_TESS_FUSE", 1) != 0;
+   device->tess_opt.fuse_gen_max =
+      debug_get_num_option("PANVK_TESS_FUSE_GEN_MAX", 64);
 
    /* v9, or PANVK_GPU_PRERAST_ARENA=eager: commit both arenas here, as
     * before csf-v11/205 (64 + 96 MiB per VkDevice with the features). */

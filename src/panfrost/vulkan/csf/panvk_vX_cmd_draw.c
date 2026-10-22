@@ -5135,6 +5135,17 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
    };
    const struct panlib_precomp_grid tess_grid =
       panlib_1d(DIV_ROUND_UP(max_patches, 64));
+   /* csf-v11 tess-fused: one workgroup counts, prefix sums and publishes the
+    * draw of a chunk (PANVK_TESS_FUSE=0 runs the COUNT pass and the serial
+    * panlib_tess_draw() instead). A direct draw the CPU knows to have at
+    * most PANVK_TESS_FUSE_GEN_MAX patches is also tessellated by that
+    * workgroup: the separate WITH_COUNTS pass would be one workgroup too.
+    */
+   const bool fuse = dev->tess_opt.fuse;
+   const uint64_t direct_patches =
+      indirect ? UINT64_MAX
+               : (uint64_t)(draw->vertex.count / ps) * draw->instance.count;
+   const bool fuse_gen = fuse && direct_patches <= dev->tess_opt.fuse_gen_max;
    const uint64_t prims_generated =
       gs ? 0 : cmdbuf->state.gfx.prims_generated_query.ptr;
    const uint32_t view_count =
@@ -5262,15 +5273,27 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
                                  push.gpu, tsd, &tcs_dispatch);
       cs_wait_slots(b, dev->csf.sb.all_iters_mask);
 
-      panlib_tessellate(&ctx, tess_grid, PANLIB_BARRIER_NONE, TD(p), domain,
-                        POLY_TESS_MODE_COUNT);
-      cs_wait_slots(b, dev->csf.sb.all_iters_mask);
-      panlib_tess_draw(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, td.gpu,
-                       c_invs, c_prims, prims_generated);
-      cs_wait_slots(b, dev->csf.sb.all_iters_mask);
-      panlib_tessellate(&ctx, tess_grid, PANLIB_BARRIER_NONE, TD(p), domain,
-                        POLY_TESS_MODE_WITH_COUNTS);
-      cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+      if (fuse) {
+         panlib_tess_count_draw(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE,
+                                td.gpu, TD(p), c_invs, c_prims,
+                                prims_generated, fuse_gen, domain);
+         cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+         if (!fuse_gen) {
+            panlib_tess_gen(&ctx, tess_grid, PANLIB_BARRIER_NONE, TD(p),
+                            domain);
+            cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+         }
+      } else {
+         panlib_tessellate(&ctx, tess_grid, PANLIB_BARRIER_NONE, TD(p),
+                           domain, POLY_TESS_MODE_COUNT);
+         cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+         panlib_tess_draw(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, td.gpu,
+                          c_invs, c_prims, prims_generated);
+         cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+         panlib_tessellate(&ctx, tess_grid, PANLIB_BARRIER_NONE, TD(p),
+                           domain, POLY_TESS_MODE_WITH_COUNTS);
+         cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+      }
 
       if (nested) {
          /* TES as the gpu_prerast VS over this iteration's index range. */

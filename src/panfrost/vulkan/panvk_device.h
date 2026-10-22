@@ -154,6 +154,15 @@ struct panvk_device {
    simple_mtx_t gpu_prerast_lock;
    /* struct panvk_gpu_prerast_syncs */
    struct panvk_priv_bo *gpu_prerast_syncs;
+   /* CSF tessellation fast paths, read once at device creation so that a
+    * process can A/B them per VkDevice. */
+   struct {
+      /* PANVK_TESS_FUSE (default 1): panlib_tess_count_draw(). */
+      bool fuse;
+      /* PANVK_TESS_FUSE_GEN_MAX (default 64): patches of a direct draw the
+       * fused workgroup also tessellates. */
+      uint32_t fuse_gen_max;
+   } tess_opt;
 
    /* Device-wide thread local storage shared by all command buffers. The
     * last BO is the current one; outgrown ones stay alive for command

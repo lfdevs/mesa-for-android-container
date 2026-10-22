@@ -8,6 +8,7 @@ libpan_shader_files = files(
   'draw_helper.cl',
   'fan_chunks.cl',
   'indirect_dispatch.cl',
+  'tess_fast.cl',
 )
 
 idep_libpan_per_arch = {}
