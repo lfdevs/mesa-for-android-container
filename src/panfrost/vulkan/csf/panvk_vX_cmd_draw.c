@@ -5196,10 +5196,21 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
     cs_store32(b, once_reset, pass_addr, 4);
     cs_flush_stores(b);
 
-   panlib_tess_setup(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, td.gpu, src,
-                     draw->indirect.count_buffer_dev_addr,
-                     draw->indirect.buffer_dev_addr ? draw->indirect.draw_index : 0);
-   cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+   /* csf-v11 tess-setup-step: the first panlib_tess_setup_step() of the
+    * loop does the setup and the predicate drop below, one dispatch and
+    * three CS load waits fewer per draw. PANVK_TESS_SETUP_STEP=0 keeps the
+    * separate setup dispatch and the CS once-block.
+    */
+   const bool setup_in_step = dev->tess_opt.setup_in_step;
+   const uint64_t count_buf = draw->indirect.count_buffer_dev_addr;
+   const uint32_t draw_index =
+      draw->indirect.buffer_dev_addr ? draw->indirect.draw_index : 0;
+
+   if (!setup_in_step) {
+      panlib_tess_setup(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, td.gpu, src,
+                        count_buf, draw_index);
+      cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+   }
 
    /* No C-level exit from a cs_while body, it would leave the block open.
     * Allocation failures are recorded on the command buffer instead.
@@ -5213,7 +5224,7 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
        * the predicate says not to render. Later iterations already see
        * total_patches == 0. pass_mem[1] is the once-only flag.
        */
-      {
+      if (!setup_in_step) {
          struct cs_index once = gpu_prerast_load_flag(b, pass_mem.gpu + 4);
          struct cs_index zero = cs_scratch_reg32(b, 2);
          struct cs_index dst = cs_scratch_reg64(b, 4);
@@ -5248,8 +5259,15 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
          }
       }
 
-      panlib_tess_step(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, td.gpu,
-                       tcs_stat);
+      /* panlib_* launchers are brace-block macros: no bare if/else. */
+      if (setup_in_step) {
+         panlib_tess_setup_step(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE,
+                                td.gpu, tcs_stat, src, count_buf, draw_index,
+                                pass_mem.gpu);
+      } else {
+         panlib_tess_step(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, td.gpu,
+                          tcs_stat);
+      }
       cs_wait_slots(b, dev->csf.sb.all_iters_mask);
 
       ok &= gpu_prerast_vs(cmdbuf, &vs_src, vs, arena,

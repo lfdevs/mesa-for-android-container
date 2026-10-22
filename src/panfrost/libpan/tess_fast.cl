@@ -161,4 +161,99 @@ panlib_tess_count_draw(global struct panlib_tess_draw *t,
       atomic_fetch_add((global atomic_uint *)prims_generated, count / vpp);
 }
 
+/* csf-v11 tess-setup-step: panlib_tess_setup(), the conditional rendering
+ * drop of the first iteration (recorded as CS loads and stores before) and
+ * panlib_tess_step() in one dispatch. pass[0] is the predicate (0 drops the
+ * draw), pass[1] the once-only flag; the CS writes both at execution time.
+ * The setup and step bodies are those of the draw_helper.cl kernels.
+ */
+KERNEL(1)
+panlib_tess_setup_step(global struct panlib_tess_draw *t,
+                       global uint32_t *tcs_stat, constant uint32_t *src_draw,
+                       constant uint32_t *count_buffer, uint32_t draw_index,
+                       global uint32_t *pass)
+{
+   global struct poly_tess_params *p = &t->p;
+   uint32_t ps = max(t->input_patch_size, 1u);
+
+   if (!pass[1]) {
+      bool live = !count_buffer || draw_index < count_buffer[0];
+
+      /* VkDrawIndirectCommand is 4 words. */
+      for (uint32_t i = 0; i < 5; i++)
+         t->in_draw[i] = live && (i < 4 || t->indexed) ? src_draw[i] : 0;
+
+      t->patches_per_instance = t->in_draw[0] / ps;
+      t->instances = t->in_draw[1];
+      t->total_patches = (uint64_t)t->patches_per_instance * t->instances;
+      t->next_patch = 0;
+      t->idx_total = 0;
+      t->idx_cursor = 0;
+      t->prims_done = 0;
+      t->new_chunk = 0;
+      t->more = 0;
+
+      /* What the CS once-block zeroed: every iteration is then an empty
+       * handshake. */
+      if (!pass[0]) {
+         t->in_draw[0] = 0;
+         t->in_draw[1] = 0;
+         t->patches_per_instance = 0;
+         t->instances = 0;
+         t->total_patches = 0;
+      }
+      pass[1] = 1;
+   }
+
+   t->new_chunk = t->idx_cursor >= t->idx_total && t->next_patch < t->total_patches;
+   if (!t->new_chunk) {
+      t->vs_draw[0] = 0;
+      t->vs_draw[1] = 0;
+      t->tcs_grid[0] = 0;
+      t->tcs_grid[1] = 0;
+      t->tcs_grid[2] = 0;
+      p->nr_patches = 0;
+      return;
+   }
+
+   uint32_t ppi = t->patches_per_instance;
+   uint32_t inst = t->next_patch / ppi;
+   uint32_t first = t->next_patch % ppi;
+   uint32_t per_inst, k;
+
+   if (first == 0 && ppi <= t->max_patches) {
+      per_inst = ppi;
+      k = min(t->max_patches / ppi, t->instances - inst);
+      k = min(k, PANLIB_CHUNK_MAX_INSTANCES);
+   } else {
+      per_inst = min(t->max_patches, ppi - first);
+      k = 1;
+   }
+
+   uint32_t n = per_inst * k;
+   p->patches_per_instance = per_inst;
+   p->nr_patches = n;
+   p->heap->bottom = 0;
+   t->chunk_patches = n;
+   t->prim_base = first;
+   t->next_patch += n;
+
+   /* Base vertex/instance stay the API ones, the chunk start is added to the
+    * VS invocation IDs.
+    */
+   t->vs_draw[0] = per_inst * ps;
+   t->vs_draw[1] = k;
+   for (uint32_t i = 2; i < 5; i++)
+      t->vs_draw[i] = t->in_draw[i];
+   t->chunk_vertex = first * ps;
+   t->chunk_instance = inst;
+
+   t->tcs_grid[0] = per_inst;
+   t->tcs_grid[1] = k;
+   t->tcs_grid[2] = 1;
+
+   if (tcs_stat)
+      tess_pstats_add(tcs_stat, n);
+}
+
 #endif

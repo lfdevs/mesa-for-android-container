@@ -162,6 +162,8 @@ struct panvk_device {
       /* PANVK_TESS_FUSE_GEN_MAX (default 64): patches of a direct draw the
        * fused workgroup also tessellates. */
       uint32_t fuse_gen_max;
+      /* PANVK_TESS_SETUP_STEP (default 1): panlib_tess_setup_step(). */
+      bool setup_in_step;
    } tess_opt;
 
    /* Device-wide thread local storage shared by all command buffers. The

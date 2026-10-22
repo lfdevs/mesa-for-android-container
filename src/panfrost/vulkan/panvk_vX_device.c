@@ -769,6 +769,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    device->tess_opt.fuse = debug_get_num_option("PANVK_TESS_FUSE", 1) != 0;
    device->tess_opt.fuse_gen_max =
       debug_get_num_option("PANVK_TESS_FUSE_GEN_MAX", 64);
+   device->tess_opt.setup_in_step =
+      debug_get_num_option("PANVK_TESS_SETUP_STEP", 1) != 0;
 
    /* v9, or PANVK_GPU_PRERAST_ARENA=eager: commit both arenas here, as
     * before csf-v11/205 (64 + 96 MiB per VkDevice with the features). */
