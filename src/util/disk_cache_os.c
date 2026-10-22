@@ -1014,6 +1014,31 @@ disk_cache_generate_cache_dir(void *mem_ctx, const char *gpu_name,
       }
    }
 
+#if DETECT_OS_ANDROID
+   /* Android app processes have no writable $HOME/.cache, so without this
+    * the cache stayed off and every process compiled its pipelines again
+    * (panvk's BC transcoders cost seconds each). Use the app's cache
+    * directory /data/user/<user>/<package>/cache, from the process name
+    * (up to a ':' service suffix). Falls through to $HOME if it fails. */
+   if (!path) {
+      char name[256] = {0}, dir[320];
+      int fd = open("/proc/self/cmdline", O_RDONLY | O_CLOEXEC);
+
+      if (fd >= 0) {
+         const ssize_t n = read(fd, name, sizeof(name) - 1);
+         close(fd);
+         if (n > 0 && name[0] && name[0] != '/') {
+            name[strcspn(name, ":")] = 0;
+            snprintf(dir, sizeof(dir), "/data/user/%u/%s/cache",
+                     (unsigned)(getuid() / 100000), name);
+            if (access(dir, W_OK) == 0)
+               path = concatenate_and_mkdir(mem_ctx, dir, cache_dir_name,
+                                            mkdir);
+         }
+      }
+   }
+#endif
+
    if (!path) {
       const char *home = os_get_option("HOME");
 

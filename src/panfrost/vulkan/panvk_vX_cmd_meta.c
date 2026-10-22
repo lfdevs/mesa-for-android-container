@@ -882,6 +882,11 @@ struct panvk_bc_xcode_push {
    uint32_t by0;
    uint32_t bw;
    uint32_t bh;
+   /* csf-v11/203: raw-store copy of the source blocks, written by the
+    * ETC2/EAC transcoder itself (0: none). */
+   uint32_t raw[2];
+   uint32_t raw_row_B;
+   uint32_t raw_slice_B;
 };
 
 /* XC_* in panvk_bc_etc2.comp. */
@@ -1015,9 +1020,10 @@ get_bc_xcode_pipeline(struct panvk_device *dev, bool astc, uint32_t mode,
  * transcoded (panvk_bc_xcoded()) image. Must run between meta_compute_start() and
  * meta_compute_end(). */
 static void
-bc_xcode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
-                const VkImageSubresourceLayers *subres, VkOffset3D offset,
-                VkExtent3D extent, const struct bc_decode_src *src)
+bc_xcode_region_raw(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
+                    const VkImageSubresourceLayers *subres, VkOffset3D offset,
+                    VkExtent3D extent, const struct bc_decode_src *src,
+                    const struct bc_decode_src *raw)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    const struct vk_device_dispatch_table *disp = &dev->vk.dispatch_table;
@@ -1059,6 +1065,9 @@ bc_xcode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
       .by0 = y0 / 4,
       .bw = bw,
       .bh = bh,
+      .raw = {raw ? (uint32_t)raw->addr : 0, raw ? (uint32_t)(raw->addr >> 32) : 0},
+      .raw_row_B = raw ? raw->row_B : 0,
+      .raw_slice_B = raw ? raw->slice_B : 0,
    };
 
    disp->CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
@@ -1068,6 +1077,25 @@ bc_xcode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
    bc_xcode_wg(wg);
    disp->CmdDispatch(cmd, DIV_ROUND_UP(bw, wg[0]), DIV_ROUND_UP(bh, wg[1]),
                      layers);
+}
+
+static void
+bc_xcode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
+                const VkImageSubresourceLayers *subres, VkOffset3D offset,
+                VkExtent3D extent, const struct bc_decode_src *src)
+{
+   bc_xcode_region_raw(cmdbuf, img, subres, offset, extent, src, NULL);
+}
+
+/* csf-v11/203: the ETC2/EAC transcoder (not the BC6H ASTC one) writes the
+ * raw blocks of an upload itself, so the upload reads its source once and
+ * needs no separate raw copy pass. 2D images only (the raw plane address
+ * steps by array layer). */
+static bool
+bc_xcode_fuses_raw(const struct panvk_image *img)
+{
+   return panvk_bc_xcoded(img) && img->bc_lowmem != 3 &&
+          img->vk.image_type != VK_IMAGE_TYPE_3D;
 }
 
 /* All-zero BC blocks for the decode of a bc_no_raw image leaving
@@ -1449,10 +1477,17 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
                                     &pCopyMemoryInfo->pRegions[i].imageSubresource,
                                     pCopyMemoryInfo->pRegions[i].imageExtent);
 
-      /* bc_no_raw images keep no raw blocks: only the shadow is written. */
+      /* bc_no_raw images keep no raw blocks: only the shadow is written.
+       * The ETC2/EAC transcoder writes the raw blocks itself. */
+      const bool fuse = xcode && bc_xcode_fuses_raw(bc_img);
+      bool keep_raw = false;
       if (!bc_img->bc_no_raw &&
-          bc_raw_use(cmdbuf, bc_img, true, bc_blocks_full(bc_img, blocks)))
-         copy_memory_to_image_raw(commandBuffer, pCopyMemoryInfo);
+          bc_raw_use(cmdbuf, bc_img, true, bc_blocks_full(bc_img, blocks))) {
+         if (fuse)
+            keep_raw = true;
+         else
+            copy_memory_to_image_raw(commandBuffer, pCopyMemoryInfo);
+      }
 
       /* Decode (or transcode) straight from the copy source: the raw copy
        * and the decode only share reads, so no barrier between them. The
@@ -1474,12 +1509,19 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
             .slice_B = DIV_ROUND_UP(col_px, 4) * row_B,
          };
 
-         if (xcode)
-            bc_xcode_region(cmdbuf, bc_img, &r->imageSubresource,
-                            r->imageOffset, r->imageExtent, &src);
-         else
+         if (xcode) {
+            const struct bc_decode_src raw =
+               keep_raw ? bc_raw_plane_src(bc_img, &r->imageSubresource,
+                                           (VkOffset3D){r->imageOffset.x & ~3,
+                                                        r->imageOffset.y & ~3, 0})
+                        : (struct bc_decode_src){0};
+            bc_xcode_region_raw(cmdbuf, bc_img, &r->imageSubresource,
+                                r->imageOffset, r->imageExtent, &src,
+                                keep_raw ? &raw : NULL);
+         } else {
             bc_decode_region_gfx(cmdbuf, bc_img, &r->imageSubresource,
                                  r->imageOffset, r->imageExtent, &src);
+         }
       }
       if (xcode)
          meta_compute_end(cmdbuf, &csave);

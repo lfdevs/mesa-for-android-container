@@ -39,6 +39,12 @@
  * and stored as one uvec2 / uvec4, and no per-block array is indexed at run
  * time (all loops have fixed trip counts).
  *
+ * csf-v11/203: the ETC1 / H error sums run in fp32 (exact: at most
+ * 16 * 3 * 255^2 < 2^24) on the otherwise idle FMA unit instead of 32-bit
+ * IMUL / integer ALU (same bitstream, about 25% fewer Valhall cycles for
+ * BC1-BC3), and an upload into a raw-store image writes the raw blocks
+ * here (registers.raw) instead of in a separate copy pass.
+ *
  * The encoder is written in the GLSL subset that is also valid C (I()/U()/F()
  * casts, CARR tables, no out parameters) so it can be unit tested on the
  * host by including this file with PANVK_BC_C_TEST defined (skip line 1),
@@ -84,6 +90,9 @@ layout(push_constant) uniform Registers
     uint by0;
     uint bw;          /* region size in blocks */
     uint bh;
+    uvec2 raw;        /* raw store copy of the source blocks (0: none) */
+    uint raw_row_B;
+    uint raw_slice_B;
 } registers;
 
 #define I(x) int(x)
@@ -421,6 +430,20 @@ GLOBAL int g_g3;
 GLOBAL int g_b3;
 GLOBAL uint g_ci;
 GLOBAL uint g_grp;
+/* The palette as floats: the error sums below are exact in fp32 (at most
+ * 16 * 3 * 255^2 < 2^24) and run on the FMA unit. */
+GLOBAL float g_fr0;
+GLOBAL float g_fg0;
+GLOBAL float g_fb0;
+GLOBAL float g_fr1;
+GLOBAL float g_fg1;
+GLOBAL float g_fb1;
+GLOBAL float g_fr2;
+GLOBAL float g_fg2;
+GLOBAL float g_fb2;
+GLOBAL float g_fr3;
+GLOBAL float g_fg3;
+GLOBAL float g_fb3;
 GLOBAL bool g_c3t;
 
 /* Texel masks (bit 2p) of the half blocks and of the rows / columns. */
@@ -513,26 +536,67 @@ etc_plane(uint map, uint hm, uint bit)
    return v & hm;
 }
 
-/* Nearest of the 4 colours q0..q3 to palette colour k: (err << 2) | idx.
- * no2: index 2 is not available (RGB8A1 transparent). */
-int
-etc_near(int k, int q0r, int q0g, int q0b, int q1r, int q1g, int q1b,
-         int q2r, int q2g, int q2b, int q3r, int q3g, int q3b, bool no2)
+float
+fpal_r(int k)
 {
-   int r = pal_r(k), g = pal_g(k), b = pal_b(k);
-   int be = rgb_err(r, g, b, q0r, q0g, q0b), bi = 0, e;
-   e = rgb_err(r, g, b, q1r, q1g, q1b); if (e < be) { be = e; bi = 1; }
-   e = no2 ? BIG_ERR : rgb_err(r, g, b, q2r, q2g, q2b); if (e < be) { be = e; bi = 2; }
-   e = rgb_err(r, g, b, q3r, q3g, q3b); if (e < be) { be = e; bi = 3; }
-   return (be << 2) | bi;
+   return k == 0 ? g_fr0 : (k == 1 ? g_fr1 : (k == 2 ? g_fr2 : g_fr3));
+}
+
+float
+fpal_g(int k)
+{
+   return k == 0 ? g_fg0 : (k == 1 ? g_fg1 : (k == 2 ? g_fg2 : g_fg3));
+}
+
+float
+fpal_b(int k)
+{
+   return k == 0 ? g_fb0 : (k == 1 ? g_fb1 : (k == 2 ? g_fb2 : g_fb3));
+}
+
+float
+frgb_err4(float r, float g, float b, float qr, float qg, float qb)
+{
+   float dr = r - qr, dg = g - qg, db = b - qb;
+   return 4.0 * (dr * dr + dg * dg + db * db);
+}
+
+/* Nearest of the 4 colours q0..q3 to palette colour k: 4 err + idx (exact
+ * in fp32; ties keep the lower index). no2: index 2 is not available
+ * (RGB8A1 transparent). */
+float
+etc_near(int k, float q0r, float q0g, float q0b, float q1r, float q1g,
+         float q1b, float q2r, float q2g, float q2b, float q3r, float q3g,
+         float q3b, bool no2)
+{
+   float r = fpal_r(k), g = fpal_g(k), b = fpal_b(k);
+   float e0 = frgb_err4(r, g, b, q0r, q0g, q0b);
+   float e1 = frgb_err4(r, g, b, q1r, q1g, q1b) + 1.0;
+   float e2 = no2 ? 1e30 : frgb_err4(r, g, b, q2r, q2g, q2b) + 2.0;
+   float e3 = frgb_err4(r, g, b, q3r, q3g, q3b) + 3.0;
+   return min(min(e0, e1), min(e2, e3));
+}
+
+/* Error and index of an etc_near() result. */
+float
+near_err(float p)
+{
+   return floor(p * 0.25);
+}
+
+uint
+near_idx(float p)
+{
+   return U(I(p)) & 3u;
 }
 
 /* Luma offset (x3) of colour k from a base: what the ETC1 modifiers, which
  * move all three channels, can follow. */
-int
+float
 etc_u(int k, int br, int bg, int bb)
 {
-   return abs(pal_r(k) - br + pal_g(k) - bg + pal_b(k) - bb);
+   float u = fpal_r(k) + fpal_g(k) + fpal_b(k) - F(br + bg + bb);
+   return u < 0.0 ? -u : u;
 }
 
 /* Exact error of ETC1 table t around (br, bg, bb) over the palette colours
@@ -541,30 +605,41 @@ int
 etc_sub_exact(int t, int br, int bg, int bb, bool punch, int n0, int n1,
               int n2, int n3)
 {
-   int a = punch ? 0 : ETC1_A[t], b = ETC1_B[t];
-   int q0r = clamp255(br + a), q0g = clamp255(bg + a), q0b = clamp255(bb + a);
-   int q1r = clamp255(br + b), q1g = clamp255(bg + b), q1b = clamp255(bb + b);
-   int q2r = clamp255(br - a), q2g = clamp255(bg - a), q2b = clamp255(bb - a);
-   int q3r = clamp255(br - b), q3g = clamp255(bg - b), q3b = clamp255(bb - b);
-   int r0 = etc_near(0, q0r, q0g, q0b, q1r, q1g, q1b, q2r, q2g, q2b, q3r, q3g, q3b, punch);
-   int r1 = etc_near(1, q0r, q0g, q0b, q1r, q1g, q1b, q2r, q2g, q2b, q3r, q3g, q3b, punch);
-   int r2 = etc_near(2, q0r, q0g, q0b, q1r, q1g, q1b, q2r, q2g, q2b, q3r, q3g, q3b, punch);
-   int r3 = etc_near(3, q0r, q0g, q0b, q1r, q1g, q1b, q2r, q2g, q2b, q3r, q3g, q3b, punch);
+   float a = punch ? 0.0 : F(ETC1_A[t]), b = F(ETC1_B[t]);
+   float fr = F(br), fg = F(bg), fb = F(bb);
+   float q0r = clamp(fr + a, 0.0, 255.0), q0g = clamp(fg + a, 0.0, 255.0),
+         q0b = clamp(fb + a, 0.0, 255.0);
+   float q1r = clamp(fr + b, 0.0, 255.0), q1g = clamp(fg + b, 0.0, 255.0),
+         q1b = clamp(fb + b, 0.0, 255.0);
+   float q2r = clamp(fr - a, 0.0, 255.0), q2g = clamp(fg - a, 0.0, 255.0),
+         q2b = clamp(fb - a, 0.0, 255.0);
+   float q3r = clamp(fr - b, 0.0, 255.0), q3g = clamp(fg - b, 0.0, 255.0),
+         q3b = clamp(fb - b, 0.0, 255.0);
+   float r0 = etc_near(0, q0r, q0g, q0b, q1r, q1g, q1b, q2r, q2g, q2b, q3r, q3g, q3b, punch);
+   float r1 = etc_near(1, q0r, q0g, q0b, q1r, q1g, q1b, q2r, q2g, q2b, q3r, q3g, q3b, punch);
+   float r2 = etc_near(2, q0r, q0g, q0b, q1r, q1g, q1b, q2r, q2g, q2b, q3r, q3g, q3b, punch);
+   float r3 = etc_near(3, q0r, q0g, q0b, q1r, q1g, q1b, q2r, q2g, q2b, q3r, q3g, q3b, punch);
    /* RGB8A1: colour 3 of a transparent block is index 2 (n3 is 0). */
-   uint i3 = punch ? 2u : U(r3 & 3);
-   g_sub_map = U(r0 & 3) | (U(r1 & 3) << 2) | (U(r2 & 3) << 4) | (i3 << 6);
-   return n0 * (r0 >> 2) + n1 * (r1 >> 2) + n2 * (r2 >> 2) +
-          (punch ? 0 : n3 * (r3 >> 2));
+   uint i3 = punch ? 2u : near_idx(r3);
+   g_sub_map = near_idx(r0) | (near_idx(r1) << 2) | (near_idx(r2) << 4) | (i3 << 6);
+   return I(F(n0) * near_err(r0) + F(n1) * near_err(r1) + F(n2) * near_err(r2) +
+            (punch ? 0.0 : F(n3) * near_err(r3)));
 }
 
 /* 1D error of table t: modifier m moves the luma (x3) by 3m. */
-int
-etc_tab_err(int t, bool punch, int n0, int u0, int n1, int u1, int n2, int u2,
-            int n3, int u3)
+float
+fsq(float x)
 {
-   int a3 = punch ? 0 : 3 * ETC1_A[t], b3 = 3 * ETC1_B[t];
-   return n0 * min(sq(u0 - a3), sq(u0 - b3)) + n1 * min(sq(u1 - a3), sq(u1 - b3)) +
-          n2 * min(sq(u2 - a3), sq(u2 - b3)) + n3 * min(sq(u3 - a3), sq(u3 - b3));
+   return x * x;
+}
+
+float
+etc_tab_err(int t, bool punch, float n0, float u0, float n1, float u1,
+            float n2, float u2, float n3, float u3)
+{
+   float a3 = punch ? 0.0 : F(3 * ETC1_A[t]), b3 = F(3 * ETC1_B[t]);
+   return n0 * min(fsq(u0 - a3), fsq(u0 - b3)) + n1 * min(fsq(u1 - a3), fsq(u1 - b3)) +
+          n2 * min(fsq(u2 - a3), fsq(u2 - b3)) + n3 * min(fsq(u3 - a3), fsq(u3 - b3));
 }
 
 /* Largest luma offset (x3) at which table t is the best for one colour:
@@ -581,26 +656,27 @@ etc_sub(uint hm, uint tm, int br, int bg, int bb, bool punch, uint opts)
 {
    uint m = hm & ~tm;
    int n0 = pal_n(0, m), n1 = pal_n(1, m), n2 = pal_n(2, m), n3 = pal_n(3, m);
-   int u0 = etc_u(0, br, bg, bb), u1 = etc_u(1, br, bg, bb);
-   int u2 = etc_u(2, br, bg, bb), u3 = etc_u(3, br, bg, bb);
+   float f0 = F(n0), f1 = F(n1), f2 = F(n2), f3 = F(n3);
+   float u0 = etc_u(0, br, bg, bb), u1 = etc_u(1, br, bg, bb);
+   float u2 = etc_u(2, br, bg, bb), u3 = etc_u(3, br, bg, bb);
 
    int bt = 0;
    if ((opts & OPT_TAB8) != 0u) {
-      int best = BIG_ERR;
+      float best = 1e30;
       UNROLL for (int t = 0; t < 8; t++) {
-         int e = etc_tab_err(t, punch, n0, u0, n1, u1, n2, u2, n3, u3);
+         float e = etc_tab_err(t, punch, f0, u0, f1, u1, f2, u2, f3, u3);
          if (e < best) { best = e; bt = t; }
       }
    } else {
-      int umax = max(max(n0 != 0 ? u0 : 0, n1 != 0 ? u1 : 0),
-                     max(n2 != 0 ? u2 : 0, n3 != 0 ? u3 : 0));
+      float umax = max(max(n0 != 0 ? u0 : 0.0, n1 != 0 ? u1 : 0.0),
+                       max(n2 != 0 ? u2 : 0.0, n3 != 0 ? u3 : 0.0));
       int t0 = 0;
       UNROLL for (int t = 0; t < 7; t++)
-         t0 += umax > ETC1_UTH[t] ? 1 : 0;
+         t0 += umax > F(ETC1_UTH[t]) ? 1 : 0;
       t0 = clamp(t0, 1, 6);
-      int e0 = etc_tab_err(t0 - 1, punch, n0, u0, n1, u1, n2, u2, n3, u3);
-      int e1 = etc_tab_err(t0, punch, n0, u0, n1, u1, n2, u2, n3, u3);
-      int e2 = etc_tab_err(t0 + 1, punch, n0, u0, n1, u1, n2, u2, n3, u3);
+      float e0 = etc_tab_err(t0 - 1, punch, f0, u0, f1, u1, f2, u2, f3, u3);
+      float e1 = etc_tab_err(t0, punch, f0, u0, f1, u1, f2, u2, f3, u3);
+      float e2 = etc_tab_err(t0 + 1, punch, f0, u0, f1, u1, f2, u2, f3, u3);
       bt = e0 <= e1 ? (e0 <= e2 ? t0 - 1 : t0 + 1) : (e1 <= e2 ? t0 : t0 + 1);
    }
 
@@ -748,20 +824,23 @@ etc_try_h(int n0, int n1, int n2, int n3)
    /* Luma offset (x3) of every colour from its group base. */
    int ar = q0r * 17, ag = q0g * 17, ab = q0b * 17;
    int cr = q1r * 17, cg = q1g * 17, cb = q1b * 17;
-   int u0 = g0 ? etc_u(0, cr, cg, cb) : etc_u(0, ar, ag, ab);
-   int u1 = g1 ? etc_u(1, cr, cg, cb) : etc_u(1, ar, ag, ab);
-   int u2 = g2 ? etc_u(2, cr, cg, cb) : etc_u(2, ar, ag, ab);
-   int u3 = g3 ? etc_u(3, cr, cg, cb) : etc_u(3, ar, ag, ab);
-   int um = (n0 * u0 + n1 * u1 + n2 * u2 + n3 * u3) / 16;
+   float u0 = g0 ? etc_u(0, cr, cg, cb) : etc_u(0, ar, ag, ab);
+   float u1 = g1 ? etc_u(1, cr, cg, cb) : etc_u(1, ar, ag, ab);
+   float u2 = g2 ? etc_u(2, cr, cg, cb) : etc_u(2, ar, ag, ab);
+   float u3 = g3 ? etc_u(3, cr, cg, cb) : etc_u(3, ar, ag, ab);
+   float f0 = F(n0), f1 = F(n1), f2 = F(n2), f3 = F(n3);
+   /* Integer division by 16 of a non-negative sum: floor. */
+   float um = floor((f0 * u0 + f1 * u1 + f2 * u2 + f3 * u3) * (1.0 / 16.0));
    int i0 = 0;
    UNROLL for (int i = 0; i < 7; i++)
-      i0 += um > ETC_H_UTH[i] ? 1 : 0;
+      i0 += um > F(ETC_H_UTH[i]) ? 1 : 0;
    i0 = clamp(i0, 1, 6);
-   int best = BIG_ERR, di = 0;
+   float best = 1e30;
+   int di = 0;
    UNROLL for (int j = -1; j <= 1; j++) {
-      int d3 = 3 * ETC_H_DIST[i0 + j];
-      int e = n0 * sq(u0 - d3) + n1 * sq(u1 - d3) + n2 * sq(u2 - d3) +
-              n3 * sq(u3 - d3);
+      float d3 = F(3 * ETC_H_DIST[i0 + j]);
+      float e = f0 * fsq(u0 - d3) + f1 * fsq(u1 - d3) + f2 * fsq(u2 - d3) +
+                f3 * fsq(u3 - d3);
       if (e < best) { best = e; di = i0 + j; }
    }
 
@@ -770,16 +849,18 @@ etc_try_h(int n0, int n1, int n2, int n3)
    int d = ETC_H_DIST[di];
    int sr = swap ? cr : ar, sg = swap ? cg : ag, sb = swap ? cb : ab;
    int tr = swap ? ar : cr, tg = swap ? ag : cg, tb = swap ? ab : cb;
-   int p0r = clamp255(sr + d), p0g = clamp255(sg + d), p0b = clamp255(sb + d);
-   int p1r = clamp255(sr - d), p1g = clamp255(sg - d), p1b = clamp255(sb - d);
-   int p2r = clamp255(tr + d), p2g = clamp255(tg + d), p2b = clamp255(tb + d);
-   int p3r = clamp255(tr - d), p3g = clamp255(tg - d), p3b = clamp255(tb - d);
-   int r0 = etc_near(0, p0r, p0g, p0b, p1r, p1g, p1b, p2r, p2g, p2b, p3r, p3g, p3b, false);
-   int r1 = etc_near(1, p0r, p0g, p0b, p1r, p1g, p1b, p2r, p2g, p2b, p3r, p3g, p3b, false);
-   int r2 = etc_near(2, p0r, p0g, p0b, p1r, p1g, p1b, p2r, p2g, p2b, p3r, p3g, p3b, false);
-   int r3 = etc_near(3, p0r, p0g, p0b, p1r, p1g, p1b, p2r, p2g, p2b, p3r, p3g, p3b, false);
-   int err = n0 * (r0 >> 2) + n1 * (r1 >> 2) + n2 * (r2 >> 2) + n3 * (r3 >> 2);
-   uint map = U(r0 & 3) | (U(r1 & 3) << 2) | (U(r2 & 3) << 4) | (U(r3 & 3) << 6);
+   float p0r = F(clamp255(sr + d)), p0g = F(clamp255(sg + d)), p0b = F(clamp255(sb + d));
+   float p1r = F(clamp255(sr - d)), p1g = F(clamp255(sg - d)), p1b = F(clamp255(sb - d));
+   float p2r = F(clamp255(tr + d)), p2g = F(clamp255(tg + d)), p2b = F(clamp255(tb + d));
+   float p3r = F(clamp255(tr - d)), p3g = F(clamp255(tg - d)), p3b = F(clamp255(tb - d));
+   float r0 = etc_near(0, p0r, p0g, p0b, p1r, p1g, p1b, p2r, p2g, p2b, p3r, p3g, p3b, false);
+   float r1 = etc_near(1, p0r, p0g, p0b, p1r, p1g, p1b, p2r, p2g, p2b, p3r, p3g, p3b, false);
+   float r2 = etc_near(2, p0r, p0g, p0b, p1r, p1g, p1b, p2r, p2g, p2b, p3r, p3g, p3b, false);
+   float r3 = etc_near(3, p0r, p0g, p0b, p1r, p1g, p1b, p2r, p2g, p2b, p3r, p3g, p3b, false);
+   int err = I(f0 * near_err(r0) + f1 * near_err(r1) + f2 * near_err(r2) +
+               f3 * near_err(r3));
+   uint map = near_idx(r0) | (near_idx(r1) << 2) | (near_idx(r2) << 4) |
+              (near_idx(r3) << 6);
 
    uint r1q = U(swap ? q1r : q0r), g1q = U(swap ? q1g : q0g),
         b1q = U(swap ? q1b : q0b);
@@ -1104,15 +1185,15 @@ eac_try_pal(int kind, int tm, int lo, int hi)
 
    bc = base * sc + c0;
    uint map = 0u;
-   int err = 0;
+   float err = 0.0;
    UNROLL for (int k = 0; k < 8; k++) {
       uint q = eac_q(t, pv(k) - bc, inv);
-      err += pv_n(k) * sq(eac_clampv(kind, bc + eac_qmod(q) * step) - pv(k));
+      err += F(pv_n(k)) * fsq(F(eac_clampv(kind, bc + eac_qmod(q) * step) - pv(k)));
       map |= (q & 7u) << U(4 * k);
    }
    g_eac_base = base;
    g_eac_map = map;
-   return err;
+   return I(err);
 }
 
 /* Range of the palette entries the block uses. */
@@ -1271,6 +1352,10 @@ bc_decode_color(uint c0w, uint c1w, bool four)
    g_r3 = opaque ? unorm8(r0 + (r1 - r0) * f3) : 0;
    g_g3 = opaque ? unorm8(g0 + (g1 - g0) * f3) : 0;
    g_b3 = opaque ? unorm8(b0 + (b1 - b0) * f3) : 0;
+   g_fr0 = F(g_r0); g_fg0 = F(g_g0); g_fb0 = F(g_b0);
+   g_fr1 = F(g_r1); g_fg1 = F(g_g1); g_fb1 = F(g_b1);
+   g_fr2 = F(g_r2); g_fg2 = F(g_g2); g_fb2 = F(g_b2);
+   g_fr3 = F(g_r3); g_fg3 = F(g_g3); g_fb3 = F(g_b3);
    g_ci = c1w;
    g_grp = opaque ? 0xau : 0xeu;
    g_c3t = !opaque;
@@ -1413,6 +1498,17 @@ main()
       w = In4(sa).data[x];
    else
       w = uvec4(In2(sa).data[x], 0u, 0u);
+
+   /* Upload into a raw-store image (csf-v11/203): keep the BC blocks here
+    * instead of a separate copy pass over the source. */
+   if ((registers.raw.x | registers.raw.y) != 0u) {
+      uvec2 ra = addr_mad(addr_mad(registers.raw, z, registers.raw_slice_B),
+                          y, registers.raw_row_B);
+      if (wide)
+         Out4(ra).data[x] = w;
+      else
+         Out2(ra).data[x] = w.xy;
+   }
 
    transcode_block(XC_MODE, w.x, w.y, w.z, w.w, XC_OPTS);
 
