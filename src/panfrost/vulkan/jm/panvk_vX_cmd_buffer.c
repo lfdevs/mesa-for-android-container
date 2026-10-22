@@ -89,8 +89,50 @@ panvk_cmd_prepare_fragment_job(struct panvk_cmd_buffer *cmdbuf, uint64_t fbd)
    return VK_SUCCESS;
 }
 
+static void cmd_close_batch_impl(struct panvk_cmd_buffer *cmdbuf);
+
 void
 panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
+{
+#if PAN_ARCH < 9
+   /* jm-v7 100: availability of the occlusion queries ended in this batch,
+    * in an after_frag batch of its own so it follows the fragment job that
+    * finished counting.
+    */
+   const uint32_t n = cmdbuf->state.gfx.v7_query_end_count;
+   if (n && cmdbuf->cur_batch) {
+      uint64_t ends[PANVK_V7_MAX_DEFERRED_QUERY_ENDS];
+      memcpy(ends, cmdbuf->state.gfx.v7_query_ends, n * sizeof(ends[0]));
+      cmdbuf->state.gfx.v7_query_end_count = 0;
+
+      cmd_close_batch_impl(cmdbuf);
+
+      struct panvk_batch *batch = panvk_per_arch(cmd_open_batch)(cmdbuf);
+      batch->after_frag = true;
+      for (uint32_t i = 0; i < n; i++) {
+         struct pan_ptr job =
+            pan_pool_alloc_desc(&cmdbuf->desc_pool.base, WRITE_VALUE_JOB);
+         if (!job.gpu)
+            break;
+         pan_section_pack(job.cpu, WRITE_VALUE_JOB, PAYLOAD, payload) {
+            payload.type = MALI_WRITE_VALUE_TYPE_IMMEDIATE_32;
+            payload.address = ends[i];
+            payload.immediate_value = 1;
+         };
+         pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_WRITE_VALUE, true, false,
+                        0, 0, &job, false);
+         util_dynarray_append(&batch->jobs, job.cpu);
+      }
+      cmd_close_batch_impl(cmdbuf);
+      return;
+   }
+   cmdbuf->state.gfx.v7_query_end_count = 0;
+#endif
+   cmd_close_batch_impl(cmdbuf);
+}
+
+static void
+cmd_close_batch_impl(struct panvk_cmd_buffer *cmdbuf)
 {
    struct panvk_batch *batch = cmdbuf->cur_batch;
 

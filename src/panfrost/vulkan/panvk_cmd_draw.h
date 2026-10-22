@@ -173,6 +173,12 @@ struct panvk_cmd_graphics_state {
     */
    uint32_t v7_dirty_sets;
    bool v7_dirty_sets_valid;
+   /* jm-v7 100: availability words of occlusion queries ended in the
+    * current batch, written once it closes (after its fragment job).
+    */
+#define PANVK_V7_MAX_DEFERRED_QUERY_ENDS 64
+   uint64_t v7_query_ends[PANVK_V7_MAX_DEFERRED_QUERY_ENDS];
+   uint32_t v7_query_end_count;
 #endif
 
    struct {

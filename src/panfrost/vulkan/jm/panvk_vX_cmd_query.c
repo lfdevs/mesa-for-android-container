@@ -68,6 +68,13 @@ static struct panvk_batch *
 open_batch_flags(struct panvk_cmd_buffer *cmd, bool *had_batch,
                  bool after_frag)
 {
+#if PAN_ARCH < 9
+   /* jm-v7 100: deferred occlusion ends become available before any
+    * timestamp, copy, reset or non-deferred end that follows them.
+    */
+   if (after_frag && cmd->state.gfx.v7_query_end_count && cmd->cur_batch)
+      panvk_per_arch(cmd_close_batch)(cmd);
+#endif
    bool res = cmd->cur_batch != NULL;
 
    if (!res)
@@ -372,6 +379,32 @@ panvk_per_arch(CmdEndQueryIndexedEXT)(VkCommandBuffer commandBuffer,
 {
    VK_FROM_HANDLE(panvk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(panvk_query_pool, pool, queryPool);
+
+#if PAN_ARCH < 9
+   /* jm-v7 100: an occlusion query ended in an open batch (usually the
+    * render pass batch holding its draws) no longer splits it. Draws count
+    * through their own DCD pointer, so turning the counter off here is
+    * enough; the availability word is written by cmd_close_batch() in an
+    * after_frag batch once this batch (and its fragment job) is done.
+    * PANVK_V7_QUERY_END_DEFER=0 = split here (old).
+    */
+   static int end_defer = -1;
+   if (end_defer < 0) {
+      const char *e = getenv("PANVK_V7_QUERY_END_DEFER");
+      end_defer = !(e && e[0] == '0');
+   }
+   if (end_defer && pool->vk.query_type == VK_QUERY_TYPE_OCCLUSION &&
+       cmd->cur_batch &&
+       cmd->state.gfx.v7_query_end_count < PANVK_V7_MAX_DEFERRED_QUERY_ENDS) {
+      cmd->state.gfx.occlusion_query.ptr = 0;
+      cmd->state.gfx.occlusion_query.mode = MALI_OCCLUSION_MODE_DISABLED;
+      gfx_state_set_dirty(cmd, OQ);
+      pstats_take_oq(cmd);
+      cmd->state.gfx.v7_query_ends[cmd->state.gfx.v7_query_end_count++] =
+         panvk_query_available_dev_addr(pool, query);
+      return;
+   }
+#endif
 
    bool end_sync = cmd->cur_batch != NULL;
 
