@@ -326,6 +326,13 @@ bool panvk_nir_lower_gs(struct nir_shader *nir,
  * primitives (instead of PANVK_GS_INDIRECT_MAX_PRIMS).
  */
 #define PANVK_TESS_GS_MAX_PRIMS (1u << 21)
+/* jm-v7 105: primitives (or points) one patch emits at most, at the maximum
+ * tess level of 64: 2 * 64 * 64 triangles for a quad, 1.5 * 64 * 64 for a
+ * triangle, 64 * 64 isoline segments, (64 + 1)^2 + 4 * 64 points. Rounded
+ * up; it only bounds a nested draw the CPU knows (and the tessellator drops
+ * whole patches past it, so a low bound loses patches, never memory).
+ */
+#define PANVK_TESS_MAX_PRIMS_PER_PATCH 8704u
 #define PANVK_TESS_UNSET 0xff
 
 /* What the draw path needs from a tess control or tess eval shader. The

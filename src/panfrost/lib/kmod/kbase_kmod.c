@@ -2296,6 +2296,29 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
       if (!kbase_dev->is_csf && pan_arch(dev->props.gpu_id) < 9 &&
           (kmod_flags & PAN_KMOD_BO_FLAG_NO_MMAP)) {
          commit_pages = MIN2((1024 * 1024) / page_size, va_pages);
+         /* jm-v7 105: a region under 64 MiB (the geometry emulation
+          * buffers and 2 MiB slabs of the v6/v7 gs_pool; the tiler heaps,
+          * tess arena and indirect varying buffer are 64 MiB or more and
+          * keep 1 MiB + 2 MiB steps) commits and grows in steps of 1/64 of
+          * its size, 64 KiB to 1 MiB. Each GS draw has its own buffers, and
+          * a 1 MiB commit + 2 MiB growth per buffer was the floor of a
+          * draw's footprint: 256 tessellated GS draws in one command
+          * buffer committed 768 MiB before the GPU ran (G72 OOM kill).
+          * PANVK_V7_GROW_STEP=0 = old.
+          */
+         static int small_step = -1;
+         if (small_step < 0) {
+            const char *e = getenv("PANVK_V7_GROW_STEP");
+            small_step = !(e && !strcmp(e, "0"));
+         }
+         const uint64_t big_pages = (64ull * 1024 * 1024) / page_size;
+         if (small_step && va_pages < big_pages) {
+            const uint64_t step =
+               CLAMP(va_pages / 64, (64 * 1024) / page_size,
+                     (1024 * 1024) / page_size);
+            extension = step;
+            commit_pages = MIN2(step, va_pages);
+         }
          mesa_logi("kbase: v%u growable BO, GROW_ON_GPF, %" PRIu64
                    " of %" PRIu64 " pages committed",
                    pan_arch(dev->props.gpu_id), commit_pages, va_pages);

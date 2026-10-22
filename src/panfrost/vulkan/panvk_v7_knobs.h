@@ -102,4 +102,15 @@ panvk_v7_split_heap(void)
           panvk_v7_knob_on("PANVK_OVERLAP", &ov);
 }
 
+/* jm-v7 105: the geometry emulation of a nested tess draw the CPU knows
+ * is sized for its patches at the maximum tess level, not for
+ * PANVK_TESS_GS_MAX_PRIMS.
+ */
+static inline bool
+panvk_v7_tess_gs_tight(void)
+{
+   static int v = -1;
+   return panvk_v7_knob_on("PANVK_V7_TESS_GS_TIGHT", &v);
+}
+
 #endif /* PANVK_V7_KNOBS_H */

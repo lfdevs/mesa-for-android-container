@@ -3677,8 +3677,28 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
    const bool nested = gfx->gs.shader || tes_v->gs.vs_clip_space ||
                        v7_polygon_mode_draw(cmdbuf, out_prim);
    uint32_t max_indices = PANVK_TESS_MAX_INDICES;
-   if (nested)
+   if (nested) {
       max_indices = MIN2(max_indices, PANVK_TESS_GS_MAX_PRIMS * vpp);
+      /* jm-v7 105: a draw the CPU knows cannot emit more than its patches
+       * at the maximum tess level. Each nested draw gets its own emulation
+       * buffers (a GS after the TES), so sizing all of them for
+       * PANVK_TESS_GS_MAX_PRIMS made every draw 3 BOs of 96 + 96 + 24 MiB
+       * VA: 256 small tessellated GS draws (PanProbe tess_perf) took 768
+       * BOs and 55 GiB of VA in one command buffer, and the S9 (G72) went
+       * OOM. The tessellator keeps only the whole patches that fit in
+       * max_indices, and the emulation is sized from the same value
+       * (gs_max_prims), so this bound is never exceeded on the GPU.
+       * PANVK_V7_TESS_GS_TIGHT=0 = old.
+       */
+      if (cpu_known && panvk_v7_tess_gs_tight()) {
+         const uint64_t patches =
+            MIN2((uint64_t)(cpu_vertices / ps) * cpu_instances,
+                 PANVK_TESS_MAX_PATCHES);
+         const uint64_t bound =
+            MAX2(patches, 1) * PANVK_TESS_MAX_PRIMS_PER_PATCH * vpp;
+         max_indices = MIN2((uint64_t)max_indices, bound);
+      }
+   }
 
    /* The tess arena: tess control output, counts and coordinate offsets per
     * patch, the domain point heap and the index buffer. Every kept patch has
