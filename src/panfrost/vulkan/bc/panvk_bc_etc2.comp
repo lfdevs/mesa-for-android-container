@@ -45,6 +45,10 @@
  * BC1-BC3), and an upload into a raw-store image writes the raw blocks
  * here (registers.raw) instead of in a separate copy pass.
  *
+ * csf-v11/210: BC1 RGB / RGBA through a cheaper palette fit on the luma
+ * axis (OPT_BC1_PAL, default), without the register spills of the
+ * encoder BC2 / BC3 colour keeps; see etc2_encode_bc1_pal().
+ *
  * The encoder is written in the GLSL subset that is also valid C (I()/U()/F()
  * casts, CARR tables, no out parameters) so it can be unit tested on the
  * host by including this file with PANVK_BC_C_TEST defined (skip line 1),
@@ -127,6 +131,9 @@ layout(push_constant) uniform Registers
 /* csf-v11/206: try the H mode on every block, not only on blocks whose
  * ETC1 error is above H_SKIP_ERR. */
 #define OPT_H_ALL 0x800000u
+/* csf-v11/210: BC1 RGB / RGBA through the palette fit on the luma axis
+ * (etc2_encode_bc1_pal()); BC2 / BC3 colour is not affected. */
+#define OPT_BC1_PAL 0x1000000u
 #ifndef H_SKIP_ERR
 #define H_SKIP_ERR 1024
 #endif
@@ -1477,6 +1484,370 @@ eac_fast(uint a0w, uint a1w)
    g_w1 = bswap32(ilo);
 }
 
+/* ============== BC1 palette fit (csf-v11/210, OPT_BC1_PAL) ============== */
+
+/* BC1 RGB / RGBA only: BC2 and BC3 colour keep etc2_encode_rgb(). The block
+ * structure is the same (flip by half-block variance, differential or
+ * individual base per half, H mode when the ETC1 error is above
+ * H_SKIP_ERR), but every choice is made on the luma axis of the at most 4
+ * palette colours. The ETC1 modifiers and the H distance move the three
+ * channels together, so for a colour at luma offset s (x3) from a base,
+ * |p - (base + m)|^2 = |p - base|^2 - 2 m s + 3 m^2 and the best modifier
+ * is the one nearest s / 3 (the palette fit of GunaCharanTeja's
+ * csf-v11/214, MIT). Only the chosen indices get the exact (clamped)
+ * error, instead of the nearest of the 4 clamped levels for every colour
+ * (48 distances per half).
+ *
+ * Register pressure is what made the encoder above spill (58 registers,
+ * 17 spills on Valhall). The palette is kept packed (8:8:8, 4 registers
+ * instead of 24), the errors run in fp32 on the FMA unit (exact, as in
+ * csf-v11/203), the differential / individual header and bases are packed
+ * before the two half fits, and the index planes are a mux on the BC
+ * index bits instead of per-colour masks. The H mode takes its per-colour
+ * texel counts from the index bit planes rather than the masks the ETC1
+ * fit uses: CSEd with it, those would stay live across the whole ETC1 fit.
+ * Its group flag rides in bit 24 of g_p3. */
+GLOBAL uint g_p0;
+GLOBAL uint g_p1;
+GLOBAL uint g_p2;
+GLOBAL uint g_p3;
+void
+bc1p_pack()
+{
+   g_p0 = U(g_r0) | (U(g_g0) << 8) | (U(g_b0) << 16);
+   g_p1 = U(g_r1) | (U(g_g1) << 8) | (U(g_b1) << 16);
+   g_p2 = U(g_r2) | (U(g_g2) << 8) | (U(g_b2) << 16);
+   /* Bit 24: g_grp is 0xa (4-colour block), else 0xe. It rides along
+    * with the palette into the H mode instead of taking a register. */
+   g_p3 = U(g_r3) | (U(g_g3) << 8) | (U(g_b3) << 16) |
+          (g_grp == 0xau ? 0x1000000u : 0u);
+}
+
+uint
+pp(int k)
+{
+   return k == 0 ? g_p0 : (k == 1 ? g_p1 : (k == 2 ? g_p2 : g_p3));
+}
+
+float
+pch(uint c, int i)
+{
+   return F((c >> U(8 * i)) & 255u);
+}
+
+float
+plum(uint c)
+{
+   return pch(c, 0) + pch(c, 1) + pch(c, 2);
+}
+
+/* Index bit plane 'bit' (1: LSB, 2: MSB) of all texels for the ETC index
+ * map (colour k at bits 2k), as a mux on the BC index bits: no per-colour
+ * masks stay live until the block is packed. */
+uint
+bc1p_plane(uint map, uint bit)
+{
+   uint lo = g_ci & HM_ALL, hi = (g_ci >> 1) & HM_ALL;
+   uint m0 = (map & bit) != 0u ? HM_ALL : 0u;
+   uint m1 = (map & (bit << 2)) != 0u ? HM_ALL : 0u;
+   uint m2 = (map & (bit << 4)) != 0u ? HM_ALL : 0u;
+   uint m3 = (map & (bit << 6)) != 0u ? HM_ALL : 0u;
+   uint t0 = m0 ^ (lo & (m1 ^ m0)), t1 = m2 ^ (lo & (m3 ^ m2));
+   return t0 ^ (hi & (t1 ^ t0));
+}
+
+/* Exact error of colour c against clamp(base + m) per channel. */
+float
+pal_err_m(uint c, float br, float bg, float bb, float m)
+{
+   return fsq(pch(c, 0) - clamp(br + m, 0.0, 255.0)) +
+          fsq(pch(c, 1) - clamp(bg + m, 0.0, 255.0)) +
+          fsq(pch(c, 2) - clamp(bb + m, 0.0, 255.0));
+}
+
+/* ETC1 index of luma offset s (x3) for modifiers a3, b3 (x3): the nearest
+ * of +-a, +-b (ties keep the lower index). punch: RGB8A1 transparent
+ * block, a is 0 and index 2 is transparent, so a small offset is index 0. */
+uint
+bc1p_idx(float s, float a3, float b3, bool punch)
+{
+   float u = abs(s);
+   bool big = fsq(u - b3) < fsq(u - a3);
+   if (!big && punch)
+      return 0u;
+   return (big ? 1u : 0u) | (s < 0.0 ? 2u : 0u);
+}
+
+/* Weighted 1D error of modifiers a3, b3 (x3) over the colours of m around
+ * luma bl. */
+float
+bc1p_tab_err(uint m, float bl, float a3, float b3)
+{
+   float e = 0.0;
+   UNROLL for (int k = 0; k < 4; k++) {
+      float u = abs(plum(pp(k)) - bl);
+      e += F(pal_n(k, m)) * min(fsq(u - a3), fsq(u - b3));
+   }
+   return e;
+}
+
+/* Table, indices (g_sub_t, g_sub_map) and exact error of the texels of hm
+ * (minus tm) around base (8:8:8). */
+float
+bc1p_half(uint hm, uint tm, uint base, bool punch)
+{
+   uint m = hm & ~tm;
+   float br = pch(base, 0), bg = pch(base, 1), bb = pch(base, 2);
+   float bl = br + bg + bb;
+
+   float umax = 0.0;
+   UNROLL for (int k = 0; k < 4; k++)
+      umax = max(umax, pal_n(k, m) != 0 ? abs(plum(pp(k)) - bl) : 0.0);
+   int t0 = 0;
+   UNROLL for (int t = 0; t < 7; t++)
+      t0 += umax > F(ETC1_UTH[t]) ? 1 : 0;
+   t0 = clamp(t0, 1, 6);
+   float e0 = bc1p_tab_err(m, bl, punch ? 0.0 : F(3 * ETC1_A[t0 - 1]), F(3 * ETC1_B[t0 - 1]));
+   float e1 = bc1p_tab_err(m, bl, punch ? 0.0 : F(3 * ETC1_A[t0]), F(3 * ETC1_B[t0]));
+   float e2 = bc1p_tab_err(m, bl, punch ? 0.0 : F(3 * ETC1_A[t0 + 1]), F(3 * ETC1_B[t0 + 1]));
+   int bt = e0 <= e1 ? (e0 <= e2 ? t0 - 1 : t0 + 1) : (e1 <= e2 ? t0 : t0 + 1);
+
+   float a = punch ? 0.0 : F(ETC1_A[bt]), b = F(ETC1_B[bt]);
+   float err = 0.0;
+   uint map = 0u;
+   UNROLL for (int k = 0; k < 4; k++) {
+      uint c = pp(k);
+      float s = plum(c) - bl;
+      uint i = bc1p_idx(s, 3.0 * a, 3.0 * b, punch);
+      /* RGB8A1: colour 3 of a transparent block is index 2 (not in m). */
+      i = (punch && k == 3) ? 2u : i;
+      float v = (i & 1u) != 0u ? b : a;
+      err += F(pal_n(k, m)) * pal_err_m(c, br, bg, bb, (i & 2u) != 0u ? -v : v);
+      map |= i << U(2 * k);
+   }
+   g_sub_t = bt;
+   g_sub_map = map;
+   return err;
+}
+
+/* Colour sum (channel c) of the texels of mask m. */
+float
+bc1p_sum(uint m, int c)
+{
+   float s = 0.0;
+   UNROLL for (int k = 0; k < 4; k++)
+      s += F(pal_n(k, m)) * pch(pp(k), c);
+   return s;
+}
+
+/* |sum|^2 / n of the texels of m: the flip whose halves have the larger
+ * total has the smaller variance inside its halves. */
+float
+bc1p_flip_score(uint m)
+{
+   float r = 0.0, g = 0.0, b = 0.0;
+   UNROLL for (int k = 0; k < 4; k++) {
+      float n = F(pal_n(k, m));
+      uint c = pp(k);
+      r += n * pch(c, 0);
+      g += n * pch(c, 1);
+      b += n * pch(c, 2);
+   }
+   return (r * r + g * g + b * b) / F(max(bitCount(m), 1));
+}
+
+/* etc_try_flip() on the packed palette. */
+float
+bc1p_try_flip(int flip, bool punch_fmt, bool transparent, uint tm)
+{
+   uint h0 = flip != 0 ? HM_T : HM_L;
+   uint h1 = flip != 0 ? HM_B : HM_R;
+   uint m0 = h0 & ~tm, m1 = h1 & ~tm;
+   float n0 = F(max(bitCount(m0), 1)), n1 = F(max(bitCount(m1), 1));
+   float sr0 = bc1p_sum(m0, 0), sg0 = bc1p_sum(m0, 1), sb0 = bc1p_sum(m0, 2);
+   float sr1 = bc1p_sum(m1, 0), sg1 = bc1p_sum(m1, 1), sb1 = bc1p_sum(m1, 2);
+
+   int r0 = clamp(rnd(sr0 * 31.0 / (255.0 * n0)), 0, 31);
+   int g0 = clamp(rnd(sg0 * 31.0 / (255.0 * n0)), 0, 31);
+   int b0 = clamp(rnd(sb0 * 31.0 / (255.0 * n0)), 0, 31);
+   int r1 = clamp(rnd(sr1 * 31.0 / (255.0 * n1)), 0, 31);
+   int g1 = clamp(rnd(sg1 * 31.0 / (255.0 * n1)), 0, 31);
+   int b1 = clamp(rnd(sb1 * 31.0 / (255.0 * n1)), 0, 31);
+   int dr = r1 - r0, dg = g1 - g0, db = b1 - b0;
+   bool fits = dr >= -4 && dr <= 3 && dg >= -4 && dg <= 3 && db >= -4 &&
+               db <= 3;
+   bool diff = fits || punch_fmt;
+
+   /* Packed early (8:8:8 bases, header word without the tables): fewer
+    * values live across the two half fits. */
+   uint hdr, e0p, e1p;
+   if (diff) {
+      dr = clamp(dr, -4, 3);
+      dg = clamp(dg, -4, 3);
+      db = clamp(db, -4, 3);
+      r1 = r0 + dr; g1 = g0 + dg; b1 = b0 + db;
+      e0p = U((r0 << 3) | (r0 >> 2)) | (U((g0 << 3) | (g0 >> 2)) << 8) |
+            (U((b0 << 3) | (b0 >> 2)) << 16);
+      e1p = U((r1 << 3) | (r1 >> 2)) | (U((g1 << 3) | (g1 >> 2)) << 8) |
+            (U((b1 << 3) | (b1 >> 2)) << 16);
+      hdr = U((r0 << 3) | (dr & 7)) | (U((g0 << 3) | (dg & 7)) << 8) |
+            (U((b0 << 3) | (db & 7)) << 16);
+   } else {
+      uint ir0 = U(clamp(rnd(sr0 * 15.0 / (255.0 * n0)), 0, 15));
+      uint ig0 = U(clamp(rnd(sg0 * 15.0 / (255.0 * n0)), 0, 15));
+      uint ib0 = U(clamp(rnd(sb0 * 15.0 / (255.0 * n0)), 0, 15));
+      uint ir1 = U(clamp(rnd(sr1 * 15.0 / (255.0 * n1)), 0, 15));
+      uint ig1 = U(clamp(rnd(sg1 * 15.0 / (255.0 * n1)), 0, 15));
+      uint ib1 = U(clamp(rnd(sb1 * 15.0 / (255.0 * n1)), 0, 15));
+      e0p = (ir0 * 17u) | ((ig0 * 17u) << 8) | ((ib0 * 17u) << 16);
+      e1p = (ir1 * 17u) | ((ig1 * 17u) << 8) | ((ib1 * 17u) << 16);
+      hdr = ((ir0 << 4) | ir1) | (((ig0 << 4) | ig1) << 8) |
+            (((ib0 << 4) | ib1) << 16);
+   }
+   /* Bit 1 of byte 3 is the diff bit, or the opaque bit for RGB8A1. */
+   uint dbit = punch_fmt ? (transparent ? 0u : 2u) : (diff ? 2u : 0u);
+   hdr |= (dbit | U(flip)) << 24;
+
+   float err = bc1p_half(h0, tm, e0p, transparent);
+   uint t0 = U(g_sub_t);
+   uint map0 = g_sub_map;
+   err += bc1p_half(h1, tm, e1p, transparent);
+   uint t1 = U(g_sub_t);
+   uint map1 = g_sub_map;
+
+   g_w0 = hdr | (((t0 << 5) | (t1 << 2)) << 24);
+   g_w1 = etc_pack_planes((bc1p_plane(map0, 1u) & h0) | (bc1p_plane(map1, 1u) & ~h0),
+                          (bc1p_plane(map0, 2u) & h0) | (bc1p_plane(map1, 2u) & ~h0));
+   return err;
+}
+
+/* 444 mean colour of the palette colours weighted by w0..w3 (n texels),
+ * r << 8 | g << 4 | b. */
+uint
+bc1p_q444(int w0, int w1, int w2, int w3, int n)
+{
+   float f = 15.0 / (255.0 * F(n));
+   float fw0 = F(w0), fw1 = F(w1), fw2 = F(w2), fw3 = F(w3);
+   uint q = 0u;
+   UNROLL for (int c = 0; c < 3; c++) {
+      float sum = fw0 * pch(g_p0, c) + fw1 * pch(g_p1, c) +
+                  fw2 * pch(g_p2, c) + fw3 * pch(g_p3, c);
+      q = (q << 4) | U(clamp(rnd(sum * f), 0, 15));
+   }
+   return q;
+}
+
+/* Channel i (0 = r) of a 444 colour, expanded to 8 bits. */
+float
+q444_ch(uint q, int i)
+{
+   return F(((q >> U(8 - 4 * i)) & 15u) * 17u);
+}
+
+float
+q444_lum(uint q)
+{
+   return q444_ch(q, 0) + q444_ch(q, 1) + q444_ch(q, 2);
+}
+
+/* etc_try_h() on the packed palette, indices on the luma axis: a colour
+ * keeps its BC endpoint group and takes the +d or -d level of it. */
+float
+bc1p_try_h()
+{
+   /* Texels per colour from the BC index bit planes (no per-colour masks:
+    * those would be CSEd with the ETC1 fit and stay live across it). */
+   uint lo = g_ci & HM_ALL, hi = (g_ci >> 1) & HM_ALL;
+   int n3 = bitCount(lo & hi), n1 = bitCount(lo) - n3, n2 = bitCount(hi) - n3;
+   int n0 = 16 - n1 - n2 - n3;
+   uint grp = (g_p3 & 0x1000000u) != 0u ? 0xau : 0xeu;
+   bool g0 = (grp & 1u) != 0u, g1 = (grp & 2u) != 0u;
+   bool g2 = (grp & 4u) != 0u, g3 = (grp & 8u) != 0u;
+   int na = (g0 ? 0 : n0) + (g1 ? 0 : n1) + (g2 ? 0 : n2) + (g3 ? 0 : n3);
+   int nb = 16 - na;
+   if (na == 0 || nb == 0)
+      return 1e30;
+   uint qa = bc1p_q444(g0 ? 0 : n0, g1 ? 0 : n1, g2 ? 0 : n2, g3 ? 0 : n3, na);
+   uint qb = bc1p_q444(g0 ? n0 : 0, g1 ? n1 : 0, g2 ? n2 : 0, g3 ? n3 : 0, nb);
+   if (qa == qb)
+      return 1e30;
+
+   float la = q444_lum(qa), lc = q444_lum(qb);
+   float um = 0.0;
+   UNROLL for (int k = 0; k < 4; k++) {
+      bool gk = ((grp >> U(k)) & 1u) != 0u;
+      um += F(k == 0 ? n0 : (k == 1 ? n1 : (k == 2 ? n2 : n3))) * abs(plum(pp(k)) - (gk ? lc : la));
+   }
+   um = floor(um * (1.0 / 16.0));
+   int i0 = 0;
+   UNROLL for (int i = 0; i < 7; i++)
+      i0 += um > F(ETC_H_UTH[i]) ? 1 : 0;
+   i0 = clamp(i0, 1, 6);
+   float best = 1e30;
+   int di = 0;
+   UNROLL for (int j = -1; j <= 1; j++) {
+      float d3 = F(3 * ETC_H_DIST[i0 + j]);
+      float e = 0.0;
+      UNROLL for (int k = 0; k < 4; k++) {
+         bool gk = ((grp >> U(k)) & 1u) != 0u;
+         e += F(k == 0 ? n0 : (k == 1 ? n1 : (k == 2 ? n2 : n3))) * fsq(abs(plum(pp(k)) - (gk ? lc : la)) - d3);
+      }
+      if (e < best) { best = e; di = i0 + j; }
+   }
+
+   /* The distance LSB is (colour 1 >= colour 2): swap to match it. Group
+    * A (endpoint 0 side) is the first H colour unless swapped. */
+   bool swap = (di & 1) != ((qa >= qb) ? 1 : 0);
+   float d = F(ETC_H_DIST[di]);
+   float err = 0.0;
+   uint map = 0u;
+   UNROLL for (int k = 0; k < 4; k++) {
+      bool gk = ((grp >> U(k)) & 1u) != 0u;
+      uint c = pp(k), q = gk ? qb : qa;
+      bool neg = plum(c) < q444_lum(q);
+      err += F(k == 0 ? n0 : (k == 1 ? n1 : (k == 2 ? n2 : n3))) *
+             pal_err_m(c, q444_ch(q, 0), q444_ch(q, 1), q444_ch(q, 2), neg ? -d : d);
+      map |= (((gk != swap) ? 2u : 0u) | (neg ? 1u : 0u)) << U(2 * k);
+   }
+
+   uint q1 = swap ? qb : qa, q2 = swap ? qa : qb;
+   uint r1q = q1 >> 8, g1q = (q1 >> 4) & 15u, b1q = q1 & 15u;
+   uint r2q = q2 >> 8, g2q = (q2 >> 4) & 15u, b2q = q2 & 15u;
+   uint dib = U(di);
+
+   uint b0w = (r1q << 3) | (g1q >> 1);
+   uint b1w = ((g1q & 1u) << 4) | (b1q & 8u) | ((b1q >> 1) & 3u);
+   uint b2w = ((b1q & 1u) << 7) | (r2q << 3) | (g2q >> 1);
+   uint b3w = ((g2q & 1u) << 7) | (b2q << 3) | (((dib >> 2) & 1u) << 2) | 2u |
+              ((dib >> 1) & 1u);
+
+   b0w = etc_no_overflow(b0w);
+   b1w = etc_force_overflow(b1w);
+
+   g_w0 = b0w | (b1w << 8) | (b2w << 16) | (b3w << 24);
+   g_w1 = etc_pack_planes(bc1p_plane(map, 1u), bc1p_plane(map, 2u));
+   return err;
+}
+
+/* ETC2 RGB8 / RGB8A1 block of a BC1 palette (bc_decode_color() done):
+ * result in g_w0/g_w1. OPT_FLIPS, OPT_TAB8 and OPT_PLANAR do not apply. */
+void
+etc2_encode_bc1_pal(bool punch_fmt, uint opts)
+{
+   bc1p_pack();
+   uint tm = (punch_fmt && g_c3t) ? pal_mask(3) : 0u;
+   bool transparent = tm != 0u;
+
+   float s0 = bc1p_flip_score(HM_L & ~tm) + bc1p_flip_score(HM_R & ~tm);
+   float s1 = bc1p_flip_score(HM_T & ~tm) + bc1p_flip_score(HM_B & ~tm);
+   float best = bc1p_try_flip(s1 > s0 ? 1 : 0, punch_fmt, transparent, tm);
+   if (!transparent && (opts & OPT_HMODE) != 0u &&
+       ((opts & OPT_H_ALL) != 0u || best > F(H_SKIP_ERR))) {
+      uint w0 = g_w0, w1 = g_w1;
+      if (bc1p_try_h() >= best) { g_w0 = w0; g_w1 = w1; }
+   }
+}
+
 /* Transcode one BC block (w0..w3) for 'mode'. The ETC2/EAC words go to
  * g_out0..3. */
 void
@@ -1484,7 +1855,10 @@ transcode_block(uint mode, uint w0, uint w1, uint w2, uint w3, uint opts)
 {
    if (mode == U(XC_BC1_RGB) || mode == U(XC_BC1_RGBA)) {
       bc_decode_color(w0, w1, false);
-      etc2_encode_rgb(mode == U(XC_BC1_RGBA), opts);
+      if ((opts & OPT_BC1_PAL) != 0u)
+         etc2_encode_bc1_pal(mode == U(XC_BC1_RGBA), opts);
+      else
+         etc2_encode_rgb(mode == U(XC_BC1_RGBA), opts);
       g_out0 = g_w0;
       g_out1 = g_w1;
       g_out2 = 0u;
@@ -1569,21 +1943,22 @@ main()
          Out2(ra).data[x] = w.xy;
    }
 
-   transcode_block(XC_MODE, w.x, w.y, w.z, w.w, XC_OPTS);
-
    /* U-interleaved: 4x4-block tiles stored linearly per tile row, blocks in
-    * a tile at | y1 | x1^y1 | y0 | x0^y0 |. */
+    * a tile at | y1 | x1^y1 | y0 | x0^y0 |. The address is final before
+    * the transcode, so only it (not x, y, z) stays live across. */
    uint bx = registers.bx0 + x, by = registers.by0 + y;
    uint ix = bx & 3u, iy = by & 3u;
    uint in_tile = ((iy >> 1) << 3) | (((ix ^ iy) >> 1) << 2) |
                   ((iy & 1u) << 1) | ((ix ^ iy) & 1u);
    uvec2 da = addr_mad(addr_mad(registers.dst, z, registers.dst_slice_B),
                        by >> 2, registers.dst_row_B);
-   uint ob = (bx >> 2) * 16u + in_tile;
+   da = addr_mad(da, (bx >> 2) * 16u + in_tile, wide ? 16u : 8u);
+
+   transcode_block(XC_MODE, w.x, w.y, w.z, w.w, XC_OPTS);
 
    if (wide)
-      Out4(da).data[ob] = uvec4(g_out0, g_out1, g_out2, g_out3);
+      Out4(da).data[0] = uvec4(g_out0, g_out1, g_out2, g_out3);
    else
-      Out2(da).data[ob] = uvec2(g_out0, g_out1);
+      Out2(da).data[0] = uvec2(g_out0, g_out1);
 }
 #endif
