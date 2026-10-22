@@ -170,6 +170,8 @@ struct panvk_device {
       /* PANVK_TESS_ARENAS (default 2): tessellation arenas a command
        * buffer alternates its tess draws over. */
       uint8_t arenas;
+      /* PANVK_TESS_WINDING_INLINE (default 1): POLY_TESS_CCW_INLINE. */
+      bool winding_inline;
    } tess_opt;
 
    /* Device-wide thread local storage shared by all command buffers. The

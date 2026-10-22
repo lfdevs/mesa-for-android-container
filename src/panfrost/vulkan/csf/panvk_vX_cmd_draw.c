@@ -5077,7 +5077,12 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
       .partitioning = spacing,
       .points_mode = points,
       .isolines = domain == 2,
-      .ccw = ccw,
+      /* csf-v11 tess-winding: swap in DefineTriangle() rather than in a
+       * second pass over the patch's indices (PANVK_TESS_WINDING_INLINE=0).
+       */
+      .ccw = !ccw                          ? 0
+             : dev->tess_opt.winding_inline ? POLY_TESS_CCW_INLINE
+                                           : 1,
    };
    t->heap.base = l.heap;
    t->heap.size = l.heap_size;
@@ -5333,8 +5338,9 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
          panlib_tess_draw(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, td.gpu,
                           c_invs, c_prims, prims_generated);
          cs_wait_slots(b, dev->csf.sb.all_iters_mask);
-         panlib_tessellate(&ctx, tess_grid, PANLIB_BARRIER_NONE, TD(p),
-                           domain, POLY_TESS_MODE_WITH_COUNTS);
+         /* panlib_tessellate(WITH_COUNTS) would swap a POLY_TESS_CCW_INLINE
+          * patch a second time, panlib_tess_gen() knows the bit. */
+         panlib_tess_gen(&ctx, tess_grid, PANLIB_BARRIER_NONE, TD(p), domain);
          cs_wait_slots(b, dev->csf.sb.all_iters_mask);
       }
 

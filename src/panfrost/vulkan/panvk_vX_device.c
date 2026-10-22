@@ -796,6 +796,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       debug_get_num_option("PANVK_TESS_SETUP_STEP", 1) != 0;
    device->tess_opt.arenas =
       debug_get_num_option("PANVK_TESS_ARENAS", 2) >= 2 ? 2 : 1;
+   device->tess_opt.winding_inline =
+      debug_get_num_option("PANVK_TESS_WINDING_INLINE", 1) != 0;
 
    /* v9, or PANVK_GPU_PRERAST_ARENA=eager: commit both arenas here, as
     * before csf-v11/205 (64 + 96 MiB per VkDevice with the features). */

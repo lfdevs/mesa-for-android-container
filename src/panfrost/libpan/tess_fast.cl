@@ -46,9 +46,10 @@ tess_fast_patch(constant struct poly_tess_params *p, uint32_t domain,
       poly_tess_isoline_process(p, patch, mode);
 
    /* The tessellator emits clockwise triangles, swap two vertices of each
-    * one for the other winding.
+    * one for the other winding. With POLY_TESS_CCW_INLINE (csf-v11
+    * tess-winding) the tessellator already wrote them swapped.
     */
-   if (mode == POLY_TESS_MODE_WITH_COUNTS && p->ccw && domain != 2 &&
+   if (mode == POLY_TESS_MODE_WITH_COUNTS && (p->ccw & 1) && domain != 2 &&
        !p->points_mode) {
       global uint32_t *idx = p->index_buffer;
       uint32_t end = p->counts[patch];

@@ -90,6 +90,8 @@ struct INDEX_PATCH_CONTEXT2 {
 struct CHWTessellator {
    enum poly_tess_mode mode;
    uint index_bias;
+   /* POLY_TESS_CCW_INLINE: write triangles counter-clockwise. */
+   bool swap_winding;
 
    // array where we will store u/v's for the points we generate
    global struct poly_tess_point *Point;
@@ -318,6 +320,12 @@ DefineTriangle(private struct CHWTessellator *ctx, int index0, int index1,
    index0 = PatchIndexValue(ctx, index0);
    index1 = PatchIndexValue(ctx, index1);
    index2 = PatchIndexValue(ctx, index2);
+
+   if (ctx->swap_winding) {
+      int tmp = index1;
+      index1 = index2;
+      index2 = tmp;
+   }
 
    vstore3(ctx->index_bias + (uint3)(index0, index1, index2), 0,
            (global uint *)ctx->Index + indexStorageBaseOffset);
@@ -834,6 +842,7 @@ poly_tess_tri_process(constant struct poly_tess_params *p, uint32_t patch,
    struct CHWTessellator ctx = {
       .mode = mode,
       .index_bias = patch * POLY_TES_PATCH_ID_STRIDE,
+      .swap_winding = (p->ccw & POLY_TESS_CCW_INLINE) != 0,
    };
 
    // Is the patch culled? NaN will pass.
@@ -1163,6 +1172,7 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
    struct CHWTessellator ctx = {
       .mode = mode,
       .index_bias = patch * POLY_TES_PATCH_ID_STRIDE,
+      .swap_winding = (p->ccw & POLY_TESS_CCW_INLINE) != 0,
    };
 
    // Is the patch culled?
