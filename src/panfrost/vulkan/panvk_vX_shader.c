@@ -2535,6 +2535,24 @@ panvk_lower_depth_bounds(nir_shader *nir)
    return app_mask != NULL;
 }
 
+#if PAN_ARCH < 9
+/* jm-v7 108: a v6/v7 vertex shader that fillModeNonSolid may draw in
+ * LINE/POINT mode feeds the polygon passthrough and keeps no_idvs (jm-v7
+ * 075). panvk_compile_shader() decides IDVS with this predicate and
+ * panvk_hash_state() hashes it, so a FILL pipeline's IDVS binary is never
+ * reused for a LINE/POINT pipeline from the shader cache.
+ */
+static bool
+panvk_v7_vs_may_draw_nonfill(const struct vk_features *features,
+                             const struct vk_graphics_pipeline_state *state)
+{
+   return features->fillModeNonSolid &&
+          (!state || !state->rs ||
+           BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE) ||
+           state->rs->polygon_mode != VK_POLYGON_MODE_FILL);
+}
+#endif
+
 static void
 panvk_hash_state(struct vk_physical_device *device,
                  const struct vk_graphics_pipeline_state *state,
@@ -2558,12 +2576,21 @@ panvk_hash_state(struct vk_physical_device *device,
     * setting. The tag versions the knob set.
     */
    const int32_t v7_knobs[] = {
-      0x76370091, /* knob set version */
+      0x76370108, /* knob set version (108: + polygon passthrough) */
       panvk_v7_knob_tex_waterfall(),
       panvk_v7_knob_idvs(),
       panvk_v7_knob_desc_reorder(),
    };
    _mesa_blake3_update(&blake3_ctx, v7_knobs, sizeof(v7_knobs));
+#endif
+#if PAN_ARCH < 9
+   /* jm-v7 108: outside the state != NULL block, like the compile-side
+    * predicate (no state = may be drawn in any polygon mode).
+    */
+   const bool v7_nonfill = (stages & VK_SHADER_STAGE_VERTEX_BIT) &&
+                           panvk_v7_vs_may_draw_nonfill(enabled_features,
+                                                        state);
+   _mesa_blake3_update(&blake3_ctx, &v7_nonfill, sizeof(v7_nonfill));
 #endif
 
    if (state != NULL) {
@@ -4675,10 +4702,7 @@ panvk_compile_shader(struct panvk_device *dev,
       const bool idvs_quirk = PAN_ARCH == 6 || prod == 0x6201 /* G72 */ ||
                               prod == 0x7201 /* G76 */;
       const bool polygon_mode =
-         dev->vk.enabled_features.fillModeNonSolid &&
-         (!state || !state->rs ||
-          BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE) ||
-          state->rs->polygon_mode != VK_POLYGON_MODE_FILL);
+         panvk_v7_vs_may_draw_nonfill(&dev->vk.enabled_features, state);
       nir_shader_gather_info(info->nir, nir_shader_get_entrypoint(info->nir));
       const bool writes_memory = info->nir->info.writes_memory;
 
