@@ -513,8 +513,7 @@ collect_cs_deps(struct panvk_cmd_buffer *cmdbuf, const VkDependencyInfo *info,
    uint32_t wait_masks[PANVK_SUBQUEUE_COUNT] = {0};
    add_execution_dependency(
       wait_masks, src.stages, dst.stages,
-      panvk_priv_mem_check_alloc(dev->gpu_prerast_arena) ||
-         panvk_priv_mem_check_alloc(dev->gpu_prerast_tess_arena));
+      dev->gpu_prerast_wanted || dev->gpu_prerast_tess_wanted);
 
    if (cmdbuf->state.gfx.render.tiler || inherits_render_ctx(cmdbuf)) {
       if (info->dependencyFlags & VK_DEPENDENCY_BY_REGION_BIT) {

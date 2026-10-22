@@ -135,8 +135,16 @@ struct panvk_device {
    } utrace;
 
    struct panvk_device_draw_context* draw_ctx;
+   /* Allocated (and fully committed) at the first gpu_prerast /
+    * tessellation draw recorded on the device, under gpu_prerast_lock,
+    * unless PANVK_GPU_PRERAST_ARENA=eager (csf-v11/205). Read them through
+    * panvk_per_arch(device_gpu_prerast_arena)(). gpu_prerast_wanted /
+    * gpu_prerast_tess_wanted say whether the device may use them. */
    struct panvk_priv_mem gpu_prerast_arena;
    struct panvk_priv_mem gpu_prerast_tess_arena;
+   bool gpu_prerast_wanted;
+   bool gpu_prerast_tess_wanted;
+   simple_mtx_t gpu_prerast_lock;
    /* struct panvk_gpu_prerast_syncs */
    struct panvk_priv_bo *gpu_prerast_syncs;
 
@@ -375,6 +383,12 @@ void panvk_per_arch(destroy_device)(struct panvk_device *device,
 /* Device teardown of the BC emulation state (csf-v11/200), then of the
  * vk_meta device (it replaces panvk_meta_cleanup() in destroy_device). */
 void panvk_per_arch(device_bc_finish)(struct panvk_device *dev);
+
+/* The gpu_prerast arena (tess = false) or the tessellation arena,
+ * allocated on first use on v10+ (csf-v11/205). Returns a zero
+ * panvk_priv_mem if the device does not use it or the allocation failed. */
+struct panvk_priv_mem
+panvk_per_arch(device_gpu_prerast_arena)(struct panvk_device *dev, bool tess);
 
 static inline VkResult
 panvk_common_check_status(struct panvk_device *dev)

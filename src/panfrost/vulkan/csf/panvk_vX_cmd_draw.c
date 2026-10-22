@@ -4379,7 +4379,12 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
       return true;
    }
 
-   uint64_t arena = panvk_priv_mem_dev_addr(dev->gpu_prerast_arena);
+   uint64_t arena = panvk_priv_mem_dev_addr(
+      panvk_per_arch(device_gpu_prerast_arena)(dev, false));
+   if (!arena) {
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      return true;
+   }
    uint64_t records = arena + PANVK_GPU_PRERAST_RECORD_OFFSET;
    uint64_t indices = arena + PANVK_GPU_PRERAST_INDEX_OFFSET;
    const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
@@ -4914,7 +4919,8 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
 
    if (!tcs || !tes || !tcs->gpu_prerast.tess.compiled ||
        !vs->gpu_prerast.lowered_vs_compiled ||
-       !panvk_priv_mem_check_alloc(dev->gpu_prerast_tess_arena)) {
+       !panvk_priv_mem_check_alloc(
+          panvk_per_arch(device_gpu_prerast_arena)(dev, true))) {
       gpu_prerast_unhandled("tessellation shaders missing");
       return;
    }
@@ -4987,7 +4993,8 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
                       panvk_gpu_prerast_gs_cap_slots(&gs->gpu_prerast.gs) /
                          MAX2(gs->gpu_prerast.gs.invocations, 1));
       range = verts / vpp * vpp;
-      if (!range || !panvk_priv_mem_check_alloc(dev->gpu_prerast_arena)) {
+      if (!range || !panvk_priv_mem_check_alloc(
+                       panvk_per_arch(device_gpu_prerast_arena)(dev, false))) {
          gpu_prerast_unhandled("tessellation output range");
          return;
       }
@@ -5528,7 +5535,13 @@ gpu_prerast_chunk_loop(struct panvk_cmd_buffer *cmdbuf,
    const bool indirect = draw->indirect.buffer_dev_addr != 0;
    const bool indexed = draw->index.index_size != 0;
    const bool fan = draw->prim == MESA_PRIM_TRIANGLE_FAN;
-   const uint64_t arena = panvk_priv_mem_dev_addr(dev->gpu_prerast_arena);
+   const uint64_t arena = panvk_priv_mem_dev_addr(
+      panvk_per_arch(device_gpu_prerast_arena)(dev, false));
+
+   if (!arena) {
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      return;
+   }
 
    struct pan_ptr cd =
       panvk_cmd_alloc_dev_mem(cmdbuf, desc, sizeof(struct panlib_chunk_draw), 16);
