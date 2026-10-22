@@ -4630,13 +4630,17 @@ panvk_compile_shader(struct panvk_device *dev,
     *   vertex job's invocations;
     * - G72/G76, where JimVulkan measured INDEXED_VERTEX jobs completing
     *   without writing positions (the vendor driver uses VERTEX + TILER).
+    * - any v6 GPU (G71/G72), until measured on a device.
     * PANVK_V7_IDVS=0 keeps it off everywhere (A/B), =1 also allows it on
-    * G72/G76.
+    * v6 and G76.
     */
    if (info->stage == MESA_SHADER_VERTEX && !vs_clip_space) {
       const int idvs_env = panvk_v7_knob_idvs();
       const uint32_t prod = (inputs.gpu_id >> 16) & 0xff0f;
-      const bool idvs_quirk = prod == 0x6201 /* G72 */ ||
+      /* jm-v7 092: every v6 part (G71 0x6000 too, same generation as G72,
+       * never measured), plus G76.
+       */
+      const bool idvs_quirk = PAN_ARCH == 6 || prod == 0x6201 /* G72 */ ||
                               prod == 0x7201 /* G76 */;
       const bool polygon_mode =
          dev->vk.enabled_features.fillModeNonSolid &&
