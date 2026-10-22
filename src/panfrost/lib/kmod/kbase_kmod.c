@@ -1729,6 +1729,64 @@ kbase_check_bifrost_atom_stride(int fd, bool *seq_nr)
    return 56;
 }
 
+/* jm-v7 111: the JM warm-up sleep.
+ *
+ * jm-v9 001 (ported from FristOneRR-Panvk-Source efd07ba) slept 2 s after
+ * the atom layout probe on every JM device open, with no comment. The
+ * reason is not known: the probe atoms are dependency-only (jc 0), the
+ * kernel completes them without the GPU, and their event is read within
+ * the probe's 1 s poll (or the submit is refused with EINVAL) before the
+ * sleep; the Bifrost stride checks after it submit more such atoms with
+ * no delay. On the FTL A31 it
+ * was 2.0 s of every one of 94 opens (~3 min of a 463 s run).
+ *
+ * Keeping the delay but only for the first JM open in the process
+ * (concurrent opens wait for it to finish) is the conservative change.
+ * PANVK_KBASE_JM_WARMUP: unset/1 = once per process; 2 = every open (old);
+ * 0 = never. PANVK_KBASE_JM_WARMUP_MS = length (default 2000, 0-10000).
+ */
+static void
+kbase_jm_warmup(void)
+{
+   static simple_mtx_t lock = SIMPLE_MTX_INITIALIZER;
+   static bool done;
+
+   const char *env = getenv("PANVK_KBASE_JM_WARMUP");
+   const int mode = (env && env[0]) ? atoi(env) : 1;
+   const char *ms_env = getenv("PANVK_KBASE_JM_WARMUP_MS");
+   int ms = (ms_env && ms_env[0]) ? atoi(ms_env) : 2000;
+   if (ms < 0 || ms > 10000)
+      ms = 2000;
+
+   if (mode == 0 || ms == 0) {
+      mesa_logi("kbase: JM warm-up off (PANVK_KBASE_JM_WARMUP=%d, _MS=%d)",
+                mode, ms);
+      return;
+   }
+
+   const bool once = mode != 2;
+   if (once)
+      simple_mtx_lock(&lock);
+   if (once && done) {
+      simple_mtx_unlock(&lock);
+      mesa_logi("kbase: JM warm-up skipped (done once in this process; "
+                "PANVK_KBASE_JM_WARMUP=2 = every open)");
+      return;
+   }
+   mesa_logi("kbase: JM warm-up %d ms (%s)", ms,
+             once ? "first JM open in this process" : "every open");
+   struct timespec warmup_ts = {
+      .tv_sec = ms / 1000,
+      .tv_nsec = (long)(ms % 1000) * 1000000l,
+   };
+   while (nanosleep(&warmup_ts, &warmup_ts) && errno == EINTR)
+      ;
+   if (once) {
+      done = true;
+      simple_mtx_unlock(&lock);
+   }
+}
+
 static struct pan_kmod_dev *
 kbase_kmod_dev_create(int fd, uint32_t flags,
                       UNUSED const struct pan_kmod_driver *drv_info,
@@ -1777,9 +1835,7 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
    unsigned atom_stride = 0;
    if (!is_csf) {
       atom_stride = kbase_probe_atom_stride(fd);
-      struct timespec warmup_ts = { .tv_sec = 2 };
-      while (nanosleep(&warmup_ts, &warmup_ts) && errno == EINTR)
-         ;
+      kbase_jm_warmup();
    }
 
    /* Map the tracking page.  The kernel requires this before any memory
