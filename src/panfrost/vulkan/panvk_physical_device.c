@@ -1947,12 +1947,16 @@ panvk_bc_lowmem_enabled(const struct panvk_physical_device *device)
    return true;
 }
 
-/* PANVK_BC_LM_OPTS (default 0x30000): 0x10000 try the ETC2 planar mode,
- * 0x20000 try the ETC2 H mode, 0x40000 try both ETC1 flips (otherwise
- * picked by a half-block heuristic), 0x80000 search all 8 ETC1 tables
- * (otherwise 3 around the colour spread), bits 20-21 EAC (table,
- * multiplier) candidates per block minus one (max 3). The value is a
- * specialization constant of the transcode pipeline. */
+/* PANVK_BC_LM_OPTS (default 0x20000 since csf-v11/206, 0x30000 before):
+ * 0x10000 try the ETC2 planar mode, 0x20000 try the ETC2 H mode,
+ * 0x40000 try both ETC1 flips (otherwise picked by a half-block
+ * heuristic), 0x80000 search all 8 ETC1 tables (otherwise 3 around the
+ * colour spread), bits 20-21 EAC (table, multiplier) candidates per block
+ * minus one (max 3, with 0x400000), 0x400000 EAC by search instead of the
+ * endpoint pair table, 0x800000 H mode on every block (otherwise only
+ * where ETC1 is poor). 0xc30000 is the bc3 (csf-v11/203) encoder,
+ * bit-identical. The value is a specialization constant of the transcode
+ * pipeline. */
 uint32_t
 panvk_bc_lm_opts(void)
 {
@@ -1960,7 +1964,9 @@ panvk_bc_lm_opts(void)
 
    if (opts < 0) {
       const char *s = os_get_option("PANVK_BC_LM_OPTS");
-      opts = s ? (int64_t)(strtoul(s, NULL, 0) & 0xffffffffu) : 0x30000;
+      /* csf-v11/206: H mode (skipped on blocks ETC1 fits well), no planar,
+       * EAC from the endpoint pair table. 0xc30000 is the bc3 encoder. */
+      opts = s ? (int64_t)(strtoul(s, NULL, 0) & 0xffffffffu) : 0x20000;
    }
    return opts;
 }

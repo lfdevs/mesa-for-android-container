@@ -1832,6 +1832,15 @@ panvk_BindImageMemory2(VkDevice device, uint32_t bindInfoCount,
 #include <unistd.h>
 #include "util/detect_os.h"
 #include "util/u_android_app_dir.h"
+#include "bc/panvk_bc_eac_lut.h"
+
+/* csf-v11/206: the EAC endpoint pair table data lives in this one
+ * (non-per-arch) object. */
+void
+panvk_bc_eac_expand_table(int kind, uint32_t *out)
+{
+   panvk_bc_eac_expand(kind, out);
+}
 #include "util/u_queue.h"
 #include "panvk_priv_bo.h"
 

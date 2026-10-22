@@ -119,6 +119,10 @@ void panvk_bc_raw_release(struct util_dynarray *refs);
 struct panvk_device;
 void panvk_bc_raw_device_finish(struct panvk_device *dev);
 
+/* csf-v11/206: expand the EAC endpoint pair table of kind (0 alpha, 1 R11,
+ * 2 signed R11) into out[2 * 65536] (bc/panvk_bc_eac_lut.h). */
+void panvk_bc_eac_expand_table(int kind, uint32_t *out);
+
 
 static inline void
 panvk_image_set_compression_props(VkImageCompressionPropertiesEXT *props,

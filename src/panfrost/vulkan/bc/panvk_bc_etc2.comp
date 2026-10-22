@@ -93,6 +93,7 @@ layout(push_constant) uniform Registers
     uvec2 raw;        /* raw store copy of the source blocks (0: none) */
     uint raw_row_B;
     uint raw_slice_B;
+    uvec2 lut;        /* csf-v11/206: EAC table of the mode's kind */
 } registers;
 
 #define I(x) int(x)
@@ -119,6 +120,16 @@ layout(push_constant) uniform Registers
 #define OPT_HMODE  0x20000u /* try the ETC2 H mode */
 #define OPT_FLIPS  0x40000u /* encode both flips instead of picking one */
 #define OPT_TAB8   0x80000u /* ETC1: 1D search over all 8 tables, not 3 */
+/* csf-v11/206: EAC by the search of csf-v11/200-203 (palette span LUT,
+ * centred and least-squares base, PANVK_BC_LM_OPTS bits 20-21 candidates)
+ * instead of the endpoint pair table (eac_fast()). */
+#define OPT_EAC_SEARCH 0x400000u
+/* csf-v11/206: try the H mode on every block, not only on blocks whose
+ * ETC1 error is above H_SKIP_ERR. */
+#define OPT_H_ALL 0x800000u
+#ifndef H_SKIP_ERR
+#define H_SKIP_ERR 1024
+#endif
 /* Bits 20-21: EAC (table, multiplier) candidates tried per channel - 1. */
 
 #define BIG_ERR 0x7fffffff
@@ -1013,7 +1024,8 @@ etc2_encode_rgb(bool punch_fmt, uint opts)
    /* H and planar have no transparent texels. */
    int n0 = pal_n(0, HM_ALL), n1 = pal_n(1, HM_ALL);
    int n2 = pal_n(2, HM_ALL), n3 = pal_n(3, HM_ALL);
-   if (!transparent && (opts & OPT_HMODE) != 0u) {
+   if (!transparent && (opts & OPT_HMODE) != 0u &&
+       ((opts & OPT_H_ALL) != 0u || best > H_SKIP_ERR)) {
       e = etc_try_h(n0, n1, n2, n3);
       if (e < best) { best = e; w0 = g_w0; w1 = g_w1; }
    }
@@ -1426,6 +1438,45 @@ eac_rgtc(uint a0w, uint a1w, bool snorm, int kind, uint opts)
    eac_emit(eac_encode_pal(kind, opts));
 }
 
+/* csf-v11/206: EAC from the endpoint pair table (panvk_bc_eac_lut.h): one
+ * load gives the EAC header and the palette entry -> EAC index map, then
+ * the 16 BC indices are remapped into the EAC index order. No palette
+ * decode, no search: a few cycles and few registers per block. */
+#ifdef PANVK_BC_C_TEST
+GLOBAL const uint *xc_eac_lut;
+#endif
+
+void
+eac_fast(uint a0w, uint a1w)
+{
+   uint key = a0w & 0xffffu;
+#ifdef PANVK_BC_C_TEST
+   uint hdr = xc_eac_lut[2u * key];
+   uint map = xc_eac_lut[2u * key + 1u];
+#else
+   uvec2 e = In2(registers.lut).data[key];
+   uint hdr = e.x;
+   uint map = e.y;
+#endif
+   uint bi0 = (a0w >> 16) | ((a1w & 0xffu) << 16);
+   uint bi1 = a1w >> 8;
+   uint ihi = 0u, ilo = 0u;
+   UNROLL for (int p = 0; p < 16; p++) {
+      uint b = ((p < 8 ? bi0 : bi1) >> U(3 * (p & 7))) & 7u;
+      uint v = (map >> (3u * b)) & 7u;
+      int pos = 45 - 3 * ((p & 3) * 4 + (p >> 2));
+      if (pos >= 32) {
+         ihi |= v << U(pos - 32);
+      } else {
+         ilo |= v << U(pos);
+         if (pos + 3 > 32)
+            ihi |= v >> U(32 - pos);
+      }
+   }
+   g_w0 = (hdr & 0xffffu) | (((ihi >> 8) & 0xffu) << 16) | ((ihi & 0xffu) << 24);
+   g_w1 = bswap32(ilo);
+}
+
 /* Transcode one BC block (w0..w3) for 'mode'. The ETC2/EAC words go to
  * g_out0..3. */
 void
@@ -1441,8 +1492,10 @@ transcode_block(uint mode, uint w0, uint w1, uint w2, uint w3, uint opts)
    } else if (mode == U(XC_BC2) || mode == U(XC_BC3)) {
       if (mode == U(XC_BC2)) {
          eac_emit(eac_encode_bc2(w0, w1));
-      } else {
+      } else if ((opts & OPT_EAC_SEARCH) != 0u) {
          eac_rgtc(w0, w1, false, 0, opts);
+      } else {
+         eac_fast(w0, w1);
       }
       g_out0 = g_w0;
       g_out1 = g_w1;
@@ -1453,13 +1506,19 @@ transcode_block(uint mode, uint w0, uint w1, uint w2, uint w3, uint opts)
    } else {
       bool snorm = mode == U(XC_BC4_S) || mode == U(XC_BC5_S);
       int kind = snorm ? 2 : 1;
-      eac_rgtc(w0, w1, snorm, kind, opts);
+      if ((opts & OPT_EAC_SEARCH) != 0u)
+         eac_rgtc(w0, w1, snorm, kind, opts);
+      else
+         eac_fast(w0, w1);
       g_out0 = g_w0;
       g_out1 = g_w1;
       g_out2 = 0u;
       g_out3 = 0u;
       if (mode >= U(XC_BC5_U)) {
-         eac_rgtc(w2, w3, snorm, kind, opts);
+         if ((opts & OPT_EAC_SEARCH) != 0u)
+            eac_rgtc(w2, w3, snorm, kind, opts);
+         else
+            eac_fast(w2, w3);
          g_out2 = g_w0;
          g_out3 = g_w1;
       }

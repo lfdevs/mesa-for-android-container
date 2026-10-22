@@ -866,6 +866,9 @@ bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
  * here rather than at the top to keep the later series' hunks in place. */
 #include "bc/panvk_bc_etc2_spv.h"
 #include "bc/panvk_bc_astc_spv.h"
+#define PANVK_BC_EAC_NO_DATA 1
+#include "bc/panvk_bc_eac_lut.h"
+#include "panvk_priv_bo.h"
 #include "panvk_cmd_alloc.h"
 #include "util/os_misc.h"
 #include "vk_enum_to_str.h"
@@ -887,6 +890,8 @@ struct panvk_bc_xcode_push {
    uint32_t raw[2];
    uint32_t raw_row_B;
    uint32_t raw_slice_B;
+   /* csf-v11/206: EAC endpoint pair table of the mode's kind. */
+   uint32_t lut[2];
 };
 
 /* XC_* in panvk_bc_etc2.comp. */
@@ -1016,6 +1021,8 @@ get_bc_xcode_pipeline(struct panvk_device *dev, bool astc, uint32_t mode,
                                           sizeof(key), pipeline_out);
 }
 
+static uint64_t bc_eac_lut_addr(struct panvk_device *dev, uint32_t mode);
+
 /* Transcode the BC blocks of one region at src into the ETC2/EAC shadow of
  * transcoded (panvk_bc_xcoded()) image. Must run between meta_compute_start() and
  * meta_compute_end(). */
@@ -1054,7 +1061,17 @@ bc_xcode_region_raw(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
    const uint64_t dst = img->bc_decoded.plane.base + ds->offset_B +
                         subres->baseArrayLayer * dl->array_stride_B;
    const uint32_t bw = DIV_ROUND_UP(w, 4), bh = DIV_ROUND_UP(h, 4);
+   uint64_t lut = 0;
+   if (img->bc_lowmem != 3) {
+      lut = bc_eac_lut_addr(dev, bc_xcode_mode(img->vk.format));
+      if (lut == UINT64_MAX) {
+         vk_command_buffer_set_error(&cmdbuf->vk,
+                                     VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         return;
+      }
+   }
    const struct panvk_bc_xcode_push push = {
+      .lut = {(uint32_t)lut, (uint32_t)(lut >> 32)},
       .src = {(uint32_t)src->addr, (uint32_t)(src->addr >> 32)},
       .dst = {(uint32_t)dst, (uint32_t)(dst >> 32)},
       .src_row_B = src->row_B,
@@ -1126,6 +1143,39 @@ enum bc_timing_path {
 
 /* Guards panvk_device::bc (device-wide BC emulation state). */
 static simple_mtx_t bc_dev_lock = SIMPLE_MTX_INITIALIZER;
+
+/* csf-v11/206: device address of the expanded EAC endpoint pair table for
+ * a transcode mode (0: the mode reads none, UINT64_MAX: out of memory).
+ * Each kind (alpha, R11, signed R11) is expanded on the CPU (~65536 x 64
+ * compares) into a 512 KiB BO at its first use. */
+static uint64_t
+bc_eac_lut_addr(struct panvk_device *dev, uint32_t mode)
+{
+   if (mode != 3 && mode < 4)
+      return 0;
+   if ((panvk_bc_lm_opts() & 0x400000u) != 0u)
+      return 0; /* OPT_EAC_SEARCH: no table */
+
+   const int kind = mode == 3 ? 0 : (mode == 5 || mode == 7) ? 2 : 1;
+   uint64_t addr = UINT64_MAX;
+
+   simple_mtx_lock(&bc_dev_lock);
+   struct panvk_priv_bo *bo = dev->bc.eac_lut[kind];
+   if (!bo &&
+       panvk_priv_bo_create(dev, PANVK_BC_EAC_TABLE_B,
+                            panvk_device_adjust_bo_flags(
+                               dev, PAN_KMOD_BO_FLAG_WB_MMAP),
+                            VK_SYSTEM_ALLOCATION_SCOPE_DEVICE,
+                            &bo) == VK_SUCCESS) {
+      panvk_bc_eac_expand_table(kind, bo->addr.host);
+      panvk_priv_bo_flush(bo, 0, PANVK_BC_EAC_TABLE_B);
+      dev->bc.eac_lut[kind] = bo;
+   }
+   if (bo)
+      addr = bo->addr.dev;
+   simple_mtx_unlock(&bc_dev_lock);
+   return addr;
+}
 
 #if PAN_ARCH >= 10
 #define BC_TIMING_SLOTS 4096
@@ -1271,6 +1321,10 @@ panvk_per_arch(device_bc_finish)(struct panvk_device *dev)
       dev->vk.dispatch_table.DestroyQueryPool(panvk_device_to_handle(dev),
                                               dev->bc.timing_pool, NULL);
       dev->bc.timing_pool = VK_NULL_HANDLE;
+   }
+   for (unsigned k = 0; k < ARRAY_SIZE(dev->bc.eac_lut); k++) {
+      panvk_priv_bo_unref(dev->bc.eac_lut[k]);
+      dev->bc.eac_lut[k] = NULL;
    }
    panvk_bc_raw_device_finish(dev);
    vk_meta_device_finish(&dev->vk, &dev->meta);

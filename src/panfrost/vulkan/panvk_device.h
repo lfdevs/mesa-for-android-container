@@ -89,6 +89,9 @@ struct panvk_device {
       uint32_t timing_next;
       uint64_t timing_ops;
       double timing_us;
+      /* csf-v11/206: expanded EAC endpoint pair tables (panvk_bc_eac_lut.h)
+       * per kind, created at the first transcode that needs one. */
+      struct panvk_priv_bo *eac_lut[3];
    } bc;
 
    /* BC raw store (csf-v11/201), under the lock in panvk_image.c: the
