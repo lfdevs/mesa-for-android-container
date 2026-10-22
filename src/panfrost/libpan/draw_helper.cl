@@ -1849,9 +1849,10 @@ panlib_v7_tessellate(constant struct poly_tess_params *p, uint32_t domain__3,
       poly_tess_isoline_process(p, patch, mode);
 
    /* The tessellator emits clockwise triangles, swap two vertices of each
-    * one for the other winding.
+    * one for the other winding (bit 0; POLY_TESS_CCW_INLINE: already
+    * swapped by the tessellator).
     */
-   if (mode == POLY_TESS_MODE_WITH_COUNTS && p->ccw && domain__3 != 2 &&
+   if (mode == POLY_TESS_MODE_WITH_COUNTS && (p->ccw & 1) && domain__3 != 2 &&
        !p->points_mode) {
       global uint32_t *idx = p->index_buffer;
       uint32_t end = p->counts[patch];

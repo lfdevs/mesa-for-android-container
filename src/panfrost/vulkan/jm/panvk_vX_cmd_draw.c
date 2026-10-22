@@ -3767,7 +3767,12 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
       .partitioning = spacing,
       .points_mode = points,
       .isolines = domain == 2,
-      .ccw = ccw,
+      /* PANVK_TESS_WINDING_INLINE (default 1): the tessellator writes the
+       * counter-clockwise triangles, no per-patch serial swap pass. */
+      .ccw = !ccw ? 0
+             : debug_get_num_option("PANVK_TESS_WINDING_INLINE", 1)
+                ? POLY_TESS_CCW_INLINE
+                : 1,
    };
    t->heap.base = l_heap;
    t->heap.size = heap_size;
