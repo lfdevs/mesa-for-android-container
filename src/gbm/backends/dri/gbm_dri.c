@@ -325,6 +325,7 @@ static const struct gbm_dri_visual gbm_dri_visuals_table[] = {
    { GBM_FORMAT_R16, PIPE_FORMAT_R16_UNORM },
    { GBM_FORMAT_GR88, PIPE_FORMAT_R8G8_UNORM },
    { GBM_FORMAT_GR1616, PIPE_FORMAT_R16G16_UNORM },
+   { GBM_FORMAT_NV12, PIPE_FORMAT_R8_G8B8_420_UNORM },
    { GBM_FORMAT_ARGB1555, PIPE_FORMAT_B5G5R5A1_UNORM },
    { GBM_FORMAT_RGB565, PIPE_FORMAT_B5G6R5_UNORM },
    { GBM_FORMAT_BGRX8888, PIPE_FORMAT_X8R8G8B8_UNORM },
@@ -379,7 +380,11 @@ gbm_dri_is_format_supported(struct gbm_device *gbm,
       return 0;
 
    format = core->v0.format_canonicalize(format);
-   if (gbm_format_to_pipe_format(format) == 0)
+   int pipe_format = gbm_format_to_pipe_format(format);
+   if (getenv("DMD_VA_LOG") && format == GBM_FORMAT_NV12)
+      fprintf(stderr, "gbm NV12 pipe_format=%d dmabuf=%d\\n",
+              pipe_format, dri->has_dmabuf_import);
+   if (pipe_format == 0)
       return 0;
 
    /* If there is no query, fall back to the small table which was originally
@@ -397,8 +402,13 @@ gbm_dri_is_format_supported(struct gbm_device *gbm,
 
    /* This returns false if the format isn't supported */
    if (!dri_query_dma_buf_modifiers(dri->screen, format, 0, NULL, NULL,
-                                         &count))
+                                         &count)) {
+      if (getenv("DMD_VA_LOG") && format == GBM_FORMAT_NV12)
+         fprintf(stderr, "gbm NV12 dma-buf query rejected\\n");
       return 0;
+   }
+   if (getenv("DMD_VA_LOG") && format == GBM_FORMAT_NV12)
+      fprintf(stderr, "gbm NV12 dma-buf query count=%d\\n", count);
 
    return 1;
 }
@@ -899,6 +909,10 @@ gbm_dri_bo_create(struct gbm_device *gbm,
 
    format = core->v0.format_canonicalize(format);
 
+   if (getenv("DMD_VA_LOG") && format == GBM_FORMAT_NV12)
+      fprintf(stderr, "gbm NV12 create usage=%#x export=%d modifiers=%p count=%u\n",
+              usage, dri->has_dmabuf_export, (const void *) modifiers, count);
+
    if (usage & GBM_BO_USE_WRITE || !dri->has_dmabuf_export)
       return create_dumb(gbm, width, height, format, usage);
 
@@ -912,6 +926,9 @@ gbm_dri_bo_create(struct gbm_device *gbm,
    bo->base.v0.format = format;
 
    pipe_format = gbm_format_to_pipe_format(format);
+   if (getenv("DMD_VA_LOG") && format == GBM_FORMAT_NV12)
+      fprintf(stderr, "gbm NV12 pipe_format=%d dri_use=%#x size=%ux%u\n",
+              pipe_format, dri_use, width, height);
    if (pipe_format == 0) {
       errno = EINVAL;
       goto failed;
@@ -1017,8 +1034,11 @@ gbm_dri_bo_create(struct gbm_device *gbm,
                                        mods_filtered ? mods_filtered : modifiers,
                                        mods_filtered ? count_filtered : count,
                                        bo);
-   if (bo->image == NULL)
+   if (bo->image == NULL) {
+      if (getenv("DMD_VA_LOG") && format == GBM_FORMAT_NV12)
+         fprintf(stderr, "gbm NV12 image creation failed errno=%d\n", errno);
       goto failed;
+   }
 
    free(mods_filtered);
    mods_filtered = NULL;

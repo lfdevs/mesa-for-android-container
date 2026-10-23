@@ -212,6 +212,9 @@ void vlVaHandlePictureParameterBufferHEVC(vlVaDriver *drv, vlVaContext *context,
    vlVaSortRefPicSet(context, context->desc.h265.RefPicSetStCurrBefore, context->desc.h265.NumPocStCurrBefore, false);
    vlVaSortRefPicSet(context, context->desc.h265.RefPicSetStCurrAfter, context->desc.h265.NumPocStCurrAfter, true);
    context->desc.h265.LtCurrDone = context->desc.h265.NumPocLtCurr < 2;
+   /* Filled by vlVaDecoderHEVCBitstreamHeader for slices that select an SPS
+    * short-term reference picture set. */
+   context->desc.h265.CurrRpsIdx = 0xff;
 
    context->desc.h265.NumShortTermPictureSliceHeaderBits = hevc->st_rps_bits;
 
@@ -316,10 +319,6 @@ void vlVaDecoderHEVCBitstreamHeader(vlVaContext *context, vlVaBuffer *buf)
    struct pipe_h265_pps *pps = pic->pps;
    struct pipe_h265_sps *sps = pic->pps->sps;
 
-   /* Only need to parse slice header if the LtCurr order is unknown */
-   if (pic->LtCurrDone)
-      return;
-
    struct vl_vlc vlc;
    vl_vlc_init(&vlc, 1, (const void * const*)&buf->data, &buf->size);
    vl_vlc_eatbits(&vlc, 1);
@@ -372,11 +371,18 @@ void vlVaDecoderHEVCBitstreamHeader(vlVaContext *context, vlVaBuffer *buf)
    if (nal_unit_type != PIPE_H265_NAL_IDR_W_RADL && nal_unit_type != PIPE_H265_NAL_IDR_N_LP) {
       vl_rbsp_u(&rbsp, sps->log2_max_pic_order_cnt_lsb_minus4 + 4); /* slice_pic_order_cnt_lsb */
       if (!vl_rbsp_u(&rbsp, 1)) { /* short_term_ref_pic_set_sps_flag */
+         pic->CurrRpsIdx = 0xff;
          for (unsigned i = 0; i < pic->NumShortTermPictureSliceHeaderBits; i++)
             vl_rbsp_u(&rbsp, 1);
-      } else if (sps->num_short_term_ref_pic_sets > 1) {
-          vl_rbsp_u(&rbsp, util_logbase2_ceil(sps->num_short_term_ref_pic_sets)); /* short_term_ref_pic_set_idx */
+      } else {
+         pic->CurrRpsIdx = 0;
+         if (sps->num_short_term_ref_pic_sets > 1)
+            pic->CurrRpsIdx = vl_rbsp_u(&rbsp, util_logbase2_ceil(sps->num_short_term_ref_pic_sets)); /* short_term_ref_pic_set_idx */
       }
+      /* The short-term RPS index is useful even when no long-term references
+       * need the remainder of this parser. */
+      if (pic->LtCurrDone)
+         return;
       if (sps->long_term_ref_pics_present_flag) {
          if (sps->num_long_term_ref_pics_sps > 0)
             num_long_term_sps = vl_rbsp_ue(&rbsp);
@@ -409,6 +415,9 @@ void vlVaDecoderHEVCBitstreamHeader(vlVaContext *context, vlVaBuffer *buf)
             vl_rbsp_u(&rbsp, 1); /* temporal_mvp_enable */
       }
    }
+
+   if (pic->LtCurrDone)
+      return;
 
    /* We don't know how many SPS LTRs are used, but we do know how many LTRs
     * from slice header are used, so derive the SPS LTRs this way. */

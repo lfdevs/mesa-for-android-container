@@ -17,6 +17,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <stdlib.h>
 
 #include "glxclient.h"
 #include <X11/extensions/Xext.h>
@@ -979,6 +980,11 @@ __glXInitialize(Display * dpy)
 
    enum glx_driver glx_driver = 0;
    const char *env = os_get_option("MESA_LOADER_DRIVER_OVERRIDE");
+   const char *termux_backend = os_get_option("TERMUX_VA_GPU_BACKEND");
+   const bool termux_kgsl = termux_backend &&
+                            !strcmp(termux_backend, "kgsl");
+   if (!env && termux_kgsl && setenv("MESA_LOADER_DRIVER_OVERRIDE", "kgsl", 0) == 0)
+      env = os_get_option("MESA_LOADER_DRIVER_OVERRIDE");
 
 #if defined(GLX_DIRECT_RENDERING)
    Bool glx_direct = !debug_get_bool_option("LIBGL_ALWAYS_INDIRECT", false);
@@ -1069,7 +1075,8 @@ __glXInitialize(Display * dpy)
 #endif
 #endif /* GLX_DIRECT_RENDERING */
 
-   if (!AllocAndFetchScreenConfigs(dpy, dpyPriv, glx_driver, !env)) {
+   if (!AllocAndFetchScreenConfigs(dpy, dpyPriv, glx_driver,
+                                   !env && !termux_kgsl)) {
       Bool fail = True;
 #if defined(GLX_DIRECT_RENDERING)
       if (glx_driver & GLX_DRIVER_ZINK_INFER) {

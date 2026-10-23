@@ -591,6 +591,8 @@ dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
    xcb_depth_iterator_t d;
    xcb_visualtype_t *visuals;
    EGLint surface_type;
+   const bool kgsl = dri2_dpy->driver_name &&
+                     strcmp(dri2_dpy->driver_name, "kgsl") == 0;
 
    d = xcb_screen_allowed_depths_iterator(dri2_dpy->screen);
 
@@ -607,7 +609,11 @@ dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
       visuals = xcb_depth_visuals(d.data);
 
       for (int i = 0; i < xcb_depth_visuals_length(d.data); i++) {
-         if (class_added[visuals[i]._class])
+         /* XWayland may expose several equivalent visuals on KGSL.  ANGLE
+          * clients can select one through GLX and then require an EGLConfig
+          * with that exact visual ID when creating an EGL window surface.
+          */
+         if (!kgsl && class_added[visuals[i]._class])
             continue;
 
          class_added[visuals[i]._class] = EGL_TRUE;
