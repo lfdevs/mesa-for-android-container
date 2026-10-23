@@ -143,6 +143,14 @@ struct panvk_cmd_buffer {
          uint32_t keep_count;
       } cond_render;
 #endif
+#if PAN_ARCH == 9
+      /* jm-v7 118: instances before the CPU split chunk being lowered
+       * (v9_prerast_draw_split()). The chunk keeps the API firstInstance and
+       * the lowered VS adds this to its instance IDs, as CSF
+       * gpu_prerast_inst_base (csf-v11 191).
+       */
+      uint32_t gpu_prerast_inst_base;
+#endif
    } state;
 };
 

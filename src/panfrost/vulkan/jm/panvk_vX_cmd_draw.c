@@ -5193,6 +5193,12 @@ v9_prerast_vs(struct panvk_cmd_buffer *cmdbuf,
    if (!params.gpu)
       return false;
    v9_prerast_fill_params(src, shader, records, indices, params.cpu);
+   /* jm-v7 118: a CPU split chunk starts this many instances into the API
+    * draw (0 otherwise). An indirect draw gets chunk_instance from
+    * panlib_v9_prerast_indirect(). */
+   if (!indirect)
+      ((struct panvk_gpu_prerast_params *)params.cpu)->chunk_instance =
+         cmdbuf->state.gpu_prerast_inst_base;
 
    if (v9_prerast_prepare_vs_descs(cmdbuf, src) != VK_SUCCESS)
       return false;
@@ -5867,6 +5873,47 @@ v9_prerast_draw_one(struct panvk_cmd_buffer *cmdbuf,
       v9_prerast_draw_generated(cmdbuf, src, arena, gen_draw, poly);
 }
 
+/* jm-v7 118: PANVK_V9_SPLIT_BASE_INST=0 = old (CPU split chunks drawn with
+ * instance.base = firstInstance + offset). */
+static bool
+v9_split_keeps_base_instance(void)
+{
+   static int v = -1;
+   if (v < 0) {
+      const char *e = getenv("PANVK_V9_SPLIT_BASE_INST");
+      v = !(e && !strcmp(e, "0"));
+   }
+   return v;
+}
+
+/* Lowers a CPU split chunk that starts inst instances into the API draw,
+ * the v9 form of CSF gpu_prerast_draw_split() (csf-v11 191). The chunk keeps
+ * the API firstInstance, so gl_BaseInstance and the per-instance attribute
+ * offsets (base * stride, v9_emit_vs_attrib()) stay the API ones, and the
+ * offset goes to the lowered VS as params.chunk_instance, which it adds to
+ * load_instance_id (the ID gl_InstanceIndex and the attribute fetch use).
+ * Before, the chunk was drawn with instance.base = firstInstance + inst:
+ * gl_BaseInstance was off by inst and an attribute with divisor d read
+ * element firstInstance + inst + i / d instead of
+ * firstInstance + (inst + i) / d.
+ */
+static void
+v9_prerast_draw_split(struct panvk_cmd_buffer *cmdbuf,
+                      const struct panvk_draw_info *chunk, uint32_t inst)
+{
+   if (!v9_split_keeps_base_instance()) {
+      struct panvk_draw_info old = *chunk;
+      old.instance.base += inst;
+      v9_prerast_draw_one(cmdbuf, &old, 0);
+      return;
+   }
+
+   const uint32_t saved = cmdbuf->state.gpu_prerast_inst_base;
+   cmdbuf->state.gpu_prerast_inst_base = saved + inst;
+   v9_prerast_draw_one(cmdbuf, chunk, 0);
+   cmdbuf->state.gpu_prerast_inst_base = saved;
+}
+
 /* Fans over the arena: chunks of hub + window vertices, like CSF
  * gpu_prerast_split_fan(). */
 static void
@@ -5885,7 +5932,6 @@ v9_prerast_split_fan(struct panvk_cmd_buffer *cmdbuf,
    chunk.instance.count = 1;
 
    for (uint32_t inst = 0; inst < draw->instance.count; inst++) {
-      chunk.instance.base = draw->instance.base + inst;
       for (uint32_t s = 1; s + 1 < draw->vertex.count; s += win - 1) {
          const uint32_t n = MIN2(win, draw->vertex.count - s);
          struct pan_ptr ib = panvk_cmd_alloc_dev_mem(
@@ -5909,7 +5955,7 @@ v9_prerast_split_fan(struct panvk_cmd_buffer *cmdbuf,
          chunk.index.buffer_size = (n + 1) * sizeof(uint32_t);
          chunk.vertex.count = n + 1;
          chunk.gpu_prerast_prim_base = s - 1;
-         v9_prerast_draw_one(cmdbuf, &chunk, 0);
+         v9_prerast_draw_split(cmdbuf, &chunk, inst);
       }
    }
 }
@@ -6100,9 +6146,8 @@ v9_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
    if (draw->vertex.count <= max_verts) {
       const uint32_t step = max_verts / draw->vertex.count;
       for (uint32_t i = 0; i < draw->instance.count; i += step) {
-         chunk.instance.base = draw->instance.base + i;
          chunk.instance.count = MIN2(step, draw->instance.count - i);
-         v9_prerast_draw_one(cmdbuf, &chunk, 0);
+         v9_prerast_draw_split(cmdbuf, &chunk, i);
       }
       return;
    }
@@ -6143,7 +6188,6 @@ v9_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
 
    chunk.instance.count = 1;
    for (uint32_t inst = 0; inst < draw->instance.count; inst++) {
-      chunk.instance.base = draw->instance.base + inst;
       for (uint32_t i = 0; i + overlap < draw->vertex.count; i += step) {
          chunk.vertex.count = MIN2(step + overlap, draw->vertex.count - i);
          if (draw->index.index_size)
@@ -6151,7 +6195,7 @@ v9_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
          else
             chunk.vertex.base = draw->vertex.base + i;
          chunk.gpu_prerast_prim_base = i / prim_div;
-         v9_prerast_draw_one(cmdbuf, &chunk, 0);
+         v9_prerast_draw_split(cmdbuf, &chunk, inst);
       }
    }
 }
