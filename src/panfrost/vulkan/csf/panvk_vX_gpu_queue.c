@@ -1036,7 +1036,7 @@ kbase_queue_wait_current(struct panvk_gpu_queue *queue,
       }
    }
 
-   mesa_logi("%s: wait completed successfully", __func__);
+   mesa_logd("%s: wait completed successfully", __func__);
    return VK_SUCCESS;
 }
 

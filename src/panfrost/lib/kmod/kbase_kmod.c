@@ -1770,8 +1770,8 @@ kbase_kmod_import_dmabuf(struct pan_kmod_dev *dev,
 
    pan_kmod_bo_init(&kbase_bo->base, dev, exclusive_vm, bo_size, flags,
                     handle);
-   mesa_logi("kbase_kmod_bo_alloc_dmabuf: succeeded for %d, bo_size=%lu, handle=%u", kbase_bo->dmabuf_fd, bo_size, handle);
-   mesa_logi("kbase: import flags=0x%llx -> va=0x%llx pages=%llu outflags=0x%llx",
+   mesa_log(MESA_LOG_DEBUG, MESA_LOG_TAG, "kbase_kmod_bo_alloc_dmabuf: succeeded for %d, bo_size=%lu, handle=%u", kbase_bo->dmabuf_fd, bo_size, handle);
+   mesa_log(MESA_LOG_DEBUG, MESA_LOG_TAG, "kbase: import flags=0x%llx -> va=0x%llx pages=%llu outflags=0x%llx",
              (unsigned long long)import_flags,
              (unsigned long long)req.out.gpu_va,
              (unsigned long long)req.out.va_pages,
