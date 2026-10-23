@@ -3130,6 +3130,19 @@ kbase_drain_events(struct kbase_kmod_dev *kd, int timeout_ms)
    if (!(pfd.revents & POLLIN))
       return -1;
 
+   /* jm-v7 114: up to 16 events per read(). kbase_read() copies queued
+    * events while the buffer has room and returns as soon as the queue is
+    * empty once it has copied one, so a short read means the queue was
+    * drained and no further poll() is needed. Before, every event cost a
+    * poll() plus a read(). PANVK_KBASE_EVENT_BATCH=0 = one per read (old).
+    */
+   static int ev_batch = -1;
+   if (ev_batch < 0) {
+      const char *e = getenv("PANVK_KBASE_EVENT_BATCH");
+      ev_batch = !(e && e[0] == '0');
+   }
+   const unsigned max_ev = ev_batch ? 16 : 1;
+
    simple_mtx_lock(&kd->atoms_read_lock);
    for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
       struct pollfd rfd = { .fd = kd->base.fd, .events = POLLIN };
@@ -3143,20 +3156,24 @@ kbase_drain_events(struct kbase_kmod_dev *kd, int timeout_ms)
          break;
       }
 
-      struct base_jd_event_v2 ev;
+      struct base_jd_event_v2 ev[16];
       ssize_t n;
       do {
-         n = read(kd->base.fd, &ev, sizeof(ev));
+         n = read(kd->base.fd, ev, max_ev * sizeof(ev[0]));
       } while (n < 0 && errno == EINTR);
-      if (n != (ssize_t)sizeof(ev)) {
+      if (n <= 0 || n % (ssize_t)sizeof(ev[0])) {
          ret = -1;
          break;
       }
 
+      const unsigned got = n / sizeof(ev[0]);
       simple_mtx_lock(&kd->atoms_lock);
-      kbase_atom_process_event_locked(kd, &ev);
+      for (unsigned j = 0; j < got; j++)
+         kbase_atom_process_event_locked(kd, &ev[j]);
       simple_mtx_unlock(&kd->atoms_lock);
       ret = 0;
+      if (got < max_ev)
+         break;
    }
    simple_mtx_unlock(&kd->atoms_read_lock);
    return ret;
