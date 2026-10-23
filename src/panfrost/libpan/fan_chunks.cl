@@ -311,3 +311,33 @@ panlib_fan_clamp_draw(global uint32_t *vertex_count,
 }
 
 #endif
+
+#if PAN_ARCH == 9
+
+/* jm-v7 119: the v9 JM form of panlib_fan_clamp_draw(). An indirect fan is
+ * lowered in one pass (no GPU chunk loop on JM) and
+ * panlib_v9_prerast_indirect() makes a draw over the record capacity NULL
+ * jobs, so a fan over the arena drew nothing while the primitives generated
+ * query counted all of it. This copies the VkDraw(Indexed)IndirectCommand
+ * (words: 4 or 5) to dst, with vertices x instances clamped to cap as CSF
+ * does, so the first triangles are drawn and the rest is dropped. Every
+ * consumer of the draw (queries, lowering) then reads dst.
+ */
+KERNEL(1)
+panlib_v9_fan_clamp_cmd(global uint32_t *dst, global const uint32_t *src,
+                        uint32_t words, uint32_t cap)
+{
+   for (uint32_t i = 0; i < words; i++)
+      dst[i] = src[i];
+
+   uint32_t n = src[0], k = src[1];
+   if ((uint64_t)n * k <= cap)
+      return;
+
+   n = min(n, cap);
+   k = min(k, cap / n);
+   dst[0] = n;
+   dst[1] = k;
+}
+
+#endif

@@ -6741,6 +6741,67 @@ v9_cmd_draw_layer(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
  * cmd_pstats_draw(): the GS and tessellation kernels count their own output
  * (clipping and primitives generated).
  */
+/* jm-v7 119: PANVK_V9_FAN_CLAMP=0 = old (an indirect fan over the arena is
+ * dropped whole). */
+static bool
+v9_fan_clamp_on(void)
+{
+   static int v = -1;
+   if (v < 0) {
+      const char *e = getenv("PANVK_V9_FAN_CLAMP");
+      v = !(e && !strcmp(e, "0"));
+   }
+   return v;
+}
+
+/* An indirect triangle fan lowered through gpu_prerast, the v9 JM form of
+ * csf-v11 195. Fans are not in the GPU chunk loop (v9_prerast_chunkable()),
+ * so the draw is lowered in one pass, and panlib_v9_prerast_indirect() made
+ * one over the record capacity NULL jobs: nothing was captured or drawn,
+ * while v9_count_draw_queries() counted every primitive (large_draw
+ * fan_indirect: written=0, generated=149999). The draw now reads a copy of
+ * its command with vertices x instances clamped to the capacity, as CSF
+ * does: the first triangles are drawn right, the rest is dropped, and the
+ * queries count what is drawn. Draws that fit are copied unchanged.
+ */
+static void
+v9_prerast_clamp_fan_cmd(struct panvk_cmd_buffer *cmdbuf,
+                         struct panvk_draw_info *draw)
+{
+   const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
+   const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
+
+   if (!vs || !v9_fan_clamp_on())
+      return;
+
+   /* The bound of panlib_v9_prerast_indirect() (v9_prerast_indirect()). */
+   uint32_t cap =
+      panvk_gpu_prerast_record_capacity(vs->gpu_prerast.io.record_stride);
+   if (gs)
+      cap = MIN2(cap, panvk_gpu_prerast_gs_cap_slots(&gs->gpu_prerast.gs) /
+                         gs->gpu_prerast.gs.invocations);
+   if (!cap)
+      return;
+
+   struct pan_ptr cmd = panvk_cmd_alloc_dev_mem(
+      cmdbuf, desc, sizeof(VkDrawIndexedIndirectCommand), 16);
+   if (!cmd.gpu) {
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+      return;
+   }
+   /* A NULLed copy job (conditional rendering) leaves an empty draw. */
+   memset(cmd.cpu, 0, sizeof(VkDrawIndexedIndirectCommand));
+
+   if (!v9_prerast_reserve_jobs(cmdbuf, 1))
+      return;
+
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+   panlib_v9_fan_clamp_cmd(&ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER,
+                           cmd.gpu, draw->indirect.buffer_dev_addr,
+                           draw->index.index_size ? 5 : 4, cap);
+   draw->indirect.buffer_dev_addr = cmd.gpu;
+}
+
 static void
 v9_count_draw_queries(struct panvk_cmd_buffer *cmdbuf,
                       const struct panvk_draw_info *draw)
@@ -6891,6 +6952,15 @@ v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
    /* Without a gl_Layer write, primitives go to layer 0 only. */
    if (!view_mask && (!vs || !vs->writes_layer))
       layer_count = 1;
+
+   /* jm-v7 119: an indirect fan through gpu_prerast draws (and counts)
+    * what fits the arena. v9_draw_indirect_unrolled() hands over one draw
+    * at a time. */
+   if (info->indirect.buffer_dev_addr && info->prim == MESA_PRIM_TRIANGLE_FAN &&
+       !info->pstats_counted &&
+       (v9_prerast_needed(cmdbuf, info) ||
+        v9_prerast_side_effects(cmdbuf, info)))
+      v9_prerast_clamp_fan_cmd(cmdbuf, info);
 
    /* Counted once per API draw, not per layer. */
    if (!info->pstats_counted)
