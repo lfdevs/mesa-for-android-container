@@ -1024,7 +1024,23 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    const bool split_heap = panvk_v7_split_heap();
    const size_t heap_size = (split_heap ? 64 : 128) * 1024 * 1024;
 #else
-   const size_t heap_size = 128 * 1024 * 1024;
+   /* jm-v7 117: on Valhall JM the MALLOC_VERTEX jobs take every vertex
+    * packet (position + varyings) of a batch from the tiler heap, next to
+    * the polygon lists, and JM has no incremental rendering: a batch that
+    * needs more than the heap fails with OUT_OF_MEMORY (kbase event 0x60).
+    * 128 MiB was too small for the GS-expanded geometry of PanProbe
+    * tess_perf gs=1 L=16 (Pixel 6, Mali-G78: about 7M unshared GS output
+    * vertices per frame). The heaps are GROW_ON_GPF and grow in 2 MiB steps
+    * (jm-v9 023), so the size is a VA reservation and a ceiling; pages are
+    * committed only as a batch uses them. PANVK_V9_TILER_HEAP_MB = size of
+    * each heap (64-1024, default 512; 128 = old).
+    */
+   size_t heap_size = 512ull * 1024 * 1024;
+   const char *heap_mb = getenv("PANVK_V9_TILER_HEAP_MB");
+   if (heap_mb && atoi(heap_mb) > 0)
+      heap_size = (size_t)CLAMP(atoi(heap_mb), 64, 1024) * 1024 * 1024;
+   mesa_logi("panvk: v9 tiler heaps 2 x %u MiB (GROW_ON_GPF)",
+             (unsigned)(heap_size >> 20));
 #endif
    result = panvk_priv_bo_create(
       device, heap_size,
@@ -1035,7 +1051,7 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
 
 #if PAN_ARCH == 9
    result = panvk_priv_bo_create(
-      device, 128 * 1024 * 1024,
+      device, heap_size,
       PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT,
       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &device->tiler_heap2);
    if (result != VK_SUCCESS)
