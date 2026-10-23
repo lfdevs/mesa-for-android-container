@@ -2577,9 +2577,18 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
             extension = step;
             commit_pages = MIN2(step, va_pages);
          }
-         mesa_logi("kbase: v%u growable BO, GROW_ON_GPF, %" PRIu64
-                   " of %" PRIu64 " pages committed",
-                   pan_arch(dev->props.gpu_id), commit_pages, va_pages);
+         /* jm-v7 115: info level for the first 8 per process, then debug
+          * (every gs_pool slab and GS emulation buffer comes here).
+          * MESA_LOG_LEVEL=debug shows them all.
+          */
+         static unsigned grow_logged;
+         const unsigned grow_n = p_atomic_inc_return(&grow_logged);
+         const bool grow_info = grow_n <= 8;
+         mesa_log(grow_info ? MESA_LOG_INFO : MESA_LOG_DEBUG, MESA_LOG_TAG,
+                  "kbase: v%u growable BO, GROW_ON_GPF, %" PRIu64
+                  " of %" PRIu64 " pages committed%s",
+                  pan_arch(dev->props.gpu_id), commit_pages, va_pages,
+                  grow_n == 8 ? " (later ones at debug level)" : "");
       }
    }
 
