@@ -268,11 +268,31 @@ panvk_pool_flush_maps(struct panvk_pool *pool)
    if (!(pool->props.create_flags & PAN_KMOD_BO_FLAG_WB_MMAP))
       return;
 
-   list_for_each_entry(struct panvk_priv_bo, bo, &pool->bos, node)
-      panvk_priv_bo_flush(bo, 0, bo->bo->size);
+   /* csf-v11 221: the transient BO is used only up to transient_offset,
+    * so its unused tail is not flushed. Other BOs have no used-size record
+    * and are flushed whole. PANVK_POOL_FLUSH_FULL=1 flushes everything.
+    */
+   static int full = -1;
+   if (full < 0) {
+      const char *e = getenv("PANVK_POOL_FLUSH_FULL");
+      full = e && e[0] == '1';
+   }
 
-   list_for_each_entry(struct panvk_priv_bo, bo, &pool->big_bos, node)
-      panvk_priv_bo_flush(bo, 0, bo->bo->size);
+   list_for_each_entry(struct panvk_priv_bo, bo, &pool->bos, node) {
+      size_t size = bo->bo->size;
+      if (!full && bo == pool->transient_bo)
+         size = MIN2(ALIGN_POT((size_t)pool->transient_offset, 64), size);
+      if (size)
+         panvk_priv_bo_flush(bo, 0, size);
+   }
+
+   list_for_each_entry(struct panvk_priv_bo, bo, &pool->big_bos, node) {
+      size_t size = bo->bo->size;
+      if (!full && bo == pool->transient_bo)
+         size = MIN2(ALIGN_POT((size_t)pool->transient_offset, 64), size);
+      if (size)
+         panvk_priv_bo_flush(bo, 0, size);
+   }
 }
 
 void
