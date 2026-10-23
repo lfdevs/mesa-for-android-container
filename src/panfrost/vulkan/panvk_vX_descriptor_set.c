@@ -353,6 +353,17 @@ write_buffer_view_desc(struct panvk_descriptor_set *set,
       .attr_desc = view->descs.attrib,
    };
 
+   /* jm-v7 116: the element count for the bindless texel buffer bounds
+    * check (build_bindless_buf_texel()), computed from the packed words the
+    * shader read before: (size - offset) / stride, size and stride in
+    * ATTRIBUTE_BUFFER words 3 and 2, offset in ATTRIBUTE word 1.
+    */
+   const uint32_t *buf_w = (const uint32_t *)&padded_desc.attr_buf_desc;
+   const uint32_t *attr_w = (const uint32_t *)&padded_desc.attr_desc;
+   const uint32_t stride = MAX2(buf_w[2], 1), size = buf_w[3];
+   const uint32_t offset = attr_w[1];
+   padded_desc.pad[0] = size >= offset ? (size - offset) / stride : 0;
+
    write_desc(set, binding, elem, &padded_desc, NO_SUBDESC);
 #else
    write_desc(set, binding, elem, &view->descs.buf, NO_SUBDESC);

@@ -55,6 +55,21 @@ panvk_v7_knob_desc_reorder(void)
    return v;
 }
 
+/* PANVK_V7_TEXEL_WIDTH: jm-v7 116, on unless "0". Bindless texel buffer
+ * bounds come from the element count the CPU stores in the descriptor's
+ * pad word instead of a per-access integer divide.
+ */
+static inline bool
+panvk_v7_knob_texel_width(void)
+{
+   static int v = -1;
+   if (v < 0) {
+      const char *e = getenv("PANVK_V7_TEXEL_WIDTH");
+      v = !(e && e[0] == '0');
+   }
+   return v;
+}
+
 /* Runtime-only knobs (no effect on a compile, so not hashed). */
 
 /* Read "<name>=0" as off; default on. */

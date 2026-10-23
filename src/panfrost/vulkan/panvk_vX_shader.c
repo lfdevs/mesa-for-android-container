@@ -2576,10 +2576,11 @@ panvk_hash_state(struct vk_physical_device *device,
     * setting. The tag versions the knob set.
     */
    const int32_t v7_knobs[] = {
-      0x76370108, /* knob set version (108: + polygon passthrough) */
+      0x76370116, /* knob set version (116: + texel width) */
       panvk_v7_knob_tex_waterfall(),
       panvk_v7_knob_idvs(),
       panvk_v7_knob_desc_reorder(),
+      panvk_v7_knob_texel_width(),
    };
    _mesa_blake3_update(&blake3_ctx, v7_knobs, sizeof(v7_knobs));
 #endif

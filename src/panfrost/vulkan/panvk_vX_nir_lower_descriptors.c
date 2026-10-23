@@ -849,9 +849,18 @@ build_bindless_buf_texel(nir_builder *b, nir_deref_instr *deref, nir_def *x,
    nir_def *size = nir_channel(b, buf, 3);
    nir_def *offset = nir_channel(b, attr, 1);
 
-   nir_def *avail = nir_bcsel(b, nir_uge(b, size, offset),
-                              nir_isub(b, size, offset), nir_imm_int(b, 0));
-   nir_def *width = nir_udiv(b, avail, nir_umax(b, stride, nir_imm_int(b, 1)));
+   nir_def *width;
+   if (panvk_v7_knob_texel_width()) {
+      /* jm-v7 116: the element count, written by write_buffer_view_desc()
+       * into the descriptor's first pad word (0 for null and unwritten
+       * descriptors). Saves the Bifrost software udiv on every access.
+       */
+      width = nir_channel(b, attr, 2);
+   } else {
+      nir_def *avail = nir_bcsel(b, nir_uge(b, size, offset),
+                                 nir_isub(b, size, offset), nir_imm_int(b, 0));
+      width = nir_udiv(b, avail, nir_umax(b, stride, nir_imm_int(b, 1)));
+   }
 
    t->fmt = nir_ushr_imm(b, nir_channel(b, attr, 0), 10);
    t->in_bounds = nir_ult(b, x, width);
