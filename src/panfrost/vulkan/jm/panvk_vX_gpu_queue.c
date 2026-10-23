@@ -476,51 +476,13 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
 #endif
 
       list_for_each_entry(struct panvk_batch, batch, &cmdbuf->batches, node) {
-         /* FIXME: should be done at the batch level */
-         unsigned nr_bos = panvk_pool_num_bos(&cmdbuf->desc_pool) +
-                           panvk_pool_num_bos(&cmdbuf->varying_pool) +
-                           panvk_pool_num_bos(&cmdbuf->tls_pool) +
-                           batch->fb.bo_count + (batch->blit.src ? 1 : 0) +
-                           (batch->blit.dst ? 1 : 0) +
-                           (batch->vtc_jc.first_tiler ? 1 : 0) + 1;
-         unsigned bo_idx = 0;
-         struct pan_kmod_bo *bos[nr_bos];
-
-         panvk_pool_get_bos(&cmdbuf->desc_pool, &bos[bo_idx]);
-         bo_idx += panvk_pool_num_bos(&cmdbuf->desc_pool);
-
-         panvk_pool_get_bos(&cmdbuf->varying_pool, &bos[bo_idx]);
-         bo_idx += panvk_pool_num_bos(&cmdbuf->varying_pool);
-
-         panvk_pool_get_bos(&cmdbuf->tls_pool, &bos[bo_idx]);
-         bo_idx += panvk_pool_num_bos(&cmdbuf->tls_pool);
-
-         for (unsigned i = 0; i < batch->fb.bo_count; i++)
-            bos[bo_idx++] = batch->fb.bos[i];
-
-         if (batch->blit.src)
-            bos[bo_idx++] = batch->blit.src;
-
-         if (batch->blit.dst)
-            bos[bo_idx++] = batch->blit.dst;
-
-         if (batch->vtc_jc.first_tiler)
-            bos[bo_idx++] = (batch->heap_half && dev->tiler_heap2)
-                               ? dev->tiler_heap2->bo
-                               : dev->tiler_heap->bo;
-
-         bos[bo_idx++] = dev->sample_positions->bo;
-         assert(bo_idx == nr_bos);
-
-         /* Merge identical BO entries. */
-         for (unsigned x = 0; x < nr_bos; x++) {
-            for (unsigned y = x + 1; y < nr_bos;) {
-               if (bos[x] == bos[y])
-                  bos[y] = bos[--nr_bos];
-               else
-                  y++;
-            }
-         }
+         /* jm-v7 113: kbase JM atoms carry no BO list (residency is the
+          * kbase context's), and kbase_kmod only copied it into an unused
+          * slot field, so the per-batch gathering of every pool BO and its
+          * O(n^2) dedup were dead work.
+          */
+         struct pan_kmod_bo **bos = NULL;
+         unsigned nr_bos = 0;
 
          panvk_wait_event_ops(batch);
 
