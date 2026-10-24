@@ -1786,6 +1786,38 @@ panvk_GetPhysicalDeviceMemoryProperties2(
             panvk_available_system_memory(physical_device), 0.9f, heap_size,
             used);
 
+         /* csf-v11 229, opt-in (default: the two lines above).
+          * PANVK_MEM_BUDGET=honest: heapUsage also counts the driver's
+          * private BOs (tiler heap chunks are not visible), and the budget
+          * is computed from that usage. PANVK_MEM_BUDGET_HEADROOM_MB=<n>:
+          * the budget is at least usage + n MiB (capped at the heap), so it
+          * never reads 100 % just because MemAvailable is near 0. */
+         static int honest = -1;
+         static int64_t headroom_mb = -1;
+         if (p_atomic_read(&honest) < 0) {
+            const char *m = os_get_option("PANVK_MEM_BUDGET");
+            p_atomic_set(&headroom_mb,
+                         MAX2(debug_get_num_option(
+                                 "PANVK_MEM_BUDGET_HEADROOM_MB", 0), 0));
+            p_atomic_set(&honest, m && !strcmp(m, "honest"));
+         }
+         if (p_atomic_read(&honest)) {
+            uint64_t priv = 0;
+            for (unsigned k = 0; k < PANVK_MEM_KIND_COUNT; k++)
+               priv += p_atomic_read_relaxed(&panvk_mem_stats.bytes[k]);
+            p->heapUsage[0] = used + priv;
+            p->heapBudget[0] = vk_physical_device_heap_budget(
+               panvk_available_system_memory(physical_device), 0.9f,
+               heap_size, used + priv);
+         }
+         if (p_atomic_read(&headroom_mb) > 0) {
+            const uint64_t floor =
+               MIN2(heap_size, p->heapUsage[0] +
+                                  (uint64_t)p_atomic_read(&headroom_mb) *
+                                     1024 * 1024);
+            p->heapBudget[0] = MAX2(p->heapBudget[0], floor);
+         }
+
          /* From the Vulkan 1.3.278 spec:
           *
           *    "The heapBudget and heapUsage values must be zero for array
