@@ -23,6 +23,7 @@
 #include "kmod/pan_kmod.h"
 
 #include "util/bitscan.h"
+#include "util/os_misc.h"
 #include "util/os_time.h"
 #include "vk_drm_syncobj.h"
 #include "vk_log.h"
@@ -2109,6 +2110,62 @@ kbase_heap_destroy_counted(struct pan_kmod_dev *kdev, uint64_t heap_ctx_va)
    p_atomic_dec(&panvk_mem_stats.heap_ctx_live);
 }
 
+/* csf-v11 224: kbase tiler heap sizes. Every renewal (about every submit in
+ * big games, KBASE_TILER_HEAP_RENEW_WORK) creates a heap that commits and
+ * zeroes its initial chunks, and up to PANVK_KBASE_HEAP_SLOTS heaps plus a
+ * spare plus the TERM backlog are alive at once, so the initial size is
+ * paid 5-20 times. The heap grows on demand (kbase tiler OOM), so fewer
+ * initial chunks only cost a few more growth events per heap.
+ * PANVK_KBASE_HEAP_CHUNKS=<initial>[,<max>]: default 4,<physical max>;
+ * "10,400" is the old behaviour. */
+static void
+kbase_heap_chunks(const struct panvk_physical_device *phys_dev,
+                  uint32_t *initial, uint32_t *max)
+{
+   static uint32_t init_v, max_v;
+
+   if (!p_atomic_read(&max_v)) {
+      uint32_t i = MIN2(phys_dev->csf.tiler.initial_chunks, 4);
+      uint32_t m = MAX2(phys_dev->csf.tiler.max_chunks, 200);
+      const char *e = os_get_option("PANVK_KBASE_HEAP_CHUNKS");
+
+      if (e && e[0]) {
+         char *end;
+         unsigned long v = strtoul(e, &end, 10);
+         if (v >= 1 && v <= 1024)
+            i = v;
+         if (*end == ',') {
+            v = strtoul(end + 1, NULL, 10);
+            if (v >= 8 && v <= 4096)
+               m = v;
+         }
+      }
+      i = MIN2(i, m);
+      p_atomic_set(&init_v, i);
+      p_atomic_set(&max_v, m);
+      mesa_logi("kbase: tiler heaps %u initial / %u max chunks of %u KiB",
+                i, m, phys_dev->csf.tiler.chunk_size / 1024);
+   }
+   *initial = p_atomic_read(&init_v);
+   *max = p_atomic_read(&max_v);
+}
+
+/* csf-v11 224: retired heaps queued for TERM on the heap thread still hold
+ * every chunk they grew. PANVK_KBASE_HEAP_TERM_MAX (default 2, old 16, 0 =
+ * always on the submitting thread) bounds the backlog; beyond it, TERM runs
+ * on the submitting thread. */
+static uint32_t
+kbase_heap_term_max(void)
+{
+   static int v = -1;
+
+   if (p_atomic_read(&v) < 0) {
+      int64_t n = debug_get_num_option("PANVK_KBASE_HEAP_TERM_MAX", 2);
+      p_atomic_set(&v, (int)CLAMP(n, 0, PANVK_KBASE_HEAP_TERM_MAX));
+   }
+   return p_atomic_read(&v);
+}
+
 static void
 kbase_spare_heap_job(void *job, void *gdata, int thread_index)
 {
@@ -2117,11 +2174,13 @@ kbase_spare_heap_job(void *job, void *gdata, int thread_index)
    const struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(dev->vk.physical);
 
+   uint32_t initial_chunks, max_chunks;
+   kbase_heap_chunks(phys_dev, &initial_chunks, &max_chunks);
+
    /* On failure ctx stays 0 and the renewal creates the heap itself. */
    if (kbase_heap_create_counted(
-          dev->kmod.dev, queue->tiler_heap.chunk_size,
-          phys_dev->csf.tiler.initial_chunks,
-          MAX2(phys_dev->csf.tiler.max_chunks, 200), 65535, 0,
+          dev->kmod.dev, queue->tiler_heap.chunk_size, initial_chunks,
+          max_chunks, 65535, 0,
           &queue->kbase_spare_heap.ctx, &queue->kbase_spare_heap.first_chunk))
       queue->kbase_spare_heap.ctx = 0;
 }
@@ -2196,8 +2255,8 @@ kbase_heap_term_push(struct panvk_gpu_queue *queue, const uint64_t *ctxs,
 
    if (queue->kbase_heap_term.enabled) {
       mtx_lock(&queue->kbase_heap_term.lock);
-      while (pushed < count &&
-             queue->kbase_heap_term.count < PANVK_KBASE_HEAP_TERM_MAX)
+      const uint32_t term_max = kbase_heap_term_max();
+      while (pushed < count && queue->kbase_heap_term.count < term_max)
          queue->kbase_heap_term.ctxs[queue->kbase_heap_term.count++] =
             ctxs[pushed++];
       if (queue->kbase_heap_term.count >
@@ -2330,12 +2389,13 @@ init_tiler(struct panvk_gpu_queue *queue)
       /* Match the Valhall G610/G710 kbase reference.  The panthor-derived
        * limit of 64 can strand large geometry workloads on the tiler iterator;
        * larger multi-GiB limits can trigger Android's global OOM killer. */
-      const uint32_t tiler_heap_max_chunks =
-         MAX2(phys_dev->csf.tiler.max_chunks, 200);
+      uint32_t tiler_heap_initial_chunks, tiler_heap_max_chunks;
+      kbase_heap_chunks(phys_dev, &tiler_heap_initial_chunks,
+                        &tiler_heap_max_chunks);
 
       if (kbase_heap_create_counted(
              dev->kmod.dev, tiler_heap->chunk_size,
-             phys_dev->csf.tiler.initial_chunks, tiler_heap_max_chunks,
+             tiler_heap_initial_chunks, tiler_heap_max_chunks,
              65535, tiler_heap_mem_group, &heap_ctx_va, &first_chunk_va)) {
          result = panvk_errorf(dev, VK_ERROR_INITIALIZATION_FAILED,
                                "Failed to create a tiler heap context");
@@ -2492,7 +2552,8 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
    const struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(dev->vk.physical);
    struct panvk_tiler_heap *tiler_heap = &queue->tiler_heap;
-   const uint32_t max_chunks = MAX2(phys_dev->csf.tiler.max_chunks, 200);
+   uint32_t initial_chunks, max_chunks;
+   kbase_heap_chunks(phys_dev, &initial_chunks, &max_chunks);
    uint64_t new_ctx, first_chunk;
 
    /* Hold at most PANVK_KBASE_HEAP_SLOTS - 1 retired contexts: if they are
@@ -2506,7 +2567,7 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
    if (!new_ctx &&
        kbase_heap_create_counted(
           dev->kmod.dev, tiler_heap->chunk_size,
-          phys_dev->csf.tiler.initial_chunks, max_chunks, 65535, 0,
+          initial_chunks, max_chunks, 65535, 0,
           &new_ctx, &first_chunk)) {
       return panvk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                           "Failed to renew the kbase tiler heap");
