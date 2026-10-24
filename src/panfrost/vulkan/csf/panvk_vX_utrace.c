@@ -171,10 +171,18 @@ panvk_utrace_capture_data(struct u_trace *ut, void *cs, void *dst_buffer,
                     cs_info->capture_data_wait_for_ts);
 }
 
+/* csf-v11 228: on kbase u_trace is never processed (the submit path clears
+ * process_utrace), so without MESA_GPU_TRACES the 10 MiB heap (u_trace
+ * timestamp and clone buffers) was committed for nothing. Then kbase gets
+ * 64 KiB, unless PANVK_UTRACE_CLONE_MEM_SIZE is set (0xa00000 = old). */
 static uint32_t
-get_utrace_clone_mem_size()
+get_utrace_clone_mem_size(const struct panvk_device *dev)
 {
-   return debug_get_num_option("PANVK_UTRACE_CLONE_MEM_SIZE", 0xa00000);
+   const bool small =
+      to_panvk_physical_device(dev->vk.physical)->kbase_node_path[0] != '\0' &&
+      !os_get_option("MESA_GPU_TRACES");
+   return debug_get_num_option("PANVK_UTRACE_CLONE_MEM_SIZE",
+                               small ? 0x10000 : 0xa00000);
 }
 
 VkResult
@@ -188,7 +196,7 @@ panvk_per_arch(utrace_context_init)(struct panvk_device *dev)
                         panvk_utrace_delete_flush_data);
 
    VkResult result = panvk_priv_bo_create_kind(
-      dev, get_utrace_clone_mem_size(), 0, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
+      dev, get_utrace_clone_mem_size(dev), 0, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
       &dev->utrace.copy_buf_heap_bo, PANVK_MEM_UTRACE);
    if (result != VK_SUCCESS) {
       u_trace_context_fini(&dev->utrace.utctx);
