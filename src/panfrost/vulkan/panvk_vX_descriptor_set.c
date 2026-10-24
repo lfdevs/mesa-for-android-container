@@ -338,9 +338,9 @@ panvk_init_pool_memory(struct panvk_device *device,
    if (!(pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_EXT)) {
       uint32_t bo_flags =
          panvk_device_adjust_bo_flags(device, PAN_KMOD_BO_FLAG_WB_MMAP);
-      VkResult result = panvk_priv_bo_create(device, pool_size, bo_flags,
+      VkResult result = panvk_priv_bo_create_kind(device, pool_size, bo_flags,
                                              VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
-                                             &pool->desc_bo);
+                                             &pool->desc_bo, PANVK_MEM_DESC_POOL);
       if (result != VK_SUCCESS)
          return result;
 

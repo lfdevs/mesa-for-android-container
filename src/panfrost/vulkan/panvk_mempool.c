@@ -69,8 +69,8 @@ panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
           * fragment/vertex+tiler pools separate.
           */
          VkResult result =
-            panvk_priv_bo_create(pool->dev, bo_sz, pool->props.create_flags,
-                                 VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo);
+            panvk_priv_bo_create_pool(pool, bo_sz, pool->props.create_flags,
+                                      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo);
 
          /* Pool allocations are indirect, meaning there's no VkResult returned
           * and no way for the caller to know why the device memory allocation

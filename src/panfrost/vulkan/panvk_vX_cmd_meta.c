@@ -1927,6 +1927,7 @@ copy_memory_to_image_raw(
 static void
 bc_raw_lazy_hit(struct panvk_device *dev, const char *what)
 {
+   p_atomic_inc(&panvk_mem_stats.bc_lazy_skips);
    if (!p_atomic_xchg(&dev->bc_raw.needed, 1))
       mesa_logw("panvk: %s of a BC image without raw blocks skipped; BC "
                 "images created from now on keep them (PANVK_BC_RAW=store "

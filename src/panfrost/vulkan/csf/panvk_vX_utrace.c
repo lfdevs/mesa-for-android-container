@@ -187,9 +187,9 @@ panvk_per_arch(utrace_context_init)(struct panvk_device *dev)
                         panvk_utrace_capture_data, panvk_utrace_get_data,
                         panvk_utrace_delete_flush_data);
 
-   VkResult result = panvk_priv_bo_create(dev, get_utrace_clone_mem_size(), 0,
-                                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
-                                          &dev->utrace.copy_buf_heap_bo);
+   VkResult result = panvk_priv_bo_create_kind(
+      dev, get_utrace_clone_mem_size(), 0, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
+      &dev->utrace.copy_buf_heap_bo, PANVK_MEM_UTRACE);
    if (result != VK_SUCCESS) {
       u_trace_context_fini(&dev->utrace.utctx);
       return result;

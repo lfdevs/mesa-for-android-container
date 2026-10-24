@@ -2073,6 +2073,7 @@ bc_raw_spill_job(void *data, void *gdata, int thread_index)
       fd = bc_raw_file(dev);
       if (fd < 0) {
          raw->pinned = true;
+         p_atomic_inc(&panvk_mem_stats.bc_pins);
          goto out;
       }
       if (raw->file_off < 0) {
@@ -2109,6 +2110,7 @@ bc_raw_spill_job(void *data, void *gdata, int thread_index)
       mesa_logw("panvk: BC raw store spill failed (%s), keeping it resident",
                 strerror(errno));
       raw->pinned = true;
+      p_atomic_inc(&panvk_mem_stats.bc_pins);
    } else if (raw->gen == gen && !raw->cmd_refs && raw->image &&
               raw->bo == bo) {
       raw->bo = NULL;
@@ -2120,6 +2122,7 @@ bc_raw_spill_job(void *data, void *gdata, int thread_index)
          dev->bc_raw.spilled_B -= raw->size;
       raw->on_disk = written;
       panvk_priv_bo_unref(bo);
+      p_atomic_inc(&panvk_mem_stats.bc_spills);
    }
 out:
    if (!--raw->refs)
@@ -2134,9 +2137,9 @@ bc_raw_materialize(struct panvk_bc_raw *raw, bool full)
 {
    struct panvk_device *dev = raw->dev;
    struct panvk_priv_bo *bo;
-   VkResult result = panvk_priv_bo_create(
+   VkResult result = panvk_priv_bo_create_kind(
       dev, raw->size, panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP),
-      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo);
+      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo, PANVK_MEM_BC_RAW);
 
    if (result != VK_SUCCESS)
       return result;
@@ -2154,8 +2157,12 @@ bc_raw_materialize(struct panvk_bc_raw *raw, bool full)
       if (!from_file) {
          mesa_loge("panvk: BC raw store read-back failed (%s)",
                    strerror(errno));
-      } else if (++raw->remat >= 2) {
-         raw->pinned = true;
+      } else {
+         p_atomic_inc(&panvk_mem_stats.bc_remats);
+         if (++raw->remat >= 2) {
+            raw->pinned = true;
+            p_atomic_inc(&panvk_mem_stats.bc_pins);
+         }
       }
    }
    if (!from_file)
@@ -2230,6 +2237,7 @@ panvk_bc_raw_release(struct util_dynarray *refs)
                                     NULL)) {
             vk_free(&dev->vk.alloc, q);
             raw->pinned = true;
+            p_atomic_inc(&panvk_mem_stats.bc_pins);
             continue;
          }
          dev->bc_raw.queue = q;

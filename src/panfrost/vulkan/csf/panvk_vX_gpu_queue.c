@@ -2079,6 +2079,36 @@ destroy_group(struct panvk_gpu_queue *queue)
 }
 
 #ifdef HAVE_PAN_KMOD_KBASE
+/* csf-v11 223: kbase tiler heap contexts, counted for PANVK_DEBUG=mem. The
+ * bytes are what HEAP_INIT commits (initial chunks); growth by the kernel
+ * on tiler OOM is not visible from user space. */
+static int
+kbase_heap_create_counted(struct pan_kmod_dev *kdev, uint32_t chunk_size,
+                          uint32_t initial_chunks, uint32_t max_chunks,
+                          uint32_t target_in_flight, uint32_t mem_group_id,
+                          uint64_t *heap_ctx_va, uint64_t *first_chunk_va)
+{
+   int ret = kbase_kmod_csf_tiler_heap_create(
+      kdev, chunk_size, initial_chunks, max_chunks, target_in_flight,
+      mem_group_id, heap_ctx_va, first_chunk_va);
+
+   if (!ret) {
+      uint64_t live = p_atomic_add_return(&panvk_mem_stats.heap_ctx_live, 1);
+      if (live > p_atomic_read_relaxed(&panvk_mem_stats.heap_ctx_peak))
+         p_atomic_set(&panvk_mem_stats.heap_ctx_peak, live);
+      p_atomic_add(&panvk_mem_stats.heap_init_B,
+                   (uint64_t)chunk_size * initial_chunks);
+   }
+   return ret;
+}
+
+static void
+kbase_heap_destroy_counted(struct pan_kmod_dev *kdev, uint64_t heap_ctx_va)
+{
+   kbase_kmod_csf_tiler_heap_destroy(kdev, heap_ctx_va);
+   p_atomic_dec(&panvk_mem_stats.heap_ctx_live);
+}
+
 static void
 kbase_spare_heap_job(void *job, void *gdata, int thread_index)
 {
@@ -2088,7 +2118,7 @@ kbase_spare_heap_job(void *job, void *gdata, int thread_index)
       to_panvk_physical_device(dev->vk.physical);
 
    /* On failure ctx stays 0 and the renewal creates the heap itself. */
-   if (kbase_kmod_csf_tiler_heap_create(
+   if (kbase_heap_create_counted(
           dev->kmod.dev, queue->tiler_heap.chunk_size,
           phys_dev->csf.tiler.initial_chunks,
           MAX2(phys_dev->csf.tiler.max_chunks, 200), 65535, 0,
@@ -2149,7 +2179,7 @@ kbase_heap_term_job(void *job, void *gdata, int thread_index)
       mtx_unlock(&queue->kbase_heap_term.lock);
 
       for (uint32_t i = 0; i < count; i++)
-         kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev, ctxs[i]);
+         kbase_heap_destroy_counted(dev->kmod.dev, ctxs[i]);
    }
 }
 
@@ -2170,6 +2200,10 @@ kbase_heap_term_push(struct panvk_gpu_queue *queue, const uint64_t *ctxs,
              queue->kbase_heap_term.count < PANVK_KBASE_HEAP_TERM_MAX)
          queue->kbase_heap_term.ctxs[queue->kbase_heap_term.count++] =
             ctxs[pushed++];
+      if (queue->kbase_heap_term.count >
+          p_atomic_read_relaxed(&panvk_mem_stats.heap_term_queued_max))
+         p_atomic_set(&panvk_mem_stats.heap_term_queued_max,
+                      queue->kbase_heap_term.count);
       if (pushed && !queue->kbase_heap_term.queued) {
          queue->kbase_heap_term.queued = true;
          add_job = true;
@@ -2187,8 +2221,10 @@ kbase_heap_term_push(struct panvk_gpu_queue *queue, const uint64_t *ctxs,
    }
 
    /* Disabled, or the thread is PANVK_KBASE_HEAP_TERM_MAX contexts behind. */
-   for (uint32_t i = pushed; i < count; i++)
-      kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev, ctxs[i]);
+   for (uint32_t i = pushed; i < count; i++) {
+      kbase_heap_destroy_counted(dev->kmod.dev, ctxs[i]);
+      p_atomic_inc(&panvk_mem_stats.heap_term_sync);
+   }
 }
 
 static void
@@ -2229,11 +2265,11 @@ kbase_spare_heap_finish(struct panvk_gpu_queue *queue)
    queue->kbase_spare_heap.enabled = false;
    util_queue_fence_destroy(&queue->kbase_spare_heap.fence);
    if (ctx)
-      kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev, ctx);
+      kbase_heap_destroy_counted(dev->kmod.dev, ctx);
 
    if (queue->kbase_heap_term.enabled) {
       for (uint32_t i = 0; i < queue->kbase_heap_term.count; i++)
-         kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev,
+         kbase_heap_destroy_counted(dev->kmod.dev,
                                            queue->kbase_heap_term.ctxs[i]);
       queue->kbase_heap_term.count = 0;
       mtx_destroy(&queue->kbase_heap_term.lock);
@@ -2297,7 +2333,7 @@ init_tiler(struct panvk_gpu_queue *queue)
       const uint32_t tiler_heap_max_chunks =
          MAX2(phys_dev->csf.tiler.max_chunks, 200);
 
-      if (kbase_kmod_csf_tiler_heap_create(
+      if (kbase_heap_create_counted(
              dev->kmod.dev, tiler_heap->chunk_size,
              phys_dev->csf.tiler.initial_chunks, tiler_heap_max_chunks,
              65535, tiler_heap_mem_group, &heap_ctx_va, &first_chunk_va)) {
@@ -2377,10 +2413,10 @@ cleanup_tiler(struct panvk_gpu_queue *queue)
        * current one. */
       kbase_spare_heap_finish(queue);
       for (uint32_t i = 0; i < queue->kbase_retired_heap_count; i++)
-         kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev,
+         kbase_heap_destroy_counted(dev->kmod.dev,
                                            queue->kbase_retired_heaps[i].ctx);
       queue->kbase_retired_heap_count = 0;
-      kbase_kmod_csf_tiler_heap_destroy(dev->kmod.dev,
+      kbase_heap_destroy_counted(dev->kmod.dev,
                                         tiler_heap->context.dev_addr);
    } else
 #endif
@@ -2468,7 +2504,7 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
 
    new_ctx = kbase_spare_heap_take(queue, &first_chunk);
    if (!new_ctx &&
-       kbase_kmod_csf_tiler_heap_create(
+       kbase_heap_create_counted(
           dev->kmod.dev, tiler_heap->chunk_size,
           phys_dev->csf.tiler.initial_chunks, max_chunks, 65535, 0,
           &new_ctx, &first_chunk)) {
@@ -2497,6 +2533,7 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
       queue->subqueues[PANVK_SUBQUEUE_VERTEX_TILER].kbase.emitted_jobs;
    queue->kbase_retired_heaps[r].frag_jobs =
       queue->subqueues[PANVK_SUBQUEUE_FRAGMENT].kbase.emitted_jobs;
+   p_atomic_inc(&panvk_mem_stats.heap_renewals);
    return VK_SUCCESS;
 }
 #endif
@@ -3377,6 +3414,8 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
 
 out:
    panvk_queue_submit_cleanup_storage(&submit, &stack_storage);
+   /* csf-v11 223: PANVK_DEBUG=mem, rate-limited. */
+   panvk_mem_report(submit.dev, false);
    return result;
 }
 
@@ -3516,6 +3555,8 @@ panvk_per_arch(destroy_gpu_queue)(struct vk_queue *vk_queue)
       kbase_queue_wait_current(queue, UINT64_MAX);
 #endif
 
+   /* csf-v11 223: last PANVK_DEBUG=mem line, before the heaps go. */
+   panvk_mem_report(dev, true);
    cleanup_queue(queue);
 #ifdef HAVE_PAN_KMOD_KBASE
    if (gpu_queue_uses_kbase(dev)) {

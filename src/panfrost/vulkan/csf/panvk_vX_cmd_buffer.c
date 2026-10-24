@@ -102,10 +102,11 @@ get_device_tls(struct panvk_cmd_buffer *cmdbuf, uint64_t size)
 
    if (!cur || pan_kmod_bo_size(cur->bo) < size) {
       struct panvk_priv_bo *bo;
-      if (panvk_priv_bo_create(
+      if (panvk_priv_bo_create_kind(
              dev, size,
              panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_NO_MMAP),
-             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo) == VK_SUCCESS) {
+             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo,
+             PANVK_MEM_DEV_TLS) == VK_SUCCESS) {
          util_dynarray_append(&dev->tls.bos, bo);
          cur = bo;
       } else {
