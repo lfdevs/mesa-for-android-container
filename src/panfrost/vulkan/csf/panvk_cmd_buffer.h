@@ -642,6 +642,11 @@ struct panvk_cmd_buffer {
    /* csf-v11/201: BC raw stores (struct panvk_bc_raw *) this command buffer
     * reads or writes, released when it is reset or freed. */
    struct util_dynarray bc_raw_refs;
+
+   /* csf-v11 227: device TLS BOs (struct panvk_priv_bo *) this command
+    * buffer's TLS descriptors point at, released when it is reset or
+    * freed, so outgrown device TLS BOs can go. */
+   struct util_dynarray dev_tls_refs;
 };
 
 struct panvk_vmr_segment {

@@ -88,10 +88,33 @@ panvk_per_arch(kbase_mark_progress)(
  * for Speed Most Wanted (1.7 GiB, then Android killed apps).
  * ponytail: outgrown BOs live until device destroy (<= 2x the peak size);
  * refcount them per command buffer if that ever matters. */
+/* csf-v11 227: PANVK_TLS_FREE_OLD=0 keeps every outgrown device TLS BO
+ * until device destroy (old). By default each command buffer holds a
+ * reference on the device TLS BO it uses, and the device keeps only the
+ * largest one, so an outgrown BO goes when the last command buffer that
+ * used it is reset or freed (it can no longer be pending then). */
+static bool
+dev_tls_free_old(void)
+{
+   static int v = -1;
+   if (p_atomic_read(&v) < 0)
+      p_atomic_set(&v, debug_get_bool_option("PANVK_TLS_FREE_OLD", true));
+   return p_atomic_read(&v);
+}
+
+static void
+dev_tls_release(struct panvk_cmd_buffer *cmdbuf)
+{
+   util_dynarray_foreach(&cmdbuf->dev_tls_refs, struct panvk_priv_bo *, bo)
+      panvk_priv_bo_unref(*bo);
+   util_dynarray_clear(&cmdbuf->dev_tls_refs);
+}
+
 static uint64_t
 get_device_tls(struct panvk_cmd_buffer *cmdbuf, uint64_t size)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const bool free_old = dev_tls_free_old();
    uint64_t addr = 0;
 
    simple_mtx_lock(&dev->tls.lock);
@@ -107,6 +130,16 @@ get_device_tls(struct panvk_cmd_buffer *cmdbuf, uint64_t size)
              panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_NO_MMAP),
              VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo,
              PANVK_MEM_DEV_TLS) == VK_SUCCESS) {
+         if (free_old) {
+            /* Drop the device's references on the outgrown BOs; command
+             * buffers that use them hold their own. */
+            util_dynarray_foreach(&dev->tls.bos, struct panvk_priv_bo *, old) {
+               p_atomic_add(&panvk_mem_stats.dev_tls_freed_B,
+                            pan_kmod_bo_size((*old)->bo));
+               panvk_priv_bo_unref(*old);
+            }
+            util_dynarray_clear(&dev->tls.bos);
+         }
          util_dynarray_append(&dev->tls.bos, bo);
          cur = bo;
       } else {
@@ -114,8 +147,18 @@ get_device_tls(struct panvk_cmd_buffer *cmdbuf, uint64_t size)
       }
    }
 
-   if (cur)
+   if (cur) {
       addr = cur->addr.dev;
+      if (free_old) {
+         bool held = false;
+         util_dynarray_foreach(&cmdbuf->dev_tls_refs, struct panvk_priv_bo *,
+                               r)
+            held = held || *r == cur;
+         if (!held)
+            util_dynarray_append(&cmdbuf->dev_tls_refs,
+                                 panvk_priv_bo_ref(cur));
+      }
+   }
    simple_mtx_unlock(&dev->tls.lock);
 
    if (!addr)
@@ -1053,6 +1096,7 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
 
    /* Not pending any more: BC timestamps are final. */
    panvk_per_arch(cmd_bc_release)(cmdbuf);
+   dev_tls_release(cmdbuf);
 
    panvk_pool_reset(&cmdbuf->cs_pool);
    panvk_pool_reset(&cmdbuf->desc_pool);
@@ -1090,6 +1134,8 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
       cs_builder_fini(&cmdbuf->state.cs[i].builder);
 
    panvk_per_arch(cmd_bc_release)(cmdbuf);
+   dev_tls_release(cmdbuf);
+   util_dynarray_fini(&cmdbuf->dev_tls_refs);
    util_dynarray_fini(&cmdbuf->bc_timing);
    util_dynarray_fini(&cmdbuf->bc_raw_refs);
    util_dynarray_fini(&cmdbuf->vmr_segs);
