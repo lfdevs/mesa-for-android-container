@@ -1567,6 +1567,8 @@ panvk_per_arch(device_bc_finish)(struct panvk_device *dev)
    vk_meta_device_finish(&dev->vk, &dev->meta);
 }
 
+static void bc_raw_written(struct panvk_image *img, bool full);
+
 /* csf-v11/201: make the raw blocks of a raw-store image resident for this
  * command buffer before any raw access. full: the access overwrites every
  * block (no read-back of a spilled store). False if that failed (the
@@ -1793,6 +1795,7 @@ panvk_per_arch(CmdCopyMemoryToImageKHR)(
       bool keep_raw = false;
       if (!bc_img->bc_no_raw &&
           bc_raw_use(cmdbuf, bc_img, true, bc_blocks_full(bc_img, blocks))) {
+         bc_raw_written(bc_img, bc_blocks_full(bc_img, blocks));
          if (fuse)
             keep_raw = true;
          else
@@ -1927,11 +1930,46 @@ copy_memory_to_image_raw(
 static void
 bc_raw_lazy_hit(struct panvk_device *dev, const char *what)
 {
-   p_atomic_inc(&panvk_mem_stats.bc_lazy_skips);
-   if (!p_atomic_xchg(&dev->bc_raw.needed, 1))
-      mesa_logw("panvk: %s of a BC image without raw blocks skipped; BC "
-                "images created from now on keep them (PANVK_BC_RAW=store "
-                "keeps them from the start)", what);
+   /* csf-v11 225: PANVK_BC_RAW_FLIP=1 (old): the first such read switches
+    * every BC image created later to raw stores. Default 0: the reads are
+    * skipped and counted (PANVK_DEBUG=mem), and no image changes mode; the
+    * flip cost up to the whole BC texture size in raw stores and did not
+    * make the skipped read exact. */
+   static int flip = -1;
+   if (p_atomic_read(&flip) < 0)
+      p_atomic_set(&flip, debug_get_bool_option("PANVK_BC_RAW_FLIP", false));
+
+   const uint64_t n = p_atomic_inc_return(&panvk_mem_stats.bc_lazy_skips);
+   if (p_atomic_read(&flip)) {
+      if (!p_atomic_xchg(&dev->bc_raw.needed, 1))
+         mesa_logw("panvk: %s of a BC image without raw blocks skipped; BC "
+                   "images created from now on keep them (PANVK_BC_RAW=store "
+                   "keeps them from the start)", what);
+   } else if (n <= 4 || util_is_power_of_two_nonzero64(n)) {
+      mesa_logw("panvk: %s of a BC image without raw blocks skipped (%" PRIu64
+                " so far; PANVK_BC_RAW=store keeps raw blocks)", what, n);
+   }
+}
+
+/* csf-v11 225: raw blocks that do not match the shadow (bc_raw_stale). */
+static bool
+bc_raw_unreadable(const struct panvk_image *img)
+{
+   if (img->bc_raw_lazy)
+      return true;
+   if (p_atomic_read(&img->bc_raw_stale)) {
+      p_atomic_inc(&panvk_mem_stats.bc_stale_reads);
+      return true;
+   }
+   return false;
+}
+
+/* csf-v11 225: a raw write of every block makes the raw blocks valid. */
+static void
+bc_raw_written(struct panvk_image *img, bool full)
+{
+   if (full && p_atomic_read(&img->bc_raw_stale))
+      p_atomic_set(&img->bc_raw_stale, false);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1946,8 +1984,9 @@ panvk_per_arch(CmdCopyImageToMemoryKHR)(
       panvk_meta_copy_get_image_properties(img, false, false);
    struct panvk_cmd_meta_compute_save_ctx save = {0};
 
-   /* csf-v11/207: no raw blocks to read (PANVK_BC_RAW=lazy). */
-   if (img->bc_raw_lazy) {
+   /* csf-v11/207: no raw blocks to read (PANVK_BC_RAW=lazy), or (225)
+    * raw blocks that a shadow-only copy left stale. */
+   if (bc_raw_unreadable(img)) {
       bc_raw_lazy_hit(dev, "copy to memory");
       return;
    }
@@ -2313,6 +2352,20 @@ bc_copy_image_shadow(struct panvk_cmd_buffer *cmdbuf,
       return;
    }
 
+   /* csf-v11 225: the destination's raw blocks (raw store or in-image raw
+    * plane) are not written, so they no longer match its shadow. A later
+    * raw read of them (a second DXVK relocation of the texture) decoded
+    * zero blocks into the next copy: black ETC2, NaN-lit EAC normals.
+    * PANVK_BC_RAW_STALE=0: old (raw blocks trusted). */
+   static int stale_on = -1;
+   if (p_atomic_read(&stale_on) < 0)
+      p_atomic_set(&stale_on, debug_get_bool_option("PANVK_BC_RAW_STALE", true));
+   if (!dst_img->bc_no_raw && p_atomic_read(&stale_on) &&
+       !p_atomic_read(&dst_img->bc_raw_stale)) {
+      p_atomic_set(&dst_img->bc_raw_stale, true);
+      p_atomic_inc(&panvk_mem_stats.bc_stale_marks);
+   }
+
    /* The source shadow was written by a transcode or copy dispatch. */
    bc_decode_barrier(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                      VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
@@ -2390,8 +2443,9 @@ cmd_copy_image(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(panvk_image, bc_dst, pCopyImageInfo->dstImage);
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
 
-   /* csf-v11/207: a source without raw blocks (PANVK_BC_RAW=lazy). */
-   if (bc_src->bc_raw_lazy) {
+   /* csf-v11/207: a source without raw blocks (PANVK_BC_RAW=lazy), or
+    * (225) with stale ones. */
+   if (bc_raw_unreadable(bc_src)) {
       if (bc_copy_shadow_ok(bc_src, bc_dst)) {
          bc_copy_image_shadow(cmdbuf, pCopyImageInfo);
       } else {
@@ -2415,6 +2469,8 @@ cmd_copy_image(VkCommandBuffer commandBuffer,
        (!bc_dst->bc_no_raw &&
         !bc_raw_use(cmdbuf, bc_dst, true, bc_blocks_full(bc_dst, blocks))))
       return;
+   if (!bc_dst->bc_no_raw)
+      bc_raw_written(bc_dst, bc_blocks_full(bc_dst, blocks));
 
    if (bc_dst->bc_emul && bc_dst->bc_no_raw) {
       bc_copy_image_no_raw(cmdbuf, pCopyImageInfo);

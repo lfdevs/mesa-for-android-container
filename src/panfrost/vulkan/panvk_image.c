@@ -959,6 +959,7 @@ panvk_image_init(struct panvk_image *image,
    image->bc_no_raw = false;
    image->bc_raw_store = false;
    image->bc_raw_lazy = false;
+   image->bc_raw_stale = false;
    if (image->bc_gfx && panvk_bc_lowmem_enabled(phys_dev) &&
        panvk_bc_lowmem_allowed(image, pCreateInfo)) {
       const VkFormat lm_format = panvk_bc_lowmem_format(image->vk.format);
@@ -2130,6 +2131,23 @@ out:
    simple_mtx_unlock(&bc_raw_lock);
 }
 
+/* csf-v11 225: a store read back from the spill file this many times stays
+ * resident for good. DXVK touches streamed textures (uploads per mip,
+ * relocation copies) in several command lists, so the old limit of 2
+ * pinned most raw stores of a long session in memory.
+ * PANVK_BC_RAW_PIN=<n> (default 0 = never pin; 2 = old). */
+static uint32_t
+bc_raw_pin_after(void)
+{
+   static int64_t v = -1;
+
+   if (p_atomic_read(&v) < 0) {
+      int64_t n = debug_get_num_option("PANVK_BC_RAW_PIN", 0);
+      p_atomic_set(&v, n <= 0 ? (int64_t)UINT32_MAX : MIN2(n, UINT32_MAX));
+   }
+   return (uint32_t)p_atomic_read(&v);
+}
+
 /* Called with bc_raw_lock held. full: the caller overwrites every block,
  * so the old contents are neither read back nor zeroed. */
 static VkResult
@@ -2159,7 +2177,7 @@ bc_raw_materialize(struct panvk_bc_raw *raw, bool full)
                    strerror(errno));
       } else {
          p_atomic_inc(&panvk_mem_stats.bc_remats);
-         if (++raw->remat >= 2) {
+         if (++raw->remat >= bc_raw_pin_after()) {
             raw->pinned = true;
             p_atomic_inc(&panvk_mem_stats.bc_pins);
          }

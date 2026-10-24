@@ -97,6 +97,12 @@ struct panvk_image {
     * (copy to memory, to a non-BC or differently shadowed image) is
     * skipped, logged, and switches the device to raw stores. */
    bool bc_raw_lazy;
+   /* csf-v11 225: a shadow-only BC -> BC copy (bc_copy_image_shadow) wrote
+    * the shadow of this image but not its raw blocks, which still hold
+    * zeros or older data. Raw reads treat it like bc_raw_lazy (shadow copy
+    * or skip) instead of decoding those blocks, until a raw write covers
+    * the whole image again. */
+   bool bc_raw_stale;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_image, vk.base, VkImage,
