@@ -3752,11 +3752,7 @@ gpu_prerast_launch_cs_desc(struct panvk_cmd_buffer *cmdbuf,
    if (cs->info.tls_size) {
       struct cs_builder *b =
          panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
-      cs_move64_to(b, cs_scratch_reg64(b, 0), cmdbuf->state.tls.desc.gpu);
-      cs_load64_to(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
-      cs_move64_to(b, cs_scratch_reg64(b, 0), tsd);
-      cs_store64(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
-      cs_flush_stores(b);
+      panvk_per_arch(cmd_copy_tls_to_tsd)(cmdbuf, b, tsd);
    }
 
    compute_state_set_dirty(cmdbuf, CS);

@@ -297,7 +297,8 @@ dev_tls_create(struct panvk_device *dev, const struct dev_tls_layout *l)
 }
 
 static uint64_t
-get_device_tls(struct panvk_cmd_buffer *cmdbuf, const struct dev_tls_layout *l)
+get_device_tls(struct panvk_cmd_buffer *cmdbuf, const struct dev_tls_layout *l,
+               unsigned *sparse_thread_size)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    const bool free_old = dev_tls_free_old();
@@ -349,6 +350,10 @@ get_device_tls(struct panvk_cmd_buffer *cmdbuf, const struct dev_tls_layout *l)
 
    if (cur) {
       addr = cur->addr.dev;
+      /* csf-v11 232: the stride the alias slots of a sparse BO assume. */
+      if (cur->alias_size)
+         *sparse_thread_size =
+            cur->alias_size / ((uint64_t)l->threads * MAX2(l->range, 1));
       if (free_old) {
          bool held = false;
          util_dynarray_foreach(&cmdbuf->dev_tls_refs, struct panvk_priv_bo *,
@@ -374,6 +379,7 @@ emit_tls(struct panvk_cmd_buffer *cmdbuf)
    struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(dev->vk.physical);
    unsigned core_id_range = pan_query_core_id_range(&phys_dev->kmod.dev->props);
+   unsigned sparse_thread_size = 0;
 
    if (cmdbuf->state.tls.info.tls.size) {
       unsigned thread_tls_alloc =
@@ -389,14 +395,47 @@ emit_tls(struct panvk_cmd_buffer *cmdbuf)
          .threads = thread_tls_alloc,
       };
 
-      cmdbuf->state.tls.info.tls.ptr = get_device_tls(cmdbuf, &layout);
+      cmdbuf->state.tls.info.tls.ptr =
+         get_device_tls(cmdbuf, &layout, &sparse_thread_size);
    }
 
    assert(!cmdbuf->state.tls.info.wls.size);
 
    if (cmdbuf->state.tls.desc.cpu) {
-      GENX(pan_emit_tls)(&cmdbuf->state.tls.info, cmdbuf->state.tls.desc.cpu);
+      /* csf-v11 232: a sparse BO's alias slots are THREAD_TLS_ALLOC x its own
+       * per-thread size apart, and the hardware places core c's stacks at
+       * c x THREAD_TLS_ALLOC x (stack size in the TSD). A smaller stack size
+       * in the TSD puts present cores in the slots of absent ones, which all
+       * alias slab 0, so their threads share stacks (113: gs_tess_primitive_id
+       * chunk cases on v10/v11). Program the BO's per-thread size. */
+      struct pan_tls_info info = cmdbuf->state.tls.info;
+      if (sparse_thread_size > info.tls.size)
+         info.tls.size = sparse_thread_size;
+      GENX(pan_emit_tls)(&info, cmdbuf->state.tls.desc.cpu);
    }
+}
+
+/* csf-v11 232: per-job TSDs (dispatch, precomp, the gpu_prerast and
+ * tessellation compute jobs) were written with their own shader's stack size
+ * and only took the TLS pointer from the command buffer's descriptor, which
+ * is filled at EndCommandBuffer. With PANVK_TLS_SPARSE the stack size (word
+ * 0, nothing else lives there) is copied too, so every job uses the stride
+ * the sparse BO was built for. PANVK_TLS_SPARSE=0 = the 112 copy. */
+void
+panvk_per_arch(cmd_copy_tls_to_tsd)(struct panvk_cmd_buffer *cmdbuf,
+                                    struct cs_builder *b, uint64_t tsd)
+{
+   const bool stride = dev_tls_sparse();
+
+   cs_move64_to(b, cs_scratch_reg64(b, 0), cmdbuf->state.tls.desc.gpu);
+   cs_load64_to(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
+   if (stride)
+      cs_load32_to(b, cs_scratch_reg32(b, 4), cs_scratch_reg64(b, 0), 0);
+   cs_move64_to(b, cs_scratch_reg64(b, 0), tsd);
+   cs_store64(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
+   if (stride)
+      cs_store32(b, cs_scratch_reg32(b, 4), cs_scratch_reg64(b, 0), 0);
+   cs_flush_stores(b);
 }
 
 /**

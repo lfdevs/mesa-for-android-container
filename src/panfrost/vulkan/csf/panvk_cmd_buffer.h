@@ -1135,6 +1135,11 @@ cs_emit_layer_fragment_state(struct cs_builder *b, struct cs_index fbd_ptr)
 }
 #endif /* PAN_ARCH >= 14 */
 
+/* csf-v11 232: copy the command buffer's TLS pointer (and, with
+ * PANVK_TLS_SPARSE, its stack size) into a per-job TSD on the GPU. */
+void panvk_per_arch(cmd_copy_tls_to_tsd)(struct panvk_cmd_buffer *cmdbuf,
+                                         struct cs_builder *b, uint64_t tsd);
+
 void panvk_per_arch(collect_crc_invalidation_deps)(const VkDependencyInfo *info,
                                                    struct panvk_cs_deps *deps,
                                                    uint64_t *crc_addrs);

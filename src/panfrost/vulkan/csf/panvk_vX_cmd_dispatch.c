@@ -416,13 +416,7 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
 
    /* Copy the global TLS pointer and size to the per-job TSD. */
    if (cs->info.tls_size) {
-      cs_move64_to(b, cs_scratch_reg64(b, 0), cmdbuf->state.tls.desc.gpu);
-      cs_load32_to(b, cs_scratch_reg32(b, 4), cs_scratch_reg64(b, 0), 0);
-      cs_load64_to(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
-      cs_move64_to(b, cs_scratch_reg64(b, 0), tsd);
-      cs_store32(b, cs_scratch_reg32(b, 4), cs_scratch_reg64(b, 0), 0);
-      cs_store64(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
-      cs_flush_stores(b);
+      panvk_per_arch(cmd_copy_tls_to_tsd)(cmdbuf, b, tsd);
    }
 
    panvk_per_arch(cmd_dispatch_shader)(cmdbuf, cs, cs_desc_state,
