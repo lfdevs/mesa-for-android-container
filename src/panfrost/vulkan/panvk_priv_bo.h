@@ -71,6 +71,9 @@ struct panvk_priv_bo {
    } addr;
    /* enum panvk_mem_kind (csf-v11 223). */
    uint8_t mem_kind;
+   /* csf-v11 230: when non-zero, addr.dev is a kbase MEM_ALIAS region of
+    * this many bytes over the BO (sparse device TLS), unmapped on destroy. */
+   uint64_t alias_size;
 };
 
 VkResult panvk_priv_bo_create(struct panvk_device *dev, uint64_t size,

@@ -12,6 +12,17 @@
 
 #include "drm-uapi/panthor_drm.h"
 
+#include <inttypes.h>
+
+#ifdef HAVE_PAN_KMOD_KBASE
+#include <errno.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include "drm-uapi/mali_kbase_ioctl.h"
+#endif
+
 #include "genxml/gen_macros.h"
 
 #include "panvk_buffer.h"
@@ -38,6 +49,8 @@
 
 #include "util/bitscan.h"
 #include "poly/geometry.h"
+#include "util/os_time.h"
+#include "util/u_debug.h"
 #include "vk_descriptor_update_template.h"
 #include "vk_format.h"
 #include "vk_synchronization.h"
@@ -110,12 +123,193 @@ dev_tls_release(struct panvk_cmd_buffer *cmdbuf)
    util_dynarray_clear(&cmdbuf->dev_tls_refs);
 }
 
+/* csf-v11 230: device TLS sized for the cores that exist.
+ *
+ * The TLS size is pow2(stack per thread) x THREAD_TLS_ALLOC x core-ID
+ * range, because a thread's stack is found from its raw core ID: core c
+ * owns the slab [c, c + 1) x pow2(stack) x THREAD_TLS_ALLOC (the layout the
+ * core_id_range sizing already assumes). Valhall CSF parts have sparse core
+ * masks: the 336 MiB device TLS of Fallout 4 on the G615 MC6 is 21 x 16 MiB,
+ * a 21-ID range for 6 cores, so 15 of 21 slabs belong to cores that do not
+ * exist, and kbase commits and zeroes all of them. The "device TLS" log
+ * line prints the real numbers.
+ *
+ * PANVK_TLS_SPARSE=1 (default on kbase): one BO holds a slab per present
+ * core, and a KBASE_IOCTL_MEM_ALIAS region spans the whole core-ID range
+ * with each present core's slot mapped to its own slab. The slots of absent
+ * cores alias the first slab (no extra pages; nothing runs there), so the
+ * GPU address layout is exactly the old one and no address faults. Any
+ * failure falls back to the full BO. PANVK_TLS_SPARSE=0 = old.
+ *
+ * PANVK_TLS_SHRINK_MS=<ms> (default 10000, 0 = old): when no command buffer
+ * needed more than half of the current device TLS for that long, a command
+ * buffer that needs a quarter or less gets a new, smaller BO and the device
+ * drops its reference on the big one (command buffers still holding it keep
+ * it alive, 227). Needs PANVK_TLS_FREE_OLD (default on). */
+static int
+dev_tls_knob(int *v, const char *name, int def)
+{
+   if (p_atomic_read(v) < 0)
+      p_atomic_set(v, (int)debug_get_num_option(name, def));
+   return p_atomic_read(v);
+}
+
+static bool
+dev_tls_sparse(void)
+{
+   static int v = -1;
+   return dev_tls_knob(&v, "PANVK_TLS_SPARSE", 1) != 0;
+}
+
 static uint64_t
-get_device_tls(struct panvk_cmd_buffer *cmdbuf, uint64_t size)
+dev_tls_shrink_ns(void)
+{
+   static int v = -1;
+   return (uint64_t)MAX2(dev_tls_knob(&v, "PANVK_TLS_SHRINK_MS", 10000), 0) *
+          1000000ull;
+}
+
+/* Bytes of GPU address space a device TLS BO covers. */
+static uint64_t
+dev_tls_span(const struct panvk_priv_bo *bo)
+{
+   return bo->alias_size ? bo->alias_size : pan_kmod_bo_size(bo->bo);
+}
+
+struct dev_tls_layout {
+   uint64_t span;      /* pan_get_total_stack_size() */
+   uint64_t per_core;  /* bytes per core-ID slot */
+   uint64_t present;   /* shader_present */
+   unsigned range;     /* core-ID range */
+   unsigned thread_size, threads;
+};
+
+#ifdef HAVE_PAN_KMOD_KBASE
+static uint64_t
+dev_tls_page(void)
+{
+   const long p = sysconf(_SC_PAGESIZE);
+   return p > 0 ? (uint64_t)p : 4096;
+}
+
+/* Returns the alias region VA, or 0. */
+static uint64_t
+dev_tls_alias(struct panvk_device *dev, const struct panvk_priv_bo *backing,
+              const struct dev_tls_layout *l)
+{
+   const uint64_t page = dev_tls_page();
+   const uint64_t stride = l->per_core / page;
+   struct base_mem_aliasing_info ai[64];
+   unsigned idx = 0;
+
+   for (unsigned c = 0; c < l->range; c++) {
+      const bool present = (l->present >> c) & 1;
+      ai[c] = (struct base_mem_aliasing_info){
+         .handle = backing->addr.dev,
+         .offset = present ? (uint64_t)idx * stride : 0,
+         .length = stride,
+      };
+      if (present)
+         idx++;
+   }
+
+   union kbase_ioctl_mem_alias req = {
+      .in = {
+         .flags = BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR |
+                  BASE_MEM_PROT_CPU_RD,
+         .stride = stride,
+         .nents = l->range,
+         .aliasing_info = (uintptr_t)ai,
+      },
+   };
+
+   if (ioctl(dev->kmod.dev->fd, KBASE_IOCTL_MEM_ALIAS, &req)) {
+      mesa_logw("panvk: device TLS: KBASE_IOCTL_MEM_ALIAS failed (%s), "
+                "using a full BO", strerror(errno));
+      return 0;
+   }
+
+   /* 64-bit clients get a SAME_VA cookie; mmap() places the region, and
+    * the address is both the CPU and the GPU VA (as for the ring buffer). */
+   void *ptr = mmap(NULL, l->span, PROT_READ, MAP_SHARED, dev->kmod.dev->fd,
+                    req.out.gpu_va);
+   if (ptr == MAP_FAILED) {
+      mesa_logw("panvk: device TLS: alias mmap failed (%s), using a full BO",
+                strerror(errno));
+      struct kbase_ioctl_mem_free free_req = {.gpu_addr = req.out.gpu_va};
+      ioctl(dev->kmod.dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+      return 0;
+   }
+
+   return (uintptr_t)ptr;
+}
+#endif
+
+static struct panvk_priv_bo *
+dev_tls_create(struct panvk_device *dev, const struct dev_tls_layout *l)
+{
+   const uint32_t flags =
+      panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_NO_MMAP);
+   struct panvk_priv_bo *bo = NULL;
+
+#ifdef HAVE_PAN_KMOD_KBASE
+   static int sparse_broken;
+   const struct panvk_physical_device *pdev =
+      to_panvk_physical_device(dev->vk.physical);
+   const unsigned cores = util_bitcount64(l->present);
+
+   if (pdev->kbase_node_path[0] && dev_tls_sparse() &&
+       !p_atomic_read(&sparse_broken) && !dev->debug.decode_ctx &&
+       cores && cores < l->range && l->range <= 64 &&
+       l->per_core * l->range == l->span && !(l->per_core % dev_tls_page()) &&
+       !(flags & PAN_KMOD_BO_FLAG_GPU_UNCACHED)) {
+      if (panvk_priv_bo_create_kind(dev, l->per_core * cores, flags,
+                                    VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo,
+                                    PANVK_MEM_DEV_TLS) == VK_SUCCESS) {
+         const uint64_t va = dev_tls_alias(dev, bo, l);
+         if (va) {
+            bo->addr.dev = va;
+            bo->alias_size = l->span;
+            mesa_logi("panvk: device TLS %u B/thread x %u threads x %u core "
+                      "IDs (%u cores, mask 0x%" PRIx64 ") = %" PRIu64
+                      " MiB of VA, %" PRIu64 " MiB backed",
+                      l->thread_size, l->threads, l->range, cores, l->present,
+                      l->span >> 20, pan_kmod_bo_size(bo->bo) >> 20);
+            return bo;
+         }
+         panvk_priv_bo_unref(bo);
+         bo = NULL;
+         p_atomic_set(&sparse_broken, 1);
+      }
+   }
+#endif
+
+   if (panvk_priv_bo_create_kind(dev, l->span, flags,
+                                 VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo,
+                                 PANVK_MEM_DEV_TLS) != VK_SUCCESS)
+      return NULL;
+
+   mesa_logi("panvk: device TLS %u B/thread x %u threads x %u core IDs "
+             "(mask 0x%" PRIx64 ") = %" PRIu64 " MiB",
+             l->thread_size, l->threads, l->range, l->present,
+             pan_kmod_bo_size(bo->bo) >> 20);
+   return bo;
+}
+
+static uint64_t
+get_device_tls(struct panvk_cmd_buffer *cmdbuf, const struct dev_tls_layout *l)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    const bool free_old = dev_tls_free_old();
+   const uint64_t size = l->span;
    uint64_t addr = 0;
+
+   /* csf-v11 230: last time a command buffer needed more than half of the
+    * current device TLS. Process-wide; a stale value only delays or
+    * advances a shrink, which is always safe. */
+   static uint64_t last_big_ns;
+   const uint64_t shrink_ns = free_old ? dev_tls_shrink_ns() : 0;
+   const uint64_t now = shrink_ns ? os_time_get_nano() : 0;
 
    simple_mtx_lock(&dev->tls.lock);
    struct panvk_priv_bo *cur =
@@ -123,13 +317,18 @@ get_device_tls(struct panvk_cmd_buffer *cmdbuf, uint64_t size)
          ? util_dynarray_top(&dev->tls.bos, struct panvk_priv_bo *)
          : NULL;
 
-   if (!cur || pan_kmod_bo_size(cur->bo) < size) {
-      struct panvk_priv_bo *bo;
-      if (panvk_priv_bo_create_kind(
-             dev, size,
-             panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_NO_MMAP),
-             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo,
-             PANVK_MEM_DEV_TLS) == VK_SUCCESS) {
+   bool replace = !cur || dev_tls_span(cur) < size;
+   if (cur && !replace && shrink_ns) {
+      if (size > dev_tls_span(cur) / 2 || !last_big_ns)
+         last_big_ns = now;
+      else if (size <= dev_tls_span(cur) / 4 &&
+               now - last_big_ns > shrink_ns)
+         replace = true;
+   }
+
+   if (replace) {
+      struct panvk_priv_bo *bo = dev_tls_create(dev, l);
+      if (bo) {
          if (free_old) {
             /* Drop the device's references on the outgrown BOs; command
              * buffers that use them hold their own. */
@@ -142,7 +341,8 @@ get_device_tls(struct panvk_cmd_buffer *cmdbuf, uint64_t size)
          }
          util_dynarray_append(&dev->tls.bos, bo);
          cur = bo;
-      } else {
+         last_big_ns = now;
+      } else if (cur && dev_tls_span(cur) < size) {
          cur = NULL;
       }
    }
@@ -180,8 +380,16 @@ emit_tls(struct panvk_cmd_buffer *cmdbuf)
          pan_query_thread_tls_alloc(&phys_dev->kmod.dev->props);
       unsigned size = pan_get_total_stack_size(cmdbuf->state.tls.info.tls.size,
                                                thread_tls_alloc, core_id_range);
+      const struct dev_tls_layout layout = {
+         .span = size,
+         .per_core = size / MAX2(core_id_range, 1),
+         .present = phys_dev->kmod.dev->props.shader_present,
+         .range = core_id_range,
+         .thread_size = size / MAX2(thread_tls_alloc * core_id_range, 1),
+         .threads = thread_tls_alloc,
+      };
 
-      cmdbuf->state.tls.info.tls.ptr = get_device_tls(cmdbuf, size);
+      cmdbuf->state.tls.info.tls.ptr = get_device_tls(cmdbuf, &layout);
    }
 
    assert(!cmdbuf->state.tls.info.wls.size);

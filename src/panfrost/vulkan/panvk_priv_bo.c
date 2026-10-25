@@ -19,6 +19,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #include "util/os_misc.h"
@@ -230,6 +231,11 @@ panvk_priv_bo_destroy(struct panvk_priv_bo *priv_bo)
                                pan_kmod_bo_size(priv_bo->bo));
       assert(!ret);
    }
+
+   /* csf-v11 230: a kbase alias region is a SAME_VA region; munmap()
+    * tears it down (and drops its reference on the BO pages). */
+   if (priv_bo->alias_size)
+      munmap((void *)(uintptr_t)priv_bo->addr.dev, priv_bo->alias_size);
 
    pan_kmod_bo_put(priv_bo->bo);
    vk_free(&dev->vk.alloc, priv_bo);
