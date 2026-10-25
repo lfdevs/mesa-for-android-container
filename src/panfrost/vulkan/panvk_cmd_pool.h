@@ -18,6 +18,13 @@ struct panvk_cmd_pool {
    struct panvk_bo_pool tls_bo_pool;
    struct panvk_bo_pool tls_big_bo_pool;
    struct list_head push_sets;
+   /* csf-v11 231: auto-trim hysteresis (226): the largest number of BOs
+    * each free list got back at one reset, in this window of resets and the
+    * previous one. */
+   struct {
+      uint32_t cur[6], prev[6];
+      uint32_t resets;
+   } autotrim;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_cmd_pool, vk.base, VkCommandPool,

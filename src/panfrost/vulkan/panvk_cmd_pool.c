@@ -28,7 +28,7 @@ panvk_CreateCommandPool(VkDevice _device,
    VK_FROM_HANDLE(panvk_device, device, _device);
    struct panvk_cmd_pool *pool;
 
-   pool = vk_alloc2(&device->vk.alloc, pAllocator, sizeof(*pool), 8,
+   pool = vk_zalloc2(&device->vk.alloc, pAllocator, sizeof(*pool), 8,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (pool == NULL)
       return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -129,6 +129,24 @@ panvk_cmd_pool_autotrim_enabled(struct panvk_device *dev)
 
 #define PANVK_CMD_POOL_BO_POOLS 6
 
+/* csf-v11 231: 226 kept only what the last reset gave back (+25%), so a pool
+ * whose recordings vary in size freed BOs at a light reset and allocated
+ * them again at the next heavy one: 656k BOs / 41.9 GB in 6 min of
+ * Fallout 4, with cmd_cs flat. Now each free list keeps the largest count
+ * it got back at any reset in the current and the previous window of
+ * PANVK_CMD_POOL_AUTOTRIM_WINDOW resets (default 64), plus a quarter (at
+ * least 2); a spike is freed one to two windows after it ends.
+ * PANVK_CMD_POOL_AUTOTRIM_WINDOW=0 = the 226 behaviour. */
+static unsigned
+panvk_cmd_pool_autotrim_window(void)
+{
+   static int v = -1;
+   if (v < 0)
+      v = MAX2((int)debug_get_num_option("PANVK_CMD_POOL_AUTOTRIM_WINDOW", 64),
+               0);
+   return v;
+}
+
 static void
 panvk_cmd_pool_bo_pools(struct panvk_cmd_pool *pool,
                         struct panvk_bo_pool *out[PANVK_CMD_POOL_BO_POOLS])
@@ -195,10 +213,23 @@ panvk_ResetCommandPool(VkDevice _device, VkCommandPool commandPool,
       panvk_cmd_pool_release_free_bos(pool);
 
    if (result == VK_SUCCESS && autotrim) {
+      const unsigned window = panvk_cmd_pool_autotrim_window();
       for (unsigned i = 0; i < PANVK_CMD_POOL_BO_POOLS; i++) {
          const unsigned after = list_length(&bo_pools[i]->free_bos);
          const unsigned used = after > before[i] ? after - before[i] : 0;
-         panvk_bo_pool_trim_to(bo_pools[i], after, used + MAX2(used / 4, 2));
+         unsigned base = used;
+         if (window) {
+            pool->autotrim.cur[i] = MAX2(pool->autotrim.cur[i], used);
+            base = MAX2(pool->autotrim.cur[i], pool->autotrim.prev[i]);
+         }
+         panvk_bo_pool_trim_to(bo_pools[i], after, base + MAX2(base / 4, 2));
+      }
+      if (window && ++pool->autotrim.resets >= window) {
+         pool->autotrim.resets = 0;
+         for (unsigned i = 0; i < PANVK_CMD_POOL_BO_POOLS; i++) {
+            pool->autotrim.prev[i] = pool->autotrim.cur[i];
+            pool->autotrim.cur[i] = 0;
+         }
       }
    }
 
