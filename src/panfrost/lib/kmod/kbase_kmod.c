@@ -1870,9 +1870,24 @@ kbase_check_bifrost_atom_stride(int fd, bool *seq_nr)
  * was 2.0 s of every one of 94 opens (~3 min of a 463 s run).
  *
  * Keeping the delay but only for the first JM open in the process
- * (concurrent opens wait for it to finish) is the conservative change.
- * PANVK_KBASE_JM_WARMUP: unset/1 = once per process; 2 = every open (old);
- * 0 = never. PANVK_KBASE_JM_WARMUP_MS = length (default 2000, 0-10000).
+ * (concurrent opens wait for it to finish) was the conservative change.
+ *
+ * 115 (perf review 2026-10-26 D4): off by default. Nothing in the code or
+ * history explains it: the stride probes before and after it are
+ * dependency-only atoms whose events are read (or refused) synchronously,
+ * the probe's atom number is free again once its event is read, and the
+ * first vertex/tiler and fragment chains of every queue are submitted
+ * synchronously with up to 5 attempts and 0.4-1.6 s back-off
+ * (kbase_kmod_job_submit_retry(), the jm-v9 002 warm-up path), which is
+ * what would catch a GPU that is not ready yet. The sleep cost 2 s per
+ * process: about 78 s (21-26 %) of an FTL PanProbe run and 2 s per game
+ * start. Watch the first submit of each process (PanProbe's first test,
+ * any "JM atom ... failed" or DEVICE_LOST right after "kbase: JM warm-up
+ * off") on the first device runs.
+ *
+ * PANVK_KBASE_JM_WARMUP: unset/0 = never (115); 1 = once per process (114);
+ * 2 = every open (before 111). PANVK_KBASE_JM_WARMUP_MS = length (default
+ * 2000, 0-10000).
  */
 static void
 kbase_jm_warmup(void)
@@ -1881,15 +1896,15 @@ kbase_jm_warmup(void)
    static bool done;
 
    const char *env = getenv("PANVK_KBASE_JM_WARMUP");
-   const int mode = (env && env[0]) ? atoi(env) : 1;
+   const int mode = (env && env[0]) ? atoi(env) : 0;
    const char *ms_env = getenv("PANVK_KBASE_JM_WARMUP_MS");
    int ms = (ms_env && ms_env[0]) ? atoi(ms_env) : 2000;
    if (ms < 0 || ms > 10000)
       ms = 2000;
 
    if (mode == 0 || ms == 0) {
-      mesa_logi("kbase: JM warm-up off (PANVK_KBASE_JM_WARMUP=%d, _MS=%d)",
-                mode, ms);
+      mesa_logi("kbase: JM warm-up off (PANVK_KBASE_JM_WARMUP=%d, _MS=%d; "
+                "=1 = 2 s once per process as in 114)", mode, ms);
       return;
    }
 
