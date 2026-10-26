@@ -28,6 +28,9 @@ enum panvk_perf_knob {
    PANVK_PERF_DB_ALT = 1 << 1,
    /* C1, PANVK_DEPTH_BOUNDS: the depthBounds feature is exposed. */
    PANVK_PERF_DEPTH_BOUNDS = 1 << 2,
+   /* PANVK_CSF_INDIRECT_REEMIT: a CSF draw after an indirect draw that
+    * repeated the VS tables or push uniforms rebuilds them. */
+   PANVK_PERF_CSF_INDIRECT_REEMIT = 1 << 3,
 };
 
 extern uint32_t panvk_perf_knobs;

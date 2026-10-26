@@ -3669,6 +3669,22 @@ launch_indirect_draw(struct panvk_cmd_buffer *cmdbuf,
          }
       }
    }
+
+   /* The loop leaves VERTEX_SRT past the last per-draw resource table and
+    * VERTEX_FAU past the last per-draw push uniform block, and those copies
+    * hold the indirect draws' own firstInstance/firstVertex patches. The
+    * next draw re-emits both registers only when its VS tables or push
+    * uniforms are dirty, which nothing guaranteed: a direct draw with the
+    * same state and zero firstVertex/firstInstance reused them. Make it
+    * rebuild its own (BASE_INSTANCE reaches vs_desc_dirty() through the
+    * per-instance attributes that made the tables repeat).
+    */
+   if (PANVK_PERF(CSF_INDIRECT_REEMIT)) {
+      if (cmdbuf->state.gfx.vs.desc_repeat_count)
+         gfx_state_set_dirty(cmdbuf, BASE_INSTANCE);
+      if (patch_faus)
+         gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+   }
 }
 
 static void panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf,
