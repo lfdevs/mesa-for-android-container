@@ -1234,11 +1234,9 @@ panvk_per_arch(cmd_init_poly_heap)(struct panvk_cmd_buffer *cmdbuf)
 }
 
 static struct cs_buffer
-alloc_cs_buffer(void *cookie)
+alloc_cs_chunk(struct panvk_cmd_buffer *cmdbuf, uint32_t capacity)
 {
-   struct panvk_cmd_buffer *cmdbuf = cookie;
    const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
-   const unsigned capacity = 64 * 1024 / sizeof(uint64_t);
 
    if (!dev->cmdbuf_opt.cs_flush_used) {
       struct pan_ptr ptr =
@@ -1286,6 +1284,35 @@ alloc_cs_buffer(void *cookie)
    };
 }
 
+static struct cs_buffer
+alloc_cs_buffer(void *cookie)
+{
+   return alloc_cs_chunk(cookie, 64 * 1024 / sizeof(uint64_t));
+}
+
+/* Every chunk was 64 KiB, so each subqueue a command buffer touched cost a
+ * 64 KiB slab however little it recorded. The first chunk of a stream is
+ * cmdbuf_opt.cs_chunk_min_B and each next one twice the chunk it follows,
+ * up to 64 KiB, always big enough for the sequence that needs it. Small
+ * chunks share the CS pool's 64 KiB slabs.
+ */
+static struct cs_buffer
+alloc_cs_buffer_sized(struct cs_builder *b, void *cookie, uint32_t min_instrs)
+{
+   struct panvk_cmd_buffer *cmdbuf = cookie;
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const uint32_t max_B = 64 * 1024;
+   uint32_t size_B = dev->cmdbuf_opt.cs_chunk_min_B;
+
+   if (b->cur_chunk.buffer.cpu)
+      size_B = MAX2(size_B, MIN2(max_B, b->cur_chunk.buffer.capacity * 2 *
+                                           (uint32_t)sizeof(uint64_t)));
+   size_B =
+      MAX2(size_B, ALIGN_POT(min_instrs * (uint32_t)sizeof(uint64_t), 64));
+
+   return alloc_cs_chunk(cmdbuf, size_B / sizeof(uint64_t));
+}
+
 static enum cs_reg_perm
 cs_reg_perm(struct cs_builder *b, unsigned reg)
 {
@@ -1328,6 +1355,9 @@ init_cs_builder(struct panvk_cmd_buffer *cmdbuf, uint32_t i)
          .compute_ep_limit =
             PAN_ARCH >= 12 ? phys_dev->kmod.dev->props.max_tasks_per_core : 0,
          .alloc_buffer = alloc_cs_buffer,
+         .alloc_buffer_sized = dev->cmdbuf_opt.cs_chunk_min_B < 64 * 1024
+                                  ? alloc_cs_buffer_sized
+                                  : NULL,
          .cookie = cmdbuf,
          .ls_sb_slot = SB_ID(LS),
       };

@@ -233,6 +233,9 @@ struct panvk_device {
       /* PANVK_JM_CMD_POOL_AUTOTRIM (default 1): command pool auto-trim
        * (csf-v11 226/231) on v6/v7/v9 JM too. */
       bool jm_pool_autotrim;
+      /* PANVK_CS_CHUNK_KB (default 4, 64 = fixed 64 KiB chunks): size of
+       * the first CS chunk of a stream (CSF), doubling up to 64 KiB. */
+      uint32_t cs_chunk_min_B;
    } cmdbuf_opt;
 
    /* Device-wide thread local storage shared by all command buffers. The

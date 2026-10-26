@@ -963,6 +963,10 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       debug_get_bool_option("PANVK_CS_FLUSH_USED", true);
    device->cmdbuf_opt.jm_pool_autotrim =
       debug_get_bool_option("PANVK_JM_CMD_POOL_AUTOTRIM", true);
+   device->cmdbuf_opt.cs_chunk_min_B =
+      util_next_power_of_two(
+         CLAMP(debug_get_num_option("PANVK_CS_CHUNK_KB", 4), 1, 64)) *
+      1024;
 
 #if PAN_ARCH >= 9
    if (PANVK_DEBUG(GPU_PRERAST) || device->vk.enabled_features.fillModeNonSolid ||
