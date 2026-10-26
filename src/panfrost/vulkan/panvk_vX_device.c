@@ -695,8 +695,14 @@ panvk_init_null_descs(struct panvk_device *dev)
 
    VkMemoryRequirements mr;
    t->GetImageMemoryRequirements(h, dev->null_descs.image, &mr);
+   /* Reads go through ZERO swizzles, but keep the texel zero anyway. */
+   const VkMemoryAllocateFlagsInfo mafi = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+      .flags = VK_MEMORY_ALLOCATE_ZERO_INITIALIZE_BIT_EXT,
+   };
    const VkMemoryAllocateInfo mai = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &mafi,
       .allocationSize = mr.size,
       .memoryTypeIndex = ffs(mr.memoryTypeBits) - 1,
    };

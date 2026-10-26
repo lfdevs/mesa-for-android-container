@@ -248,8 +248,10 @@ dev_tls_alias(struct panvk_device *dev, const struct panvk_priv_bo *backing,
 static struct panvk_priv_bo *
 dev_tls_create(struct panvk_device *dev, const struct dev_tls_layout *l)
 {
-   const uint32_t flags =
-      panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_NO_MMAP);
+   /* Stacks are written before they are read, and a reused BO holds old
+    * stacks anyway: no clear (it was up to 336 MiB of memset in 112). */
+   const uint32_t flags = panvk_device_adjust_bo_flags(
+      dev, PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_NO_ZERO);
    struct panvk_priv_bo *bo = NULL;
 
 #ifdef HAVE_PAN_KMOD_KBASE
@@ -1444,9 +1446,11 @@ panvk_create_cmdbuf(struct vk_command_pool *vk_pool, VkCommandBufferLevel level,
    panvk_pool_init(&cmdbuf->desc_pool, device, &pool->desc_bo_pool, NULL,
                    &desc_pool_props);
 
+   /* WLS: workgroup memory is undefined at dispatch start (zero-init is
+    * lowered in the shader), and pooled slabs are reused uncleared. */
    struct panvk_pool_properties tls_pool_props = {
-      .create_flags =
-         panvk_device_adjust_bo_flags(device, PAN_KMOD_BO_FLAG_NO_MMAP),
+      .create_flags = panvk_device_adjust_bo_flags(
+         device, PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_NO_ZERO),
       .slab_size = 64 * 1024,
       .label = "TLS pool",
       .prealloc = false,

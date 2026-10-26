@@ -373,6 +373,10 @@ panvk_device_adjust_bo_flags(const struct panvk_device *device,
          PAN_KMOD_BO_FLAG_GPU_UNCACHED))
       bo_flags &= ~PAN_KMOD_BO_FLAG_GPU_UNCACHED;
 
+   if (!(device->kmod.dev->props.supported_bo_flags &
+         PAN_KMOD_BO_FLAG_NO_ZERO))
+      bo_flags &= ~PAN_KMOD_BO_FLAG_NO_ZERO;
+
    return bo_flags;
 }
 

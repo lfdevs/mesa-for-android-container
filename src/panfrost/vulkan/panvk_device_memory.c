@@ -122,6 +122,18 @@ panvk_AllocateMemory(VkDevice _device,
          (device->vk.enabled_features.memoryMapPlaced &&
           (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
 
+      /* Vulkan leaves new memory undefined unless the application asks
+       * for VK_MEMORY_ALLOCATE_ZERO_INITIALIZE_BIT_EXT, so skip the kbase
+       * clear (041: about 1 GiB of memset at a Fallout 4 load, 40-80 ms
+       * per 256 MiB DXVK chunk). Only on v9+, whose AFBC plane descriptors
+       * carry the plane size: an AFBC header that was never written holds
+       * an arbitrary payload offset, while a zero one is a solid-colour
+       * block, and v6/v7 surfaces have no size to bound the fetch.
+       */
+      if (pan_arch(device->kmod.dev->props.gpu_id) >= 9 &&
+          !(mem->vk.alloc_flags & VK_MEMORY_ALLOCATE_ZERO_INITIALIZE_BIT_EXT))
+         bo_flags |= PAN_KMOD_BO_FLAG_NO_ZERO;
+
       bo_flags = panvk_device_adjust_bo_flags(device, bo_flags);
       mem->bo = pan_kmod_bo_alloc(device->kmod.dev,
                                   shareable ? NULL : device->kmod.vm,

@@ -623,6 +623,11 @@ kbase_dev_query_props(struct kbase_kmod_dev *kbase_dev,
                                 PAN_KMOD_BO_FLAG_WB_MMAP |
                                 PAN_KMOD_BO_FLAG_GPU_UNCACHED |
                                 PAN_KMOD_BO_FLAG_CSF_EVENT;
+
+   /* NO_ZERO skips 041's clear of the committed pages.
+    * PANVK_KBASE_ZERO_ALL=1 clears every BO again (114). */
+   if (!debug_get_bool_option("PANVK_KBASE_ZERO_ALL", false))
+      props->supported_bo_flags |= PAN_KMOD_BO_FLAG_NO_ZERO;
 }
 
 /* jm-v7 109: GPU timestamp frequency calibration.
@@ -2830,7 +2835,7 @@ retry_alloc:;
    kbase_bo->gpu_mapping = cpu_ptr;
    kbase_bo->gpu_va = kbase_bo->same_va ? (uintptr_t)cpu_ptr : alloc_gpu_va;
 
-   if (commit_pages) {
+   if (commit_pages && !(kmod_flags & PAN_KMOD_BO_FLAG_NO_ZERO)) {
       memset(cpu_ptr, 0, commit_pages * page_size);
       if ((alloc_flags & BASE_MEM_CACHED_CPU) && !kbase_bo->cpu_gpu_coherent) {
          struct kbase_ioctl_mem_sync sync_req = {

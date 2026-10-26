@@ -138,6 +138,13 @@ enum pan_kmod_bo_flags {
 
    /* kbase CSF event memory monitored for cross-CSG synchronization. */
    PAN_KMOD_BO_FLAG_CSF_EVENT = BITFIELD_BIT(8),
+
+   /* kbase: leave the committed pages as the kernel hands them out instead
+    * of clearing them in user space. Pages come zeroed from the kernel and
+    * the device pool; only pages this context freed come back with their
+    * old contents, so a BO never sees another process's data.
+    */
+   PAN_KMOD_BO_FLAG_NO_ZERO = BITFIELD_BIT(9),
 };
 
 /* Allowed group priority flags. */
