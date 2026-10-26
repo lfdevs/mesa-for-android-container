@@ -7342,6 +7342,14 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_FRAGMENT);
    bool has_oq_chain = cmdbuf->state.gfx.render.oq.chain != 0;
 
+   /* C4 (115): what these jobs write, for the preload barrier of later
+    * passes. A secondary that continues the primary's pass does not know
+    * the attachments.
+    */
+   panvk_per_arch(cmd_track_frag_writes)(cmdbuf);
+   if (inherits_render_ctx(cmdbuf))
+      cmdbuf->state.gfx.frag_written.overflow = true;
+
    /* Now initialize the fragment bits. */
    cs_update_frag_ctx(b) {
 #if PAN_ARCH >= 14

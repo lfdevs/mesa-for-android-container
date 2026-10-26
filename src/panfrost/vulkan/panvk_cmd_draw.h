@@ -165,6 +165,27 @@ enum panvk_cmd_graphics_dirty_state {
    PANVK_CMD_GRAPHICS_DIRTY_STATE_COUNT,
 };
 
+#if PAN_ARCH >= 10
+/* C4 (115): the memory that the fragment jobs issued since the fragment
+ * subqueue last waited for all of its jobs may have written: every plane
+ * of their attachments, as page-aligned address ranges. A pass that loads
+ * none of it does not need that wait before its preload
+ * (cmd_init_render_state()). Only valid once this command buffer did such
+ * a wait, since the fragment jobs of earlier command buffers can still run
+ * until then. Executing secondaries clears it with the rest of the
+ * graphics state.
+ */
+struct panvk_frag_written {
+   bool valid;
+   /* Out of ranges, or an attachment with an unknown range. */
+   bool overflow;
+   uint8_t count;
+   struct {
+      uint64_t start, end;
+   } ranges[16];
+};
+#endif
+
 struct panvk_cmd_graphics_state {
    struct panvk_descriptor_state desc_state;
 #if PAN_ARCH < 9
@@ -393,6 +414,8 @@ struct panvk_cmd_graphics_state {
 
 #if PAN_ARCH >= 10
    uint64_t tsd;
+
+   struct panvk_frag_written frag_written;
 #endif
 
    BITSET_DECLARE(dirty, PANVK_CMD_GRAPHICS_DIRTY_STATE_COUNT);
@@ -682,6 +705,10 @@ void panvk_per_arch(cmd_select_db_alt_fs)(struct panvk_cmd_buffer *cmdbuf);
 #endif
 
 void panvk_per_arch(cmd_select_tile_size)(struct panvk_cmd_buffer *cmdbuf);
+
+#if PAN_ARCH >= 10
+void panvk_per_arch(cmd_track_frag_writes)(struct panvk_cmd_buffer *cmdbuf);
+#endif
 
 struct panvk_draw_info {
    struct {

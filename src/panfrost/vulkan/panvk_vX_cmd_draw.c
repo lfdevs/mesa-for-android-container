@@ -9,6 +9,7 @@
 #include "panvk_cmd_buffer.h"
 #include "panvk_device_memory.h"
 #include "panvk_entrypoints.h"
+#include "panvk_perf_knobs.h"
 
 #include "pan_desc.h"
 #include "pan_util.h"
@@ -597,6 +598,234 @@ render_state_set_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
    }
 }
 
+#if PAN_ARCH >= 10
+/* C4 (115): add the page-aligned range [base, base + size). A zero base
+ * (unbound) is unknown.
+ */
+static void
+frag_written_add_range(struct panvk_frag_written *fw, uint64_t base,
+                       uint64_t size)
+{
+   if (!base) {
+      fw->overflow = true;
+      return;
+   }
+
+   const uint64_t start = ROUND_DOWN_TO(base, 4096);
+   const uint64_t end = align64(base + size, 4096);
+
+   for (unsigned r = 0; r < fw->count; r++) {
+      if (fw->ranges[r].start <= start && end <= fw->ranges[r].end)
+         return;
+   }
+
+   if (fw->count == ARRAY_SIZE(fw->ranges)) {
+      fw->overflow = true;
+      return;
+   }
+
+   fw->ranges[fw->count].start = start;
+   fw->ranges[fw->count].end = end;
+   fw->count++;
+}
+
+static void
+frag_written_add_iview(struct panvk_frag_written *fw,
+                       const struct panvk_image_view *iview)
+{
+   if (!iview)
+      return;
+
+   const struct panvk_image *img =
+      container_of(iview->vk.image, struct panvk_image, vk);
+
+   /* Sparse images can share pages with anything. */
+   if (img->vk.create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) {
+      fw->overflow = true;
+      return;
+   }
+
+   for (unsigned p = 0; p < img->plane_count; p++)
+      frag_written_add_range(fw, img->planes[p].plane.base,
+                             img->planes[p].plane.layout.data_size_B);
+}
+
+/* A direct MSAA resolve stores straight to the resolve image, which is in
+ * none of the attachment views.
+ */
+static void
+frag_written_add_store(struct panvk_frag_written *fw,
+                       const struct pan_fb_store_target *store)
+{
+   if (!store->store || !store->iview)
+      return;
+
+   for (unsigned p = 0; p < ARRAY_SIZE(store->iview->planes); p++) {
+      const struct pan_image_plane_ref pref =
+         pan_image_view_get_plane(store->iview, p);
+
+      if (!pref.image)
+         continue;
+
+      const struct pan_image_plane *plane = pref.image->planes[pref.plane_idx];
+      if (!plane) {
+         fw->overflow = true;
+         continue;
+      }
+
+      frag_written_add_range(fw, plane->base, plane->layout.data_size_B);
+   }
+}
+
+static bool
+frag_written_overlaps_range(const struct panvk_frag_written *fw,
+                            uint64_t base, uint64_t size)
+{
+   if (!base)
+      return true;
+
+   const uint64_t start = ROUND_DOWN_TO(base, 4096);
+   const uint64_t end = align64(base + size, 4096);
+
+   for (unsigned r = 0; r < fw->count; r++) {
+      if (start < fw->ranges[r].end && fw->ranges[r].start < end)
+         return true;
+   }
+
+   return false;
+}
+
+static bool
+frag_written_overlaps(const struct panvk_frag_written *fw,
+                      const struct panvk_image_view *iview)
+{
+   if (!iview)
+      return false;
+
+   const struct panvk_image *img =
+      container_of(iview->vk.image, struct panvk_image, vk);
+
+   if (img->vk.create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
+      return true;
+
+   for (unsigned p = 0; p < img->plane_count; p++) {
+      if (frag_written_overlaps_range(fw, img->planes[p].plane.base,
+                                      img->planes[p].plane.layout.data_size_B))
+         return true;
+   }
+
+   return false;
+}
+
+/* The view the preload actually reads from. */
+static bool
+frag_written_overlaps_load(const struct panvk_frag_written *fw,
+                           const struct pan_fb_load_target *load)
+{
+   if (!load->iview)
+      return false;
+
+   for (unsigned p = 0; p < ARRAY_SIZE(load->iview->planes); p++) {
+      const struct pan_image_plane_ref pref =
+         pan_image_view_get_plane(load->iview, p);
+
+      if (!pref.image)
+         continue;
+
+      const struct pan_image_plane *plane = pref.image->planes[pref.plane_idx];
+      if (!plane || frag_written_overlaps_range(fw, plane->base,
+                                                plane->layout.data_size_B))
+         return true;
+   }
+
+   return false;
+}
+
+/* Called for every fragment job the command buffer issues: everything the
+ * jobs can write. That is the attachments (incremental rendering spills to
+ * them even without a store), the internal multisampled images of
+ * multisampled-render-to-single-sampled, the resolve targets and whatever
+ * the framebuffer stores to.
+ */
+void
+panvk_per_arch(cmd_track_frag_writes)(struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   struct panvk_frag_written *fw = &cmdbuf->state.gfx.frag_written;
+
+   for (unsigned i = 0; i < MAX_RTS; i++) {
+      frag_written_add_iview(fw, render->color_attachments.iviews[i]);
+      frag_written_add_iview(fw, render->color_attachments.preload_iviews[i]);
+      frag_written_add_iview(fw,
+                             render->color_attachments.resolve[i].dst_iview);
+   }
+
+   frag_written_add_iview(fw, render->z_attachment.iview);
+   frag_written_add_iview(fw, render->z_attachment.preload_iview);
+   frag_written_add_iview(fw, render->z_attachment.resolve.dst_iview);
+   frag_written_add_iview(fw, render->s_attachment.iview);
+   frag_written_add_iview(fw, render->s_attachment.preload_iview);
+   frag_written_add_iview(fw, render->s_attachment.resolve.dst_iview);
+
+   for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
+      frag_written_add_store(fw, &render->fb.store.rts[rt]);
+      frag_written_add_store(fw, &render->fb.spill.store.rts[rt]);
+   }
+
+   frag_written_add_store(fw, &render->fb.store.zs);
+   frag_written_add_store(fw, &render->fb.store.s);
+   frag_written_add_store(fw, &render->fb.spill.store.zs);
+   frag_written_add_store(fw, &render->fb.spill.store.s);
+}
+
+static bool
+load_target_reads_image(const struct pan_fb_load_target *target,
+                        bool include_border)
+{
+   return target->in_bounds_load == PAN_FB_LOAD_IMAGE ||
+          (include_border && target->border_load == PAN_FB_LOAD_IMAGE);
+}
+
+/* Whether the preload of this pass has to wait for earlier fragment jobs:
+ * unless this command buffer knows, since its last full fragment wait,
+ * every attachment the fragment jobs wrote and none of them is loaded here.
+ */
+static bool
+preload_needs_frag_wait(const struct panvk_cmd_buffer *cmdbuf,
+                        bool include_border)
+{
+   const struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   const struct panvk_frag_written *fw = &cmdbuf->state.gfx.frag_written;
+   const struct pan_fb_load *load = &render->fb.load;
+
+   if (!fw->valid || fw->overflow)
+      return true;
+
+   for (unsigned rt = 0; rt < MIN2(MAX_RTS, PAN_MAX_RTS); rt++) {
+      if (load_target_reads_image(&load->rts[rt], include_border) &&
+          (frag_written_overlaps_load(fw, &load->rts[rt]) ||
+           frag_written_overlaps(fw, render->color_attachments.iviews[rt]) ||
+           frag_written_overlaps(fw,
+                                 render->color_attachments.preload_iviews[rt])))
+         return true;
+   }
+
+   if (load_target_reads_image(&load->z, include_border) &&
+       (frag_written_overlaps_load(fw, &load->z) ||
+        frag_written_overlaps(fw, render->z_attachment.iview) ||
+        frag_written_overlaps(fw, render->z_attachment.preload_iview)))
+      return true;
+
+   if (load_target_reads_image(&load->s, include_border) &&
+       (frag_written_overlaps_load(fw, &load->s) ||
+        frag_written_overlaps(fw, render->s_attachment.iview) ||
+        frag_written_overlaps(fw, render->s_attachment.preload_iview)))
+      return true;
+
+   return false;
+}
+#endif
+
 void
 panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
                                       const VkRenderingInfo *pRenderingInfo)
@@ -736,7 +965,7 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
        * load, we need a barrier to ensure that the texture cache gets
        * invalidated prior to the load.
        */
-      const VkMemoryBarrier2 mem_barrier = {
+      VkMemoryBarrier2 mem_barrier = {
          .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
          .srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
                          VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT |
@@ -746,6 +975,19 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
          .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
          .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
       };
+#if PAN_ARCH >= 10
+      /* C4 (115): the source scope makes the fragment subqueue wait for all
+       * its earlier jobs. When none of those that ran since its last such
+       * wait wrote what this pass loads, keep only the invalidate (no
+       * source stages: no wait, only the fragment-side cache operation).
+       * PANVK_PRELOAD_BARRIER_TRACK=0 always waits, as in 114.
+       */
+      if (PANVK_PERF(PRELOAD_BARRIER_TRACK) &&
+          !preload_needs_frag_wait(cmdbuf, has_partial_tiles)) {
+         mem_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+         mem_barrier.srcAccessMask = VK_ACCESS_2_NONE;
+      }
+#endif
       const VkDependencyInfo dep_info = {
          .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
          .memoryBarrierCount = 1,

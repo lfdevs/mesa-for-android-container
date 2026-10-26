@@ -58,6 +58,10 @@ enum panvk_perf_knob {
    /* D13, PANVK_ANDROID_PRESENT_THREAD: the PanVK Android swapchain copies
     * and posts frames on its own thread; vkQueuePresentKHR only queues. */
    PANVK_PERF_ANDROID_PRESENT_THREAD = 1 << 11,
+   /* C4, PANVK_PRELOAD_BARRIER_TRACK: on CSF, the preload barrier of a
+    * LOAD pass waits for earlier fragment jobs only if one of them may
+    * have written what the pass loads. */
+   PANVK_PERF_PRELOAD_BARRIER_TRACK = 1 << 12,
 };
 
 extern uint32_t panvk_perf_knobs;
