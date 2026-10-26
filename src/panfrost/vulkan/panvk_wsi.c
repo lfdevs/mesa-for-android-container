@@ -572,3 +572,280 @@ panvk_wsi_finish(struct panvk_physical_device *physical_device)
    physical_device->vk.wsi_device = NULL;
    wsi_device_finish(&physical_device->wsi_device, &instance->vk.alloc);
 }
+
+/* ---- csf-v11 233: PANVK_FPS_LOG present counter ----
+ *
+ * PANVK_FPS_LOG=<path> (appended; a "%p" in the path becomes the pid)
+ * counts the presents this driver sees:
+ *  - vkQueuePresentKHR (wsi_common): the X11 swapchain that PanPlay's Wine
+ *    games use (Xlib/XCB surface, software PutImage / MIT-SHM present to
+ *    the built-in X server), Wayland, and the PanVK Android surface
+ *    swapchain that PanProbe uses;
+ *  - vkQueueSignalReleaseImageANDROID: the Android loader's own swapchain,
+ *    when PanVK is loaded as the system driver.
+ * After PANVK_FPS_LOG_MS (default 1000, at least 100) ms of presents, one
+ * line:
+ *
+ *   fps t_ms=<ms since the first present> frames=<n> fps=<x.x>
+ *       avg_ms=<x.xx> max_ms=<x.xx> total=<N>
+ *
+ * frames, avg_ms and max_ms are over the frame times (time between two
+ * presents) of that interval, fps = frames / interval, total counts every
+ * present so far. An "fps-summary" line with the same fields over the whole
+ * run, plus reason=swapchain|exit, is written at vkDestroySwapchainKHR and
+ * at driver unload or process exit, each only if there were presents since
+ * the previous summary; the interval in progress is written first, so the
+ * fps lines add up to the summary. A process that never presents writes
+ * nothing: the file is opened at the first present and starts with a
+ * "# panvk-fps" line (driver version, pid, interval, wall clock of the
+ * first present). Counts are per process (all devices and swapchains).
+ *
+ * The variables are read once per process, at the first present (or
+ * swapchain destroy). After that, with PANVK_FPS_LOG unset, the present path
+ * reads one global and calls wsi_common as before.
+ *
+ * Only appended to this file (nothing above changes), so patches made
+ * without it still apply to it without an offset.
+ */
+#include <inttypes.h>
+#include <stdio.h>
+#include <time.h>
+#include <unistd.h>
+
+#include "git_sha1.h"
+#include "panvk_entrypoints.h"
+#include "util/log.h"
+#include "util/os_misc.h"
+#include "util/os_time.h"
+#include "util/simple_mtx.h"
+#include "util/u_atomic.h"
+#include "util/u_debug.h"
+#include "util/u_math.h"
+#include "vk_common_entrypoints.h"
+#include "wsi_common_entrypoints.h"
+
+#ifndef PANVK_KBASE_RELEASE
+#define PANVK_KBASE_RELEASE "dev"
+#endif
+
+/* 0 = not read yet, 1 = off, 2 = on. */
+static int panvk_fps_state;
+static simple_mtx_t panvk_fps_lock = SIMPLE_MTX_INITIALIZER;
+static struct {
+   bool opened, done;
+   FILE *fp;
+   char tmpl[512];
+   uint64_t interval_ns;
+   uint64_t first_ns, last_ns, win_start_ns, win_max_ns, run_max_ns;
+   uint64_t win_frames, total, summary_total;
+} panvk_fps;
+
+static void panvk_fps_log_atexit(void);
+
+static void
+panvk_fps_log_init(void)
+{
+   simple_mtx_lock(&panvk_fps_lock);
+   if (!p_atomic_read(&panvk_fps_state)) {
+      const char *path = os_get_option("PANVK_FPS_LOG");
+      int state = 1;
+
+      if (path && path[0] && strlen(path) < sizeof(panvk_fps.tmpl)) {
+         memcpy(panvk_fps.tmpl, path, strlen(path) + 1);
+         panvk_fps.interval_ns =
+            (uint64_t)MAX2(debug_get_num_option("PANVK_FPS_LOG_MS", 1000), 100) *
+            1000000ull;
+         atexit(panvk_fps_log_atexit);
+         state = 2;
+      } else if (path && path[0]) {
+         mesa_logw("panvk: PANVK_FPS_LOG path too long, ignored");
+      }
+      p_atomic_set(&panvk_fps_state, state);
+   }
+   simple_mtx_unlock(&panvk_fps_lock);
+}
+
+/* True when PANVK_FPS_LOG is set; reads the variables at the first call. */
+static inline bool
+panvk_fps_enabled(void)
+{
+   int state = p_atomic_read_relaxed(&panvk_fps_state);
+
+   if (unlikely(!state)) {
+      panvk_fps_log_init();
+      state = p_atomic_read(&panvk_fps_state);
+   }
+   return state == 2;
+}
+
+/* Lock held. The pid is the presenting process's (expanded at open). */
+static void
+panvk_fps_log_open(void)
+{
+   const char *t = panvk_fps.tmpl, *p = strstr(t, "%p");
+   char path[600];
+   struct timespec ts;
+
+   panvk_fps.opened = true;
+   if (p)
+      snprintf(path, sizeof(path), "%.*s%d%s", (int)(p - t), t, (int)getpid(),
+               p + 2);
+   else
+      snprintf(path, sizeof(path), "%s", t);
+
+   panvk_fps.fp = fopen(path, "a");
+   if (!panvk_fps.fp) {
+      mesa_logw("panvk: PANVK_FPS_LOG=%s: cannot open, using mesa_log", path);
+      return;
+   }
+   setvbuf(panvk_fps.fp, NULL, _IOLBF, 0);
+   clock_gettime(CLOCK_REALTIME, &ts);
+   fprintf(panvk_fps.fp,
+           "# panvk-fps PanVK-kbase " PANVK_KBASE_RELEASE
+           " (Mesa " PACKAGE_VERSION MESA_GIT_SHA1 ") pid=%d interval_ms=%" PRIu64
+           " first_present_unix_ms=%" PRIu64 "\n",
+           (int)getpid(), panvk_fps.interval_ns / 1000000,
+           (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000);
+   mesa_logi("panvk: PANVK_FPS_LOG=%s, one line per %" PRIu64 " ms", path,
+             panvk_fps.interval_ns / 1000000);
+}
+
+/* Lock held. */
+static void
+panvk_fps_log_line(const char *kind, const char *reason, uint64_t span_ns,
+                   uint64_t frames, uint64_t max_ns)
+{
+   char line[256];
+
+   snprintf(line, sizeof(line),
+            "%s t_ms=%" PRIu64 " frames=%" PRIu64
+            " fps=%.1f avg_ms=%.2f max_ms=%.2f total=%" PRIu64 "%s%s",
+            kind, (panvk_fps.last_ns - panvk_fps.first_ns) / 1000000, frames,
+            span_ns ? (double)frames * 1e9 / (double)span_ns : 0.0,
+            frames ? (double)span_ns / 1e6 / (double)frames : 0.0,
+            (double)max_ns / 1e6, panvk_fps.total, reason ? " reason=" : "",
+            reason ? reason : "");
+   if (panvk_fps.fp)
+      fprintf(panvk_fps.fp, "%s\n", line);
+   else
+      mesa_logi("panvk: %s", line);
+}
+
+/* Lock held: the interval in progress, if it has frames. */
+static void
+panvk_fps_log_flush_window(void)
+{
+   if (!panvk_fps.win_frames)
+      return;
+   panvk_fps_log_line("fps", NULL, panvk_fps.last_ns - panvk_fps.win_start_ns,
+                      panvk_fps.win_frames, panvk_fps.win_max_ns);
+   panvk_fps.win_start_ns = panvk_fps.last_ns;
+   panvk_fps.win_frames = 0;
+   panvk_fps.win_max_ns = 0;
+}
+
+/* [now] is taken before the present call, so it is the time the
+ * application presented. */
+static void
+panvk_fps_log_present(uint64_t now)
+{
+   simple_mtx_lock(&panvk_fps_lock);
+   if (panvk_fps.done)
+      goto out;
+   if (!panvk_fps.opened)
+      panvk_fps_log_open();
+
+   if (!panvk_fps.total) {
+      panvk_fps.first_ns = panvk_fps.win_start_ns = now;
+   } else {
+      /* Two presenting threads can take their times out of order. */
+      if (now < panvk_fps.last_ns)
+         now = panvk_fps.last_ns;
+      const uint64_t dt = now - panvk_fps.last_ns;
+      panvk_fps.win_frames++;
+      panvk_fps.win_max_ns = MAX2(panvk_fps.win_max_ns, dt);
+      panvk_fps.run_max_ns = MAX2(panvk_fps.run_max_ns, dt);
+   }
+   panvk_fps.last_ns = now;
+   panvk_fps.total++;
+
+   if (now - panvk_fps.win_start_ns >= panvk_fps.interval_ns)
+      panvk_fps_log_flush_window();
+out:
+   simple_mtx_unlock(&panvk_fps_lock);
+}
+
+static void
+panvk_fps_log_summary(const char *reason, bool last)
+{
+   simple_mtx_lock(&panvk_fps_lock);
+   if (!panvk_fps.done && panvk_fps.total > panvk_fps.summary_total) {
+      panvk_fps_log_flush_window();
+      panvk_fps_log_line("fps-summary", reason,
+                         panvk_fps.last_ns - panvk_fps.first_ns,
+                         panvk_fps.total - 1, panvk_fps.run_max_ns);
+      panvk_fps.summary_total = panvk_fps.total;
+   }
+   if (last) {
+      /* Driver unload or exit: nothing is written after this. */
+      panvk_fps.done = true;
+      if (panvk_fps.fp)
+         fclose(panvk_fps.fp);
+      panvk_fps.fp = NULL;
+   }
+   simple_mtx_unlock(&panvk_fps_lock);
+}
+
+/* Registered once, when PANVK_FPS_LOG is set. A shared library's atexit
+ * handler also runs at its dlclose (bionic and glibc). */
+static void
+panvk_fps_log_atexit(void)
+{
+   panvk_fps_log_summary("exit", true);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+panvk_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
+{
+   if (likely(!panvk_fps_enabled()))
+      return wsi_QueuePresentKHR(queue, pPresentInfo);
+
+   const uint64_t now = os_time_get_nano();
+   VkResult result = wsi_QueuePresentKHR(queue, pPresentInfo);
+
+   /* VK_SUCCESS or VK_SUBOPTIMAL_KHR: the image was queued for display. */
+   if (result >= 0)
+      panvk_fps_log_present(now);
+   return result;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_DestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
+                          const VkAllocationCallbacks *pAllocator)
+{
+   if (swapchain != VK_NULL_HANDLE && unlikely(panvk_fps_enabled()))
+      panvk_fps_log_summary("swapchain", false);
+
+   wsi_DestroySwapchainKHR(device, swapchain, pAllocator);
+}
+
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+VKAPI_ATTR VkResult VKAPI_CALL
+panvk_QueueSignalReleaseImageANDROID(VkQueue queue,
+                                     uint32_t waitSemaphoreCount,
+                                     const VkSemaphore *pWaitSemaphores,
+                                     VkImage image, int *pNativeFenceFd)
+{
+   if (likely(!panvk_fps_enabled()))
+      return vk_common_QueueSignalReleaseImageANDROID(
+         queue, waitSemaphoreCount, pWaitSemaphores, image, pNativeFenceFd);
+
+   const uint64_t now = os_time_get_nano();
+   VkResult result = vk_common_QueueSignalReleaseImageANDROID(
+      queue, waitSemaphoreCount, pWaitSemaphores, image, pNativeFenceFd);
+
+   if (result == VK_SUCCESS)
+      panvk_fps_log_present(now);
+   return result;
+}
+#endif
