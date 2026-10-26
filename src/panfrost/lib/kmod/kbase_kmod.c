@@ -1231,8 +1231,67 @@ kbase_kmod_csf_queue_kick(struct pan_kmod_dev *dev, uint64_t ringbuf_va)
    return 0;
 }
 
+/* PANVK_KBASE_WAIT_STATS=1 (diagnostics, off by default): once a second, one
+ * line over the CSF notification waits of that second: how many, how many
+ * slept a whole 20 ms slice without a notification (a late or missed
+ * wakeup), their mean and longest time, and whether KCPU fence waits are on. */
+static int kbase_kmod_csf_wait_event_raw(struct pan_kmod_dev *dev,
+                                         int64_t timeout_ns);
+
+static struct {
+   simple_mtx_t lock;
+   int on; /* -1 = not read yet */
+   uint64_t start_ns, n, full_slices, sum_ns, max_ns;
+} kbase_wait_stats = { .lock = SIMPLE_MTX_INITIALIZER, .on = -1 };
+
+static void
+kbase_wait_stats_add(struct pan_kmod_dev *dev, uint64_t t0, int64_t timeout_ns,
+                     bool timed_out)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   const uint64_t now = os_time_get_nano(), d = now - t0;
+
+   simple_mtx_lock(&kbase_wait_stats.lock);
+   if (!kbase_wait_stats.start_ns)
+      kbase_wait_stats.start_ns = t0;
+   kbase_wait_stats.n++;
+   kbase_wait_stats.sum_ns += d;
+   kbase_wait_stats.max_ns = MAX2(kbase_wait_stats.max_ns, d);
+   if (timed_out && timeout_ns >= 19000000)
+      kbase_wait_stats.full_slices++;
+   if (now - kbase_wait_stats.start_ns >= 1000000000ull) {
+      mesa_logi("kbase: wait-stats waits=%" PRIu64 " full_20ms_slices=%" PRIu64
+                " avg_ms=%.2f max_ms=%.2f kcpu=%d",
+                kbase_wait_stats.n, kbase_wait_stats.full_slices,
+                (double)kbase_wait_stats.sum_ns / 1e6 / kbase_wait_stats.n,
+                (double)kbase_wait_stats.max_ns / 1e6, kd->kcpu.valid);
+      kbase_wait_stats.start_ns = now;
+      kbase_wait_stats.n = kbase_wait_stats.full_slices = 0;
+      kbase_wait_stats.sum_ns = kbase_wait_stats.max_ns = 0;
+   }
+   simple_mtx_unlock(&kbase_wait_stats.lock);
+}
+
 int
 kbase_kmod_csf_wait_event(struct pan_kmod_dev *dev, int64_t timeout_ns)
+{
+   if (unlikely(kbase_wait_stats.on))  {
+      if (kbase_wait_stats.on < 0)
+         kbase_wait_stats.on =
+            debug_get_bool_option("PANVK_KBASE_WAIT_STATS", false);
+      if (kbase_wait_stats.on) {
+         const uint64_t t0 = os_time_get_nano();
+         int ret = kbase_kmod_csf_wait_event_raw(dev, timeout_ns);
+         kbase_wait_stats_add(dev, t0, timeout_ns, ret == 0 &&
+                              os_time_get_nano() - t0 >= (uint64_t)timeout_ns);
+         return ret;
+      }
+   }
+   return kbase_kmod_csf_wait_event_raw(dev, timeout_ns);
+}
+
+static int
+kbase_kmod_csf_wait_event_raw(struct pan_kmod_dev *dev, int64_t timeout_ns)
 {
    /* Block until the kernel has a CSF notification pending, then consume one
     * notification with read().  This is what drives kernel-side
