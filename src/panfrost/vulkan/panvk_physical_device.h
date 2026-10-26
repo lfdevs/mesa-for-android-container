@@ -85,6 +85,14 @@ struct panvk_physical_device {
       alignas(8) uint64_t heap_used;
       alignas(8) uint64_t available;
       alignas(8) uint64_t available_ns;
+
+      /* PANVK_MEM_BUDGET_PRESSURE (default 1): the budget only counts
+       * MemAvailable beyond budget_reserve, plus 256 MiB more while swap is
+       * running out (swap_* sampled with MemAvailable). */
+      bool budget_pressure;
+      uint64_t budget_reserve;
+      alignas(8) uint64_t swap_total;
+      alignas(8) uint64_t swap_free;
    } memory;
 
    struct vk_sync_type drm_syncobj_type;

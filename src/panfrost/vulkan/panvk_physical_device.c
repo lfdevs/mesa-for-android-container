@@ -24,6 +24,7 @@
 #endif
 
 #include "util/disk_cache.h"
+#include "util/os_file.h"
 #include "util/os_misc.h"
 #include "util/os_time.h"
 #include "util/u_atomic.h"
@@ -634,6 +635,24 @@ get_device_heaps(struct panvk_physical_device *device,
    device->memory.budget = get_memory_budget(device->drm.render_rdev);
    if (!device->memory.budget)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
+   /* On Android, zram and the low memory killer hold MemAvailable at a few
+    * hundred MB until zram is full, so a budget of used + 90 % of it gave
+    * DXVK the same headroom while the game was being swapped out (DXVK
+    * kept 307 MB of allocated but unused chunks in Fallout 4). Keep a
+    * reserve out of the budget: PANVK_MEM_BUDGET_RESERVE_MB, default 256
+    * up to 8 GiB of RAM and 0 above. PANVK_MEM_BUDGET_PRESSURE=0 is the
+    * 114 budget.
+    */
+   uint64_t total_ram = 0;
+   os_get_total_physical_memory(&total_ram);
+   device->memory.budget_pressure =
+      debug_get_bool_option("PANVK_MEM_BUDGET_PRESSURE", true);
+   device->memory.budget_reserve =
+      (uint64_t)MAX2(debug_get_num_option(
+                        "PANVK_MEM_BUDGET_RESERVE_MB",
+                        total_ram && total_ram <= (8ull << 30) ? 256 : 0),
+                     0)
+      << 20;
 
    return VK_SUCCESS;
 }
@@ -1752,6 +1771,37 @@ panvk_GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
    return vk_outarray_status(&out);
 }
 
+static bool
+panvk_meminfo_field(const char *meminfo, const char *key, uint64_t *bytes)
+{
+   const char *str = strstr(meminfo, key);
+
+   if (!str)
+      return false;
+
+   *bytes = strtoull(str + strlen(key), NULL, 10) << 10;
+   return true;
+}
+
+/* MemAvailable, SwapTotal and SwapFree from one /proc/meminfo read. */
+static bool
+panvk_read_meminfo(uint64_t *available, uint64_t *swap_total,
+                   uint64_t *swap_free)
+{
+   char *meminfo = os_read_file("/proc/meminfo", NULL);
+
+   if (!meminfo)
+      return false;
+
+   bool ok = panvk_meminfo_field(meminfo, "MemAvailable:", available);
+   if (!panvk_meminfo_field(meminfo, "SwapTotal:", swap_total) ||
+       !panvk_meminfo_field(meminfo, "SwapFree:", swap_free))
+      *swap_total = *swap_free = 0;
+
+   free(meminfo);
+   return ok;
+}
+
 static uint64_t
 panvk_available_system_memory(struct panvk_physical_device *physical_device)
 {
@@ -1761,13 +1811,38 @@ panvk_available_system_memory(struct panvk_physical_device *physical_device)
    if (last && now - last < 100000000ull)
       return p_atomic_read(&physical_device->memory.available);
 
-   uint64_t available;
-   if (!os_get_available_system_memory(&available))
+   uint64_t available, swap_total = 0, swap_free = 0;
+   if (physical_device->memory.budget_pressure) {
+      if (!panvk_read_meminfo(&available, &swap_total, &swap_free))
+         return 0;
+   } else if (!os_get_available_system_memory(&available)) {
       return 0;
+   }
 
+   p_atomic_set(&physical_device->memory.swap_total, swap_total);
+   p_atomic_set(&physical_device->memory.swap_free, swap_free);
    p_atomic_set(&physical_device->memory.available, available);
    p_atomic_set(&physical_device->memory.available_ns, now);
    return available;
+}
+
+/* MemAvailable the budget may hand out (PANVK_MEM_BUDGET_PRESSURE). */
+static uint64_t
+panvk_budget_available_memory(struct panvk_physical_device *physical_device)
+{
+   uint64_t available = panvk_available_system_memory(physical_device);
+
+   if (!physical_device->memory.budget_pressure)
+      return available;
+
+   uint64_t reserve = physical_device->memory.budget_reserve;
+   const uint64_t swap_total =
+      p_atomic_read(&physical_device->memory.swap_total);
+   if (swap_total &&
+       p_atomic_read(&physical_device->memory.swap_free) < swap_total / 8)
+      reserve += 256ull << 20;
+
+   return available > reserve ? available - reserve : 0;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1809,9 +1884,10 @@ panvk_GetPhysicalDeviceMemoryProperties2(
          p->heapUsage[0] = used;
 
          /* Set the budget at 90% of available to avoid thrashing */
-         p->heapBudget[0] = vk_physical_device_heap_budget(
-            panvk_available_system_memory(physical_device), 0.9f, heap_size,
-            used);
+         const uint64_t available =
+            panvk_budget_available_memory(physical_device);
+         p->heapBudget[0] =
+            vk_physical_device_heap_budget(available, 0.9f, heap_size, used);
 
          /* csf-v11 229, opt-in (default: the two lines above).
           * PANVK_MEM_BUDGET=honest: heapUsage also counts the driver's
@@ -1834,8 +1910,7 @@ panvk_GetPhysicalDeviceMemoryProperties2(
                priv += p_atomic_read_relaxed(&panvk_mem_stats.bytes[k]);
             p->heapUsage[0] = used + priv;
             p->heapBudget[0] = vk_physical_device_heap_budget(
-               panvk_available_system_memory(physical_device), 0.9f,
-               heap_size, used + priv);
+               available, 0.9f, heap_size, used + priv);
          }
          if (p_atomic_read(&headroom_mb) > 0) {
             const uint64_t floor =
@@ -1843,6 +1918,14 @@ panvk_GetPhysicalDeviceMemoryProperties2(
                                   (uint64_t)p_atomic_read(&headroom_mb) *
                                      1024 * 1024);
             p->heapBudget[0] = MAX2(p->heapBudget[0], floor);
+         }
+
+         /* Under pressure the budget can reach the usage, never less (nor
+          * zero, which the spec forbids). */
+         if (physical_device->memory.budget_pressure) {
+            p->heapBudget[0] =
+               MAX2(p->heapBudget[0],
+                    MIN2(heap_size, MAX2(p->heapUsage[0], 1ull << 20)));
          }
 
          /* From the Vulkan 1.3.278 spec:
