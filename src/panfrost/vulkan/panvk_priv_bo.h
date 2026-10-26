@@ -49,6 +49,11 @@ struct panvk_mem_stats {
    uint64_t cmdpool_trim_bos, cmdpool_trim_B;
    /* Device TLS BOs freed early (csf-v11 097 grow-only list). */
    uint64_t dev_tls_freed_B;
+   /* Device slab caches (panvk_mempool.c): slabs and bytes idle in them
+    * (counted in their kind too), slabs they handed out, slabs and bytes
+    * their window trim freed. */
+   uint64_t slab_cache_count, slab_cache_B, slab_cache_hits,
+      slab_cache_freed_bos, slab_cache_freed_B;
 };
 
 extern struct panvk_mem_stats panvk_mem_stats;

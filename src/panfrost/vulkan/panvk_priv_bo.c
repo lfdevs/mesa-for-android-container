@@ -392,6 +392,8 @@ panvk_mem_report(struct panvk_device *dev, bool final)
       " remats=%" PRIu64 " pins=%" PRIu64 " lazy_skips=%" PRIu64
       " stale=%" PRIu64 "/%" PRIu64
       " | trim bos=%" PRIu64 " %.1f tls_freed=%.1f"
+      " | slab_cache=%.1f/%" PRIu64 " hits=%" PRIu64 " freed=%" PRIu64
+      " %.1f"
       " | rss=%.1f anon=%.1f file=%.1f swap=%.1f avail=%.1f",
       final ? "-final" : "", (now - panvk_mem_report_start_ns) / 1e9,
       MIB(devmem), MIB(priv), MIB(b[PANVK_MEM_DEV_POOL]),
@@ -426,7 +428,12 @@ panvk_mem_report(struct panvk_device *dev, bool final)
       p_atomic_read_relaxed(&s->bc_stale_reads),
       p_atomic_read_relaxed(&s->cmdpool_trim_bos),
       MIB(p_atomic_read_relaxed(&s->cmdpool_trim_B)),
-      MIB(p_atomic_read_relaxed(&s->dev_tls_freed_B)), kb[0] / 1024.0,
+      MIB(p_atomic_read_relaxed(&s->dev_tls_freed_B)),
+      MIB(p_atomic_read_relaxed(&s->slab_cache_B)),
+      p_atomic_read_relaxed(&s->slab_cache_count),
+      p_atomic_read_relaxed(&s->slab_cache_hits),
+      p_atomic_read_relaxed(&s->slab_cache_freed_bos),
+      MIB(p_atomic_read_relaxed(&s->slab_cache_freed_B)), kb[0] / 1024.0,
       kb[1] / 1024.0, kb[2] / 1024.0, kb[3] / 1024.0, MIB(avail));
 
    FILE *fp = panvk_mem_report_file();

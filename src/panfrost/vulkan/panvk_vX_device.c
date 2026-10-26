@@ -967,6 +967,14 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       util_next_power_of_two(
          CLAMP(debug_get_num_option("PANVK_CS_CHUNK_KB", 4), 1, 64)) *
       1024;
+   device->cmdbuf_opt.slab_cache =
+      PAN_ARCH >= 10 && debug_get_bool_option("PANVK_CMD_SLAB_CACHE", true);
+   const uint64_t slab_cache_window_ns =
+      CLAMP(debug_get_num_option("PANVK_CMD_SLAB_CACHE_MS", 2000), 100,
+            600000) *
+      1000000ull;
+   for (unsigned i = 0; i < PANVK_SLAB_CACHE_COUNT; i++)
+      panvk_slab_cache_init(&device->slab_cache[i], slab_cache_window_ns);
 
 #if PAN_ARCH >= 9
    if (PANVK_DEBUG(GPU_PRERAST) || device->vk.enabled_features.fillModeNonSolid ||
@@ -1296,6 +1304,8 @@ err_free_priv_bos:
    panvk_priv_bo_unref(device->tess_gs_scratch[1]);
    panvk_priv_bo_unref(device->tiler_heap);
    panvk_priv_bo_unref(device->tiler_heap2);
+   for (unsigned i = 0; i < PANVK_SLAB_CACHE_COUNT; i++)
+      panvk_slab_cache_finish(&device->slab_cache[i]);
    panvk_device_cleanup_mempools(device);
    vk_free(&device->vk.alloc, device->dump_region_size);
    pan_kmod_vm_destroy(device->kmod.vm);
@@ -1364,6 +1374,8 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
 #if PAN_ARCH >= 10
    simple_mtx_destroy(&device->gpu_prerast_lock);
 #endif
+   for (unsigned i = 0; i < PANVK_SLAB_CACHE_COUNT; i++)
+      panvk_slab_cache_finish(&device->slab_cache[i]);
    panvk_device_cleanup_mempools(device);
    vk_free(&device->vk.alloc, device->dump_region_size);
    pan_kmod_vm_destroy(device->kmod.vm);

@@ -14,17 +14,54 @@
 #include "util/list.h"
 #include "util/simple_mtx.h"
 
+/* One cache per kind of command buffer slab (CS, descriptor, TLS) for the
+ * whole device, so that command pools share their idle slabs instead of
+ * each keeping its own peak. Slabs in a cache belong to no command buffer.
+ * They are handed out newest first and trimmed oldest first: at the first
+ * hand-off after each window of window_ns, the slabs that stayed in the
+ * cache through the whole window (its lowest count) are freed, but for a
+ * quarter of the window's swing, at least 2.
+ */
+enum panvk_slab_cache_kind {
+   PANVK_SLAB_CACHE_CS,
+   PANVK_SLAB_CACHE_DESC,
+   PANVK_SLAB_CACHE_TLS,
+   PANVK_SLAB_CACHE_COUNT,
+};
+
+struct panvk_slab_cache {
+   simple_mtx_t lock;
+   /* Idle slabs, oldest first. */
+   struct list_head bos;
+   uint32_t count;
+   /* Lowest and highest count in the current window. */
+   uint32_t low, high;
+   uint64_t window_start_ns, window_ns;
+};
+
+void panvk_slab_cache_init(struct panvk_slab_cache *cache, uint64_t window_ns);
+void panvk_slab_cache_finish(struct panvk_slab_cache *cache);
+
 struct panvk_bo_pool {
    struct list_head free_bos;
+
+   /* When not NULL, slabs come from this cache when free_bos is empty, and
+    * panvk_bo_pool_give_to_cache() hands it the free ones. */
+   struct panvk_slab_cache *cache;
 };
 
 static inline void
 panvk_bo_pool_init(struct panvk_bo_pool *bo_pool)
 {
    list_inithead(&bo_pool->free_bos);
+   bo_pool->cache = NULL;
 }
 
 void panvk_bo_pool_cleanup(struct panvk_bo_pool *bo_pool);
+
+/* Moves all but keep of the free BOs to bo_pool->cache. They must be slabs
+ * no pending command buffer uses. */
+void panvk_bo_pool_give_to_cache(struct panvk_bo_pool *bo_pool, unsigned keep);
 
 struct panvk_pool_properties {
    /* BO flags to use in the pool */

@@ -10,11 +10,118 @@
 
 #include "kmod/pan_kmod.h"
 
+#include "util/os_time.h"
+
 void
 panvk_bo_pool_cleanup(struct panvk_bo_pool *bo_pool)
 {
    list_for_each_entry_safe(struct panvk_priv_bo, bo, &bo_pool->free_bos,
                             node) {
+      list_del(&bo->node);
+      panvk_priv_bo_unref(bo);
+   }
+}
+
+void
+panvk_slab_cache_init(struct panvk_slab_cache *cache, uint64_t window_ns)
+{
+   memset(cache, 0, sizeof(*cache));
+   simple_mtx_init(&cache->lock, mtx_plain);
+   list_inithead(&cache->bos);
+   cache->window_ns = window_ns;
+   cache->window_start_ns = os_time_get_nano();
+}
+
+void
+panvk_slab_cache_finish(struct panvk_slab_cache *cache)
+{
+   list_for_each_entry_safe(struct panvk_priv_bo, bo, &cache->bos, node) {
+      list_del(&bo->node);
+      p_atomic_dec(&panvk_mem_stats.slab_cache_count);
+      p_atomic_add(&panvk_mem_stats.slab_cache_B,
+                   -(int64_t)pan_kmod_bo_size(bo->bo));
+      panvk_priv_bo_unref(bo);
+   }
+   simple_mtx_destroy(&cache->lock);
+}
+
+static struct panvk_priv_bo *
+panvk_slab_cache_take(struct panvk_slab_cache *cache)
+{
+   struct panvk_priv_bo *bo = NULL;
+
+   simple_mtx_lock(&cache->lock);
+   if (cache->count) {
+      bo = list_last_entry(&cache->bos, struct panvk_priv_bo, node);
+      list_del(&bo->node);
+      cache->count--;
+      cache->low = MIN2(cache->low, cache->count);
+   }
+   simple_mtx_unlock(&cache->lock);
+
+   if (bo) {
+      p_atomic_inc(&panvk_mem_stats.slab_cache_hits);
+      p_atomic_dec(&panvk_mem_stats.slab_cache_count);
+      p_atomic_add(&panvk_mem_stats.slab_cache_B,
+                   -(int64_t)pan_kmod_bo_size(bo->bo));
+   }
+
+   return bo;
+}
+
+void
+panvk_bo_pool_give_to_cache(struct panvk_bo_pool *bo_pool, unsigned keep)
+{
+   struct panvk_slab_cache *cache = bo_pool->cache;
+   struct list_head give, drop;
+   unsigned have = list_length(&bo_pool->free_bos), given = 0, dropped = 0;
+   uint64_t given_B = 0, dropped_B = 0;
+
+   list_inithead(&give);
+   list_inithead(&drop);
+   for (; have > keep; have--, given++) {
+      struct panvk_priv_bo *bo =
+         list_first_entry(&bo_pool->free_bos, struct panvk_priv_bo, node);
+      list_del(&bo->node);
+      list_addtail(&bo->node, &give);
+      given_B += pan_kmod_bo_size(bo->bo);
+   }
+
+   const uint64_t now = os_time_get_nano();
+
+   simple_mtx_lock(&cache->lock);
+   list_splicetail(&give, &cache->bos);
+   cache->count += given;
+   cache->high = MAX2(cache->high, cache->count);
+
+   if (now - cache->window_start_ns >= cache->window_ns) {
+      /* With takes from the tail, the low oldest slabs were not used in
+       * this window. */
+      const uint32_t margin = MAX2((cache->high - cache->low) / 4, 2);
+      uint32_t idle = MIN2(cache->low, cache->count);
+
+      for (; idle > margin; idle--, dropped++) {
+         struct panvk_priv_bo *bo =
+            list_first_entry(&cache->bos, struct panvk_priv_bo, node);
+         list_del(&bo->node);
+         list_addtail(&bo->node, &drop);
+         dropped_B += pan_kmod_bo_size(bo->bo);
+      }
+
+      cache->count -= dropped;
+      cache->low = cache->high = cache->count;
+      cache->window_start_ns = now;
+   }
+   simple_mtx_unlock(&cache->lock);
+
+   p_atomic_add(&panvk_mem_stats.slab_cache_count,
+                (int64_t)given - (int64_t)dropped);
+   p_atomic_add(&panvk_mem_stats.slab_cache_B,
+                (int64_t)given_B - (int64_t)dropped_B);
+   p_atomic_add(&panvk_mem_stats.slab_cache_freed_bos, dropped);
+   p_atomic_add(&panvk_mem_stats.slab_cache_freed_B, dropped_B);
+
+   list_for_each_entry_safe(struct panvk_priv_bo, bo, &drop, node) {
       list_del(&bo->node);
       panvk_priv_bo_unref(bo);
    }
@@ -48,7 +155,12 @@ panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
          list_first_entry(&pool->bo_pool->free_bos, struct panvk_priv_bo, node);
       list_del(&bo->node);
    } else {
-      if (pool->big_bo_pool) {
+      /* Else an idle slab of the same kind from the device cache. */
+      if (pool->bo_pool && pool->bo_pool->cache &&
+          bo_sz == pool->base.slab_size)
+         bo = panvk_slab_cache_take(pool->bo_pool->cache);
+
+      if (bo == NULL && pool->big_bo_pool) {
          list_for_each_entry_safe(struct panvk_priv_bo, pooled_bo,
                                   &pool->big_bo_pool->free_bos, node) {
             const size_t picked_bo_sz = pan_kmod_bo_size(pooled_bo->bo);

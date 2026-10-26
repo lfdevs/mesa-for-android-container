@@ -236,7 +236,14 @@ struct panvk_device {
       /* PANVK_CS_CHUNK_KB (default 4, 64 = fixed 64 KiB chunks): size of
        * the first CS chunk of a stream (CSF), doubling up to 64 KiB. */
       uint32_t cs_chunk_min_B;
+      /* PANVK_CMD_SLAB_CACHE (default 1, CSF): command pools share their
+       * idle CS, descriptor and TLS slabs through slab_cache[]. */
+      bool slab_cache;
    } cmdbuf_opt;
+
+   /* Device-wide caches of idle command buffer slabs, indexed by enum
+    * panvk_slab_cache_kind (used when cmdbuf_opt.slab_cache). */
+   struct panvk_slab_cache slab_cache[PANVK_SLAB_CACHE_COUNT];
 
    /* Device-wide thread local storage shared by all command buffers. The
     * last BO is the current one; outgrown ones stay alive for command

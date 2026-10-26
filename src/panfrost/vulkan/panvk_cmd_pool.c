@@ -46,9 +46,31 @@ panvk_CreateCommandPool(VkDevice _device,
    panvk_bo_pool_init(&pool->gs_bo_pool);
    panvk_bo_pool_init(&pool->tls_bo_pool);
    panvk_bo_pool_init(&pool->tls_big_bo_pool);
+   if (device->cmdbuf_opt.slab_cache) {
+      pool->cs_bo_pool.cache = &device->slab_cache[PANVK_SLAB_CACHE_CS];
+      pool->desc_bo_pool.cache = &device->slab_cache[PANVK_SLAB_CACHE_DESC];
+      pool->tls_bo_pool.cache = &device->slab_cache[PANVK_SLAB_CACHE_TLS];
+   }
    list_inithead(&pool->push_sets);
    *pCmdPool = panvk_cmd_pool_to_handle(pool);
    return VK_SUCCESS;
+}
+
+/* Hands the free slabs of the pool's cached kinds but keep of each to the
+ * device slab caches. */
+static void
+panvk_cmd_pool_give_to_caches(struct panvk_cmd_pool *pool, unsigned keep)
+{
+   struct panvk_bo_pool *cached[] = {
+      &pool->cs_bo_pool,
+      &pool->desc_bo_pool,
+      &pool->tls_bo_pool,
+   };
+
+   for (unsigned i = 0; i < ARRAY_SIZE(cached); i++) {
+      if (cached[i]->cache)
+         panvk_bo_pool_give_to_cache(cached[i], keep);
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -62,6 +84,10 @@ panvk_DestroyCommandPool(VkDevice _device, VkCommandPool commandPool,
       return;
 
    vk_command_pool_finish(&pool->vk);
+
+   /* None of the pool's command buffers is pending: its idle slabs can
+    * serve other pools. */
+   panvk_cmd_pool_give_to_caches(pool, 0);
 
    panvk_bo_pool_cleanup(&pool->cs_bo_pool);
    panvk_bo_pool_cleanup(&pool->desc_bo_pool);
@@ -136,6 +162,7 @@ panvk_cmd_pool_autotrim_enabled(struct panvk_device *dev)
 }
 
 #define PANVK_CMD_POOL_BO_POOLS 6
+#define PANVK_CMD_POOL_CACHE_KEEP 2
 
 /* csf-v11 231: 226 kept only what the last reset gave back (+25%), so a pool
  * whose recordings vary in size freed BOs at a light reset and allocated
@@ -220,9 +247,22 @@ panvk_ResetCommandPool(VkDevice _device, VkCommandPool commandPool,
    if (result == VK_SUCCESS && release_resources)
       panvk_cmd_pool_release_free_bos(pool);
 
+   /* With the device slab caches (PANVK_CMD_SLAB_CACHE), the pool keeps
+    * PANVK_CMD_POOL_CACHE_KEEP free slabs of each cached kind for its next
+    * recording and the caches get the rest: one DXVK command list records
+    * at a time, so per-pool peaks summed over its ~20 recycled pools were
+    * mostly idle. The caches trim themselves, csf-v11 231 does not apply to
+    * them.
+    */
+   if (result == VK_SUCCESS && !release_resources)
+      panvk_cmd_pool_give_to_caches(pool, PANVK_CMD_POOL_CACHE_KEEP);
+
    if (result == VK_SUCCESS && autotrim) {
       const unsigned window = panvk_cmd_pool_autotrim_window();
       for (unsigned i = 0; i < PANVK_CMD_POOL_BO_POOLS; i++) {
+         if (bo_pools[i]->cache)
+            continue;
+
          const unsigned after = list_length(&bo_pools[i]->free_bos);
          const unsigned used = after > before[i] ? after - before[i] : 0;
          unsigned base = used;
