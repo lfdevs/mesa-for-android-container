@@ -289,6 +289,18 @@ struct kbase_ioctl_mem_commit {
    _IOW(KBASE_IOCTL_TYPE, 20, struct kbase_ioctl_mem_commit)
 
 /* -----------------------------------------------------------------------
+ * Memory flags change — set or clear the modifiable flags of a region
+ * (BASE_MEM_DONT_NEED makes a native region evictable).
+ * ----------------------------------------------------------------------- */
+struct kbase_ioctl_mem_flags_change {
+   __u64 gpu_va;
+   __u64 flags;
+   __u64 mask;
+};
+#define KBASE_IOCTL_MEM_FLAGS_CHANGE \
+   _IOW(KBASE_IOCTL_TYPE, 23, struct kbase_ioctl_mem_flags_change)
+
+/* -----------------------------------------------------------------------
  * Memory alias — create an alias of one or more existing regions.
  * ----------------------------------------------------------------------- */
 struct base_mem_aliasing_info {

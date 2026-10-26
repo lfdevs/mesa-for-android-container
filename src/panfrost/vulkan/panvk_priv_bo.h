@@ -54,6 +54,10 @@ struct panvk_mem_stats {
     * their window trim freed. */
    uint64_t slab_cache_count, slab_cache_B, slab_cache_hits,
       slab_cache_freed_bos, slab_cache_freed_B;
+   /* PANVK_KBASE_EVICTABLE: cached slabs marked evictable (and their
+    * bytes), taken back, and freed because they could not be taken back. */
+   uint64_t slab_evict_count, slab_evict_B, slab_evict_reused,
+      slab_evict_lost;
 };
 
 extern struct panvk_mem_stats panvk_mem_stats;
@@ -76,6 +80,8 @@ struct panvk_priv_bo {
    } addr;
    /* enum panvk_mem_kind (csf-v11 223). */
    uint8_t mem_kind;
+   /* Window of its slab cache in which the BO was marked evictable. */
+   uint32_t cache_window;
    /* csf-v11 230: when non-zero, addr.dev is a kbase MEM_ALIAS region of
     * this many bytes over the BO (sparse device TLS), unmapped on destroy. */
    uint64_t alias_size;

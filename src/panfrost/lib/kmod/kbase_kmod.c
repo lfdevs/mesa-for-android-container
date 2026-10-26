@@ -1693,6 +1693,41 @@ kbase_kmod_alias_destroy(struct pan_kmod_dev *dev, uint64_t va, uint64_t size,
    munmap((void *)(uintptr_t)va, size * nents);
 }
 
+int
+kbase_kmod_bo_set_evictable(struct pan_kmod_bo *bo, bool evictable)
+{
+   struct kbase_kmod_bo *kbase_bo =
+      container_of(bo, struct kbase_kmod_bo, base);
+
+   /* kbase only evicts native regions; growable ones are not fully
+    * committed. */
+   if (kbase_bo->dmabuf_fd >= 0 ||
+       (bo->flags & PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT))
+      return -EINVAL;
+
+   struct kbase_ioctl_mem_flags_change req = {
+      .gpu_va = kbase_bo->gpu_va,
+      .flags = evictable ? BASE_MEM_DONT_NEED : 0,
+      .mask = BASE_MEM_DONT_NEED,
+   };
+   int ret = ioctl(bo->dev->fd, KBASE_IOCTL_MEM_FLAGS_CHANGE, &req);
+
+   if (evictable)
+      return ret ? -errno : 0;
+
+   /* Clearing DONT_NEED re-backs what the shrinker took, but kbase returns
+    * EINVAL for it on native regions (only imports get past the flags
+    * update that follows), so its result says nothing. MEM_COMMIT refuses
+    * DONT_NEED regions: committing every page succeeds only when the region
+    * is needed again, and grows it back if the re-backing fell short. */
+   struct kbase_ioctl_mem_commit commit = {
+      .gpu_addr = kbase_bo->gpu_va,
+      .pages = DIV_ROUND_UP(bo->size, kbase_kmod_page_size()),
+   };
+
+   return ioctl(bo->dev->fd, KBASE_IOCTL_MEM_COMMIT, &commit) ? -errno : 0;
+}
+
 /* struct base_jd_atom above is the kernel's base_jd_atom_v2 (56 bytes)
  * padded with zeros to 64.  Stock kbase reads stride 56 as base_jd_atom_v2
  * and stride 64 as base_jd_atom (a leading seq_nr, so our layout would be

@@ -183,6 +183,15 @@ uint64_t kbase_kmod_alias_create(struct pan_kmod_dev *dev, uint64_t bo_va,
 void kbase_kmod_alias_destroy(struct pan_kmod_dev *dev, uint64_t va,
                               uint64_t size, uint32_t nents);
 
+/* Marks a native, fully committed BO evictable (BASE_MEM_DONT_NEED): under
+ * memory pressure the kernel may take its pages. Neither the CPU nor the GPU
+ * may touch it until kbase_kmod_bo_set_evictable(bo, false) returns 0, which
+ * means the region is needed again and every page is backed (the contents
+ * are undefined if the pages were taken). Returns 0 or a negative errno;
+ * on failure to clear the flag, free the BO. Not for imported or aliased
+ * BOs. */
+int kbase_kmod_bo_set_evictable(struct pan_kmod_bo *bo, bool evictable);
+
 #if defined(__cplusplus)
 } // extern "C"
 #endif

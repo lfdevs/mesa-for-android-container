@@ -973,8 +973,15 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       CLAMP(debug_get_num_option("PANVK_CMD_SLAB_CACHE_MS", 2000), 100,
             600000) *
       1000000ull;
+   /* Opt-in: evictable slabs need a kernel that clears DONT_NEED as
+    * expected (MTK kbase 1.21 untested), and pandecode reads every BO. */
+   const uint32_t slab_evict_windows =
+      physical_device->kbase_node_path[0] && !device->debug.decode_ctx
+         ? CLAMP(debug_get_num_option("PANVK_KBASE_EVICTABLE", 0), 0, 64)
+         : 0;
    for (unsigned i = 0; i < PANVK_SLAB_CACHE_COUNT; i++)
-      panvk_slab_cache_init(&device->slab_cache[i], slab_cache_window_ns);
+      panvk_slab_cache_init(&device->slab_cache[i], slab_cache_window_ns,
+                            slab_evict_windows);
 
 #if PAN_ARCH >= 9
    if (PANVK_DEBUG(GPU_PRERAST) || device->vk.enabled_features.fillModeNonSolid ||

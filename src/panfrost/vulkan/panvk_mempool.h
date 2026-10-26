@@ -37,9 +37,18 @@ struct panvk_slab_cache {
    /* Lowest and highest count in the current window. */
    uint32_t low, high;
    uint64_t window_start_ns, window_ns;
+   uint32_t window_seq;
+   /* When evict_windows is not 0 (kbase, PANVK_KBASE_EVICTABLE), the slabs
+    * the window trim would free are marked evictable instead, so the kernel
+    * can take their pages under memory pressure. They are handed out only
+    * when bos is empty, and freed evict_windows windows later. Oldest
+    * first. */
+   struct list_head evict_bos;
+   uint32_t evict_count, evict_windows;
 };
 
-void panvk_slab_cache_init(struct panvk_slab_cache *cache, uint64_t window_ns);
+void panvk_slab_cache_init(struct panvk_slab_cache *cache, uint64_t window_ns,
+                           uint32_t evict_windows);
 void panvk_slab_cache_finish(struct panvk_slab_cache *cache);
 
 struct panvk_bo_pool {
