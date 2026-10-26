@@ -231,14 +231,23 @@ panvk_device_cleanup_tls(struct panvk_device *dev)
  * first draw that records a gpu_prerast or tessellation pass, still fully
  * committed before any GPU access (the record happens before the submit),
  * so the fault growth problem above does not come back. The v9 JM
- * gpu_prerast paths read the arenas directly and keep the creation-time
- * commit. PANVK_GPU_PRERAST_ARENA=eager restores it on CSF too. */
+ * gpu_prerast paths (v9_prerast_draw_one(), v9_tess_draw()) take the
+ * arenas through panvk_per_arch(device_gpu_prerast_arena)() at record time
+ * too, so v9 is lazy as well (perf review 2026-10-26 D7: it committed and
+ * CPU-cleared 160 MiB in every such VkDevice).
+ * PANVK_GPU_PRERAST_ARENA=eager restores the creation-time commit;
+ * PANVK_V9_PRERAST_ARENA_LAZY=0 restores it on v9 only (the 114 behaviour,
+ * CSF stays lazy). */
 static bool
 gpu_prerast_arena_eager(void)
 {
    const char *v = os_get_option("PANVK_GPU_PRERAST_ARENA");
 
-   return PAN_ARCH < 10 || (v && !strcmp(v, "eager"));
+   if (v && !strcmp(v, "eager"))
+      return true;
+
+   return PAN_ARCH < 10 &&
+          !debug_get_bool_option("PANVK_V9_PRERAST_ARENA_LAZY", true);
 }
 
 static struct panvk_priv_mem

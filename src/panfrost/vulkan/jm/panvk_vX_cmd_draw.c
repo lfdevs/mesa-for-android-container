@@ -5828,7 +5828,10 @@ v9_prerast_draw_one(struct panvk_cmd_buffer *cmdbuf,
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    const struct panvk_shader *shader = cmdbuf->state.gfx.vs.shader;
-   const uint64_t arena = panvk_priv_mem_dev_addr(dev->gpu_prerast_arena);
+   /* Committed at the first draw that needs it, at record time (before any
+    * submit can touch it), as on CSF. */
+   const uint64_t arena = panvk_priv_mem_dev_addr(
+      panvk_per_arch(device_gpu_prerast_arena)(dev, false));
 
    if (!arena ||
        !panvk_per_arch(gpu_prerast_can_lower)(cmdbuf, src,
@@ -6331,7 +6334,8 @@ v9_tess_draw(struct panvk_cmd_buffer *cmdbuf,
    const struct panvk_shader *tcs = cmdbuf->state.gfx.tcs.shader;
    const struct panvk_shader *tes = cmdbuf->state.gfx.tes.shader;
    const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
-   const uint64_t arena = panvk_priv_mem_dev_addr(dev->gpu_prerast_tess_arena);
+   const uint64_t arena = panvk_priv_mem_dev_addr(
+      panvk_per_arch(device_gpu_prerast_arena)(dev, true));
 
    if (!vs || !tcs || !tes || !tcs->gpu_prerast.tess.compiled ||
        !vs->gpu_prerast.lowered_vs_compiled || !arena) {
