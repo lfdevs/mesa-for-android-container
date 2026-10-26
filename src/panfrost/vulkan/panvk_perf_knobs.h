@@ -55,6 +55,9 @@ enum panvk_perf_knob {
    /* K1, PANVK_ANDROID_PRESENT_FENCE: the PanVK Android swapchain waits
     * for the presented image's fence instead of the whole device. */
    PANVK_PERF_ANDROID_PRESENT_FENCE = 1 << 10,
+   /* D13, PANVK_ANDROID_PRESENT_THREAD: the PanVK Android swapchain copies
+    * and posts frames on its own thread; vkQueuePresentKHR only queues. */
+   PANVK_PERF_ANDROID_PRESENT_THREAD = 1 << 11,
 };
 
 extern uint32_t panvk_perf_knobs;
