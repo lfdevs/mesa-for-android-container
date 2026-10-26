@@ -593,10 +593,22 @@ struct panvk_cond_render_state {
    enum mali_cs_condition exec_cond;
 };
 
+/* A CS chunk of the recording, see panvk_cmd_buffer::cs_chunks. */
+struct panvk_cs_chunk {
+   struct panvk_priv_bo *bo;
+   uint64_t gpu;
+   uint32_t offset;
+   /* Bytes to flush: the capacity, or what the builder wrote once it ended
+    * in this chunk. */
+   uint32_t size;
+};
+
 struct panvk_cmd_buffer {
    struct vk_command_buffer vk;
    VkCommandBufferUsageFlags flags;
    struct panvk_pool cs_pool;
+   /* struct panvk_cs_chunk, in allocation order (PANVK_CS_FLUSH_USED). */
+   struct util_dynarray cs_chunks;
    struct panvk_pool desc_pool;
    struct panvk_pool tls_pool;
    struct list_head push_sets;

@@ -959,6 +959,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    panvk_device_init_mempools(device);
    simple_mtx_init(&device->tls.lock, mtx_plain);
    util_dynarray_init(&device->tls.bos, NULL);
+   device->cmdbuf_opt.cs_flush_used =
+      debug_get_bool_option("PANVK_CS_FLUSH_USED", true);
 
 #if PAN_ARCH >= 9
    if (PANVK_DEBUG(GPU_PRERAST) || device->vk.enabled_features.fillModeNonSolid ||

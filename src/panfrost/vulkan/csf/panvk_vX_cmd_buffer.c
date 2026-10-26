@@ -473,6 +473,51 @@ flush_sync_points(struct panvk_cmd_buffer *cmdbuf)
       cmdbuf->state.cs[i].relative_sync_point = 0;
 }
 
+/* Records how much of the builder's current chunk is written before
+ * cs_end() forgets it, so that EndCommandBuffer flushes only that. Later
+ * patches (cs_maybe, chunk links) land inside written ranges.
+ */
+static void
+cs_chunk_note_end(struct panvk_cmd_buffer *cmdbuf, struct cs_builder *b)
+{
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+
+   if (!dev->cmdbuf_opt.cs_flush_used || !cs_is_valid(b) ||
+       !b->cur_chunk.buffer.cpu)
+      return;
+
+   /* cs_end() first emits the instructions of a pending cs_if(). */
+   cs_flush_pending_if(b);
+
+   util_dynarray_foreach_reverse(&cmdbuf->cs_chunks, struct panvk_cs_chunk,
+                                 c) {
+      if (c->gpu == b->cur_chunk.buffer.gpu) {
+         c->size = MIN2(ALIGN_POT(b->cur_chunk.pos * sizeof(uint64_t), 64),
+                        c->size);
+         return;
+      }
+   }
+}
+
+static void
+flush_cs_maps(struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+
+   if (!dev->cmdbuf_opt.cs_flush_used) {
+      panvk_pool_flush_maps(&cmdbuf->cs_pool);
+      return;
+   }
+
+   if (!(cmdbuf->cs_pool.props.create_flags & PAN_KMOD_BO_FLAG_WB_MMAP))
+      return;
+
+   util_dynarray_foreach(&cmdbuf->cs_chunks, struct panvk_cs_chunk, c) {
+      if (c->size)
+         panvk_priv_bo_flush(c->bo, c->offset, c->size);
+   }
+}
+
 static void
 finish_cs(struct panvk_cmd_buffer *cmdbuf, uint32_t subqueue)
 {
@@ -568,6 +613,7 @@ finish_cs(struct panvk_cmd_buffer *cmdbuf, uint32_t subqueue)
 
    panvk_per_arch(kbase_mark_progress)(
       cmdbuf, subqueue, PANVK_KBASE_PROGRESS_CMDBUF_DONE);
+   cs_chunk_note_end(cmdbuf, b);
    cs_end(&cmdbuf->state.cs[subqueue].builder);
 }
 
@@ -648,7 +694,7 @@ panvk_per_arch(EndCommandBuffer)(VkCommandBuffer commandBuffer)
       }
    }
 
-   panvk_pool_flush_maps(&cmdbuf->cs_pool);
+   flush_cs_maps(cmdbuf);
    panvk_pool_flush_maps(&cmdbuf->desc_pool);
 
    return vk_command_buffer_end(&cmdbuf->vk);
@@ -1191,13 +1237,51 @@ static struct cs_buffer
 alloc_cs_buffer(void *cookie)
 {
    struct panvk_cmd_buffer *cmdbuf = cookie;
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    const unsigned capacity = 64 * 1024 / sizeof(uint64_t);
 
-   struct pan_ptr ptr = panvk_cmd_alloc_dev_mem(cmdbuf, cs, capacity * 8, 64);
+   if (!dev->cmdbuf_opt.cs_flush_used) {
+      struct pan_ptr ptr =
+         panvk_cmd_alloc_dev_mem(cmdbuf, cs, capacity * 8, 64);
+
+      return (struct cs_buffer){
+         .cpu = ptr.cpu,
+         .gpu = ptr.gpu,
+         .capacity = capacity,
+      };
+   }
+
+   struct panvk_cs_chunk *chunk =
+      util_dynarray_grow(&cmdbuf->cs_chunks, struct panvk_cs_chunk, 1);
+   if (!chunk) {
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return (struct cs_buffer){0};
+   }
+
+   struct panvk_priv_mem mem = panvk_pool_alloc_mem(
+      &cmdbuf->cs_pool, (struct panvk_pool_alloc_info){
+                           .size = capacity * sizeof(uint64_t),
+                           .alignment = 64,
+                        });
+   struct panvk_priv_bo *bo = panvk_priv_mem_bo(mem);
+   if (!bo) {
+      (void)util_dynarray_pop_ptr(&cmdbuf->cs_chunks, struct panvk_cs_chunk);
+      vk_command_buffer_set_error(
+         &cmdbuf->vk,
+         panvk_catch_indirect_alloc_failure(VK_ERROR_OUT_OF_DEVICE_MEMORY));
+      return (struct cs_buffer){0};
+   }
+
+   *chunk = (struct panvk_cs_chunk){
+      .bo = bo,
+      .gpu = panvk_priv_mem_dev_addr(mem),
+      .offset = mem.offset,
+      .size = capacity * sizeof(uint64_t),
+   };
 
    return (struct cs_buffer){
-      .cpu = ptr.cpu,
-      .gpu = ptr.gpu,
+      .cpu = panvk_priv_mem_host_addr(mem),
+      .gpu = chunk->gpu,
       .capacity = capacity,
    };
 }
@@ -1310,6 +1394,7 @@ panvk_per_arch(cmd_cut_vmr_segment)(struct panvk_cmd_buffer *cmdbuf)
        * this stream's pending loads.
        */
       cs_wait_slots(b, dev->csf.sb.all_mask);
+      cs_chunk_note_end(cmdbuf, b);
       cs_end(b);
       if (!cs_is_valid(b)) {
          vk_command_buffer_set_error(&cmdbuf->vk,
@@ -1364,6 +1449,7 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
 
    memset(&cmdbuf->state, 0, sizeof(cmdbuf->state));
    util_dynarray_clear(&cmdbuf->vmr_segs);
+   util_dynarray_clear(&cmdbuf->cs_chunks);
    init_cs_builders(cmdbuf);
 }
 
@@ -1388,6 +1474,7 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
    util_dynarray_fini(&cmdbuf->bc_timing);
    util_dynarray_fini(&cmdbuf->bc_raw_refs);
    util_dynarray_fini(&cmdbuf->vmr_segs);
+   util_dynarray_fini(&cmdbuf->cs_chunks);
    panvk_pool_cleanup(&cmdbuf->cs_pool);
    panvk_pool_cleanup(&cmdbuf->desc_pool);
    panvk_pool_cleanup(&cmdbuf->tls_pool);

@@ -225,6 +225,13 @@ struct panvk_device {
       uint64_t vs_region_end;
    } tess_opt;
 
+   /* CSF command buffer memory options, read once at device creation. */
+   struct {
+      /* PANVK_CS_FLUSH_USED (default 1): EndCommandBuffer flushes each CS
+       * chunk up to what its builder wrote, not every CS pool BO whole. */
+      bool cs_flush_used;
+   } cmdbuf_opt;
+
    /* Device-wide thread local storage shared by all command buffers. The
     * last BO is the current one; outgrown ones stay alive for command
     * buffers that still point at them. */
