@@ -158,6 +158,12 @@ struct kbase_kmod_dev {
     * (DRM_PANTHOR_GPU_COHERENCY_* values), or KBASE_COHERENCY_UNREPORTED. */
    uint32_t coherency_mode;
 
+   /* PANVK_KBASE_COHERENT_POOLS=1 on a CSF device with ACE-Lite or ACE:
+    * CPU-cached allocations ask for BASE_MEM_COHERENT_SYSTEM
+    * (kbase_kmod_bo_alloc()). kbase_coherent_pools_off() clears it if the
+    * kernel drops the flag or fails such an allocation. */
+   bool coherent_pools;
+
    /* CSF interface information (CSF only), queried from
     * KBASE_IOCTL_CS_GET_GLB_IFACE and stored in the panthor uAPI layout
     * so CSF-generic code can consume either backend. */
@@ -557,14 +563,37 @@ kbase_dev_query_props(struct kbase_kmod_dev *kbase_dev,
          : kbase_dev->coherency_mode;
    props->timestamp_device_coherent = !strict_clock && mode_114 != 0;
 
+   /* Perf review B2, opt-in until a device A/B passes. With ACE-Lite or ACE
+    * the GPU can snoop the CPU caches for regions allocated
+    * BASE_MEM_COHERENT_SYSTEM, and the CPU caches see the GPU's writes, so
+    * the CPU cache maintenance on the CPU-cached BOs (command buffer CS and
+    * descriptor pools, descriptor pools, device pools, HOST_CACHED memory)
+    * is not needed: such BOs get PAN_KMOD_BO_FLAG_IO_COHERENT, which makes
+    * pan_kmod_queue_bo_map_sync() return early, and MEM_SYNC already skips
+    * them. kbase drops the flag on a system that is not coherent; the
+    * allocation checks the returned flags per BO. CSF only for now. */
+   const bool pools_wanted =
+      debug_get_bool_option("PANVK_KBASE_COHERENT_POOLS", false);
+   kbase_dev->coherent_pools =
+      pools_wanted && kbase_dev->is_csf &&
+      (kbase_dev->coherency_mode == DRM_PANTHOR_GPU_COHERENCY_ACE_LITE ||
+       kbase_dev->coherency_mode == DRM_PANTHOR_GPU_COHERENCY_ACE);
+
    /* One line with what the kernel reports, so a device log shows the mode
-    * the cache-maintenance work (perf review B2) has to rely on. */
-   mesa_logi("kbase: coherency mode %u (%s), shaderDeviceClock %s (%s)",
+    * the cache-maintenance work has to rely on. */
+   mesa_logi("kbase: coherency mode %u (%s), shaderDeviceClock %s (%s), "
+             "coherent pools %s",
              kbase_dev->coherency_mode,
              kbase_coherency_mode_str(kbase_dev->coherency_mode),
              props->timestamp_device_coherent ? "on" : "off",
              strict_clock ? "strict, PANVK_KBASE_STRICT_DEVICE_CLOCK=0 = 114"
-                          : "114 rule, coherency mode != 0");
+                          : "114 rule, coherency mode != 0",
+             kbase_dev->coherent_pools
+                ? "requested (PANVK_KBASE_COHERENT_POOLS=1)"
+             : pools_wanted
+                ? "off (PANVK_KBASE_COHERENT_POOLS=1 needs CSF and ACE-Lite "
+                  "or ACE)"
+                : "off (PANVK_KBASE_COHERENT_POOLS=1 enables)");
 
    props->timestamp_frequency = 0;
 #if defined(__aarch64__)
@@ -2556,6 +2585,16 @@ kbase_kmod_bo_alloc_dmabuf(struct pan_kmod_dev *dev, uint64_t size,
    return bo;
 }
 
+/* PANVK_KBASE_COHERENT_POOLS=1 fallback: later allocations use the 114
+ * flags. BOs that were allocated coherent stay coherent. */
+static void
+kbase_coherent_pools_off(struct kbase_kmod_dev *kbase_dev, const char *why)
+{
+   if (p_atomic_xchg(&kbase_dev->coherent_pools, false))
+      mesa_logw("kbase: coherent pools off: %s (coherency mode %u)", why,
+                kbase_dev->coherency_mode);
+}
+
 static struct pan_kmod_bo *
 kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
                     struct pan_kmod_vm *exclusive_vm, uint64_t size,
@@ -2586,6 +2625,24 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
    uint64_t extension = 0;
    uint64_t alloc_flags = to_kbase_mem_flags(kmod_flags);
    uint64_t alloc_gpu_va;
+
+   /* Perf review B2 (PANVK_KBASE_COHERENT_POOLS=1, see
+    * kbase_dev_query_props()): a CPU-cached BO asks for a system-coherent
+    * region instead of a GPU-coherent one (kbase rejects the two flags
+    * together). GPU-only, growable, GPU-uncached, executable and event
+    * memory keep the 114 flags. */
+   bool want_coherent =
+      p_atomic_read(&kbase_dev->coherent_pools) &&
+      (kmod_flags & PAN_KMOD_BO_FLAG_WB_MMAP) &&
+      !(kmod_flags & (PAN_KMOD_BO_FLAG_EXECUTABLE |
+                      PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT |
+                      PAN_KMOD_BO_FLAG_NO_MMAP |
+                      PAN_KMOD_BO_FLAG_GPU_UNCACHED |
+                      PAN_KMOD_BO_FLAG_CSF_EVENT));
+   if (want_coherent) {
+      alloc_flags &= ~BASE_MEM_COHERENT_LOCAL;
+      alloc_flags |= BASE_MEM_COHERENT_SYSTEM;
+   }
 
    if (kmod_flags & PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT) {
       /* Growable region: grown in 2 MB increments on GPU page fault
@@ -2657,6 +2714,7 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
     * both build the same request.  Some vendor CSF kernels (v14 G1-Ultra,
     * Linux 6.12) reject ALLOC_EX with ENOTTY: fall back to MEM_ALLOC until
     * one path has succeeded, then stick to it. */
+retry_alloc:;
    uint32_t path = p_atomic_read(&kbase_dev->mem_alloc_path);
    bool done = false;
 
@@ -2687,7 +2745,7 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
          if (path || (err != ENOTTY && err != EINVAL)) {
             mesa_loge("kbase: KBASE_IOCTL_MEM_ALLOC_EX failed: %s",
                       strerror(err));
-            goto err_free_bo;
+            goto err_alloc;
          }
          mesa_logw("kbase: KBASE_IOCTL_MEM_ALLOC_EX failed: %s; "
                    "trying KBASE_IOCTL_MEM_ALLOC", strerror(err));
@@ -2715,7 +2773,7 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
       }
       if (ret) {
          mesa_loge("kbase: KBASE_IOCTL_MEM_ALLOC failed: %s", strerror(errno));
-         goto err_free_bo;
+         goto err_alloc;
       }
       if (p_atomic_cmpxchg(&kbase_dev->mem_alloc_path, 0,
                            KBASE_MEM_ALLOC_PATH_LEGACY) == 0)
@@ -2723,6 +2781,24 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
 
       alloc_flags = req.out.flags;
       alloc_gpu_va = req.out.gpu_va;
+   }
+
+   if (want_coherent) {
+      if (!(alloc_flags & BASE_MEM_COHERENT_SYSTEM)) {
+         /* kbase dropped the flag, so this region is neither system- nor
+          * GPU-coherent: free it and allocate with the 114 flags. */
+         struct kbase_ioctl_mem_free free_req = { .gpu_addr = alloc_gpu_va };
+         ioctl(dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+         kbase_coherent_pools_off(kbase_dev, "the kernel dropped "
+                                             "BASE_MEM_COHERENT_SYSTEM");
+         want_coherent = false;
+         alloc_flags = to_kbase_mem_flags(kmod_flags);
+         goto retry_alloc;
+      }
+      mesa_logi_once("kbase: coherent pools on: the kernel kept "
+                     "BASE_MEM_COHERENT_SYSTEM (flags 0x%" PRIx64 "), no CPU "
+                     "cache maintenance on CPU-cached BOs",
+                     alloc_flags);
    }
 
    kbase_bo->same_va = (alloc_flags & BASE_MEM_SAME_VA) != 0;
@@ -2772,10 +2848,23 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
    /* Allocate a unique u32 handle for the pan_kmod handle_to_bo table. */
    uint32_t handle = p_atomic_inc_return(&kbase_dev->next_handle);
 
+   /* A system-coherent CPU-cached BO needs no CPU cache maintenance:
+    * IO_COHERENT makes pan_kmod_queue_bo_map_sync() skip it. */
    pan_kmod_bo_init(&kbase_bo->base, dev, exclusive_vm,
-                    va_pages * page_size, kmod_flags, handle);
+                    va_pages * page_size,
+                    want_coherent ? kmod_flags | PAN_KMOD_BO_FLAG_IO_COHERENT
+                                  : kmod_flags,
+                    handle);
    return &kbase_bo->base;
 
+err_alloc:
+   if (want_coherent) {
+      kbase_coherent_pools_off(kbase_dev, "a BASE_MEM_COHERENT_SYSTEM "
+                                          "allocation failed");
+      want_coherent = false;
+      alloc_flags = to_kbase_mem_flags(kmod_flags);
+      goto retry_alloc;
+   }
 err_free_bo:
    pan_kmod_dev_free(dev, kbase_bo);
    return NULL;
