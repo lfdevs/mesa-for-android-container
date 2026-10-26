@@ -270,8 +270,18 @@ panvk_android_swapchain_queue_present(
    if (image_index >= chain->base.image_count)
       return VK_ERROR_OUT_OF_DATE_KHR;
 
-   VK_FROM_HANDLE(vk_device, dev, swapchain->device);
-   dev->dispatch_table.DeviceWaitIdle(swapchain->device);
+   if (PANVK_PERF(ANDROID_PRESENT_FENCE)) {
+      /* The image's present fence covers the semaphores this present
+       * waits on and all earlier work on the queue.  On a sw WSI device
+       * wsi_common_queue_present() has already waited for it.
+       */
+      swapchain->wsi->WaitForFences(swapchain->device, 1,
+                                    &swapchain->fences[image_index], true,
+                                    UINT64_MAX);
+   } else {
+      VK_FROM_HANDLE(vk_device, dev, swapchain->device);
+      dev->dispatch_table.DeviceWaitIdle(swapchain->device);
+   }
 
    if (chain->window && chain->images[image_index].ahb) {
       ANativeWindow_Buffer win_buf;

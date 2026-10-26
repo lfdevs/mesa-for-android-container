@@ -52,6 +52,9 @@ enum panvk_perf_knob {
     * reply to each sw MIT-SHM put; the present thread does not block on
     * the round trip. */
    PANVK_PERF_WSI_SW_DEFER_REPLY = 1 << 9,
+   /* K1, PANVK_ANDROID_PRESENT_FENCE: the PanVK Android swapchain waits
+    * for the presented image's fence instead of the whole device. */
+   PANVK_PERF_ANDROID_PRESENT_FENCE = 1 << 10,
 };
 
 extern uint32_t panvk_perf_knobs;
