@@ -105,6 +105,9 @@ struct panvk_device {
       /* PANVK_JM_RESET_FLUSH (default once, batch/0 = old): a resubmitted
        * command buffer cleans its descriptor pool once, not per batch. */
       bool reset_flush_once;
+      /* PANVK_V7_TESS_BATCH_DRAWS (default 4, 0 = old): v6/v7 tess draws
+       * that may share a batch at their worst-case varying charge. */
+      uint32_t tess_batch_draws;
    } jm_opt;
    struct panvk_priv_bo *sample_positions;
 

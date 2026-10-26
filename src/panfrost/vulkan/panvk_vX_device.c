@@ -995,6 +995,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    /* v6/v7 panvk_tess_draw() reads it per draw (v9+ sets it below). */
    device->tess_opt.winding_inline =
       debug_get_num_option("PANVK_TESS_WINDING_INLINE", 1) != 0;
+   device->jm_opt.tess_batch_draws =
+      CLAMP(debug_get_num_option("PANVK_V7_TESS_BATCH_DRAWS", 4), 0, 64);
 #endif
 
 #if PAN_ARCH >= 9

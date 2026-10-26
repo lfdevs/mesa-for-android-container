@@ -3840,10 +3840,24 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
     * phases of this draw.
     */
    const uint64_t tess_budget = panvk_v7_tess_batch_budget();
-   const uint64_t vary_w =
+   uint64_t vary_w =
       (uint64_t)max_indices * layers *
          (16 + 4 + tes_v->info.varyings.formats.generic_size_B) +
       (uint64_t)layers * 3 * 64;
+   /* The worst case is every patch at level 64 (PANVK_TESS_MAX_PRIMS_PER_
+    * PATCH): 21.5 MiB for a 16-patch triangle draw, so with the whole worst
+    * case charged every tess draw started a new batch, and every batch
+    * after the first in a render pass stores and reloads the framebuffer.
+    * Real draws use a small part of it (1.4 MiB at level 16). Each draw is
+    * charged at most budget / PANVK_V7_TESS_BATCH_DRAWS (default 4), so
+    * that many share a batch. The prefix kernel still keeps only the
+    * patches whose varyings fit what is left of the indirect varying
+    * buffer, so a batch that really reaches the worst case only takes
+    * more of that buffer (up to N times 21.5 MiB). 0 = the whole worst
+    * case (old).
+    */
+   if (tess_budget && dev->jm_opt.tess_batch_draws)
+      vary_w = MIN2(vary_w, tess_budget / dev->jm_opt.tess_batch_draws);
    if (!draw->indirect_dep_job && tess_budget) {
       struct panvk_batch *b = cmdbuf->cur_batch;
       const bool used = b->tess_vary_w || b->tess_gs_off;
@@ -3856,9 +3870,11 @@ panvk_tess_draw(struct panvk_cmd_buffer *cmdbuf,
          if (over && logged < 3) {
             logged++;
             mesa_logi("panvk: v%u tess batch budget %llu MiB: new batch "
-                      "(varyings %llu MiB worst case, GS scratch %llu MiB)",
+                      "(varyings %llu MiB charged, %u draws per batch, "
+                      "GS scratch %llu MiB)",
                       PAN_ARCH, (unsigned long long)(tess_budget >> 20),
                       (unsigned long long)((b->tess_vary_w + vary_w) >> 20),
+                      dev->jm_opt.tess_batch_draws,
                       (unsigned long long)(b->tess_gs_off >> 20));
          }
          panvk_per_arch(cmd_close_batch)(cmdbuf);
