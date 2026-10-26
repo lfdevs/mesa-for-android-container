@@ -801,7 +801,7 @@ always_load(const struct pan_fb_load *load,
           (pan_fb_shader_key_target_written(&key->key.s) && load->s.always);
 }
 
-#if PAN_ARCH == 11
+#if PAN_ARCH >= 9 && PAN_ARCH <= 11
 DEBUG_GET_ONCE_BOOL_OPTION(zs_preload_always, "PANVK_ZS_PRELOAD_ALWAYS", false)
 #endif
 
@@ -829,18 +829,18 @@ cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
    if (result != VK_SUCCESS)
       return result;
 
-   /* We could use INTERSECT on Valhall too, but EARLY_ZS_ALWAYS has the
-    * advantage of reloading the ZS tile buffer one or more tiles ahead,
-    * making ZS data immediately available for any ZS tests taking place in
-    * other shaders.  Thing's haven't been benchmarked to determine what's
-    * preferable (saving bandwidth vs having ZS preloaded earlier), so let's
-    * leave it like that for now.
+   /* EARLY_ZS_ALWAYS reloads the ZS tile buffer one or more tiles ahead,
+    * making ZS data immediately available for ZS tests in other shaders,
+    * but it reads Z/S for every tile, including tiles no primitive touches.
+    * On v9-v11 use INTERSECT, like the colour preload, unless the target
+    * has to be written for empty tiles too (always_load()).
+    * PANVK_ZS_PRELOAD_ALWAYS=1 restores EARLY_ZS_ALWAYS.
     *
     * On v13+, we don't have EARLY_ZS_ALWAYS instead we use PREPASS_ALWAYS.
     */
 #if PAN_ARCH >= 13
    fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_PREPASS_ALWAYS;
-#elif PAN_ARCH == 11
+#elif PAN_ARCH >= 9 && PAN_ARCH <= 11
    fs->modes[dcd_idx] = (always_load(load, &key) ||
                          debug_get_option_zs_preload_always())
                         ? MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS
