@@ -707,9 +707,15 @@ panvk_create_cmdbuf(struct vk_command_pool *vk_pool, VkCommandBufferLevel level,
    panvk_pool_init(&cmdbuf->desc_pool, device, &pool->desc_bo_pool, NULL,
                    &desc_pool_props);
 
+   /* Only TLS (stacks, written before they are read) and WLS (undefined
+    * at dispatch start, zero-init is lowered in the shader) come from this
+    * pool, and pooled BOs are reused uncleared anyway: no kbase clear, as
+    * the CSF TLS does (perf review 2026-10-26 D2; up to 2 x 47 MiB of
+    * memset per command buffer on the S9). PANVK_KBASE_ZERO_ALL=1 clears
+    * them again. */
    struct panvk_pool_properties tls_pool_props = {
-      .create_flags =
-         panvk_device_adjust_bo_flags(device, PAN_KMOD_BO_FLAG_NO_MMAP),
+      .create_flags = panvk_device_adjust_bo_flags(
+         device, PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_NO_ZERO),
       .slab_size = 64 * 1024,
       .label = "TLS pool",
       .prealloc = false,
