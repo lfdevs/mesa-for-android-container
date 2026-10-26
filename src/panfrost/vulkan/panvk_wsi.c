@@ -810,10 +810,6 @@ panvk_wsi_finish(struct panvk_physical_device *physical_device)
 #include "vk_common_entrypoints.h"
 #include "wsi_common_entrypoints.h"
 
-#ifndef PANVK_KBASE_RELEASE
-#define PANVK_KBASE_RELEASE "dev"
-#endif
-
 /* 0 = not read yet, 1 = off, 2 = on. */
 static int panvk_fps_state;
 static simple_mtx_t panvk_fps_lock = SIMPLE_MTX_INITIALIZER;
@@ -887,8 +883,8 @@ panvk_fps_log_open(void)
    setvbuf(panvk_fps.fp, NULL, _IOLBF, 0);
    clock_gettime(CLOCK_REALTIME, &ts);
    fprintf(panvk_fps.fp,
-           "# panvk-fps PanVK-kbase " PANVK_KBASE_RELEASE
-           " (Mesa " PACKAGE_VERSION MESA_GIT_SHA1 ") pid=%d interval_ms=%" PRIu64
+           "# panvk-fps Mesa " PACKAGE_VERSION MESA_GIT_SHA1
+           " pid=%d interval_ms=%" PRIu64
            " first_present_unix_ms=%" PRIu64 "\n",
            (int)getpid(), panvk_fps.interval_ns / 1000000,
            (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000);
