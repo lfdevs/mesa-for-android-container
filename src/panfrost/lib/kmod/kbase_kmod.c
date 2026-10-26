@@ -154,6 +154,10 @@ struct kbase_kmod_dev {
    /* True for the CSF flavour of kbase (arch >= 10), false for JM. */
    bool is_csf;
 
+   /* KBASE_GPUPROP_RAW_COHERENCY_MODE, the system coherency kbase selected
+    * (DRM_PANTHOR_GPU_COHERENCY_* values), or KBASE_COHERENCY_UNREPORTED. */
+   uint32_t coherency_mode;
+
    /* CSF interface information (CSF only), queried from
     * KBASE_IOCTL_CS_GET_GLB_IFACE and stored in the panthor uAPI layout
     * so CSF-generic code can consume either backend. */
@@ -389,6 +393,27 @@ kbase_get_gpuprops(int fd, size_t *out_size)
    return buf;
 }
 
+/* kbase_kmod_dev::coherency_mode when the props blob has no
+ * KBASE_GPUPROP_RAW_COHERENCY_MODE. */
+#define KBASE_COHERENCY_UNREPORTED UINT32_MAX
+
+static const char *
+kbase_coherency_mode_str(uint32_t mode)
+{
+   switch (mode) {
+   case DRM_PANTHOR_GPU_COHERENCY_ACE_LITE:
+      return "ACE-Lite";
+   case DRM_PANTHOR_GPU_COHERENCY_ACE:
+      return "ACE";
+   case DRM_PANTHOR_GPU_COHERENCY_NONE:
+      return "none";
+   case KBASE_COHERENCY_UNREPORTED:
+      return "not reported";
+   default:
+      return "unknown";
+   }
+}
+
 static void
 kbase_dev_query_props(struct kbase_kmod_dev *kbase_dev,
                       const uint8_t *buf, size_t buf_size)
@@ -491,21 +516,56 @@ kbase_dev_query_props(struct kbase_kmod_dev *kbase_dev,
       }
    }
 
-   /* Coherency: kbase raw coherency mode.
-    * 0 = none, 1 = ACE-Lite, 2 = ACE.
+   /* Coherency: KBASE_GPUPROP_RAW_COHERENCY_MODE is the coherency mode kbase
+    * selected (base_gpu_props::coherency_mode), not the supported ones, in
+    * the COHERENCY_ENABLE encoding panthor and panfrost report too:
+    * 0 = ACE-Lite, 1 = ACE, 31 = none.
     *
     * In pan_kmod, is_io_coherent means explicit CPU cache maintenance can be
     * skipped for WB_MMAP BOs. That is not true for this kbase backend: kbase
     * cached CPU mappings still need KBASE_IOCTL_MEM_SYNC before GPU access and
-    * after GPU writes.
+    * after GPU writes, unless the region itself is BASE_MEM_COHERENT_SYSTEM.
     */
-   uint32_t coherency_mode = (uint32_t)kbase_gpuprop_get(
-      buf, buf_size, KBASE_GPUPROP_RAW_COHERENCY_MODE, 0);
+   const uint64_t coherency_raw = kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_COHERENCY_MODE, UINT64_MAX);
+   kbase_dev->coherency_mode = coherency_raw == UINT64_MAX
+                                  ? KBASE_COHERENCY_UNREPORTED
+                                  : (uint32_t)coherency_raw;
    props->is_io_coherent = false;
 
    /* Timestamp: expose if gpu_id is non-zero (safe assumption). */
    props->gpu_can_query_timestamp = (props->gpu_id != 0);
-   props->timestamp_device_coherent = (coherency_mode != 0);
+
+   /* timestamp_device_coherent (shaderDeviceClock) says the GPU timestamp
+    * reaches the shader cores, so a device-scope clock read (LD_GCLK
+    * SYSTEM_TIMESTAMP) runs and agrees across cores: panfrost asks for it
+    * with the cycle-count job requirement, panthor 1.6 sets GLB_COUNTER_EN.
+    * The coherency mode does not tell that, and 114 read it as "0 = none",
+    * so the clock was advertised with COHERENCY_NONE and hidden with
+    * ACE-Lite or an unreported mode (the shaderDeviceClock split between the
+    * G615 MC2 phones and the MC6 dev device). Nothing in this backend starts
+    * the counter for shaders: JM atoms only run it with PERMON (timestamp
+    * queries), and kbase does not report whether the CSF firmware got
+    * GLB_COUNTER_EN. So the device scope is not advertised; the subgroup
+    * scope is unchanged. PANVK_KBASE_STRICT_DEVICE_CLOCK=0 = 114 (coherency
+    * mode != 0, an unreported mode reads as 0). */
+   const bool strict_clock =
+      debug_get_bool_option("PANVK_KBASE_STRICT_DEVICE_CLOCK", true);
+   const uint32_t mode_114 =
+      kbase_dev->coherency_mode == KBASE_COHERENCY_UNREPORTED
+         ? 0
+         : kbase_dev->coherency_mode;
+   props->timestamp_device_coherent = !strict_clock && mode_114 != 0;
+
+   /* One line with what the kernel reports, so a device log shows the mode
+    * the cache-maintenance work (perf review B2) has to rely on. */
+   mesa_logi("kbase: coherency mode %u (%s), shaderDeviceClock %s (%s)",
+             kbase_dev->coherency_mode,
+             kbase_coherency_mode_str(kbase_dev->coherency_mode),
+             props->timestamp_device_coherent ? "on" : "off",
+             strict_clock ? "strict, PANVK_KBASE_STRICT_DEVICE_CLOCK=0 = 114"
+                          : "114 rule, coherency mode != 0");
+
    props->timestamp_frequency = 0;
 #if defined(__aarch64__)
    uint64_t cntfrq;
