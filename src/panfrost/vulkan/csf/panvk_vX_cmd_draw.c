@@ -6052,6 +6052,9 @@ vmr_track_secondary(struct panvk_cmd_buffer *cmdbuf)
 static void
 panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
 {
+   /* C1: lowered or unlowered FS, before anything looks at it. */
+   panvk_per_arch(cmd_select_db_alt_fs)(cmdbuf);
+
    const struct panvk_shader_variant *vs =
       raster_vs_variant(cmdbuf, draw.gpu_prerast_generated);
    VkResult result;

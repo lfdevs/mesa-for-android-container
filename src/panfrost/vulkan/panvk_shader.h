@@ -620,17 +620,19 @@ struct panvk_shader {
     * (line, point) and class (triangles, triangles with adjacency).
     */
    struct panvk_shader *polygon_gs[2][2];
+#endif
+
    /* jm-v7 076: another compile of the same shader, which the draw picks
-    * instead while its state allows (panvk_v7_select_alt_shaders()). A
-    * fragment shader with the depth bounds lowering has the unlowered one,
-    * used while the test is off (it keeps FPK and early ZS). A vertex shader
-    * with xfb has a screen-space one without xfb, used while xfb is
-    * inactive and no geometry shader is bound (jm-v7 077). Owned by the
-    * shader; alt_parent points back from the alternate.
+    * instead while its state allows (panvk_v7_select_alt_shaders(), and
+    * cmd_select_db_alt_fs() on v9+ since 115). A fragment shader with the
+    * depth bounds lowering has the unlowered one, used while the test is
+    * off (it keeps FPK and early ZS). On v6/v7, a vertex shader with xfb
+    * has a screen-space one without xfb, used while xfb is inactive and no
+    * geometry shader is bound (jm-v7 077). Owned by the shader; alt_parent
+    * points back from the alternate.
     */
    struct panvk_shader *alt;
    const struct panvk_shader *alt_parent;
-#endif
 
    struct panvk_shader_variant variants[];
 };

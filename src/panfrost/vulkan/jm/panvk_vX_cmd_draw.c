@@ -6618,6 +6618,9 @@ v9_tess_draw(struct panvk_cmd_buffer *cmdbuf,
 static void
 v9_cmd_draw_layer(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
 {
+   /* C1 (115): lowered or unlowered FS for this draw. */
+   panvk_per_arch(cmd_select_db_alt_fs)(cmdbuf);
+
    /* The tess and gpu_prerast paths call get_fs() too. */
    cmdbuf->state.gfx.fs.required =
       fs_required(&cmdbuf->state.gfx, &cmdbuf->vk.dynamic_graphics_state);

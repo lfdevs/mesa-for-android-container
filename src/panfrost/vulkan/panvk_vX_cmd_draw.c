@@ -1156,6 +1156,41 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
    }
 }
 
+#if PAN_ARCH >= 9
+/* C1 (115): the v9+ form of jm-v7 076's panvk_v7_select_alt_shaders(). Picks
+ * the bound FS's compile for this draw: the depth bounds lowered one while
+ * the test is on and a depth attachment is bound (the ds.enable sysval, and
+ * db_on in build_dcd_flags() and the v9 JM DCD), the unlowered alternate
+ * otherwise. The state keeps whichever compile was last used, alt_parent
+ * leads back to the main one, and a change marks FS dirty as a bind would.
+ * Called once per draw, before fs.required is computed.
+ */
+void
+panvk_per_arch(cmd_select_db_alt_fs)(struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_shader *fs = cmdbuf->state.gfx.fs.shader;
+
+   if (!fs || !PANVK_PERF(DB_ALT))
+      return;
+
+   const struct panvk_shader *main_fs = fs->alt_parent ? fs->alt_parent : fs;
+   if (!main_fs->alt)
+      return;
+
+   const bool db_on =
+      cmdbuf->vk.dynamic_graphics_state.ds.depth.bounds_test.enable &&
+      (cmdbuf->state.gfx.render.bound_attachments &
+       MESA_VK_RP_ATTACHMENT_DEPTH_BIT);
+   const struct panvk_shader *want = db_on ? main_fs : main_fs->alt;
+
+   if (want != fs) {
+      cmdbuf->state.gfx.fs.shader = want;
+      gfx_state_set_dirty(cmdbuf, FS);
+      gfx_state_set_dirty(cmdbuf, FS_PUSH_UNIFORMS);
+   }
+}
+#endif
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdBindVertexBuffers2)(VkCommandBuffer commandBuffer,
                                       uint32_t firstBinding,

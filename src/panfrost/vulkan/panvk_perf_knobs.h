@@ -23,6 +23,9 @@ enum panvk_perf_knob {
     * depth bounds stand-in of a depth-only pipeline, or an FS with nothing
     * to write) leaves the FS state clean instead of dirtying it again. */
    PANVK_PERF_FS_IDLE_CLEAN = 1 << 0,
+   /* C1, PANVK_DB_ALT: v9+ fragment shaders with the depth bounds lowering
+    * get an unlowered compile, drawn while the test is off (jm-v7 076). */
+   PANVK_PERF_DB_ALT = 1 << 1,
 };
 
 extern uint32_t panvk_perf_knobs;

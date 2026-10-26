@@ -667,6 +667,10 @@ void
 panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
                                       const VkRenderingInfo *pRenderingInfo);
 
+#if PAN_ARCH >= 9
+void panvk_per_arch(cmd_select_db_alt_fs)(struct panvk_cmd_buffer *cmdbuf);
+#endif
+
 void panvk_per_arch(cmd_select_tile_size)(struct panvk_cmd_buffer *cmdbuf);
 
 struct panvk_draw_info {

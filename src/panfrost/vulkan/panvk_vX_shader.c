@@ -17,6 +17,7 @@
 #include "panvk_instance.h"
 #include "panvk_mempool.h"
 #include "panvk_nir.h"
+#include "panvk_perf_knobs.h"
 #include "panvk_physical_device.h"
 #include "panvk_sampler.h"
 #include "panvk_shader.h"
@@ -2448,6 +2449,26 @@ panvk_depth_bounds_lowered(const struct vk_features *features,
            state->ds->depth.bounds_test.enable);
 }
 
+/* jm-v7 076: whether a depth bounds lowered fragment shader also gets the
+ * unlowered alternate compile (panvk_shader::alt): the test may be off at
+ * draw time (dynamic enable, or no pipeline state). C1 (115): on v9+ too,
+ * PANVK_DB_ALT=0 turns it off there.
+ */
+static bool
+panvk_db_alt_wanted(const struct vk_features *features,
+                    const struct vk_graphics_pipeline_state *state)
+{
+#if PAN_ARCH >= 9
+   if (!PANVK_PERF(DB_ALT))
+      return false;
+#endif
+
+   return panvk_depth_bounds_lowered(features, state) &&
+          (!state || !state->ds ||
+           BITSET_TEST(state->dynamic,
+                       MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE));
+}
+
 /* Clears the SampleMask bit of every sample whose stored depth is
  * outside [min, max]. The draw makes the depth read and the late ZS update
  * effective only while the test is enabled (see build_dcd_flags).
@@ -2569,6 +2590,16 @@ panvk_hash_state(struct vk_physical_device *device,
 #if PAN_ARCH >= 9
    const bool robust_ssbo_vec = PANVK_DEBUG(ROBUST_SSBO_VEC);
    _mesa_blake3_update(&blake3_ctx, &robust_ssbo_vec, sizeof(robust_ssbo_vec));
+#endif
+#if PAN_ARCH >= 9
+   /* C1 (115): whether a fragment shader carries the unlowered alternate,
+    * so a pipeline with a dynamic depth bounds enable never gets a cached
+    * binary without it (one with a static enable shares the depth_bounds
+    * hash below), and a PANVK_DB_ALT=0 run never gets one with it.
+    */
+   const bool db_alt = (stages & VK_SHADER_STAGE_FRAGMENT_BIT) &&
+                       panvk_db_alt_wanted(enabled_features, state);
+   _mesa_blake3_update(&blake3_ctx, &db_alt, sizeof(db_alt));
 #endif
 #if PAN_ARCH < 9
    /* jm-v7 091: the compile knobs (panvk_v7_knobs.h), resolved, so an A/B
@@ -3913,9 +3944,9 @@ panvk_shader_destroy(struct vk_device *vk_dev, struct vk_shader *vk_shader,
             panvk_shader_destroy(vk_dev, &shader->polygon_gs[m][c]->vk, NULL);
       }
    }
+#endif
    if (shader->alt)
       panvk_shader_destroy(vk_dev, &shader->alt->vk, pAllocator);
-#endif
 
    vk_shader_free(vk_dev, pAllocator, &shader->vk);
 }
@@ -5503,12 +5534,33 @@ panvk_per_arch(create_shader_from_binary)(struct panvk_device *dev,
    return result;
 }
 
+/* jm-v7 076: whether a fragment shader gets an alternate compile
+ * (panvk_shader::alt): one with the depth bounds lowering whose test may be
+ * off at draw time (dynamic enable, or no pipeline state). The lowering
+ * writes SampleMask, which costs FPK and early ZS, and makes even an empty
+ * FS required, for every draw while the test is off. That is nearly every
+ * draw under DXVK: its fast-linked fragment shader libraries have the
+ * enable dynamic, and D3D11 never turns the test on.
+ *
+ * C1 (115): on v9+ as well (CSF and v9 JM had the lowering and no
+ * alternate since csf-v11 092/116 and jm-v9 018). PANVK_DB_ALT=0 compiles
+ * and draws the lowered FS only there, as in 114; v6/v7 keep 076 as is.
+ */
+static bool
+panvk_fs_wants_db_alt(const struct vk_features *features,
+                      const struct vk_shader_compile_info *info,
+                      const struct vk_graphics_pipeline_state *state)
+{
+   /* Not for driver-internal shaders (the device depth bounds FS, meta). */
+   if (info->stage != MESA_SHADER_FRAGMENT || info->nir->info.internal)
+      return false;
+
+   return panvk_db_alt_wanted(features, state);
+}
+
 #if PAN_ARCH < 9
-/* jm-v7 076: whether a shader gets an alternate compile (panvk_shader::alt).
- * A fragment shader with the depth bounds lowering whose test may be off at
- * draw time (dynamic enable, or no pipeline state): the lowering writes
- * SampleMask, which costs FPK and early ZS, and makes even an empty FS
- * required, for every draw while the test is off.
+/* jm-v7 076/077: whether a shader gets an alternate compile
+ * (panvk_shader::alt), see panvk_fs_wants_db_alt() for fragment shaders.
  */
 static bool
 panvk_v7_wants_alt(const struct vk_features *features,
@@ -5520,10 +5572,7 @@ panvk_v7_wants_alt(const struct vk_features *features,
       return false;
 
    if (info->stage == MESA_SHADER_FRAGMENT)
-      return panvk_depth_bounds_lowered(features, state) &&
-             (!state || !state->ds ||
-              BITSET_TEST(state->dynamic,
-                          MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE));
+      return panvk_fs_wants_db_alt(features, info, state);
 
    /* jm-v7 077: a last-stage vertex shader with xfb outputs is compiled for
     * clip space and always drawn through the passthrough GS, even while
@@ -5629,32 +5678,35 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
 #endif
       }
 
-#if PAN_ARCH < 9
       /* jm-v7 076: the alternate compile picked per draw (see
-       * panvk_shader::alt). Cloned before the main compile consumes the NIR.
+       * panvk_shader::alt), on v9+ the unlowered FS only (C1). Cloned
+       * before the main compile consumes the NIR.
        */
-      nir_shader *alt_nir = panvk_v7_wants_alt(enabled_features, &infos[i],
-                                               state)
-                               ? nir_shader_clone(NULL, infos[i].nir)
-                               : NULL;
+#if PAN_ARCH < 9
+      const bool want_alt =
+         panvk_v7_wants_alt(enabled_features, &infos[i], state);
+#else
+      const bool want_alt =
+         panvk_fs_wants_db_alt(enabled_features, &infos[i], state);
 #endif
+      nir_shader *alt_nir =
+         want_alt ? nir_shader_clone(NULL, infos[i].nir) : NULL;
 
       result = panvk_compile_shader(dev, &infos[i], state, vs_varying_layout,
                                     noperspective_varyings_ptr, scissor_loc, prev_gs_outputs,
                                     false, pAllocator, &shaders_out[i]);
 
       if (result != VK_SUCCESS) {
-#if PAN_ARCH < 9
          ralloc_free(alt_nir);
-#endif
          goto err_cleanup;
       }
 
-#if PAN_ARCH < 9
       if (alt_nir) {
          struct vk_shader_compile_info alt_info = infos[i];
          alt_info.nir = alt_nir;
+#if PAN_ARCH < 9
          panvk_v7_prepare_alt_nir(&alt_info);
+#endif
          struct vk_shader *alt_vk = NULL;
          /* Not fatal: without it the main compile is used for every draw. */
          if (panvk_compile_shader(dev, &alt_info, state, vs_varying_layout,
@@ -5669,7 +5721,6 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
          }
          ralloc_free(alt_nir);
       }
-#endif
 
       /* Clean up NIR for the current shader */
       ralloc_free(infos[i].nir);
@@ -5937,8 +5988,7 @@ panvk_deserialize_shader(struct vk_device *vk_dev, struct blob_reader *blob,
       }
    }
 
-#if PAN_ARCH < 9
-   /* jm-v7 076: the alternate compile, nested. */
+   /* jm-v7 076: the alternate compile, nested (every arch since 115). */
    if (blob_read_uint8(blob)) {
       struct vk_shader *alt_vk = NULL;
       result = blob->overrun ? VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT
@@ -5956,7 +6006,6 @@ panvk_deserialize_shader(struct vk_device *vk_dev, struct blob_reader *blob,
       panvk_shader_destroy(vk_dev, &shader->vk, pAllocator);
       return vk_error(device, VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT);
    }
-#endif
 
    *shader_out = &shader->vk;
 
@@ -6078,12 +6127,10 @@ panvk_shader_serialize(struct vk_device *vk_dev,
       panvk_shader_serialize_variant(vk_dev, variant, blob);
    }
 
-#if PAN_ARCH < 9
-   /* jm-v7 076: the alternate compile, nested. */
+   /* jm-v7 076: the alternate compile, nested (every arch since 115). */
    blob_write_uint8(blob, shader->alt != NULL);
    if (shader->alt && !panvk_shader_serialize(vk_dev, &shader->alt->vk, blob))
       return false;
-#endif
 
    return !blob->out_of_memory;
 }
@@ -6582,10 +6629,10 @@ panvk_per_arch(create_depth_bounds_fs)(struct panvk_device *dev)
    return VK_SUCCESS;
 }
 
-#if PAN_ARCH < 9
 /* Whether binding @shader over @cur only re-selects the shader @cur already
  * is an alternate compile of. PANVK_V7_ALT_REBIND_DIRTY=1 restores the old
- * behaviour (every such rebind marks the stage dirty).
+ * behaviour (every such rebind marks the stage dirty). Used for the v9+
+ * unlowered FS too since 115 (C1).
  */
 static bool
 panvk_v7_same_shader_rebind(const struct panvk_shader *cur,
@@ -6598,7 +6645,6 @@ panvk_v7_same_shader_rebind(const struct panvk_shader *cur,
    }
    return !old && cur && shader && cur != shader && cur->alt_parent == shader;
 }
-#endif
 
 static void
 panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stage,
@@ -6630,11 +6676,11 @@ panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stag
    case MESA_SHADER_FRAGMENT:
       if (!shader)
          shader = to_panvk_device(cmd->vk.base.device)->depth_bounds_fs;
-#if PAN_ARCH < 9
-      /* jm-v7 098: same for the jm-v7 076 unlowered FS. */
+      /* jm-v7 098: same for the jm-v7 076 unlowered FS (and its v9+ form,
+       * cmd_select_db_alt_fs()).
+       */
       if (panvk_v7_same_shader_rebind(cmd->state.gfx.fs.shader, shader))
          break;
-#endif
       if (cmd->state.gfx.fs.shader != shader) {
          cmd->state.gfx.fs.shader = shader;
          gfx_state_set_dirty(cmd, FS);

@@ -84,6 +84,7 @@ static const struct {
    uint32_t knob;
 } panvk_perf_knob_names[] = {
    {"PANVK_CSF_FS_IDLE_CLEAN", PANVK_PERF_FS_IDLE_CLEAN},
+   {"PANVK_DB_ALT", PANVK_PERF_DB_ALT},
 };
 
 void
