@@ -97,6 +97,12 @@ struct panvk_device {
     */
    struct panvk_priv_bo *indirect_varying_buffer2;
    struct panvk_priv_bo *tess_gs_scratch[2];
+   /* JM (v6/v7/v9) options, read once at device creation. */
+   struct {
+      /* PANVK_V7_FS_COPY_ONCE (default 1): v6/v7 FS descriptor copy job
+       * only when the FS tables change, none per tiler job. */
+      bool fs_copy_once;
+   } jm_opt;
    struct panvk_priv_bo *sample_positions;
 
    struct {

@@ -983,6 +983,11 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       panvk_slab_cache_init(&device->slab_cache[i], slab_cache_window_ns,
                             slab_evict_windows);
 
+#if PAN_ARCH <= 9
+   device->jm_opt.fs_copy_once =
+      debug_get_bool_option("PANVK_V7_FS_COPY_ONCE", true);
+#endif
+
 #if PAN_ARCH >= 9
    if (PANVK_DEBUG(GPU_PRERAST) || device->vk.enabled_features.fillModeNonSolid ||
        device->vk.enabled_features.geometryShader ||

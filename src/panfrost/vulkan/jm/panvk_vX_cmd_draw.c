@@ -1741,24 +1741,34 @@ panvk_draw_prepare_tiler_job(struct panvk_cmd_buffer *cmdbuf,
                              struct panvk_draw_data *draw)
 {
    struct panvk_batch *batch = cmdbuf->cur_batch;
-   struct pan_ptr ptr;
+   struct pan_ptr ptr = {0};
 
-   if (cmdbuf->state.gfx.fs.required) {
-      const struct panvk_shader_desc_info *fs_desc_info =
-         &cmdbuf->state.gfx.fs.shader->desc_info;
-      struct panvk_shader_desc_state *fs_desc_state =
-         &cmdbuf->state.gfx.fs.desc;
-      VkResult result = panvk_per_arch(meta_get_copy_desc_job)(
-         cmdbuf, fs_desc_info, &cmdbuf->state.gfx.desc_state,
-         fs_desc_state, 0, &ptr);
-      if (result != VK_SUCCESS)
-         return result;
+   /* The FS descriptor copy job that runs is the one prepare_draw() builds
+    * when the FS tables change: panvk_cmd_draw() and
+    * panvk_cmd_draw_indirect() chain draw->jobs.frag_copy_desc before the
+    * per-layer prepare_draw_layer() calls that get here, so the copy job
+    * this built for every layer was never chained, only allocated, packed
+    * and reset on every resubmit. PANVK_V7_FS_COPY_ONCE=0 builds it again
+    * (old, without the uninitialized ptr on FS-less draws).
+    */
+   if (!to_panvk_device(cmdbuf->vk.base.device)->jm_opt.fs_copy_once) {
+      if (cmdbuf->state.gfx.fs.required) {
+         const struct panvk_shader_desc_info *fs_desc_info =
+            &cmdbuf->state.gfx.fs.shader->desc_info;
+         struct panvk_shader_desc_state *fs_desc_state =
+            &cmdbuf->state.gfx.fs.desc;
+         VkResult result = panvk_per_arch(meta_get_copy_desc_job)(
+            cmdbuf, fs_desc_info, &cmdbuf->state.gfx.desc_state,
+            fs_desc_state, 0, &ptr);
+         if (result != VK_SUCCESS)
+            return result;
+      }
+
+      if (ptr.cpu)
+         util_dynarray_append(&batch->jobs, ptr.cpu);
+
+      draw->jobs.frag_copy_desc = ptr;
    }
-
-   if (ptr.cpu)
-      util_dynarray_append(&batch->jobs, ptr.cpu);
-
-   draw->jobs.frag_copy_desc = ptr;
 
    /* Per-viewport tiler jobs (jm-v7 031): one array, the emulation patches
     * each one's index count.
