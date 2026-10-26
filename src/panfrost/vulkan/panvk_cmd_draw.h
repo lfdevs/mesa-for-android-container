@@ -181,6 +181,15 @@ struct panvk_cmd_graphics_state {
    uint64_t v7_query_ends[PANVK_V7_MAX_DEFERRED_QUERY_ENDS];
    uint32_t v7_query_end_count;
 #endif
+#if PAN_ARCH >= 10
+   /* A2 (115): the graphics sets whose binding changed since the last draw,
+    * exact only while every DESC_STATE dirtying since then came through a
+    * set bind or push (otherwise DESC_STATE means every set). Reset by
+    * clear_dirty_after_draw().
+    */
+   uint32_t csf_dirty_sets;
+   bool csf_dirty_sets_valid;
+#endif
 
    struct {
       struct vk_vertex_input_state vi;
@@ -631,6 +640,7 @@ cached_fs_required(ASSERTED const struct panvk_cmd_graphics_state *state,
       vk_dynamic_graphics_state_clear_dirty(                                   \
          &(__cmdbuf)->vk.dynamic_graphics_state);                              \
       gfx_state_clear_all_dirty(__cmdbuf);                                     \
+      (__cmdbuf)->state.gfx.csf_dirty_sets_valid = false;                      \
       if (__idle_clean)                                                        \
          (__cmdbuf)->state.gfx.fs.unused = true;                               \
       else if (__fs_unused)                                                    \

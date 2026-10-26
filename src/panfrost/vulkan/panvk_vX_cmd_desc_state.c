@@ -17,6 +17,7 @@
 #include "panvk_cmd_desc_state.h"
 #include "panvk_device.h"
 #include "panvk_entrypoints.h"
+#include "panvk_perf_knobs.h"
 #include "panvk_v7_knobs.h"
 
 #include "pan_pool.h"
@@ -89,6 +90,36 @@ v7_gfx_desc_dirty_sets(struct panvk_cmd_buffer *cmdbuf, uint32_t sets)
       cmdbuf->state.gfx.v7_dirty_sets_valid = true;
    }
    cmdbuf->state.gfx.v7_dirty_sets |= sets;
+   gfx_state_set_dirty(cmdbuf, DESC_STATE);
+}
+#endif
+
+#if PAN_ARCH >= 10
+/* A2 (115): the CSF form of jm-v7 097. DESC_STATE for the graphics sets in
+ * @sets only: a draw rebuilds the tables of the stages that use one of them
+ * (vs_desc_dirty(), fs_desc_dirty()), and an identical rebind dirties
+ * nothing. The mask stays exact while every DESC_STATE dirtying since the
+ * last draw came through here; any other one (meta restore, secondaries)
+ * makes DESC_STATE mean every set, and those also dirty VS and FS, which
+ * rebuild both stages anyway. PANVK_CSF_DESC_DIRTY=0 = 114 (any bind or
+ * push rebuilds both).
+ */
+static void
+csf_gfx_desc_dirty_sets(struct panvk_cmd_buffer *cmdbuf, uint32_t sets)
+{
+   if (!PANVK_PERF(CSF_DESC_DIRTY)) {
+      gfx_state_set_dirty(cmdbuf, DESC_STATE);
+      return;
+   }
+
+   if (!sets)
+      return;
+
+   if (!gfx_state_dirty(cmdbuf, DESC_STATE)) {
+      cmdbuf->state.gfx.csf_dirty_sets = 0;
+      cmdbuf->state.gfx.csf_dirty_sets_valid = true;
+   }
+   cmdbuf->state.gfx.csf_dirty_sets |= sets;
    gfx_state_set_dirty(cmdbuf, DESC_STATE);
 }
 #endif
@@ -410,6 +441,8 @@ panvk_per_arch(CmdBindDescriptorSets2KHR)(
 
 #if PAN_ARCH < 9
       v7_gfx_desc_dirty_sets(cmdbuf, changed);
+#elif PAN_ARCH >= 10
+      csf_gfx_desc_dirty_sets(cmdbuf, changed);
 #else
       (void)changed;
       gfx_state_set_dirty(cmdbuf, DESC_STATE);
@@ -464,6 +497,9 @@ panvk_per_arch(CmdPushDescriptorSet2KHR)(
 #if PAN_ARCH < 9
       v7_gfx_desc_dirty_sets(cmdbuf,
                              BITFIELD_BIT(pPushDescriptorSetInfo->set));
+#elif PAN_ARCH >= 10
+      csf_gfx_desc_dirty_sets(cmdbuf,
+                              BITFIELD_BIT(pPushDescriptorSetInfo->set));
 #else
       gfx_state_set_dirty(cmdbuf, DESC_STATE);
 #endif
@@ -509,6 +545,8 @@ panvk_per_arch(CmdPushDescriptorSetWithTemplate2KHR)(
    if (template->bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS)
 #if PAN_ARCH < 9
       v7_gfx_desc_dirty_sets(cmdbuf, BITFIELD_BIT(set));
+#elif PAN_ARCH >= 10
+      csf_gfx_desc_dirty_sets(cmdbuf, BITFIELD_BIT(set));
 #else
       gfx_state_set_dirty(cmdbuf, DESC_STATE);
 #endif

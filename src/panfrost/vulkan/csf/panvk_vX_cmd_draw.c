@@ -415,8 +415,28 @@ prepare_vs_driver_set(struct panvk_cmd_buffer *cmdbuf, uint32_t repeat_count)
 
    vs_desc_state->driver_set.dev_addr = driver_set.gpu;
    vs_desc_state->driver_set.size = desc_count * PANVK_DESCRIPTOR_SIZE;
-   gfx_state_set_dirty(cmdbuf, DESC_STATE);
+   /* A2 (115): this only made the FS tables rebuild too; with per-set
+    * tracking each stage follows its own state.
+    */
+   if (!PANVK_PERF(CSF_DESC_DIRTY))
+      gfx_state_set_dirty(cmdbuf, DESC_STATE);
    return VK_SUCCESS;
+}
+
+/* A2 (115): whether a set the stage uses (@used_set_mask) may have been
+ * bound or pushed since the last draw. DESC_STATE alone means every set
+ * while the per-set mask is off (PANVK_CSF_DESC_DIRTY=0) or not exact.
+ */
+static bool
+gfx_sets_dirty(const struct panvk_cmd_buffer *cmdbuf, uint32_t used_set_mask)
+{
+   if (!gfx_state_dirty(cmdbuf, DESC_STATE))
+      return false;
+
+   if (!PANVK_PERF(CSF_DESC_DIRTY) || !cmdbuf->state.gfx.csf_dirty_sets_valid)
+      return true;
+
+   return (cmdbuf->state.gfx.csf_dirty_sets & used_set_mask) != 0;
 }
 
 /* Only valid to call after prepare_vi() */
@@ -436,7 +456,8 @@ vs_desc_dirty(struct panvk_cmd_buffer *cmdbuf)
           dyn_gfx_state_dirty(cmdbuf, VI_BINDINGS_VALID) ||
           dyn_gfx_state_dirty(cmdbuf, VI_BINDING_STRIDES) ||
           gfx_state_dirty(cmdbuf, VB) || gfx_state_dirty(cmdbuf, VS) ||
-          gfx_state_dirty(cmdbuf, DESC_STATE);
+          gfx_sets_dirty(cmdbuf,
+                         cmdbuf->state.gfx.vs.shader->desc_info.used_set_mask);
 }
 
 static VkResult
@@ -579,16 +600,23 @@ prepare_fs_driver_set(struct panvk_cmd_buffer *cmdbuf)
 
    fs_desc_state->driver_set.dev_addr = driver_set.gpu;
    fs_desc_state->driver_set.size = desc_count * PANVK_DESCRIPTOR_SIZE;
-   gfx_state_set_dirty(cmdbuf, DESC_STATE);
+   /* A2 (115): this only re-emitted VERTEX_SRT, see prepare_vs_driver_set(). */
+   if (!PANVK_PERF(CSF_DESC_DIRTY))
+      gfx_state_set_dirty(cmdbuf, DESC_STATE);
    return VK_SUCCESS;
 }
 
 static bool
 fs_desc_dirty(struct panvk_cmd_buffer *cmdbuf)
 {
+   /* A2 (115): an FS that does not run has no tables (FRAGMENT_SRT is 0),
+    * so set changes only matter once fs_user_dirty() brings it back.
+    */
+   const struct panvk_shader *fs = get_fs(cmdbuf);
+
    return fs_user_dirty(cmdbuf) ||
           gfx_state_dirty(cmdbuf, VS) ||
-          gfx_state_dirty(cmdbuf, DESC_STATE);
+          gfx_sets_dirty(cmdbuf, fs ? fs->desc_info.used_set_mask : 0);
 }
 
 static VkResult

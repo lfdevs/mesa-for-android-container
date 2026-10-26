@@ -31,6 +31,9 @@ enum panvk_perf_knob {
    /* PANVK_CSF_INDIRECT_REEMIT: a CSF draw after an indirect draw that
     * repeated the VS tables or push uniforms rebuilds them. */
    PANVK_PERF_CSF_INDIRECT_REEMIT = 1 << 3,
+   /* A2, PANVK_CSF_DESC_DIRTY: CSF descriptor binds and pushes dirty only
+    * the stages that use the changed sets. */
+   PANVK_PERF_CSF_DESC_DIRTY = 1 << 4,
 };
 
 extern uint32_t panvk_perf_knobs;
