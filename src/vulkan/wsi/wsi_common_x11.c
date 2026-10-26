@@ -107,6 +107,7 @@ struct wsi_x11_connection {
    bool is_xwayland;
    bool has_mit_shm;
    bool has_xfixes;
+   bool has_randr;
 
    struct list_head screen_resources_list;
 
@@ -385,6 +386,7 @@ wsi_x11_connection_create(struct wsi_device *wsi_dev,
 
    wsi_conn->is_xwayland = wsi_x11_detect_xwayland(conn, randr_reply,
                                                    xwl_reply);
+   wsi_conn->has_randr = randr_reply && randr_reply->present;
 
    wsi_conn->has_dri3_modifiers = has_dri3_v1_2 && has_present_v1_2;
    wsi_conn->has_dri3_explicit_sync = has_dri3_v1_4 && has_present_v1_4;
@@ -507,6 +509,13 @@ static struct wsi_x11_screen_resources *
 wsi_x11_connection_find_screen_resources(struct wsi_device *wsi_dev, xcb_connection_t *conn, xcb_window_t window)
 {
    struct wsi_x11_connection *wsi_conn = wsi_x11_get_connection(wsi_dev, conn);
+
+   /* The refresh estimate uses RandR. libxcb shuts the connection down on a
+    * request to an extension the server lacks (EXT_NOTSUPPORTED), so a
+    * server without RANDR gets no screen resources and no estimate. */
+   if (!wsi_conn || !wsi_conn->has_randr)
+      return NULL;
+
    xcb_get_geometry_cookie_t geometry_cookie = xcb_get_geometry_unchecked(conn, window);
    xcb_get_geometry_reply_t *geometry_reply = xcb_get_geometry_reply(conn, geometry_cookie, NULL);
 
@@ -966,7 +975,10 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
          xcb_connection_t *conn = x11_surface_get_connection(icd_surface);
          struct wsi_x11_connection *wsi_conn = wsi_x11_get_connection(wsi_device, conn);
 
-         if (!wsi_device->has_host_query_reset && !wsi_conn->is_xwayland) {
+         /* The CPU copy present (x11_present_to_x11_sw) never reports a
+          * present stage, so timing requests would never complete. */
+         if ((!wsi_device->has_host_query_reset && !wsi_conn->is_xwayland) ||
+             (wsi_device->sw && !wsi_conn->has_mit_shm)) {
             /* X11 can sometimes COMPLETE before the GPU is even done.
              * In this case, we need to observe a reset timestamp when polling,
              * which requires host query resets. On Xwayland, this cannot happen,

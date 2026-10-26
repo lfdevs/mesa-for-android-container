@@ -223,6 +223,12 @@ loader_update_screen_resources(struct loader_screen_resources *res)
    xcb_randr_get_screen_resources_current_reply_t *reply =
       xcb_randr_get_screen_resources_current_reply(res->conn, cookie, NULL);
 
+   /* No RandR 1.3 on the server, or the connection failed: keep what we had. */
+   if (!reply) {
+      mtx_unlock(&res->mtx);
+      return false;
+   }
+
    xcb_randr_crtc_t *new_crtcs =
       xcb_randr_get_screen_resources_current_crtcs(reply);
 
