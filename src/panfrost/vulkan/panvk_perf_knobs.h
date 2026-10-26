@@ -40,6 +40,10 @@ enum panvk_perf_knob {
    /* A5, PANVK_PRERAST_FAST_SKIP: a CSF draw that gpu_prerast does not
     * want skips the other gpu_prerast checks. */
    PANVK_PERF_PRERAST_FAST_SKIP = 1 << 6,
+   /* M3, PANVK_DESC_POOL_HINT: descriptor set allocation starts the free
+    * slot search at the first word that can hold a free set, and a pool
+    * reset only visits the allocated sets. */
+   PANVK_PERF_DESC_POOL_HINT = 1 << 7,
 };
 
 extern uint32_t panvk_perf_knobs;

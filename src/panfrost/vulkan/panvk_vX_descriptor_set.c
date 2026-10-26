@@ -32,6 +32,7 @@
 #include "panvk_image.h"
 #include "panvk_image_view.h"
 #include "panvk_macros.h"
+#include "panvk_perf_knobs.h"
 #include "panvk_priv_bo.h"
 #include "panvk_sampler.h"
 
@@ -399,6 +400,8 @@ panvk_desc_pool_free_set(struct panvk_descriptor_pool *pool,
             set->desc_count * PANVK_DESCRIPTOR_SIZE);
 
       BITSET_SET(pool->free_sets, set_idx);
+      pool->free_sets_hint =
+         MIN2(pool->free_sets_hint, (uint32_t)(set_idx / BITSET_WORDBITS));
 
       /* Discard constness to call vk_descriptor_set_layout_unref(). */
       struct panvk_descriptor_set_layout *set_layout =
@@ -642,10 +645,21 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
    }
 
    uint64_t descs_size = num_descs * PANVK_DESCRIPTOR_SIZE;
+
+   /* Perf review M3: the search for the lowest free set used to start at
+    * word 0, so filling a pool cost O(sets / 32) per allocation. The words
+    * below free_sets_hint are all 0 (every free path lowers the hint), so
+    * starting there finds the same set. PANVK_DESC_POOL_HINT=0 = 114. */
+   const uint32_t hint =
+      PANVK_PERF(DESC_POOL_HINT) ? pool->free_sets_hint : 0;
    uint32_t first_free_set =
-      __bitset_ffs(pool->free_sets, BITSET_WORDS(pool->max_sets));
+      __bitset_ffs(pool->free_sets + hint,
+                   BITSET_WORDS(pool->max_sets) - hint);
+   if (first_free_set)
+      first_free_set += hint * BITSET_WORDBITS;
    if (first_free_set == 0 || pool->desc_heap.free_size < descs_size)
       return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
+   pool->free_sets_hint = (first_free_set - 1) / BITSET_WORDBITS;
 
    uint64_t descs_dev_addr = 0;
    if (num_descs) {
@@ -759,10 +773,28 @@ panvk_per_arch(ResetDescriptorPool)(VkDevice _device, VkDescriptorPool _pool,
 {
    VK_FROM_HANDLE(panvk_descriptor_pool, pool, _pool);
 
-   for (uint32_t i = 0; i < pool->max_sets; i++)
-      panvk_desc_pool_free_set(pool, &pool->sets[i]);
+   if (PANVK_PERF(DESC_POOL_HINT)) {
+      /* Visit the allocated sets (the 0 bits of free_sets) a word at a time
+       * instead of testing every slot. */
+      for (uint32_t w = 0; w < BITSET_WORDS(pool->max_sets); w++) {
+         BITSET_WORD used = ~pool->free_sets[w];
+
+         while (used) {
+            const uint32_t i = w * BITSET_WORDBITS + u_bit_scan(&used);
+
+            if (i >= pool->max_sets)
+               break;
+
+            panvk_desc_pool_free_set(pool, &pool->sets[i]);
+         }
+      }
+   } else {
+      for (uint32_t i = 0; i < pool->max_sets; i++)
+         panvk_desc_pool_free_set(pool, &pool->sets[i]);
+   }
 
    BITSET_SET_COUNT(pool->free_sets, 0, pool->max_sets);
+   pool->free_sets_hint = 0;
    return VK_SUCCESS;
 }
 
