@@ -26,6 +26,8 @@ enum panvk_perf_knob {
    /* C1, PANVK_DB_ALT: v9+ fragment shaders with the depth bounds lowering
     * get an unlowered compile, drawn while the test is off (jm-v7 076). */
    PANVK_PERF_DB_ALT = 1 << 1,
+   /* C1, PANVK_DEPTH_BOUNDS: the depthBounds feature is exposed. */
+   PANVK_PERF_DEPTH_BOUNDS = 1 << 2,
 };
 
 extern uint32_t panvk_perf_knobs;

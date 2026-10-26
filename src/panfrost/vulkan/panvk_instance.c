@@ -85,6 +85,7 @@ static const struct {
 } panvk_perf_knob_names[] = {
    {"PANVK_CSF_FS_IDLE_CLEAN", PANVK_PERF_FS_IDLE_CLEAN},
    {"PANVK_DB_ALT", PANVK_PERF_DB_ALT},
+   {"PANVK_DEPTH_BOUNDS", PANVK_PERF_DEPTH_BOUNDS},
 };
 
 void

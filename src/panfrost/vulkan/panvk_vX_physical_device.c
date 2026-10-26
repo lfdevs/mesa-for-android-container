@@ -23,6 +23,7 @@
 #include "panvk_buffer.h"
 #include "panvk_cmd_draw.h"
 #include "panvk_descriptor_set_layout.h"
+#include "panvk_perf_knobs.h"
 #include "panvk_physical_device.h"
 #include "panvk_wsi.h"
 
@@ -342,8 +343,11 @@ panvk_per_arch(get_physical_device_features)(
       .depthBiasClamp = true,
       /* v6/v7: a passthrough GS emits edges or vertices (jm-v7 018). */
       .fillModeNonSolid = true,
-      /* v6/v7: emulated in the FS with LD_TILE of the depth (jm-v7 015). */
-      .depthBounds = true,
+      /* v6/v7: emulated in the FS with LD_TILE of the depth (jm-v7 015).
+       * PANVK_DEPTH_BOUNDS=0 hides it for A/B runs (C1, 115): DXVK then
+       * declares no depth bounds state, as before csf-v11 092 on v10/v11.
+       */
+      .depthBounds = PANVK_PERF(DEPTH_BOUNDS),
       .wideLines = true,
       .largePoints = true,
       .alphaToOne = PAN_ARCH >= 10,
