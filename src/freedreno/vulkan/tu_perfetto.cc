@@ -468,6 +468,9 @@ static once_flag tu_perfetto_init_once_flag = ONCE_FLAG_INIT;
 static void
 tu_perfetto_init_once()
 {
+   if (!util_perfetto_init())
+      return;
+
    {
       perfetto::DataSourceDescriptor dsd;
 #if DETECT_OS_ANDROID
