@@ -110,10 +110,12 @@ batch_has_timestamps(const struct panvk_batch *batch)
    return batch->timestamps || batch->after_frag;
 }
 
-/* Reset a batch that has already been issued. */
+/* Reset a batch that has already been issued. flush = clean the descriptor
+ * pool after it; a caller that resets several batches can pass false and
+ * flush once after the last one. */
 static void
 panvk_reset_issued_batch(struct panvk_cmd_buffer *cmdbuf,
-                         struct panvk_batch *batch)
+                         struct panvk_batch *batch, bool flush)
 {
    {
       util_dynarray_foreach(&batch->jobs, void *, job)
@@ -151,7 +153,8 @@ panvk_reset_issued_batch(struct panvk_cmd_buffer *cmdbuf,
 
       /* We don't keep track of BO <-> job relationship, so let's just flush the
        * whole desc pool for now. */
-      panvk_pool_flush_maps(&cmdbuf->desc_pool);
+      if (flush)
+         panvk_pool_flush_maps(&cmdbuf->desc_pool);
    }
 
    batch->issued = false;
@@ -171,7 +174,7 @@ panvk_queue_submit_batch(struct panvk_gpu_queue *queue,
 
    /* Reset the batch if it's already been issued */
    if (batch->issued)
-      panvk_reset_issued_batch(cmdbuf, batch);
+      panvk_reset_issued_batch(cmdbuf, batch, true);
 
    /* Flush pending synchronization requests before submitting the job, to
     * make sure things are GPU-visible. */
@@ -468,11 +471,24 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
       /* A conditional rendering predicate job rewrites job headers of the
        * later batches of its draw (cmd_cond_render_end()). Reset (CPU write
        * plus cache flush) every batch before any of them runs, so that no
-       * flush lands after a predicate job wrote a header. */
+       * flush lands after a predicate job wrote a header.
+       *
+       * Every reset write is in the descriptor pool, which the old code
+       * cleaned whole once per batch (256 times per PanProbe tess_perf frame
+       * on v6/v7). DC CVAC only writes back dirty lines, so one clean after
+       * the last reset, still before the first submit, leaves memory in the
+       * same state. PANVK_JM_RESET_FLUSH=batch (or 0) = once per batch.
+       */
+      const bool flush_once = dev->jm_opt.reset_flush_once;
+      bool reset_any = false;
       list_for_each_entry(struct panvk_batch, batch, &cmdbuf->batches, node) {
-         if (batch->issued)
-            panvk_reset_issued_batch(cmdbuf, batch);
+         if (batch->issued) {
+            panvk_reset_issued_batch(cmdbuf, batch, !flush_once);
+            reset_any = true;
+         }
       }
+      if (reset_any && flush_once)
+         panvk_pool_flush_maps(&cmdbuf->desc_pool);
 #endif
 
       list_for_each_entry(struct panvk_batch, batch, &cmdbuf->batches, node) {

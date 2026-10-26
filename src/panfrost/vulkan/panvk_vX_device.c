@@ -986,6 +986,10 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
 #if PAN_ARCH <= 9
    device->jm_opt.fs_copy_once =
       debug_get_bool_option("PANVK_V7_FS_COPY_ONCE", true);
+   const char *reset_flush = os_get_option("PANVK_JM_RESET_FLUSH");
+   device->jm_opt.reset_flush_once =
+      !reset_flush ||
+      (strcmp(reset_flush, "batch") && strcmp(reset_flush, "0"));
 #endif
 
 #if PAN_ARCH >= 9

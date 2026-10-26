@@ -102,6 +102,9 @@ struct panvk_device {
       /* PANVK_V7_FS_COPY_ONCE (default 1): v6/v7 FS descriptor copy job
        * only when the FS tables change, none per tiler job. */
       bool fs_copy_once;
+      /* PANVK_JM_RESET_FLUSH (default once, batch/0 = old): a resubmitted
+       * command buffer cleans its descriptor pool once, not per batch. */
+      bool reset_flush_once;
    } jm_opt;
    struct panvk_priv_bo *sample_positions;
 
