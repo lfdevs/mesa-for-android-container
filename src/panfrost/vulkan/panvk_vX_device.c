@@ -991,6 +991,11 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       !reset_flush ||
       (strcmp(reset_flush, "batch") && strcmp(reset_flush, "0"));
 #endif
+#if PAN_ARCH < 9
+   /* v6/v7 panvk_tess_draw() reads it per draw (v9+ sets it below). */
+   device->tess_opt.winding_inline =
+      debug_get_num_option("PANVK_TESS_WINDING_INLINE", 1) != 0;
+#endif
 
 #if PAN_ARCH >= 9
    if (PANVK_DEBUG(GPU_PRERAST) || device->vk.enabled_features.fillModeNonSolid ||
