@@ -145,6 +145,10 @@ struct wsi_device {
       /* Select and read Present events on a separate connection to the X
        * server, so the WSI never reads from the application's connection. */
       bool dedicated_event_connection;
+      /* sw MIT-SHM present: collect the GetGeometry reply of each put on
+       * the event thread instead of blocking the present thread on the
+       * round trip. */
+      bool sw_defer_reply;
    } x11;
 
    struct {

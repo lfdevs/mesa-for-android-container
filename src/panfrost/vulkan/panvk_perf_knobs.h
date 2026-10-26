@@ -48,6 +48,10 @@ enum panvk_perf_knob {
     * back through a cached memory type plus an invalidate instead of the
     * uncached coherent one. */
    PANVK_PERF_WSI_SW_CACHED = 1 << 8,
+   /* C2 (b), PANVK_WSI_SW_DEFER_REPLY: the X11 event thread collects the
+    * reply to each sw MIT-SHM put; the present thread does not block on
+    * the round trip. */
+   PANVK_PERF_WSI_SW_DEFER_REPLY = 1 << 9,
 };
 
 extern uint32_t panvk_perf_knobs;

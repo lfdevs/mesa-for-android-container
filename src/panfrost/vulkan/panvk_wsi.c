@@ -566,6 +566,14 @@ panvk_wsi_init(struct panvk_physical_device *physical_device)
    physical_device->wsi_device.sw_cached_noncoherent =
       PANVK_PERF(WSI_SW_CACHED);
 
+   /* MIT-SHM sw present: the event thread collects each put's GetGeometry
+    * reply, so the present thread copies and sends the next frame while
+    * the X server handles this one.  PANVK_WSI_SW_DEFER_REPLY=0 keeps the
+    * blocking round trip per present.
+    */
+   physical_device->wsi_device.x11.sw_defer_reply =
+      PANVK_PERF(WSI_SW_DEFER_REPLY);
+
    physical_device->vk.wsi_device = &physical_device->wsi_device;
 
 #ifdef VK_USE_PLATFORM_ANDROID_KHR

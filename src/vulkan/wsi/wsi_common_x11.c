@@ -1291,6 +1291,13 @@ struct x11_image {
    /* sw present via MIT-SHM AttachFd: memfd copy target for ShmPutImage */
    void *                                    sw_shm_map;
    size_t                                    sw_shm_size;
+   /* sw_defer_reply: the GetGeometry sent after this image's last put,
+    * not collected yet (the server may still read the segment), its
+    * submission order and the present ID it completes. */
+   bool                                      sw_reply_pending;
+   unsigned int                              sw_reply_sequence;
+   uint64_t                                  sw_reply_serial;
+   uint64_t                                  sw_reply_present_id;
    uint64_t                                  present_id;
    VkPresentModeKHR                          present_mode;
    xcb_rectangle_t                           rects[MAX_DAMAGE_RECTS];
@@ -1331,6 +1338,12 @@ struct x11_swapchain {
    /* sw present: FIFO cadence (0 = unpaced) and next present deadline */
    uint64_t                                     sw_fifo_interval_ns;
    uint64_t                                     sw_next_present_ns;
+   /* sw MIT-SHM present: the event thread collects the GetGeometry
+    * replies (wsi_device::x11.sw_defer_reply); puts sent so far and
+    * replies outstanding.  Protected by thread_state_lock. */
+   bool                                         sw_defer_reply;
+   uint64_t                                     sw_reply_serial;
+   uint32_t                                     sw_replies_pending;
 
    /* Some X servers reject DRI3FenceFromFD for imported pixmaps.  Fall back
     * to Present IdleNotify for implicit-sync image reuse when that happens.
@@ -1940,6 +1953,78 @@ x11_present_to_x11_dri3(struct x11_swapchain *chain, uint32_t image_index,
    return x11_swapchain_result(chain, VK_SUCCESS);
 }
 #endif
+/* The swapchain status a sw present's GetGeometry reply implies. */
+static VkResult
+x11_sw_geometry_result(const struct x11_swapchain *chain,
+                       const xcb_get_geometry_reply_t *geom)
+{
+   if (!geom)
+      return VK_ERROR_SURFACE_LOST_KHR;
+
+   if (chain->extent.width != geom->width ||
+       chain->extent.height != geom->height)
+      return VK_ERROR_OUT_OF_DATE_KHR;
+
+   return VK_SUCCESS;
+}
+
+static void
+x11_sw_complete_present_id(struct x11_swapchain *chain, uint64_t present_id)
+{
+   if (!present_id)
+      return;
+
+   mtx_lock(&chain->present_progress_mutex);
+   if (present_id > chain->present_id) {
+      chain->present_id = present_id;
+      u_cnd_monotonic_broadcast(&chain->present_progress_cond);
+   }
+   mtx_unlock(&chain->present_progress_mutex);
+}
+
+/* sw_defer_reply: in-flight puts, at most.  The server always has the next
+ * frame queued while it handles one, and the window lags at most one frame
+ * behind the present thread. */
+#define X11_SW_MAX_PENDING_REPLIES 2
+
+/* Event thread, thread_state_lock held: collect the oldest outstanding
+ * GetGeometry reply.  Returns false when none is outstanding. */
+static bool
+x11_sw_collect_reply(struct x11_swapchain *chain)
+{
+   struct x11_image *image = NULL;
+   for (uint32_t i = 0; i < chain->base.image_count; i++) {
+      struct x11_image *it = &chain->images[i];
+      if (it->sw_reply_pending &&
+          (!image || it->sw_reply_serial < image->sw_reply_serial))
+         image = it;
+   }
+   if (!image)
+      return false;
+
+   /* Only this thread clears sw_reply_pending, and the present thread
+    * leaves the image's reply state alone until then. */
+   xcb_get_geometry_cookie_t cookie = { image->sw_reply_sequence };
+   mtx_unlock(&chain->thread_state_lock);
+   xcb_generic_error_t *err = NULL;
+   xcb_get_geometry_reply_t *geom =
+      xcb_get_geometry_reply(chain->conn, cookie, &err);
+   mtx_lock(&chain->thread_state_lock);
+
+   VkResult result = x11_sw_geometry_result(chain, geom);
+   free(err);
+   free(geom);
+
+   image->sw_reply_pending = false;
+   chain->sw_replies_pending--;
+   x11_sw_complete_present_id(chain, image->sw_reply_present_id);
+   x11_swapchain_result(chain, result);
+
+   /* Wake the present thread if it waits for this segment or a slot. */
+   u_cnd_monotonic_broadcast(&chain->thread_state_cond);
+   return true;
+}
+
 /**
  * Send image to X server unaccelerated (software drivers).
  */
@@ -1968,6 +2053,18 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index)
    uint64_t max_req_len = xcb_get_maximum_request_length(chain->conn);
 
    if (chain->sw_shm) {
+      if (chain->sw_defer_reply) {
+         /* The reply to this image's previous put proves the server has
+          * read the segment, so the copy below cannot race with it. */
+         while (chain->status >= 0 &&
+                (image->sw_reply_pending ||
+                 chain->sw_replies_pending >= X11_SW_MAX_PENDING_REPLIES))
+            u_cnd_monotonic_wait(&chain->thread_state_cond,
+                                 &chain->thread_state_lock);
+         if (chain->status < 0)
+            return chain->status;
+      }
+
       /* One CPU copy into the memfd segment; the server reads it directly. */
       int n = image->rectangle_count;
       xcb_rectangle_t full = { 0, 0, chain->extent.width, chain->extent.height };
@@ -2048,31 +2145,32 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index)
 
    xcb_flush(chain->conn);
 
+   if (chain->sw_defer_reply) {
+      /* The server reads only the segment, so the image can be acquired
+       * again right away.  The event thread collects the reply, completes
+       * the present ID and reports OUT_OF_DATE (one present later than the
+       * synchronous path does). */
+      image->sw_reply_pending = true;
+      image->sw_reply_sequence = geom_cookie.sequence;
+      image->sw_reply_serial = ++chain->sw_reply_serial;
+      image->sw_reply_present_id = image->present_id;
+      chain->sw_replies_pending++;
+
+      wsi_queue_push(&chain->acquire_queue, image_index);
+      return VK_SUCCESS;
+   }
+
    /* We don't have queued present here.
     * Immediately let application acquire again, but query geometry first so
     * we can report OUT_OF_DATE on resize. */
    xcb_generic_error_t *err;
 
    xcb_get_geometry_reply_t *geom = xcb_get_geometry_reply(chain->conn, geom_cookie, &err);
-   VkResult result = VK_SUCCESS;
-   if (geom) {
-      if (chain->extent.width != geom->width ||
-          chain->extent.height != geom->height)
-         result = VK_ERROR_OUT_OF_DATE_KHR;
-   } else {
-      result = VK_ERROR_SURFACE_LOST_KHR;
-   }
+   VkResult result = x11_sw_geometry_result(chain, geom);
    free(err);
    free(geom);
 
-   if (image->present_id) {
-      mtx_lock(&chain->present_progress_mutex);
-      if (image->present_id > chain->present_id) {
-         chain->present_id = image->present_id;
-         u_cnd_monotonic_broadcast(&chain->present_progress_cond);
-      }
-      mtx_unlock(&chain->present_progress_mutex);
-   }
+   x11_sw_complete_present_id(chain, image->present_id);
 
    wsi_queue_push(&chain->acquire_queue, image_index);
    return result;
@@ -2455,6 +2553,15 @@ x11_manage_event_queue(void *state)
    mtx_lock(&chain->thread_state_lock);
 
    while (chain->status >= 0) {
+      /* sw present has no Present events: this thread only collects the
+       * deferred GetGeometry replies, or sleeps until a put is sent. */
+      if (chain->sw_defer_reply) {
+         if (!x11_sw_collect_reply(chain))
+            u_cnd_monotonic_wait(&chain->thread_state_cond,
+                                 &chain->thread_state_lock);
+         continue;
+      }
+
       /* This thread should only go sleep waiting for X events when we know there are pending events.
        * We expect COMPLETION events when there is at least one image marked as present_queued.
        * We also expect IDLE events, but we only consider waiting for them when all images are busy,
@@ -3415,6 +3522,12 @@ x11_swapchain_destroy(struct wsi_swapchain *wsi_chain,
       wsi_queue_destroy(&chain->acquire_queue);
    wsi_queue_destroy(&chain->present_queue);
 
+   /* Both threads are gone: drop the sw replies nobody will collect. */
+   for (uint32_t i = 0; i < chain->base.image_count; i++) {
+      if (chain->images[i].sw_reply_pending)
+         xcb_discard_reply(chain->conn, chain->images[i].sw_reply_sequence);
+   }
+
    for (uint32_t i = 0; i < chain->base.image_count; i++)
       x11_image_finish(chain, pAllocator, &chain->images[i]);
 #ifdef HAVE_X11_DRM
@@ -3818,6 +3931,9 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       if (result != VK_SUCCESS)
          goto fail_init_images;
    }
+
+   /* After the images: a failed segment attach drops sw_shm. */
+   chain->sw_defer_reply = chain->sw_shm && wsi_device->x11.sw_defer_reply;
 
    /* The queues have a length of base.image_count + 1 because we will
     * occasionally use UINT32_MAX to signal the other thread that an error
