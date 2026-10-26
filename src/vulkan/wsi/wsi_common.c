@@ -238,6 +238,7 @@ wsi_device_init(struct wsi_device *wsi,
    WSI_GET_CB(WaitForFences);
    WSI_GET_CB(MapMemory);
    WSI_GET_CB(UnmapMemory);
+   WSI_GET_CB(InvalidateMappedMemoryRanges);
    if (wsi->has_present_wait)
       WSI_GET_CB(WaitSemaphores);
 #undef WSI_GET_CB
@@ -3106,6 +3107,63 @@ wsi_select_host_memory_type(const struct wsi_device *wsi,
    return wsi_select_memory_type(wsi, req_props, 0 /* deny_props */, type_bits);
 }
 
+/* Memory only this process reads, through wsi_image::cpu_map, after the
+ * blit fence (no alloc_shm: no other process maps it). */
+static uint32_t
+wsi_select_cpu_readback_memory_type(const struct wsi_device *wsi,
+                                    uint32_t type_bits)
+{
+   if (wsi->sw && wsi->sw_cached_noncoherent) {
+      /* The CPU reads every frame back: a cached type that needs an
+       * invalidate beats an uncached coherent one, but a cached coherent
+       * type beats both. */
+      const VkMemoryPropertyFlags cached_coherent =
+         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+         VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+      const VkMemoryPropertyFlags cached =
+         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+         VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+      u_foreach_bit(t, type_bits) {
+         const VkMemoryPropertyFlags flags =
+            wsi->memory_props.memoryTypes[t].propertyFlags;
+         if ((flags & cached_coherent) == cached_coherent)
+            return t;
+      }
+      u_foreach_bit(t, type_bits) {
+         const VkMemoryPropertyFlags flags =
+            wsi->memory_props.memoryTypes[t].propertyFlags;
+         if ((flags & cached) == cached)
+            return t;
+      }
+   }
+
+   return wsi_select_host_memory_type(wsi, type_bits);
+}
+
+static bool
+wsi_memory_type_is_noncoherent(const struct wsi_device *wsi, uint32_t type)
+{
+   return !(wsi->memory_props.memoryTypes[type].propertyFlags &
+            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+}
+
+void
+wsi_image_invalidate_cpu_map(const struct wsi_swapchain *chain,
+                             const struct wsi_image *image)
+{
+   if (!image->cpu_map || !image->cpu_map_noncoherent)
+      return;
+
+   const VkMappedMemoryRange range = {
+      .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+      .memory = image->blit.buffer != VK_NULL_HANDLE ? image->blit.memory
+                                                     : image->memory,
+      .offset = 0,
+      .size = VK_WHOLE_SIZE,
+   };
+   chain->wsi->InvalidateMappedMemoryRanges(chain->device, 1, &range);
+}
+
 VkResult
 wsi_create_buffer_blit_context(const struct wsi_swapchain *chain,
                                const struct wsi_image_info *info,
@@ -3190,6 +3248,10 @@ wsi_create_buffer_blit_context(const struct wsi_swapchain *chain,
                                 &chain->alloc, &image->blit.memory);
    if (result != VK_SUCCESS)
       return result;
+
+   /* Only consulted when the CPU image path maps the buffer (cpu_map). */
+   image->cpu_map_noncoherent =
+      wsi_memory_type_is_noncoherent(wsi, buf_mem_info.memoryTypeIndex);
 
    result = wsi->BindBufferMemory(chain->device, image->blit.buffer,
                                   image->blit.memory, 0);
@@ -3557,8 +3619,9 @@ wsi_create_cpu_linear_image_mem(const struct wsi_swapchain *chain,
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
       .pNext = &memory_dedicated_info,
       .allocationSize = reqs.size,
-      .memoryTypeIndex =
-         wsi_select_host_memory_type(wsi, reqs.memoryTypeBits),
+      .memoryTypeIndex = info->alloc_shm ?
+         wsi_select_host_memory_type(wsi, reqs.memoryTypeBits) :
+         wsi_select_cpu_readback_memory_type(wsi, reqs.memoryTypeBits),
    };
 
    void *sw_host_ptr = NULL;
@@ -3579,6 +3642,9 @@ wsi_create_cpu_linear_image_mem(const struct wsi_swapchain *chain,
                                 &chain->alloc, &image->memory);
    if (result != VK_SUCCESS)
       return result;
+
+   image->cpu_map_noncoherent =
+      wsi_memory_type_is_noncoherent(wsi, memory_info.memoryTypeIndex);
 
    result = wsi->MapMemory(chain->device, image->memory,
                            0, VK_WHOLE_SIZE, 0, &image->cpu_map);
@@ -3650,7 +3716,8 @@ wsi_configure_cpu_image(const struct wsi_swapchain *chain,
                                  1 /* size_align */,
                                  info);
 
-      info->select_blit_dst_memory_type = wsi_select_host_memory_type;
+      info->select_blit_dst_memory_type = params->alloc_shm ?
+         wsi_select_host_memory_type : wsi_select_cpu_readback_memory_type;
       info->select_image_memory_type = wsi_select_device_memory_type;
       info->create_mem = wsi_create_cpu_buffer_image_mem;
    } else {

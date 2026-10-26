@@ -174,6 +174,13 @@ struct wsi_device {
 
    bool sw;
 
+   /* sw only: when no HOST_COHERENT|HOST_CACHED memory type exists, read
+    * the image back through a HOST_CACHED type that is not coherent
+    * instead of an uncached (write-combined) one.  Every CPU read of
+    * wsi_image::cpu_map is then preceded by wsi_image_invalidate_cpu_map().
+    */
+   bool sw_cached_noncoherent;
+
    /* Set to true if the implementation is ok with linear WSI images. */
    bool wants_linear;
 
@@ -264,6 +271,7 @@ struct wsi_device {
    WSI_CB(WaitForFences);
    WSI_CB(MapMemory);
    WSI_CB(UnmapMemory);
+   WSI_CB(InvalidateMappedMemoryRanges);
    WSI_CB(WaitSemaphores);
 #undef WSI_CB
 

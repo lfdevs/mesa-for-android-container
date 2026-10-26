@@ -1957,6 +1957,9 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index)
    if (!chain->sw_shm)
       geom_cookie = xcb_get_geometry(chain->conn, chain->window);
 
+   /* The blit fence has signalled (present thread or vkQueuePresentKHR). */
+   wsi_image_invalidate_cpu_map(&chain->base, &image->base);
+
    xcb_void_cookie_t cookie;
    void *myptr = image->base.cpu_map;
    size_t hdr_len = sizeof(xcb_put_image_request_t);

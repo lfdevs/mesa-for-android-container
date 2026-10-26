@@ -44,6 +44,10 @@ enum panvk_perf_knob {
     * slot search at the first word that can hold a free set, and a pool
     * reset only visits the allocated sets. */
    PANVK_PERF_DESC_POOL_HINT = 1 << 7,
+   /* Package P-C. C2 (a), PANVK_WSI_SW_CACHED: the sw WSI reads frames
+    * back through a cached memory type plus an invalidate instead of the
+    * uncached coherent one. */
+   PANVK_PERF_WSI_SW_CACHED = 1 << 8,
 };
 
 extern uint32_t panvk_perf_knobs;

@@ -3334,6 +3334,7 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
 
    if (chain->buffer_type == WSI_WL_BUFFER_SHM_MEMCPY) {
       struct wsi_wl_image *image = &chain->images[image_index];
+      wsi_image_invalidate_cpu_map(&chain->base, &image->base);
       memcpy(image->shm_ptr, image->base.cpu_map,
              image->base.row_pitches[0] * chain->extent.height);
    }

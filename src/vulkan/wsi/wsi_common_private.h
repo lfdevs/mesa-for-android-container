@@ -191,6 +191,9 @@ struct wsi_image {
    int dma_buf_fd;
 #endif
    void *cpu_map;
+   /* The memory behind cpu_map is not HOST_COHERENT: invalidate it before
+    * the CPU reads what the GPU wrote (wsi_image_invalidate_cpu_map()). */
+   bool cpu_map_noncoherent;
 
    VkQueryPool query_pool;
    VkCommandBuffer *timestamp_cmd_buffers;
@@ -461,6 +464,10 @@ wsi_image_init_timestamp(const struct wsi_swapchain *chain,
 void
 wsi_destroy_image(const struct wsi_swapchain *chain,
                   struct wsi_image *image);
+
+void
+wsi_image_invalidate_cpu_map(const struct wsi_swapchain *chain,
+                             const struct wsi_image *image);
 
 VkResult
 wsi_swapchain_wait_for_present_semaphore(const struct wsi_swapchain *chain,

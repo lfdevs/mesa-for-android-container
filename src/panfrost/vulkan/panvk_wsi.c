@@ -11,6 +11,7 @@
 
 #include "panvk_wsi.h"
 #include "panvk_instance.h"
+#include "panvk_perf_knobs.h"
 #include "panvk_physical_device.h"
 
 #include <stdlib.h>
@@ -556,6 +557,14 @@ panvk_wsi_init(struct panvk_physical_device *physical_device)
       !uses_kbase || (kbase_dmabuf && !kbase_raw_dri3);
    physical_device->wsi_device.can_present_on_device =
       panvk_can_present_on_device;
+
+   /* The sw path reads every frame back on the CPU.  Without IO coherency
+    * the only coherent host-visible type is the uncached one, so read
+    * through the cached type and invalidate instead.
+    * PANVK_WSI_SW_CACHED=0 keeps the uncached buffer.
+    */
+   physical_device->wsi_device.sw_cached_noncoherent =
+      PANVK_PERF(WSI_SW_CACHED);
 
    physical_device->vk.wsi_device = &physical_device->wsi_device;
 
