@@ -16,6 +16,7 @@
 #include "panvk_entrypoints.h"
 #include "panvk_image.h"
 #include "panvk_image_view.h"
+#include "panvk_perf_knobs.h"
 #include "panvk_physical_device.h"
 #include "panvk_shader.h"
 
@@ -232,6 +233,13 @@ struct panvk_cmd_graphics_state {
       uint64_t blend_descs[MAX_RTS];
       uint64_t push_uniforms;
       bool required;
+#if PAN_ARCH >= 10
+      /* A1 (115): a draw since the last FS emission did not run the bound
+       * FS (fs_required() false). The next draw that runs it marks FS and
+       * FS_PUSH_UNIFORMS dirty, see clear_dirty_after_draw().
+       */
+      bool unused;
+#endif
 #if PAN_ARCH < 9
       uint64_t rsd;
 #endif
@@ -599,8 +607,38 @@ cached_fs_required(ASSERTED const struct panvk_cmd_graphics_state *state,
     gfx_state_dirty(cmdbuf, RENDER_STATE))
 
 /* After a draw, all dirty flags are cleared except the FS dirty flag which
- * needs to be set again if the draw didn't use the fragment shader. */
+ * needs to be set again if the draw didn't use the fragment shader.
+ *
+ * A1 (115), CSF: since csf-v11 092 a pipeline without a fragment shader has
+ * the device depth bounds FS bound, which is not used while the test is off,
+ * so that rule re-emitted all the FS-side state (blend, ZSD, DCD, tiler
+ * flags, FS registers and descriptors) on every depth-only draw. Every input
+ * of fs_required() is in fs_user_dirty(), so a draw that starts using the FS
+ * again re-emits it anyway; fs.unused only remembers to mark FS and
+ * FS_PUSH_UNIFORMS dirty at that draw (panvk_cmd_draw()), and the draws in
+ * between leave the FS state clean. PANVK_CSF_FS_IDLE_CLEAN=0 restores the
+ * per-draw re-dirtying.
+ */
 
+#if PAN_ARCH >= 10
+#define clear_dirty_after_draw(__cmdbuf)                                       \
+   do {                                                                        \
+      bool __fs_unused =                                                       \
+         (__cmdbuf)->state.gfx.fs.shader != get_fs(__cmdbuf);                  \
+      bool __idle_clean = __fs_unused && PANVK_PERF(FS_IDLE_CLEAN);            \
+      bool __set_fs_push_dirty = __fs_unused && !__idle_clean &&               \
+                                 gfx_state_dirty(__cmdbuf, FS_PUSH_UNIFORMS);  \
+      vk_dynamic_graphics_state_clear_dirty(                                   \
+         &(__cmdbuf)->vk.dynamic_graphics_state);                              \
+      gfx_state_clear_all_dirty(__cmdbuf);                                     \
+      if (__idle_clean)                                                        \
+         (__cmdbuf)->state.gfx.fs.unused = true;                               \
+      else if (__fs_unused)                                                    \
+         gfx_state_set_dirty(__cmdbuf, FS);                                    \
+      if (__set_fs_push_dirty)                                                 \
+         gfx_state_set_dirty(__cmdbuf, FS_PUSH_UNIFORMS);                      \
+   } while (0)
+#else
 #define clear_dirty_after_draw(__cmdbuf)                                       \
    do {                                                                        \
       bool __set_fs_dirty =                                                    \
@@ -615,6 +653,7 @@ cached_fs_required(ASSERTED const struct panvk_cmd_graphics_state *state,
       if (__set_fs_push_dirty)                                                 \
          gfx_state_set_dirty(__cmdbuf, FS_PUSH_UNIFORMS);                      \
    } while (0)
+#endif
 
 #if PAN_ARCH >= 10 && PAN_ARCH < 14
 VkResult

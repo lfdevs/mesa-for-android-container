@@ -6097,6 +6097,15 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
    cmdbuf->state.gfx.fs.required =
       fs_required(&cmdbuf->state.gfx, &cmdbuf->vk.dynamic_graphics_state);
 
+   /* A1: the first draw that runs the FS after draws that did not (see
+    * clear_dirty_after_draw()) emits its state again.
+    */
+   if (cmdbuf->state.gfx.fs.unused && cmdbuf->state.gfx.fs.required) {
+      cmdbuf->state.gfx.fs.unused = false;
+      gfx_state_set_dirty(cmdbuf, FS);
+      gfx_state_set_dirty(cmdbuf, FS_PUSH_UNIFORMS);
+   }
+
    if (cmdbuf->state.gfx.vi.base_instance != draw.instance.base) {
       cmdbuf->state.gfx.vi.base_instance = draw.instance.base;
       gfx_state_set_dirty(cmdbuf, BASE_INSTANCE);
