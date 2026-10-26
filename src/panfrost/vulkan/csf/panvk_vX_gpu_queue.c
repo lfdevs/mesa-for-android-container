@@ -2225,6 +2225,13 @@ DEBUG_GET_ONCE_BOOL_OPTION(kbase_async_heap_term, "PANVK_KBASE_ASYNC_HEAP_TERM",
 DEBUG_GET_ONCE_BOOL_OPTION(kbase_heap_eager_term, "PANVK_KBASE_HEAP_EAGER_TERM",
                            true)
 
+/* Every live heap keeps the chunks it grew, and with 4 slots up to 3 retired
+ * heaps wait for the GPU. Fewer slots free memory sooner, but a renewal is
+ * skipped while all retired slots are still in use, and the current heap
+ * then keeps growing (107 saw submit stalls with 1 retired heap). */
+DEBUG_GET_ONCE_NUM_OPTION(kbase_heap_slots, "PANVK_KBASE_HEAP_SLOTS",
+                          PANVK_KBASE_HEAP_SLOTS)
+
 static void
 kbase_heap_term_job(void *job, void *gdata, int thread_index)
 {
@@ -2311,6 +2318,8 @@ kbase_spare_heap_init(struct panvk_gpu_queue *queue)
       debug_get_option_kbase_async_heap_term() &&
       mtx_init(&queue->kbase_heap_term.lock, mtx_plain) == thrd_success;
    queue->kbase_heap_eager_term = debug_get_option_kbase_heap_eager_term();
+   queue->kbase_heap_slots =
+      CLAMP(debug_get_option_kbase_heap_slots(), 2, PANVK_KBASE_HEAP_SLOTS);
 
    kbase_spare_heap_kick(queue);
 }
@@ -2549,8 +2558,7 @@ kbase_try_destroy_retired_heap(struct panvk_gpu_queue *queue)
            queue->kbase_retired_heap_count *
               sizeof(queue->kbase_retired_heaps[0]));
 
-   return queue->kbase_retired_heap_count <
-          ARRAY_SIZE(queue->kbase_retired_heaps);
+   return queue->kbase_retired_heap_count < queue->kbase_heap_slots - 1;
 }
 
 static VkResult
@@ -2564,10 +2572,10 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
    kbase_heap_chunks(phys_dev, &initial_chunks, &max_chunks);
    uint64_t new_ctx, first_chunk;
 
-   /* Hold at most PANVK_KBASE_HEAP_SLOTS - 1 retired contexts: if they are
-    * all still firmware-visible, skip this renewal (VK_INCOMPLETE) and retry
-    * on a later graphics submission.  The next descriptor slot belonged to
-    * the oldest heap, which the firmware no longer reads. */
+   /* Hold at most kbase_heap_slots - 1 retired contexts: if they are all
+    * still firmware-visible, skip this renewal (VK_INCOMPLETE) and retry on
+    * a later graphics submission.  The next descriptor slot belonged to the
+    * oldest heap, which the firmware no longer reads. */
    if (!kbase_try_destroy_retired_heap(queue))
       return VK_INCOMPLETE;
 
@@ -2585,7 +2593,7 @@ kbase_renew_tiler_heap(struct panvk_gpu_queue *queue)
    uint64_t old_ctx = tiler_heap->context.dev_addr;
    tiler_heap->context.dev_addr = new_ctx;
 
-   const uint32_t slot = (queue->kbase_heap_slot + 1) % PANVK_KBASE_HEAP_SLOTS;
+   const uint32_t slot = (queue->kbase_heap_slot + 1) % queue->kbase_heap_slots;
    const uint32_t slot_offset = slot * KBASE_HEAP_DESC_SLOT_STRIDE;
    panvk_priv_mem_write_desc(tiler_heap->desc, slot_offset, TILER_HEAP, cfg) {
       cfg.size = tiler_heap->chunk_size;

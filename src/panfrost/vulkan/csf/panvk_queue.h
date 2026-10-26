@@ -159,6 +159,9 @@ struct panvk_gpu_queue {
       uint64_t frag_jobs;
    } kbase_retired_heaps[PANVK_KBASE_HEAP_SLOTS - 1];
    uint32_t kbase_retired_heap_count;
+   /* Descriptor slots in use, 2 to PANVK_KBASE_HEAP_SLOTS (env
+    * PANVK_KBASE_HEAP_SLOTS): at most kbase_heap_slots - 1 retired heaps. */
+   uint32_t kbase_heap_slots;
    /* Test the retired heaps at every submission, not only at renewal
     * (PANVK_KBASE_HEAP_EAGER_TERM). */
    bool kbase_heap_eager_term;
