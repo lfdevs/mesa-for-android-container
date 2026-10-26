@@ -3479,6 +3479,11 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
 
 #ifdef HAVE_PAN_KMOD_KBASE
    if (gpu_queue_uses_kbase(submit.dev)) {
+      /* Non-coherent CPU-mapped imports (PANVK_KBASE_IMPORT_SYNC=1): the
+       * list is empty otherwise, then this is only a lock. */
+      if (vk_submit->command_buffer_count)
+         kbase_kmod_jm_clean_imports(submit.dev->kmod.dev);
+
       result = panvk_queue_submit_ioctl_kbase(&submit, vk_submit);
       if (result != VK_SUCCESS)
          goto out;
