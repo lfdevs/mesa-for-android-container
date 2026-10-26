@@ -27,6 +27,7 @@
 #include <android/native_window.h>
 #endif
 #include "util/u_debug.h"
+#include "util/log.h"
 #include "util/macros.h"
 #include "util/os_file.h"
 #include "util/os_time.h"
@@ -1479,9 +1480,30 @@ wsi_CreateSwapchainKHR(VkDevice _device,
     * bool deferred_allocation = pCreateInfo->flags & VK_SWAPCHAIN_CREATE_DEFERRED_MEMORY_ALLOCATION_BIT_EXT;
     */
 
+   /* MESA_VK_WSI_CREATE_LOG=1 (diagnostics): the create info and its pNext
+    * chain, before and after the platform's create_swapchain. */
+   const bool create_log = debug_get_bool_option("MESA_VK_WSI_CREATE_LOG", false);
+   if (create_log) {
+      char chain_str[256] = "";
+      int o = 0;
+      vk_foreach_struct_const(stype, ext, info.pNext) {
+         if (o < (int)sizeof(chain_str))
+            o += snprintf(chain_str + o, sizeof(chain_str) - o, " %d", stype);
+         (void)ext;
+      }
+      mesa_logi("wsi: CreateSwapchain enter platform=%d minImages=%u format=%d "
+                "extent=%ux%u usage=0x%x mode=%d flags=0x%x old=%p pNext:%s",
+                surface->platform, info.minImageCount, info.imageFormat,
+                info.imageExtent.width, info.imageExtent.height,
+                info.imageUsage, info.presentMode, info.flags,
+                (void *)(uintptr_t)info.oldSwapchain, chain_str);
+   }
+
    VkResult result = iface->create_swapchain(surface, _device, wsi_device,
                                              &info, alloc,
                                              &swapchain);
+   if (create_log)
+      mesa_logi("wsi: CreateSwapchain platform create result=%d", result);
    if (result != VK_SUCCESS)
       return result;
 
