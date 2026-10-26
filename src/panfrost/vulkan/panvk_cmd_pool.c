@@ -117,9 +117,12 @@ panvk_cmd_pool_release_free_bos(struct panvk_cmd_pool *pool)
  * pool's free lists stayed at the largest command list it ever recorded
  * (loading screens included). On a flags = 0 reset, keep what the command
  * buffers just gave back plus a quarter (at least 2 slabs) for the next
- * recording, and free older free-list BOs beyond that. v10+ only;
+ * recording, and free older free-list BOs beyond that.
  * PANVK_CMD_POOL_AUTOTRIM=0 (or PANVK_CMD_POOL_TRIM=0) is the old
- * behaviour. */
+ * behaviour. The JM pools (descriptor, TLS, varying and GS slabs) go back
+ * to the same free lists at reset and only hold BOs no pending command
+ * buffer uses, so v6/v7/v9 trim the same way unless
+ * PANVK_JM_CMD_POOL_AUTOTRIM=0 (114: v10+ only). */
 static bool
 panvk_cmd_pool_autotrim_enabled(struct panvk_device *dev)
 {
@@ -128,7 +131,8 @@ panvk_cmd_pool_autotrim_enabled(struct panvk_device *dev)
       v = debug_get_bool_option("PANVK_CMD_POOL_AUTOTRIM", true);
    const struct panvk_physical_device *pdev =
       to_panvk_physical_device(dev->vk.physical);
-   return v && pan_arch(pdev->kmod.dev->props.gpu_id) >= 10;
+   return v && (pan_arch(pdev->kmod.dev->props.gpu_id) >= 10 ||
+                dev->cmdbuf_opt.jm_pool_autotrim);
 }
 
 #define PANVK_CMD_POOL_BO_POOLS 6
