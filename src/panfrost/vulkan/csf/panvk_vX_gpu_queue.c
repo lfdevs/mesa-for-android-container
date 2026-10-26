@@ -2218,6 +2218,13 @@ kbase_spare_heap_take(struct panvk_gpu_queue *queue, uint64_t *first_chunk)
 DEBUG_GET_ONCE_BOOL_OPTION(kbase_async_heap_term, "PANVK_KBASE_ASYNC_HEAP_TERM",
                            true)
 
+/* A retired heap keeps every chunk it grew until it is destroyed, and the
+ * completion test used to run only when the next renewal was due (about one
+ * frame later in heavy games, up to 128 submissions in light ones).
+ * PANVK_KBASE_HEAP_EAGER_TERM=0 runs it at renewal only. */
+DEBUG_GET_ONCE_BOOL_OPTION(kbase_heap_eager_term, "PANVK_KBASE_HEAP_EAGER_TERM",
+                           true)
+
 static void
 kbase_heap_term_job(void *job, void *gdata, int thread_index)
 {
@@ -2303,6 +2310,7 @@ kbase_spare_heap_init(struct panvk_gpu_queue *queue)
       queue->kbase_spare_heap.enabled &&
       debug_get_option_kbase_async_heap_term() &&
       mtx_init(&queue->kbase_heap_term.lock, mtx_plain) == thrd_success;
+   queue->kbase_heap_eager_term = debug_get_option_kbase_heap_eager_term();
 
    kbase_spare_heap_kick(queue);
 }
@@ -3218,6 +3226,13 @@ panvk_queue_submit_ioctl_kbase(struct panvk_queue_submit *submit,
       else
          queue->kbase_tiler_work_count += submit->tiler_work_estimate;
    }
+
+   /* Destroy the retired heaps whose work has completed now rather than at
+    * the next renewal: the same completion test (two cache-line invalidates
+    * and two loads), and TERM still goes to the heap thread. */
+   if (touched && queue->kbase_heap_eager_term &&
+       queue->kbase_retired_heap_count)
+      kbase_try_destroy_retired_heap(queue);
 
    uint64_t renew_work = kbase_tiler_heap_renew_work();
    if (submit->tiler_work_estimate &&
