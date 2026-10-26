@@ -532,6 +532,9 @@ panvk_wsi_init(struct panvk_physical_device *physical_device)
                             &instance->drirc.options,
                             &(struct wsi_device_options){
                                .sw_device = uses_kbase && !kbase_dmabuf,
+                               /* Only the raw-FD DRI3 path asks for the
+                                * fourth image when the server is Xwayland. */
+                               .extra_xwayland_image =
                                   kbase_dmabuf && kbase_raw_dri3,
                             });
    if (result != VK_SUCCESS)
