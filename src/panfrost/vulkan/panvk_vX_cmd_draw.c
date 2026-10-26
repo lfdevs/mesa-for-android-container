@@ -1209,14 +1209,23 @@ panvk_per_arch(CmdBindVertexBuffers2)(VkCommandBuffer commandBuffer,
                                         bindingCount, pStrides);
    }
 
+   /* A4 (115): VB dirty rebuilds the VS driver set and resource table on
+    * CSF and the attribute tables on v6/v7 (jm-v7 097), so only set it when
+    * a binding really changes (the strides compare in the runtime).
+    * PANVK_VB_DIRTY_CMP=0 dirties on every call, as in 114.
+    */
+   bool changed = !PANVK_PERF(VB_DIRTY_CMP);
+
    for (uint32_t i = 0; i < bindingCount; i++) {
       VK_FROM_HANDLE(panvk_buffer, buffer, pBuffers[i]);
+      struct panvk_attrib_buf *vb = &cmdbuf->state.gfx.vb.bufs[firstBinding + i];
+      uint64_t address;
+      unsigned size;
 
       if (buffer) {
-         cmdbuf->state.gfx.vb.bufs[firstBinding + i].address =
-            panvk_buffer_gpu_ptr(buffer, pOffsets[i]);
-         cmdbuf->state.gfx.vb.bufs[firstBinding + i].size = panvk_buffer_range(
-            buffer, pOffsets[i], pSizes ? pSizes[i] : VK_WHOLE_SIZE);
+         address = panvk_buffer_gpu_ptr(buffer, pOffsets[i]);
+         size = panvk_buffer_range(buffer, pOffsets[i],
+                                   pSizes ? pSizes[i] : VK_WHOLE_SIZE);
       } else {
 #if PAN_ARCH < 9
          /* nullDescriptor: zeroed memory nothing writes rather than address
@@ -1224,18 +1233,29 @@ panvk_per_arch(CmdBindVertexBuffers2)(VkCommandBuffer commandBuffer,
           */
          const struct panvk_device *dev =
             to_panvk_device(cmdbuf->vk.base.device);
-         cmdbuf->state.gfx.vb.bufs[firstBinding + i].address =
-            dev->null_descs.zero_addr;
+         address = dev->null_descs.zero_addr;
 #else
-         cmdbuf->state.gfx.vb.bufs[firstBinding + i].address = 0;
+         address = 0;
 #endif
-         cmdbuf->state.gfx.vb.bufs[firstBinding + i].size = 0;
+         size = 0;
+      }
+
+      if (vb->address != address || vb->size != size) {
+         vb->address = address;
+         vb->size = size;
+         changed = true;
       }
    }
 
-   cmdbuf->state.gfx.vb.count =
+   const uint32_t vb_count =
       MAX2(cmdbuf->state.gfx.vb.count, firstBinding + bindingCount);
-   gfx_state_set_dirty(cmdbuf, VB);
+   if (cmdbuf->state.gfx.vb.count != vb_count) {
+      cmdbuf->state.gfx.vb.count = vb_count;
+      changed = true;
+   }
+
+   if (changed)
+      gfx_state_set_dirty(cmdbuf, VB);
 }
 
 VKAPI_ATTR void VKAPI_CALL

@@ -34,6 +34,9 @@ enum panvk_perf_knob {
    /* A2, PANVK_CSF_DESC_DIRTY: CSF descriptor binds and pushes dirty only
     * the stages that use the changed sets. */
    PANVK_PERF_CSF_DESC_DIRTY = 1 << 4,
+   /* A4, PANVK_VB_DIRTY_CMP: vkCmdBindVertexBuffers2 dirties the vertex
+    * buffers only when a binding's address or size changes. */
+   PANVK_PERF_VB_DIRTY_CMP = 1 << 5,
 };
 
 extern uint32_t panvk_perf_knobs;
