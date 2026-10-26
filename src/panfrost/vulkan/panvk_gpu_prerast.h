@@ -307,14 +307,22 @@ static_assert(PANVK_GPU_PRERAST_PARAMS_OFFSET +
                  PANVK_GPU_PRERAST_DISPATCH_OFFSET,
               "gpu_prerast params overlap the dispatch words");
 
+/* VS records an arena whose VS region ends at vs_region_end holds. */
+static inline uint32_t
+panvk_gpu_prerast_record_capacity_in(uint64_t vs_region_end,
+                                     uint32_t record_stride)
+{
+   uint64_t cap = record_stride
+      ? (vs_region_end - PANVK_GPU_PRERAST_RECORD_OFFSET) / record_stride
+      : 0;
+   return MIN2(cap, PANVK_GPU_PRERAST_MAX_INVOCATIONS);
+}
+
 static inline uint32_t
 panvk_gpu_prerast_record_capacity(uint32_t record_stride)
 {
-   uint64_t cap = record_stride
-      ? (PANVK_GPU_PRERAST_VS_REGION_END - PANVK_GPU_PRERAST_RECORD_OFFSET) /
-           record_stride
-      : 0;
-   return MIN2(cap, PANVK_GPU_PRERAST_MAX_INVOCATIONS);
+   return panvk_gpu_prerast_record_capacity_in(PANVK_GPU_PRERAST_VS_REGION_END,
+                                               record_stride);
 }
 
 /* The tessellation arena reuses the gpu_prerast header and VS region layout
@@ -323,6 +331,8 @@ panvk_gpu_prerast_record_capacity(uint32_t record_stride)
  */
 #define PANVK_GPU_PRERAST_TESS_ARENA_SIZE (96ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_TESS_DATA_OFFSET PANVK_GPU_PRERAST_VS_REGION_END
+#define PANVK_GPU_PRERAST_TESS_DATA_SIZE                                       \
+   (PANVK_GPU_PRERAST_TESS_ARENA_SIZE - PANVK_GPU_PRERAST_TESS_DATA_OFFSET)
 #define PANVK_GPU_PRERAST_TESS_MAX_LEVEL 64
 #define PANVK_GPU_PRERAST_TESS_MAX_PATCH_SIZE 32
 #define PANVK_GPU_PRERAST_TESS_UNSET 0xff
@@ -348,25 +358,37 @@ panvk_gpu_prerast_tess_patch_bytes(uint32_t tcs_stride_B)
           16 + PANVK_GPU_PRERAST_TESS_MAX_INDICES * sizeof(uint32_t);
 }
 
+/* A CSF tessellation arena only holds the VS records of one chunk
+ * (max_patches x patch size), so its data region can start right after a
+ * smaller VS region (panvk_device::tess_opt.vs_region_end). The data region
+ * keeps its size. The JM v9 path uses the constants above.
+ */
+static inline uint64_t
+panvk_gpu_prerast_tess_arena_size(uint64_t vs_region_end)
+{
+   return vs_region_end + PANVK_GPU_PRERAST_TESS_DATA_SIZE;
+}
+
 static inline uint32_t
 panvk_gpu_prerast_tess_max_patches(uint32_t tcs_stride_B,
                                    uint32_t vs_record_stride,
-                                   uint32_t patch_size)
+                                   uint32_t patch_size,
+                                   uint64_t vs_region_end)
 {
-   uint64_t tess = (PANVK_GPU_PRERAST_TESS_ARENA_SIZE -
-                    PANVK_GPU_PRERAST_TESS_DATA_OFFSET - 4 * 16) /
+   uint64_t tess = (PANVK_GPU_PRERAST_TESS_DATA_SIZE - 4 * 16) /
                    panvk_gpu_prerast_tess_patch_bytes(tcs_stride_B);
    uint64_t vs =
-      panvk_gpu_prerast_record_capacity(vs_record_stride) / MAX2(patch_size, 1);
+      panvk_gpu_prerast_record_capacity_in(vs_region_end, vs_record_stride) /
+      MAX2(patch_size, 1);
    return MIN2(tess, vs);
 }
 
 static inline void
-panvk_gpu_prerast_tess_layout(uint64_t arena, uint32_t patches,
-                              uint32_t tcs_stride_B,
+panvk_gpu_prerast_tess_layout(uint64_t arena, uint64_t vs_region_end,
+                              uint32_t patches, uint32_t tcs_stride_B,
                               struct panvk_gpu_prerast_tess_layout *l)
 {
-   uint64_t off = arena + PANVK_GPU_PRERAST_TESS_DATA_OFFSET;
+   uint64_t off = arena + vs_region_end;
 
    l->tcs = off;
    off += ALIGN_POT((uint64_t)patches * tcs_stride_B, 16);
@@ -381,7 +403,8 @@ panvk_gpu_prerast_tess_layout(uint64_t arena, uint32_t patches,
    l->index = off;
    l->index_size =
       patches * PANVK_GPU_PRERAST_TESS_MAX_INDICES * sizeof(uint32_t);
-   assert(off + l->index_size <= arena + PANVK_GPU_PRERAST_TESS_ARENA_SIZE);
+   assert(off + l->index_size <=
+          arena + panvk_gpu_prerast_tess_arena_size(vs_region_end));
 }
 
 struct panvk_gpu_prerast_arena {

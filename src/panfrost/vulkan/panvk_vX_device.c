@@ -270,14 +270,15 @@ panvk_per_arch(device_gpu_prerast_arena)(struct panvk_device *dev, bool tess)
 
    simple_mtx_lock(&dev->gpu_prerast_lock);
    if (!panvk_priv_mem_check_alloc(*mem)) {
-      *mem = alloc_gpu_prerast_arena(
-         dev, tess ? PANVK_GPU_PRERAST_TESS_ARENA_SIZE
-                   : PANVK_GPU_PRERAST_ARENA_SIZE);
+      const uint64_t size =
+         tess ? panvk_gpu_prerast_tess_arena_size(dev->tess_opt.vs_region_end)
+              : PANVK_GPU_PRERAST_ARENA_SIZE;
+
+      *mem = alloc_gpu_prerast_arena(dev, size);
       if (panvk_priv_mem_check_alloc(*mem))
          mesa_logi("panvk: gpu_prerast %s arena committed (%llu MiB)",
                    tess ? "tessellation" : "draw",
-                   (unsigned long long)((tess ? PANVK_GPU_PRERAST_TESS_ARENA_SIZE
-                                              : PANVK_GPU_PRERAST_ARENA_SIZE) >> 20));
+                   (unsigned long long)(size >> 20));
    }
    struct panvk_priv_mem ret = *mem;
    simple_mtx_unlock(&dev->gpu_prerast_lock);
@@ -294,11 +295,14 @@ panvk_per_arch(device_gpu_prerast_tess_arena2)(struct panvk_device *dev)
 
    simple_mtx_lock(&dev->gpu_prerast_lock);
    if (!panvk_priv_mem_check_alloc(*mem)) {
-      *mem = alloc_gpu_prerast_arena(dev, PANVK_GPU_PRERAST_TESS_ARENA_SIZE);
+      const uint64_t size =
+         panvk_gpu_prerast_tess_arena_size(dev->tess_opt.vs_region_end);
+
+      *mem = alloc_gpu_prerast_arena(dev, size);
       if (panvk_priv_mem_check_alloc(*mem))
          mesa_logi("panvk: gpu_prerast second tessellation arena committed "
                    "(%llu MiB)",
-                   (unsigned long long)(PANVK_GPU_PRERAST_TESS_ARENA_SIZE >> 20));
+                   (unsigned long long)(size >> 20));
       else
          dev->tess_opt.arenas = 1; /* Do not retry on every draw. */
    }
@@ -969,6 +973,18 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       debug_get_num_option("PANVK_TESS_ARENAS", 2) >= 2 ? 2 : 1;
    device->tess_opt.winding_inline =
       debug_get_num_option("PANVK_TESS_WINDING_INLINE", 1) != 0;
+   /* A tessellation chunk needs max_patches x patch size VS records, about
+    * 0.25 MiB for 4 control points x 128 B and 8 MiB only for 32 control
+    * points x 512 B records (then fewer patches per chunk). v9 JM computes
+    * its layout from the 32 MiB constants.
+    */
+   device->tess_opt.vs_region_end = PANVK_GPU_PRERAST_VS_REGION_END;
+   if (PAN_ARCH >= 10) {
+      const uint64_t mb =
+         CLAMP(debug_get_num_option("PANVK_TESS_VS_REGION_MB", 8), 2,
+               PANVK_GPU_PRERAST_VS_REGION_END >> 20);
+      device->tess_opt.vs_region_end = mb << 20;
+   }
 
    /* v9, or PANVK_GPU_PRERAST_ARENA=eager: commit both arenas here, as
     * before csf-v11/205 (64 + 96 MiB per VkDevice with the features). */

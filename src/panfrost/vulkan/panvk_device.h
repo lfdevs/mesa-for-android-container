@@ -219,6 +219,10 @@ struct panvk_device {
       uint8_t arenas;
       /* PANVK_TESS_WINDING_INLINE (default 1): POLY_TESS_CCW_INLINE. */
       bool winding_inline;
+      /* PANVK_TESS_VS_REGION_MB (default 8 on v10+, 32 = the v9 layout):
+       * end of the VS records in the tessellation arenas, where their data
+       * region starts. */
+      uint64_t vs_region_end;
    } tess_opt;
 
    /* Device-wide thread local storage shared by all command buffers. The

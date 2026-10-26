@@ -3768,6 +3768,23 @@ gpu_prerast_arena_sync(const struct panvk_device *dev, uint64_t arena)
                 : offsetof(struct panvk_gpu_prerast_syncs, arena));
 }
 
+/* VS records the arena holds: the tessellation arenas have a smaller VS
+ * region (panvk_device::tess_opt.vs_region_end).
+ */
+static uint32_t
+gpu_prerast_arena_record_capacity(const struct panvk_device *dev,
+                                  uint64_t arena, uint32_t record_stride)
+{
+   const bool tess =
+      arena == panvk_priv_mem_dev_addr(dev->gpu_prerast_tess_arena) ||
+      (panvk_priv_mem_check_alloc(dev->gpu_prerast_tess_arena2) &&
+       arena == panvk_priv_mem_dev_addr(dev->gpu_prerast_tess_arena2));
+
+   return panvk_gpu_prerast_record_capacity_in(
+      tess ? dev->tess_opt.vs_region_end : PANVK_GPU_PRERAST_VS_REGION_END,
+      record_stride);
+}
+
 static void
 gpu_prerast_release_arena(struct panvk_cmd_buffer *cmdbuf, uint64_t arena)
 {
@@ -4307,8 +4324,8 @@ gpu_prerast_vs(struct panvk_cmd_buffer *cmdbuf,
                  source->index.index_size == 2 ? UINT16_MAX : UINT32_MAX);
    STORE_PARAM32(primitive_restart, source->index.restart_enable);
    STORE_PARAM32(record_capacity,
-                 panvk_gpu_prerast_record_capacity(
-                    shader->gpu_prerast.io.record_stride));
+                 gpu_prerast_arena_record_capacity(
+                    dev, arena, shader->gpu_prerast.io.record_stride));
    STORE_PARAM32(draw_id, source->indirect.draw_index);
    if (chunk_addr) {
       cs_move64_to(compute, addr, chunk_addr);
@@ -4706,6 +4723,7 @@ gpu_prerast_draw_generated(struct panvk_cmd_buffer *cmdbuf,
 static uint32_t
 gpu_prerast_tess_max_patches(const struct panvk_cmd_buffer *cmdbuf)
 {
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
    const struct panvk_shader *tcs = cmdbuf->state.gfx.tcs.shader;
    const uint32_t ps =
@@ -4716,7 +4734,7 @@ gpu_prerast_tess_max_patches(const struct panvk_cmd_buffer *cmdbuf)
 
    return panvk_gpu_prerast_tess_max_patches(
       tcs->gpu_prerast.tess.stride_el * 4, vs->gpu_prerast.io.record_stride,
-      ps);
+      ps, dev->tess_opt.vs_region_end);
 }
 
 /* Loads the address of a tessellation sync of the queue syncobjs BO, see
@@ -5070,7 +5088,8 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
    const uint64_t prerast_arena =
       nested ? panvk_priv_mem_dev_addr(dev->gpu_prerast_arena) : 0;
    struct panvk_gpu_prerast_tess_layout l;
-   panvk_gpu_prerast_tess_layout(arena, max_patches, tc->stride_el * 4, &l);
+   panvk_gpu_prerast_tess_layout(arena, dev->tess_opt.vs_region_end,
+                                 max_patches, tc->stride_el * 4, &l);
 
     struct pan_ptr td = panvk_cmd_alloc_dev_mem(
        cmdbuf, desc, sizeof(struct panlib_tess_draw), 16);
