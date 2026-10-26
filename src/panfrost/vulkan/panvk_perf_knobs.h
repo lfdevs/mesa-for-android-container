@@ -37,6 +37,9 @@ enum panvk_perf_knob {
    /* A4, PANVK_VB_DIRTY_CMP: vkCmdBindVertexBuffers2 dirties the vertex
     * buffers only when a binding's address or size changes. */
    PANVK_PERF_VB_DIRTY_CMP = 1 << 5,
+   /* A5, PANVK_PRERAST_FAST_SKIP: a CSF draw that gpu_prerast does not
+    * want skips the other gpu_prerast checks. */
+   PANVK_PERF_PRERAST_FAST_SKIP = 1 << 6,
 };
 
 extern uint32_t panvk_perf_knobs;

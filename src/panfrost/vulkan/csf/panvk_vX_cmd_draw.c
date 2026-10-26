@@ -6121,7 +6121,18 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
       draw.pstats_counted = true;
    }
 
-   if (gpu_prerast_wanted(cmdbuf, &draw) && gpu_prerast_split(cmdbuf, &draw))
+   /* A5 (115): evaluated once. A draw gpu_prerast does not want (none of
+    * its triggers, see gpu_prerast_needed()) can never be lowered either:
+    * gpu_prerast_can_lower() needs one of the same triggers or
+    * PANVK_DEBUG=gpu_prerast. Such a draw skips gpu_prerast_draw() and the
+    * second gpu_prerast_needed() below. PANVK_PRERAST_FAST_SKIP=0 runs
+    * them, as in 114.
+    */
+   const bool prerast_wanted = gpu_prerast_wanted(cmdbuf, &draw);
+   const bool prerast_skip = PANVK_PERF(PRERAST_FAST_SKIP) &&
+                             !prerast_wanted && !PANVK_DEBUG(GPU_PRERAST);
+
+   if (prerast_wanted && gpu_prerast_split(cmdbuf, &draw))
       return;
 
    /* A split chunk that falls back to IDVS has no instance ID offset: shift
@@ -6176,12 +6187,14 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
       return;
    }
 
-   if (!draw.gpu_prerast_generated && gpu_prerast_draw(cmdbuf, &draw))
-      return;
+   if (!prerast_skip) {
+      if (!draw.gpu_prerast_generated && gpu_prerast_draw(cmdbuf, &draw))
+         return;
 
-   if (gpu_prerast_needed(cmdbuf, &draw)) {
-      gpu_prerast_unhandled("shader variants missing");
-      return;
+      if (gpu_prerast_needed(cmdbuf, &draw)) {
+         gpu_prerast_unhandled("shader variants missing");
+         return;
+      }
    }
 
    /* For indirect draws, we need to patch the descriptors we just emitted */
