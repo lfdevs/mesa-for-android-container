@@ -431,7 +431,7 @@ struct tva_pending {
     bool failed;                  /* session error: fence must not hang */
     bool copied;                  /* staging already written into the target */
     bool resource_notified;       /* external write notification delivered */
-    bool drop_on_fence_destroy;   /* target was reused before this output */
+    bool drop_on_fence_destroy;   /* protect target reuse from late output */
     unsigned waiters;              /* fence_wait callers holding this entry */
     struct pipe_resource *resources[2]; /* owned until the entry is reaped */
     uint8_t *staging;
@@ -910,6 +910,11 @@ tva_pend_reserve_locked(struct tva_codec *c, uint32_t unit_seq,
     memset(p, 0, sizeof(*p));
     p->in_use = true;
     p->unit_seq = unit_seq;
+    /* Chromium destroys a VA surface fence immediately before recycling the
+     * surface.  Protect every decode output from a late MediaCodec result,
+     * not only AV1 hidden-reference outputs: AVC/HEVC reordering can also
+     * return a frame after the client has moved on to a newer picture. */
+    p->drop_on_fence_destroy = fence != NULL;
     if (target) {
         struct pipe_resource *res[4] = {0};
         target->get_resources(target, res);
