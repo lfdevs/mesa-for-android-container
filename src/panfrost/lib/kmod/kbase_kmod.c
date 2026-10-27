@@ -40,6 +40,7 @@
 #include <fcntl.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -47,6 +48,9 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
+#ifdef __ANDROID__
+#include <dlfcn.h>
+#endif
 
 #include "util/macros.h"
 #include "util/os_time.h"
@@ -2743,6 +2747,80 @@ kbase_kmod_bo_alloc_dmabuf(struct pan_kmod_dev *dev, uint64_t size,
    return bo;
 }
 
+/* Without /dev/dma_heap and a new-ABI ION heap (MediaTek 4.14 kernels, a31:
+ * ION_IOC_HEAP_QUERY is EINVAL), gralloc is the dma-buf allocator an app can
+ * reach: a BLOB AHardwareBuffer, imported like a dma-heap buffer. Placed
+ * maps (VK_EXT_map_memory_placed, 32-bit WoW64) need a dma-buf. A BO
+ * without WB_MMAP asks for a CPU mapping gralloc keeps uncached (READ_RARELY),
+ * the GPU does not snoop CPU caches here. */
+static struct pan_kmod_bo *
+kbase_kmod_bo_alloc_ahb(struct pan_kmod_dev *dev, uint64_t size,
+                        uint32_t kmod_flags)
+{
+#ifdef __ANDROID__
+   struct ahb_desc {
+      uint32_t width, height, layers, format;
+      uint64_t usage;
+      uint32_t stride, rfu0;
+      uint64_t rfu1;
+   };
+   struct native_handle {
+      int version, num_fds, num_ints, data[];
+   };
+   void *lib = dlopen("libnativewindow.so", RTLD_NOW | RTLD_LOCAL);
+   int (*ahb_alloc)(const struct ahb_desc *, void **) =
+      lib ? dlsym(lib, "AHardwareBuffer_allocate") : NULL;
+   void (*ahb_release)(void *) =
+      lib ? dlsym(lib, "AHardwareBuffer_release") : NULL;
+   const struct native_handle *(*ahb_handle)(const void *) =
+      lib ? dlsym(lib, "AHardwareBuffer_getNativeHandle") : NULL;
+
+   if (!ahb_alloc || !ahb_release || !ahb_handle)
+      return NULL;
+
+   const uint64_t len = ALIGN_POT(size, kbase_kmod_page_size());
+   const uint64_t cpu = (kmod_flags & PAN_KMOD_BO_FLAG_WB_MMAP)
+                           ? 0x33 /* CPU_READ_OFTEN | CPU_WRITE_OFTEN */
+                           : 0x22 /* CPU_READ_RARELY | CPU_WRITE_RARELY */;
+   struct ahb_desc desc = {
+      .width = len, .height = 1, .layers = 1,
+      .format = 0x21 /* AHARDWAREBUFFER_FORMAT_BLOB */,
+      .usage = cpu | (1ull << 24) /* GPU_DATA_BUFFER */,
+   };
+   void *ahb = NULL;
+
+   if (len > UINT32_MAX)
+      return NULL;
+   if (ahb_alloc(&desc, &ahb)) {
+      desc.usage = cpu;
+      if (ahb_alloc(&desc, &ahb)) {
+         mesa_loge("kbase: gralloc BLOB allocation of %" PRIu64 " bytes "
+                   "failed", len);
+         return NULL;
+      }
+   }
+
+   /* The buffer is not always fd 0: an MTK handle is gralloc_extra, the
+    * dma-buf, an ashmem metadata region. */
+   const struct native_handle *h = ahb_handle(ahb);
+   struct pan_kmod_bo *bo = NULL;
+   for (int i = 0; h && i < h->num_fds && !bo; i++) {
+      char path[32], link[32] = "";
+      snprintf(path, sizeof(path), "/proc/self/fd/%d", h->data[i]);
+      if (readlink(path, link, sizeof(link) - 1) > 0 &&
+          (!strncmp(link, "/dmabuf:", 8) ||
+           !strcmp(link, "anon_inode:dmabuf")))
+         bo = kbase_kmod_import_dmabuf(dev, NULL, h->data[i], len,
+                                       kmod_flags, false);
+   }
+   /* The import holds its own dma-buf reference (and fd). */
+   ahb_release(ahb);
+   return bo;
+#else
+   return NULL;
+#endif
+}
+
 /* PANVK_KBASE_COHERENT_POOLS=1 fallback: later allocations use the 114
  * flags. BOs that were allocated coherent stay coherent. */
 static void
@@ -2761,11 +2839,17 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
    struct kbase_kmod_dev *kbase_dev =
       container_of(dev, struct kbase_kmod_dev, base);
 
-   if (!exclusive_vm && kbase_dev->dma_heap_fd >= 0 &&
+   if (!exclusive_vm &&
        !(kmod_flags & (PAN_KMOD_BO_FLAG_EXECUTABLE |
                        PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT |
-                       PAN_KMOD_BO_FLAG_CSF_EVENT)))
-      return kbase_kmod_bo_alloc_dmabuf(dev, size, kmod_flags);
+                       PAN_KMOD_BO_FLAG_CSF_EVENT))) {
+      if (kbase_dev->dma_heap_fd >= 0)
+         return kbase_kmod_bo_alloc_dmabuf(dev, size, kmod_flags);
+      struct pan_kmod_bo *bo = kbase_kmod_bo_alloc_ahb(dev, size, kmod_flags);
+      if (bo)
+         return bo;
+      /* A kbase BO still works for everything but a placed map. */
+   }
 
    const uint64_t page_size = kbase_kmod_page_size();
    uint64_t va_pages = (size + page_size - 1) / page_size;
@@ -3120,9 +3204,8 @@ kbase_kmod_bo_get_mmap_offset(struct pan_kmod_bo *bo)
  * < 4 GiB) therefore only works for dma-buf backed BOs: the dma-buf is mapped
  * a second time at that address, sharing pages with the GPU (no copy, no
  * sync).  panvk allocates host-visible memory from the dma-heap when the app
- * enables memoryMapPlaced (patch 091).
- * ponytail: without /dev/dma_heap placed maps fail (ENOTSUP); an anonymous
- * shadow copy needs dirty tracking to be both correct and fast. */
+ * enables memoryMapPlaced (patch 091), from gralloc without a dma-heap or
+ * ION heap (kbase_kmod_bo_alloc_ahb()). */
 static void *
 kbase_kmod_bo_mmap(struct pan_kmod_bo *bo, UNUSED int prot, UNUSED int flags,
                    void *host_addr)
