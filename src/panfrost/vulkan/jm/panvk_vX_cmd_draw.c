@@ -1148,7 +1148,9 @@ panvk_draw_prepare_vs_attribs(struct panvk_cmd_buffer *cmdbuf,
          cmdbuf, desc,
          num_vs_attribs * sizeof(struct libpan_draw_helper_attrib_info), 8);
 
-      if (!bufs_infos_storage.gpu ||
+      /* A zero-size allocation is NULL: a draw without vertex buffers (the
+       * VS pulls its vertices) is not out of memory. */
+      if ((num_vbs && !bufs_infos_storage.gpu) ||
           (num_vs_attribs && !attribs_infos_storage.gpu))
          return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
