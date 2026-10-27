@@ -1296,6 +1296,7 @@ cs_render_desc_ringbuf_reserve(struct panvk_cmd_buffer *cmdbuf,
 
    /* Wait for the other end to release memory. */
    cs_move32_to(b, sz_reg, size - 1);
+   panvk_kbase_wait_deferred_syncs(cmdbuf, b);
    cs_sync32_wait(b, false, MALI_CS_CONDITION_GREATER, sz_reg, ringbuf_sync);
 
    /* Decrement the syncobj to reflect the fact we're reserving memory.
@@ -4042,6 +4043,7 @@ gpu_prerast_acquire_arena(struct panvk_cmd_buffer *cmdbuf, uint64_t arena)
 
    cs_move64_to(b, addr, gpu_prerast_arena_sync(dev, arena));
    cs_move32_to(b, value, 0);
+   panvk_kbase_wait_deferred_syncs(cmdbuf, b);
    cs_sync32_wait(b, false, MALI_CS_CONDITION_GREATER, value, addr);
    cs_move32_to(b, value, -1);
    cs_sync32_add(b, true, panvk_cs_signal_scope(cmdbuf), value, addr, cs_now());
@@ -4760,6 +4762,7 @@ gpu_prerast_sync32_take(struct panvk_cmd_buffer *cmdbuf,
    struct cs_index value = cs_scratch_reg32(b, 2);
 
    cs_move32_to(b, value, 0);
+   panvk_kbase_wait_deferred_syncs(cmdbuf, b);
    cs_sync32_wait(b, false, MALI_CS_CONDITION_GREATER, value, addr);
    cs_move32_to(b, value, -1);
    cs_sync32_add(b, true, panvk_cs_signal_scope(cmdbuf), value, addr, cs_now());

@@ -101,6 +101,20 @@ panvk_cs_signal_scope(const struct panvk_cmd_buffer *cmdbuf)
    return MALI_CS_SYNC_SCOPE_CSG;
 }
 
+/* kbase runs each subqueue in its own CSG. A deferred signal (tiling done,
+ * fragment done, ringbuf release) still pending when its stream blocks in a
+ * SYNC_WAIT on another subqueue is not sent: on a Pixel 7 (G710) VT and
+ * COMPUTE sat in a barrier wait on FRAG while FRAG waited for VT's tiling
+ * signal. Let the stream's own deferred syncs land before such a wait. */
+static inline void
+panvk_kbase_wait_deferred_syncs(const struct panvk_cmd_buffer *cmdbuf,
+                                struct cs_builder *b)
+{
+   if (to_panvk_physical_device(cmdbuf->vk.base.device->physical)
+          ->kbase_node_path[0])
+      cs_wait_slot(b, SB_ID(DEFERRED_SYNC));
+}
+
 #define PANVK_INSTR_SYNC_OPS(__cnt_width)                                      \
    static inline void panvk_instr_sync##__cnt_width##_add(                     \
       struct panvk_cmd_buffer *cmdbuf, enum panvk_subqueue_id id,              \
@@ -130,6 +144,7 @@ panvk_cs_signal_scope(const struct panvk_cmd_buffer *cmdbuf)
       struct cs_builder *b = panvk_get_cs_builder(cmdbuf, id);                 \
       panvk_per_arch(panvk_instr_begin_work)(                                  \
          id, cmdbuf, PANVK_INSTR_WORK_TYPE_SYNC##__cnt_width##_WAIT);          \
+      panvk_kbase_wait_deferred_syncs(cmdbuf, b);                              \
       cs_sync##__cnt_width##_wait(b, reject_error, cond, ref, addr);           \
       struct panvk_instr_end_args instr_info = {                               \
          .sync = {.addr_regs = addr, .val_regs = ref, .cond = cond},           \
