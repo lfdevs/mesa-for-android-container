@@ -3211,8 +3211,10 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
          return;
 
       if (vs->info.vs.idvs) {
+         /* Local dependency: pan_jc_add_job() replaces the global one of a
+          * tiling job with the previous tiler job. */
          pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_INDEXED_VERTEX, false,
-                        false, 0, copy_desc_job_id, &draw->jobs.idvs, false);
+                        false, copy_desc_job_id, 0, &draw->jobs.idvs, false);
       } else {
          unsigned vjob_id =
             vs_job ? pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_VERTEX,
@@ -3587,8 +3589,10 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
       uint32_t prev_job = batch->vtc_jc.job_index;
 
       if (vs->info.vs.idvs) {
+         /* Local dependency, as in the direct path: the helper patches
+          * this job, which must not start before it. */
          pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_INDEXED_VERTEX, false,
-                        false, 0, prev_job, &draw->jobs.idvs, false);
+                        false, prev_job, 0, &draw->jobs.idvs, false);
       } else {
          unsigned vjob_id =
             vs_job ? pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_VERTEX,
@@ -4996,8 +5000,10 @@ v9_emit_malloc_vertex_job(struct panvk_cmd_buffer *cmdbuf,
    /* A gpu_prerast generated draw reads the records and indices the
     * producer jobs just wrote: wait for them. */
    const bool barrier = draw_barrier || info->gpu_prerast_generated;
+   /* Local dependency: pan_jc_add_job() replaces the global one of a
+    * tiling job with the previous tiler job. */
    pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_MALLOC_VERTEX, barrier,
-                  draw_barrier != 0, 0, indirect_dep, &job, false);
+                  draw_barrier != 0, indirect_dep, 0, &job, false);
    return VK_SUCCESS;
 }
 
