@@ -81,6 +81,22 @@ TEST_F(SchedulerPredicates, BLEND)
    ASSERT_FALSE(bi_reads_t(blend, 3));
 }
 
+TEST_F(SchedulerPredicates, DescriptorNotFromPassthrough)
+{
+   bi_instr *ld = bi_ld_cvt_to(b, TMP(), TMP(), TMP(), TMP(),
+                               BI_REGISTER_FORMAT_F32, BI_VECSIZE_V4);
+   ASSERT_TRUE(bi_reads_t(ld, 0));
+   ASSERT_TRUE(bi_reads_t(ld, 1));
+   ASSERT_FALSE(bi_reads_t(ld, 2));
+
+   bi_instr *st = bi_st_cvt(b, TMP(), TMP(), TMP(), TMP(),
+                            BI_REGISTER_FORMAT_F32, BI_VECSIZE_V4);
+   ASSERT_FALSE(bi_reads_t(st, 0));
+   ASSERT_TRUE(bi_reads_t(st, 1));
+   ASSERT_FALSE(bi_reads_t(st, 2));
+   ASSERT_FALSE(bi_reads_t(st, 3));
+}
+
 TEST_F(SchedulerPredicates, RestrictionsOnModifiersOfSameCycleTemporaries)
 {
    bi_instr *fadd = bi_fadd_f32_to(b, TMP(), TMP(), TMP());
