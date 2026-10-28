@@ -1040,6 +1040,7 @@ static void
 panvk_draw_emit_attrib(const struct panvk_draw_data *draw,
                        const struct vk_vertex_attribute_state *attrib_info,
                        const struct vk_vertex_binding_state *buf_info,
+                       uint32_t stride,
                        const struct panvk_attrib_buf *buf,
                        struct mali_attribute_packed *desc,
                        struct libpan_draw_helper_attrib_info *helper_attrib_info)
@@ -1058,20 +1059,20 @@ panvk_draw_emit_attrib(const struct panvk_draw_data *draw,
       /* In case of indirect draw, the descriptor will be patched at runtime */
       if (helper_attrib_info != NULL) {
          helper_attrib_info->base_offset = offset;
-         helper_attrib_info->stride = per_instance ? buf_info->stride : 0;
+         helper_attrib_info->stride = per_instance ? stride : 0;
          helper_attrib_info->start_stride =
-            per_instance && buf_info->divisor ? buf_info->stride : 0;
+            per_instance && buf_info->divisor ? stride : 0;
       } else {
          cfg.offset = offset;
          if (per_instance)
-            cfg.offset += draw->info.instance.base * buf_info->stride;
+            cfg.offset += draw->info.instance.base * stride;
          /* Bifrost adds the DCD offset_start (the raw vertex offset) to the
           * index of instanced attributes as well: undo it, as gallium's
           * panfrost_emit_vertex_data() does. Divisor 0 has a zero stride. */
          if (per_instance && buf_info->divisor &&
              draw->info.instance.count > 1)
             cfg.offset -=
-               (int32_t)(draw->info.vertex.raw_offset * buf_info->stride);
+               (int32_t)(draw->info.vertex.raw_offset * stride);
       }
    }
 }
@@ -1180,6 +1181,7 @@ panvk_draw_prepare_vs_attribs(struct panvk_cmd_buffer *cmdbuf,
             attribs_infos ? &attribs_infos[i] : NULL;
          panvk_draw_emit_attrib(draw, &vi->attributes[i],
                                 &vi->bindings[buf_idx],
+                                dyns->vi_binding_strides[buf_idx],
                                 &cmdbuf->state.gfx.vb.bufs[buf_idx],
                                 &attrib_descs[i], helper_attrib_info);
       } else {
