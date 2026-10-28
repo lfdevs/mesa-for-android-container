@@ -759,6 +759,16 @@ panvk_preprocess_nir(struct vk_physical_device *vk_pdev,
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
    NIR_PASS(_, nir, nir_split_var_copies);
 
+   /* Big constant tables (the BC lowmem transcoder's EAC LUTs, 1152 + 512 +
+    * 128 entries) become constant data before the first copy_prop_vars:
+    * otherwise every one of their initializer stores is tracked against every
+    * load through all the optimization loops (nir_compare_deref_paths), 1.4 s
+    * to 4.3 s of CPU per transcode pipeline on a G615 phone. Small tables
+    * stay for panvk_lower_nir()'s pass, after unrolling made their accesses
+    * direct.
+    */
+   NIR_PASS(_, nir, nir_opt_large_constants, NULL, 256);
+
    NIR_PASS(_, nir, nir_opt_copy_prop_vars);
    NIR_PASS(_, nir, nir_opt_combine_stores, nir_var_all);
    NIR_PASS(_, nir, nir_opt_loop);
