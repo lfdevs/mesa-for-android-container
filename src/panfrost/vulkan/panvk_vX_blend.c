@@ -377,7 +377,10 @@ panvk_per_arch(blend_emit_descs)(struct panvk_cmd_buffer *cmdbuf,
        */
       pan_blend_optimize_equation(&rt->equation, rt->format, bs.constants);
 
-      blend_info->any_dest_read |= pan_blend_reads_dest(rt->equation);
+      /* A logic op reads the destination (gallium's load_dest): forward
+       * pixel kill must not drop the fragments it combines with. */
+      blend_info->any_dest_read |=
+         bs.logicop_enable || pan_blend_reads_dest(rt->equation);
 
       if (blend_needs_shader(&bs, i, &ff_blend_constant)) {
          nir_alu_type src0_type = fs_info->bifrost.blend[loc].type;
