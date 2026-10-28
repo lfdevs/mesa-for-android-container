@@ -1479,8 +1479,12 @@ static bool
 tva_reader_copy_enabled(void)
 {
    const char *e = getenv("DMD_VA_READER_COPY");
+   /* Direct writes race the compositor when Chromium reuses a VA surface
+    * while an imported texture is still in flight.  Keep the cache-safe
+    * application-thread staging path as the default; direct writes remain
+    * available for explicitly validated consumers with DMD_VA_READER_COPY=1. */
    if (!e || !*e)
-      return true;
+      return false;
    return !(!strcmp(e, "0") || !strcmp(e, "false") ||
             !strcmp(e, "off"));
 }
@@ -1965,6 +1969,11 @@ tva_reader_thread(void *param)
             tva_copy_frame_direct(c, p, f.data, f.size)) {
             p->copied = true;
             p->ready = true;
+            /* Direct copies happen on the reader thread before Chromium
+             * necessarily waits on the VA fence.  Publish the external write
+             * immediately so Freedreno invalidates its imported-resource
+             * cache before the compositor samples this surface. */
+            tva_notify_frame_resources(c, p);
             c->frames_done++;
             TVA_TRACE("reader direct copy unit=%u result=1", p->unit_seq);
             u_cnd_monotonic_broadcast(&c->pend_cond);
