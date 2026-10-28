@@ -42,12 +42,27 @@ VkResult panvk_per_arch(create_depth_bounds_fs)(struct panvk_device *dev);
 /* We could theoretically use the MAX_PER_SET values here (except for UBOs
  * where we're really limited to 256 on the shader side), but on Bifrost we
  * have to copy some tables around, which comes at an extra memory/processing
- * cost, so let's pick something smaller. */
-#define MAX_PER_STAGE_SAMPLED_IMAGES 256
+ * cost, so let's pick something smaller.
+ *
+ * Storage images, storage texel buffers and uniform texel buffers that are
+ * not update-after-bind all live in the image attribute table, two
+ * ATTRIBUTE_BUFFER entries each, and the ATTRIBUTE "Buffer index" field is
+ * 9 bits wide (512 entries). A vertex shader puts its vertex buffers (up to
+ * 16, two entries each) first, so a stage has room for 240 image table
+ * entries. Uniform texel buffers count against the sampled image limit and
+ * storage texel buffers against the storage image limit, so their sum must
+ * stay within 240: 64 storage images (D3D11/D3D12 FL 11_1 UAV slots) and
+ * 176 sampled images (D3D has 128 SRV slots). Update-after-bind bindings
+ * are bindless (jm-v7 050) and do not use the table. */
+#define MAX_PER_STAGE_IMG_TABLE_ENTRIES 240
+#define MAX_PER_STAGE_SAMPLED_IMAGES 176
 #define MAX_PER_STAGE_SAMPLERS 128
 #define MAX_PER_STAGE_UNIFORM_BUFFERS MAX_PER_SET_UNIFORM_BUFFERS
 #define MAX_PER_STAGE_STORAGE_BUFFERS 64
-#define MAX_PER_STAGE_STORAGE_IMAGES 32
+#define MAX_PER_STAGE_STORAGE_IMAGES 64
+static_assert(MAX_PER_STAGE_SAMPLED_IMAGES + MAX_PER_STAGE_STORAGE_IMAGES <=
+                 MAX_PER_STAGE_IMG_TABLE_ENTRIES,
+              "image attribute table overflows the 9-bit buffer index");
 #define MAX_PER_STAGE_INPUT_ATTACHMENTS MAX_PER_SET_INPUT_ATTACHMENTS
 
 #else

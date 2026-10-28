@@ -1208,6 +1208,12 @@ panvk_draw_prepare_vs_attribs(struct panvk_cmd_buffer *cmdbuf,
       cmdbuf->state.gfx.vs.attr_key.valid = true;
    }
 
+   /* Image entries follow the vertex buffers in the attribute buffer table,
+    * whose ATTRIBUTE "Buffer index" is 9 bits (panvk_shader.h). */
+   static_assert((MAX_VBS + MAX_PER_STAGE_IMG_TABLE_ENTRIES) * 2 <= 512,
+                 "VS image attribute buffers overflow the buffer index");
+   assert(num_imgs <= MAX_PER_STAGE_IMG_TABLE_ENTRIES);
+
    if (num_imgs) {
       cmdbuf->state.gfx.vs.desc.img_attrib_table =
          attribs.gpu + (MAX_VS_ATTRIBS * pan_size(ATTRIBUTE));
