@@ -1406,6 +1406,8 @@ account_tiler_work(struct panvk_cmd_buffer *cmdbuf, uint64_t work)
       cmdbuf->state.tiler_work_estimate += work;
 }
 
+DEBUG_GET_ONCE_BOOL_OPTION(tiler_layer_budget, "PANVK_TILER_LAYER_BUDGET", true)
+
 static VkResult
 get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
 {
@@ -1447,9 +1449,21 @@ get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
       ASSERTED unsigned max_levels = tiler_features.max_levels;
       assert(max_levels >= 2);
 
-      /* The tiler chunk start with a header of 64 bytes */
+      /* The bins of every layer of a tiler context come from one heap
+       * chunk (after its 64-byte header), and v10/v11 need twice
+       * pan_calc_bins_pointer_size() per layer. Measured on Mali-G715 with
+       * the vkd3d-proton pass without attachments (65536x65536, 256
+       * layers, 8 per context): mask 0x1fe0 (171 KiB per layer) OOMs with
+       * 1 and 2 MiB chunks, not with 4 MiB; mask 0x1fc0 (43 KiB) OOMs with
+       * 512 KiB chunks, not with 1 MiB. kbase terminates the group on that
+       * OOM. PANVK_TILER_LAYER_BUDGET=0 = 115b (budget of one layer). */
+      uint32_t bin_budget = phys_dev->csf.tiler.chunk_size - 64;
+      if (debug_get_option_tiler_layer_budget())
+         bin_budget /= (PAN_ARCH < 12 ? 2 : 1) *
+                       CLAMP(cmdbuf->state.gfx.render.layer_count, 1,
+                             MAX_LAYERS_PER_TILER_DESC);
       cfg.hierarchy_mask = panvk_select_tiler_hierarchy_mask(
-         phys_dev, &cmdbuf->state.gfx, phys_dev->csf.tiler.chunk_size - 64);
+         phys_dev, &cmdbuf->state.gfx, bin_budget);
       cfg.fb_width = fb->width_px;
       cfg.fb_height = fb->height_px;
 
