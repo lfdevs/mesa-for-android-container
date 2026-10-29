@@ -787,7 +787,7 @@ jobs:
 
       - name: Configure Git
         run: |
-          sudo chown -R runner:runner "${{ github.workspace }}/archlinuxarm-PKGBUILDs"
+          sudo chown -R runner:runner "$GITHUB_WORKSPACE/archlinuxarm-PKGBUILDs"
           sudo -u runner bash -c '
             git config --global user.email "actions@github.com"
             git config --global user.name "GitHub Actions"
@@ -796,13 +796,13 @@ jobs:
       - name: Set release name suffix
         shell: bash
         run: |
-          cd "${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa"
+          cd "$GITHUB_WORKSPACE/archlinuxarm-PKGBUILDs/extra/mesa"
           version=$(awk -F= '/^pkgver=/{print $2; exit}' PKGBUILD)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
           requested_ref="${MESA_SOURCE_REF#refs/tags/}"
           checked_out_tag=
-          if git -C "${{ github.workspace }}/archlinuxarm-PKGBUILDs" show-ref --verify --quiet "refs/tags/$requested_ref" \
-            && ! git -C "${{ github.workspace }}/archlinuxarm-PKGBUILDs" symbolic-ref --quiet HEAD >/dev/null; then
+          if git -C "$GITHUB_WORKSPACE/archlinuxarm-PKGBUILDs" show-ref --verify --quiet "refs/tags/$requested_ref" \
+            && ! git -C "$GITHUB_WORKSPACE/archlinuxarm-PKGBUILDs" symbolic-ref --quiet HEAD >/dev/null; then
             checked_out_tag="$requested_ref"
           fi
           if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
@@ -813,13 +813,14 @@ jobs:
       - name: Build Mesa
         shell: bash
         run: |
+          source_dir="$GITHUB_WORKSPACE/archlinuxarm-PKGBUILDs/extra/mesa"
           sudo -u runner bash -c '
             export CCACHE_DIR=/home/runner/.ccache
             echo "Building Mesa..."
-            cd "${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa"
+            cd "$1"
             makepkg -s --noconfirm
             echo "Mesa build completed successfully!"
-          '
+          ' -- "$source_dir"
 
       - name: Save ccache
         uses: actions/cache/save@v6
@@ -832,7 +833,7 @@ jobs:
         shell: bash
         run: |
           echo "Packaging Mesa..."
-          cd "${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa"
+          cd "$GITHUB_WORKSPACE/archlinuxarm-PKGBUILDs/extra/mesa"
           tar -cvf mesa-for-android-container_${MESA_RELEASE_NAME_SUFFIX}.tar *.pkg.tar.xz
           echo "Calculating sha256 checksums..."
           find . -maxdepth 1 \( -name "*.tar" \) -type f -printf "%P\0" | xargs -0 sha256sum | sort -k2 > sha256sums.txt
@@ -844,8 +845,8 @@ jobs:
         with:
           name: mesa-for-android-container_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa/*.tar
-            ${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa/sha256sums.txt
+            archlinuxarm-PKGBUILDs/extra/mesa/*.tar
+            archlinuxarm-PKGBUILDs/extra/mesa/sha256sums.txt
           retention-days: 90
 
   void-linux:
