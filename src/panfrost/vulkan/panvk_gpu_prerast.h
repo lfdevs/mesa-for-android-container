@@ -302,6 +302,10 @@ struct panvk_gpu_prerast_params {
    } poly;
 };
 
+/* v9 JM: the lowered VS params are followed by one u32 instance divisor per
+ * vertex attribute slot (MAX_VS_ATTRIBS), see v9_prerast_vs(). */
+#define PANVK_V9_PRERAST_DIVISORS_OFFSET sizeof(struct panvk_gpu_prerast_params)
+
 static_assert(PANVK_GPU_PRERAST_PARAMS_OFFSET +
                     sizeof(struct panvk_gpu_prerast_params) <=
                  PANVK_GPU_PRERAST_DISPATCH_OFFSET,

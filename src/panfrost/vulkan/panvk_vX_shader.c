@@ -964,6 +964,38 @@ panvk_poly_lower_sw_vs(nir_shader *s)
                                      nir_metadata_control_flow, NULL);
 }
 
+#if PAN_ARCH == 9
+/* v9: the lowered VS computes the element index of an instance-rate
+ * attribute itself (instance ID / divisor, from the u32 per attribute slot
+ * after the params, 0 = vertex rate) and fetches every attribute with
+ * vertex frequency (v9_emit_vs_attrib()). On the G57 an instance-frequency
+ * LD_ATTR in merged workgroups returned, for every lane of a 4-lane group,
+ * the element of the group's first lane, with the hardware divisor and with
+ * a pre-divided instance ID alike.
+ */
+static bool
+panvk_v9_prerast_sw_divisor_intr(nir_builder *b, nir_intrinsic_instr *intr,
+                                 UNUSED void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_load_attr_pan)
+      return false;
+
+   b->cursor = nir_before_instr(&intr->instr);
+   /* The handle is the attribute slot, driver set (table 0) index 0-15. */
+   nir_def *slot = nir_iand_imm(b, intr->src[2].ssa, MAX_VS_ATTRIBS - 1);
+   nir_def *off = nir_iadd_imm(b, nir_imul_imm(b, slot, 4),
+                               PANVK_V9_PRERAST_DIVISORS_OFFSET);
+   nir_def *div = nir_load_global(
+      b, 1, 32,
+      nir_iadd(b, nir_load_vertex_param_buffer_poly(b), nir_u2u64(b, off)),
+      .align_mul = 4);
+   nir_def *elem = nir_bcsel(b, nir_ieq_imm(b, div, 0), intr->src[0].ssa,
+                             nir_udiv(b, intr->src[1].ssa, nir_umax_imm(b, div, 1)));
+   nir_src_rewrite(&intr->src[0], elem);
+   return true;
+}
+#endif
+
 static bool
 panvk_tess_lower_intr(nir_builder *b, nir_intrinsic_instr *intr,
                       UNUSED void *data)
@@ -4834,15 +4866,6 @@ panvk_compile_shader(struct panvk_device *dev,
          (want_prerast || writes_vp) ? PANVK_VS_VARIANT_GPU_PASSTHROUGH
                                      : PANVK_VS_VARIANT_HW;
       struct panvk_gpu_prerast_out_types out_types = {0};
-      /* v9 JM: a merged lowered VS fetched instance-rate attributes with a
-       * divisor from the wrong element (PanProbe draw_params 'divisor', 1
-       * vertex x 6 instances, 2 of 6 instances wrong on the G57; CSF passes
-       * the same case), so a v9 VS that reads vertex inputs is not merged.
-       * TES, GS and polygon kernels fetch no vertex attributes.
-       */
-      const bool vs_fetches_attribs = PAN_ARCH == 9 &&
-                                      info->stage == MESA_SHADER_VERTEX &&
-                                      info->nir->info.inputs_read != 0;
 #else
       const enum panvk_vs_variant last_variant = PANVK_VS_VARIANT_HW;
 #endif
@@ -4967,6 +4990,11 @@ panvk_compile_shader(struct panvk_device *dev,
                                           panvk_gpu_prerast_collect_out_type,
                                           nir_metadata_all, &out_types);
                NIR_PASS(_, nir, pan_nir_lower_vs_inputs_poly, inputs.gpu_id);
+#if PAN_ARCH == 9
+               NIR_PASS(_, nir, nir_shader_intrinsics_pass,
+                        panvk_v9_prerast_sw_divisor_intr,
+                        nir_metadata_control_flow, NULL);
+#endif
                NIR_PASS(_, nir, panvk_gpu_prerast_lower_vs_outputs);
                if (info->stage == MESA_SHADER_VERTEX &&
                    nir->info.writes_memory)
@@ -5023,8 +5051,7 @@ panvk_compile_shader(struct panvk_device *dev,
          variant->own_bin = true;
 
 #if PAN_ARCH >= 9
-         const bool merge_wg = gpu_lower && !vs_fetches_attribs &&
-                               panvk_gpu_prerast_merge_wg(nir);
+         const bool merge_wg = gpu_lower && panvk_gpu_prerast_merge_wg(nir);
 #endif
 
          result = panvk_compile_nir(dev, nir, info->flags, &inputs, state,

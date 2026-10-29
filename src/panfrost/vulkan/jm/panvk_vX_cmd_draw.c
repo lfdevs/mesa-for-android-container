@@ -4414,7 +4414,7 @@ v9_translate_stencil_op(VkStencilOp in)
 static void
 v9_emit_vs_attrib(struct panvk_cmd_buffer *cmdbuf, uint32_t attrib_idx,
                   uint32_t vb_desc_offset, struct mali_attribute_packed *desc,
-                  uint32_t base_instance)
+                  uint32_t base_instance, bool sw_divisor)
 {
    const struct vk_dynamic_graphics_state *dyns =
       &cmdbuf->vk.dynamic_graphics_state;
@@ -4436,10 +4436,16 @@ v9_emit_vs_attrib(struct panvk_cmd_buffer *cmdbuf, uint32_t attrib_idx,
       cfg.table = 0;
       cfg.buffer_index = vb_desc_offset + attrib_info->binding;
       cfg.stride = stride;
-      if (!per_instance) {
+      if (!per_instance || sw_divisor) {
+         /* sw_divisor: the lowered VS passes the element index of an
+          * instance-rate attribute as its vertex ID
+          * (panvk_v9_prerast_sw_divisor_intr(), divisors from
+          * v9_prerast_vs()). */
          cfg.attribute_type = MALI_ATTRIBUTE_TYPE_1D;
          cfg.frequency = MALI_ATTRIBUTE_FREQUENCY_VERTEX;
          cfg.offset_enable = true;
+         if (per_instance && buf_info->divisor == 0)
+            cfg.stride = 0;
       } else if (buf_info->divisor <= 1) {
          cfg.attribute_type = MALI_ATTRIBUTE_TYPE_1D;
          cfg.frequency = MALI_ATTRIBUTE_FREQUENCY_INSTANCE;
@@ -4462,7 +4468,7 @@ static VkResult
 v9_prepare_vs_driver_set_ex(struct panvk_cmd_buffer *cmdbuf,
                             const struct panvk_shader *vs_shader,
                             struct panvk_shader_desc_state *st,
-                            uint32_t base_instance)
+                            uint32_t base_instance, bool sw_divisor)
 {
    const struct panvk_shader_desc_info *vs_desc_info = &vs_shader->desc_info;
    const struct vk_vertex_input_state *vi =
@@ -4483,7 +4489,8 @@ v9_prepare_vs_driver_set_ex(struct panvk_cmd_buffer *cmdbuf,
    struct panvk_opaque_desc *descs = driver_set.cpu;
    for (uint32_t i = 0; i < MAX_VS_ATTRIBS; i++) {
       if (vi->attributes_valid & BITFIELD_BIT(i))
-         v9_emit_vs_attrib(cmdbuf, i, vb_offset, (void *)&descs[i], base_instance);
+         v9_emit_vs_attrib(cmdbuf, i, vb_offset, (void *)&descs[i], base_instance,
+                           sw_divisor);
       else
          pan_cast_and_pack(&descs[i], NULL_DESCRIPTOR, cfg);
    }
@@ -4512,10 +4519,12 @@ v9_prepare_vs_driver_set_ex(struct panvk_cmd_buffer *cmdbuf,
 }
 
 static VkResult
-v9_prepare_vs_driver_set(struct panvk_cmd_buffer *cmdbuf, uint32_t base_instance)
+v9_prepare_vs_driver_set(struct panvk_cmd_buffer *cmdbuf, uint32_t base_instance,
+                         bool sw_divisor)
 {
    return v9_prepare_vs_driver_set_ex(cmdbuf, cmdbuf->state.gfx.vs.shader,
-                                      &cmdbuf->state.gfx.vs.desc, base_instance);
+                                      &cmdbuf->state.gfx.vs.desc, base_instance,
+                                      sw_divisor);
 }
 
 /* Driver set of a stage without vertex attributes (FS, GS kernel): the
@@ -5202,7 +5211,7 @@ v9_prerast_prepare_vs_descs(struct panvk_cmd_buffer *cmdbuf,
    if (result != VK_SUCCESS)
       return result;
 
-   result = v9_prepare_vs_driver_set(cmdbuf, info->instance.base);
+   result = v9_prepare_vs_driver_set(cmdbuf, info->instance.base, true);
    if (result != VK_SUCCESS)
       return result;
 
@@ -5234,10 +5243,26 @@ v9_prerast_vs(struct panvk_cmd_buffer *cmdbuf,
    const bool indirect = src->indirect.buffer_dev_addr != 0;
 
    struct pan_ptr params = panvk_cmd_alloc_dev_mem(
-      cmdbuf, desc, sizeof(struct panvk_gpu_prerast_params), 64);
+      cmdbuf, desc,
+      PANVK_V9_PRERAST_DIVISORS_OFFSET + MAX_VS_ATTRIBS * sizeof(uint32_t), 64);
    if (!params.gpu)
       return false;
    v9_prerast_fill_params(src, shader, records, indices, params.cpu);
+   /* Per attribute slot for the lowered VS
+    * (panvk_v9_prerast_sw_divisor_intr()): 0 = vertex rate, else the
+    * instance divisor (1 for divisor 0, whose stride is 0). */
+   const struct vk_vertex_input_state *vi =
+      cmdbuf->vk.dynamic_graphics_state.vi;
+   uint32_t *divs =
+      (uint32_t *)((uint8_t *)params.cpu + PANVK_V9_PRERAST_DIVISORS_OFFSET);
+   for (uint32_t i = 0; i < MAX_VS_ATTRIBS; i++) {
+      const struct vk_vertex_binding_state *b =
+         &vi->bindings[vi->attributes[i].binding];
+      divs[i] = (vi->attributes_valid & BITFIELD_BIT(i)) &&
+                      b->input_rate == VK_VERTEX_INPUT_RATE_INSTANCE
+                   ? MAX2(b->divisor, 1)
+                   : 0;
+   }
    /* jm-v7 118: a CPU split chunk starts this many instances into the API
     * draw (0 otherwise). An indirect draw gets chunk_instance from
     * panlib_v9_prerast_indirect(). */
@@ -6772,7 +6797,7 @@ v9_cmd_draw_layer(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
    result = panvk_per_arch(cmd_prepare_push_descs)(cmdbuf, desc_state, used);
    if (result != VK_SUCCESS)
       return;
-   result = v9_prepare_vs_driver_set(cmdbuf, info->instance.base);
+   result = v9_prepare_vs_driver_set(cmdbuf, info->instance.base, false);
    if (result != VK_SUCCESS)
       return;
    result = panvk_per_arch(cmd_prepare_shader_res_table)(
