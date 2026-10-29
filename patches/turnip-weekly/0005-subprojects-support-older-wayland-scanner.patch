@@ -1,0 +1,65 @@
+From f4ff988ea881b4768b260a0d23f77a794b35f718 Mon Sep 17 00:00:00 2001
+From: lfdevs <lfdevs@lfdevs.com>
+Date: Thu, 29 Oct 2026 11:37:13 +0800
+Subject: [PATCH] subprojects: support older wayland-scanner with protocols
+ 1.49
+
+Debian-family distributions may provide wayland-scanner versions older
+than 1.25. wayland-protocols 1.49 uses newer XML metadata and passes
+--strict unconditionally, causing these scanners to reject valid protocol
+files.
+
+Apply --strict only when wayland-scanner is at least 1.25. Older scanners
+still generate the required enum headers without strict XML validation,
+while newer scanners retain the existing validation behavior.
+---
+ .../0001-wayland-scanner-older-version.patch  | 24 +++++++++++++++++++
+ subprojects/wayland-protocols.wrap            |  1 +
+ 2 files changed, 25 insertions(+)
+ create mode 100644 subprojects/packagefiles/wayland-protocols-1.49/0001-wayland-scanner-older-version.patch
+
+diff --git a/subprojects/packagefiles/wayland-protocols-1.49/0001-wayland-scanner-older-version.patch b/subprojects/packagefiles/wayland-protocols-1.49/0001-wayland-scanner-older-version.patch
+new file mode 100644
+index 00000000000..ba63c6133a5
+--- /dev/null
++++ b/subprojects/packagefiles/wayland-protocols-1.49/0001-wayland-scanner-older-version.patch
+@@ -0,0 +1,24 @@
++--- a/include/wayland-protocols/meson.build
+++++ b/include/wayland-protocols/meson.build
++@@ -1,13 +1,18 @@
++ header_install_dir = get_option('includedir') / 'wayland-protocols'
+++# wayland-scanner before 1.25 does not know newer protocol XML metadata.
+++# It can still generate valid enum headers when strict XML validation is off.
+++scanner_options = []
+++if dep_scanner.version().version_compare('>=1.25.0')
+++	scanner_options += ['--strict']
+++endif
+++
++ foreach protocol_file : protocol_files
++ 	header_name = fs.name(protocol_file).replace('.xml', '-enum.h')
++ 	headers += custom_target(
++ 		header_name,
++ 		output: header_name,
++ 		input: '../..' / protocol_file,
++-		command: [
++-			prog_scanner,
++-			'--strict',
+++		command: [prog_scanner] + scanner_options + [
++ 			'enum-header',
++ 			'@INPUT@',
++ 			'@OUTPUT@',
+diff --git a/subprojects/wayland-protocols.wrap b/subprojects/wayland-protocols.wrap
+index 9ccac395871..8bc27690d6b 100644
+--- a/subprojects/wayland-protocols.wrap
++++ b/subprojects/wayland-protocols.wrap
+@@ -3,6 +3,7 @@ directory = wayland-protocols-1.49
+ source_url = https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.49/downloads/wayland-protocols-1.49.tar.xz
+ source_filename = wayland-protocols-1.49.tar.xz
+ source_hash = ec4c8f74942d6dff7ace8b4ce4764f0ef9ff618a935d974ea77edee2ad240b14
++diff_files = wayland-protocols-1.49/0001-wayland-scanner-older-version.patch
+ 
+ [provide]
+ wayland-protocols = wayland_protocols
+-- 
+2.47.3
+
