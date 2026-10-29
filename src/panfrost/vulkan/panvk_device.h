@@ -231,6 +231,12 @@ struct panvk_device {
       uint8_t arenas;
       /* PANVK_TESS_WINDING_INLINE (default 1): POLY_TESS_CCW_INLINE. */
       bool winding_inline;
+      /* PANVK_PRERAST_CHUNK_FLUSH (default 1 on v14+, 0 before): each
+       * gpu_prerast chunk iteration (tessellation and the draw chunk loop)
+       * cleans and invalidates the LS caches and invalidates the other
+       * caches once the previous chunk is drawn, so no core reads that
+       * chunk's lines at the reused arena addresses. */
+      bool chunk_flush;
       /* PANVK_TESS_VS_REGION_MB (default 8 on v10+, 32 = the v9 layout):
        * end of the VS records in the tessellation arenas, where their data
        * region starts. */

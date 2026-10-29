@@ -4785,6 +4785,24 @@ gpu_prerast_sync32_take(struct panvk_cmd_buffer *cmdbuf,
    cs_sync32_wait(b, false, MALI_CS_CONDITION_GREATER, value, addr);
    cs_move32_to(b, value, -1);
    cs_sync32_add(b, true, panvk_cs_signal_scope(cmdbuf), value, addr, cs_now());
+
+   /* jm-v7: every chunk rewrites the arena addresses (VS records, TCS
+    * outputs, domain points, indices) that the previous chunk's kernels and
+    * draw read. On v14 the second chunk on drew with stale lines of the
+    * previous one (missing tessellation patches). The compute side owns the
+    * arenas again here: flush once before this chunk's kernels.
+    */
+   if (subqueue == PANVK_SUBQUEUE_COMPUTE &&
+       to_panvk_device(cmdbuf->vk.base.device)->tess_opt.chunk_flush) {
+      struct cs_index flush_id = cs_scratch_reg32(b, 2);
+
+      cs_move32_to(b, flush_id, 0);
+      cs_flush_caches(b, MALI_CS_FLUSH_MODE_NONE,
+                      MALI_CS_FLUSH_MODE_CLEAN_AND_INVALIDATE,
+                      MALI_CS_OTHER_FLUSH_MODE_INVALIDATE, flush_id,
+                      cs_defer(SB_IMM_MASK, SB_ID(IMM_FLUSH)));
+      cs_wait_slot(b, SB_ID(IMM_FLUSH));
+   }
 }
 
 static void

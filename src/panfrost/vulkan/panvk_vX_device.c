@@ -1027,6 +1027,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       debug_get_num_option("PANVK_TESS_ARENAS", 2) >= 2 ? 2 : 1;
    device->tess_opt.winding_inline =
       debug_get_num_option("PANVK_TESS_WINDING_INLINE", 1) != 0;
+   device->tess_opt.chunk_flush =
+      debug_get_num_option("PANVK_PRERAST_CHUNK_FLUSH", PAN_ARCH >= 14) != 0;
    /* A tessellation chunk needs max_patches x patch size VS records, about
     * 0.25 MiB for 4 control points x 128 B and 8 MiB only for 32 control
     * points x 512 B records (then fewer patches per chunk). v9 JM computes
