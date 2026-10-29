@@ -189,8 +189,7 @@ cmd_close_batch_impl(struct panvk_cmd_buffer *cmdbuf)
           cmdbuf->tls_half[h].tls_size >= size) {
          batch->tlsinfo.tls.ptr = cmdbuf->tls_half[h].tls_ptr;
       } else {
-         batch->tlsinfo.tls.ptr =
-            panvk_cmd_alloc_dev_mem(cmdbuf, tls, size, 4096).gpu;
+         batch->tlsinfo.tls.ptr = panvk_cmd_alloc_tls_mem(cmdbuf, size);
          if (batch->tlsinfo.tls.ptr) {
             cmdbuf->tls_half[h].tls_ptr = batch->tlsinfo.tls.ptr;
             cmdbuf->tls_half[h].tls_size = size;
@@ -214,8 +213,7 @@ cmd_close_batch_impl(struct panvk_cmd_buffer *cmdbuf)
          batch->tlsinfo.wls.ptr = cmdbuf->tls_half[h].wls_ptr;
       } else {
          batch->tlsinfo.wls.ptr =
-            panvk_cmd_alloc_dev_mem(cmdbuf, tls, batch->wls_total_size, 4096)
-               .gpu;
+            panvk_cmd_alloc_tls_mem(cmdbuf, batch->wls_total_size);
          if (batch->tlsinfo.wls.ptr) {
             cmdbuf->tls_half[h].wls_ptr = batch->tlsinfo.wls.ptr;
             cmdbuf->tls_half[h].wls_size = batch->wls_total_size;

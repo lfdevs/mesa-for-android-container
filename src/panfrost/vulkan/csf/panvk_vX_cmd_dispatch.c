@@ -168,8 +168,7 @@ panvk_per_arch(cmd_dispatch_prepare_tls)(
        * instance count) might differ significantly between dispatch commands,
        * rather than track a single maximum size, we might want to consider
        * multiple allocations for different size buckets. */
-      tlsinfo.wls.ptr =
-         panvk_cmd_alloc_dev_mem(cmdbuf, tls, wls_total_size, 4096).gpu;
+      tlsinfo.wls.ptr = panvk_cmd_alloc_tls_mem(cmdbuf, wls_total_size);
       if (!tlsinfo.wls.ptr)
          return 0;
    }

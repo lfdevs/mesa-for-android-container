@@ -184,6 +184,17 @@ struct dev_tls_layout {
    unsigned thread_size, threads;
 };
 
+/* jm-v7 0145: the TLS region must not cross a 4 GiB boundary (see
+ * panvk_cmd_alloc_tls_mem()). Callers retry while holding the rejects, so the
+ * next region gets another address. */
+#define DEV_TLS_MAX_REJECTS 8
+
+static bool
+dev_tls_crosses_4g(uint64_t va, uint64_t size)
+{
+   return (va >> 32) != ((va + size - 1) >> 32);
+}
+
 #ifdef HAVE_PAN_KMOD_KBASE
 static uint64_t
 dev_tls_page(void)
@@ -213,35 +224,59 @@ dev_tls_alias(struct panvk_device *dev, const struct panvk_priv_bo *backing,
          idx++;
    }
 
-   union kbase_ioctl_mem_alias req = {
-      .in = {
-         .flags = BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR |
-                  BASE_MEM_PROT_CPU_RD,
-         .stride = stride,
-         .nents = l->range,
-         .aliasing_info = (uintptr_t)ai,
-      },
-   };
+   void *rejects[DEV_TLS_MAX_REJECTS];
+   unsigned n_rejects = 0;
+   uint64_t va = 0;
 
-   if (ioctl(dev->kmod.dev->fd, KBASE_IOCTL_MEM_ALIAS, &req)) {
-      mesa_logw("panvk: device TLS: KBASE_IOCTL_MEM_ALIAS failed (%s), "
-                "using a full BO", strerror(errno));
-      return 0;
+   for (;;) {
+      union kbase_ioctl_mem_alias req = {
+         .in = {
+            .flags = BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR |
+                     BASE_MEM_PROT_CPU_RD,
+            .stride = stride,
+            .nents = l->range,
+            .aliasing_info = (uintptr_t)ai,
+         },
+      };
+
+      if (ioctl(dev->kmod.dev->fd, KBASE_IOCTL_MEM_ALIAS, &req)) {
+         mesa_logw("panvk: device TLS: KBASE_IOCTL_MEM_ALIAS failed (%s), "
+                   "using a full BO", strerror(errno));
+         break;
+      }
+
+      /* 64-bit clients get a SAME_VA cookie; mmap() places the region, and
+       * the address is both the CPU and the GPU VA (as for the ring buffer).
+       */
+      void *ptr = mmap(NULL, l->span, PROT_READ, MAP_SHARED,
+                       dev->kmod.dev->fd, req.out.gpu_va);
+      if (ptr == MAP_FAILED) {
+         mesa_logw("panvk: device TLS: alias mmap failed (%s), using a full "
+                   "BO", strerror(errno));
+         struct kbase_ioctl_mem_free free_req = {.gpu_addr = req.out.gpu_va};
+         ioctl(dev->kmod.dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+         break;
+      }
+
+      if (!dev_tls_crosses_4g((uintptr_t)ptr, l->span)) {
+         va = (uintptr_t)ptr;
+         break;
+      }
+
+      if (n_rejects == DEV_TLS_MAX_REJECTS) {
+         munmap(ptr, l->span);
+         mesa_logw("panvk: device TLS: no alias region inside a 4 GiB "
+                   "window, using a full BO");
+         break;
+      }
+      rejects[n_rejects++] = ptr;
    }
 
-   /* 64-bit clients get a SAME_VA cookie; mmap() places the region, and
-    * the address is both the CPU and the GPU VA (as for the ring buffer). */
-   void *ptr = mmap(NULL, l->span, PROT_READ, MAP_SHARED, dev->kmod.dev->fd,
-                    req.out.gpu_va);
-   if (ptr == MAP_FAILED) {
-      mesa_logw("panvk: device TLS: alias mmap failed (%s), using a full BO",
-                strerror(errno));
-      struct kbase_ioctl_mem_free free_req = {.gpu_addr = req.out.gpu_va};
-      ioctl(dev->kmod.dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
-      return 0;
-   }
+   /* munmap() of a SAME_VA alias region frees it. */
+   for (unsigned i = 0; i < n_rejects; i++)
+      munmap(rejects[i], l->span);
 
-   return (uintptr_t)ptr;
+   return va;
 }
 #endif
 
@@ -286,9 +321,31 @@ dev_tls_create(struct panvk_device *dev, const struct dev_tls_layout *l)
    }
 #endif
 
-   if (panvk_priv_bo_create_kind(dev, l->span, flags,
-                                 VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo,
-                                 PANVK_MEM_DEV_TLS) != VK_SUCCESS)
+   struct panvk_priv_bo *rejects[DEV_TLS_MAX_REJECTS];
+   unsigned n_rejects = 0;
+
+   for (;;) {
+      if (panvk_priv_bo_create_kind(dev, l->span, flags,
+                                    VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo,
+                                    PANVK_MEM_DEV_TLS) != VK_SUCCESS) {
+         bo = NULL;
+         break;
+      }
+      if (!dev_tls_crosses_4g(bo->addr.dev, l->span))
+         break;
+      if (n_rejects == DEV_TLS_MAX_REJECTS) {
+         mesa_loge("panvk: device TLS: no BO inside a 4 GiB window");
+         panvk_priv_bo_unref(bo);
+         bo = NULL;
+         break;
+      }
+      rejects[n_rejects++] = bo;
+   }
+
+   for (unsigned i = 0; i < n_rejects; i++)
+      panvk_priv_bo_unref(rejects[i]);
+
+   if (!bo)
       return NULL;
 
    mesa_logi("panvk: device TLS %u B/thread x %u threads x %u core IDs "
