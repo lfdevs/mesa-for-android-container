@@ -769,13 +769,15 @@ panvk_wsi_init(struct panvk_physical_device *physical_device)
     * and v13 lost the same way from 120 on (cube 964 on 118, ~600 after).
     * An automatic choice (timing an invalidate + frame read of each type at
     * the first swapchain) picked cached on the X6 Pro too, where FL 11_1
-    * runs 470 vs 800 fps, so the cost is not in the CPU read alone.  Default
-    * by arch: cached on v13+, uncached below.  PANVK_WSI_SW_CACHED=1/0
-    * forces it.
+    * runs 470 vs 800 fps, so the cost is not in the CPU read alone.  v9
+    * lost the same way as v14 (TB336FU .so bisect, 119 -> 120: D3D12 gears
+    * 259 -> 220 fps, D3D11 FL 11_0 214 -> 196).  So uncached only on v11,
+    * the one arch where 0160 measured a gain; cached everywhere else, as
+    * before 0160.  PANVK_WSI_SW_CACHED=1/0 forces it.
     */
    physical_device->wsi_device.sw_cached_noncoherent = debug_get_bool_option(
       "PANVK_WSI_SW_CACHED",
-      pan_arch(physical_device->kmod.dev->props.gpu_id) >= 13);
+      pan_arch(physical_device->kmod.dev->props.gpu_id) != 11);
 
    /* MIT-SHM sw present: the event thread collects each put's GetGeometry
     * reply, so the present thread copies and sends the next frame while
