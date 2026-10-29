@@ -2902,7 +2902,9 @@ prepare_dcd(struct panvk_cmd_buffer *cmdbuf,
                  dyn_gfx_state_dirty(cmdbuf, DS_STENCIL_WRITE_MASK) ||
                  dyn_gfx_state_dirty(cmdbuf, CB_BLEND_ENABLES) ||
                  dyn_gfx_state_dirty(cmdbuf, CB_BLEND_EQUATIONS) ||
-                 dyn_gfx_state_dirty(cmdbuf, CB_WRITE_MASKS);
+                 dyn_gfx_state_dirty(cmdbuf, CB_WRITE_MASKS) ||
+                 dyn_gfx_state_dirty(cmdbuf, CB_LOGIC_OP_ENABLE) ||
+                 dyn_gfx_state_dirty(cmdbuf, CB_LOGIC_OP);
 #endif
    bool dcd0_dirty =
       dyn_gfx_state_dirty(cmdbuf, RS_RASTERIZER_DISCARD_ENABLE) ||
@@ -2928,6 +2930,9 @@ prepare_dcd(struct panvk_cmd_buffer *cmdbuf,
       dyn_gfx_state_dirty(cmdbuf, CB_BLEND_ENABLES) ||
       dyn_gfx_state_dirty(cmdbuf, CB_BLEND_EQUATIONS) ||
       dyn_gfx_state_dirty(cmdbuf, CB_WRITE_MASKS) ||
+      /* and on any_dest_read, which a logic op sets */
+      dyn_gfx_state_dirty(cmdbuf, CB_LOGIC_OP_ENABLE) ||
+      dyn_gfx_state_dirty(cmdbuf, CB_LOGIC_OP) ||
       /* line mode needs primitive topology */
       dyn_gfx_state_dirty(cmdbuf, IA_PRIMITIVE_TOPOLOGY) ||
       dyn_gfx_state_dirty(cmdbuf, INPUT_ATTACHMENT_MAP) ||
