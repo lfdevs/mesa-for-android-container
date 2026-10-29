@@ -6153,7 +6153,35 @@ vmr_track_secondary(struct panvk_cmd_buffer *cmdbuf)
 }
 
 static void
+panvk_cmd_draw_inner(struct panvk_cmd_buffer *cmdbuf,
+                     struct panvk_draw_info draw);
+
+/* Item 8 (perf plan): an API draw with a pass-through GS (pt_skip) runs the
+ * VS on the hardware without the GS, unless a pipeline statistics query
+ * needs the GS counters. */
+static void
 panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
+{
+   const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
+   const struct panvk_shader *eff = gs;
+
+   if (!draw.gpu_prerast_generated && gs && gs->gpu_prerast.gs.pt_skip &&
+       !cmdbuf->state.gfx.pstats_query.report)
+      eff = NULL;
+   if (eff != cmdbuf->state.gfx.gs_pt_last) {
+      gfx_state_set_dirty(cmdbuf, VS);
+      gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+      gfx_state_set_dirty(cmdbuf, FS);
+      cmdbuf->state.gfx.gs_pt_last = eff;
+   }
+   cmdbuf->state.gfx.gs.shader = eff;
+   panvk_cmd_draw_inner(cmdbuf, draw);
+   cmdbuf->state.gfx.gs.shader = gs;
+}
+
+static void
+panvk_cmd_draw_inner(struct panvk_cmd_buffer *cmdbuf,
+                     struct panvk_draw_info draw)
 {
    /* C1: lowered or unlowered FS, before anything looks at it. */
    panvk_per_arch(cmd_select_db_alt_fs)(cmdbuf);

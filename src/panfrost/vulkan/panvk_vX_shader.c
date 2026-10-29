@@ -5696,6 +5696,125 @@ panvk_v7_prepare_alt_nir(struct vk_shader_compile_info *info)
 }
 #endif
 
+#if PAN_ARCH >= 9
+/* Item 8 (perf plan): true when the GS emits each input vertex once, in
+ * order, with every output a copy of the same input of that vertex and no
+ * other effect (DXVK/emulator pass-through GS). Analysed on a lowered clone.
+ */
+static bool
+gs_is_passthrough(const nir_shader *src)
+{
+   const struct shader_info *si = &src->info;
+   const unsigned n = mesa_vertices_per_prim(si->gs.input_primitive);
+   const enum mesa_prim want = n == 1   ? MESA_PRIM_POINTS
+                               : n == 2 ? MESA_PRIM_LINE_STRIP
+                                        : MESA_PRIM_TRIANGLE_STRIP;
+
+   if (!debug_get_bool_option("PANVK_GS_PT_SKIP", true) ||
+       (si->gs.input_primitive != MESA_PRIM_POINTS &&
+        si->gs.input_primitive != MESA_PRIM_LINES &&
+        si->gs.input_primitive != MESA_PRIM_TRIANGLES) ||
+       si->gs.output_primitive != want || si->gs.vertices_out != n ||
+       si->gs.invocations > 1 || src->xfb_info || si->writes_memory ||
+       (si->outputs_written &
+        (VARYING_BIT_LAYER | VARYING_BIT_VIEWPORT | VARYING_BIT_PRIMITIVE_ID)))
+      return false;
+
+   nir_shader *nir = nir_shader_clone(NULL, src);
+   bool progress;
+   NIR_PASS(_, nir, nir_lower_global_vars_to_local);
+   NIR_PASS(_, nir, nir_lower_vars_to_ssa);
+   do {
+      progress = false;
+      NIR_PASS(progress, nir, nir_opt_copy_prop);
+      NIR_PASS(progress, nir, nir_opt_dce);
+      NIR_PASS(progress, nir, nir_opt_dead_cf);
+      NIR_PASS(progress, nir, nir_opt_constant_folding);
+      NIR_PASS(progress, nir, nir_opt_loop_unroll);
+      NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
+   } while (progress);
+   NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
+            glsl_type_size, 0);
+   NIR_PASS(_, nir, nir_opt_constant_folding);
+   NIR_PASS(_, nir, nir_opt_copy_prop);
+   NIR_PASS(_, nir, nir_opt_dce);
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
+   const uint64_t outputs = nir->info.outputs_written;
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   bool ok = exec_list_is_singular(&impl->body) && outputs;
+   unsigned k = 0;
+   uint64_t stored = 0;
+
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
+         if (!ok)
+            break;
+         if (instr->type == nir_instr_type_load_const ||
+             instr->type == nir_instr_type_undef)
+            continue;
+         if (instr->type != nir_instr_type_intrinsic) {
+            ok = false;
+            break;
+         }
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         switch (intr->intrinsic) {
+         case nir_intrinsic_load_per_vertex_input:
+         case nir_intrinsic_end_primitive:
+            break;
+         case nir_intrinsic_emit_vertex:
+            ok = nir_intrinsic_stream_id(intr) == 0 && stored == outputs &&
+                 k < n;
+            stored = 0;
+            k++;
+            break;
+         case nir_intrinsic_store_output: {
+            nir_instr *vi = nir_def_instr(intr->src[0].ssa);
+            nir_intrinsic_instr *ld =
+               vi->type == nir_instr_type_intrinsic ? nir_instr_as_intrinsic(vi)
+                                                    : NULL;
+            const nir_io_semantics so = nir_intrinsic_io_semantics(intr);
+            ok = ld && ld->intrinsic == nir_intrinsic_load_per_vertex_input &&
+                 nir_src_is_const(ld->src[0]) &&
+                 nir_src_as_uint(ld->src[0]) == k &&
+                 nir_src_is_const(ld->src[1]) && !nir_src_as_uint(ld->src[1]) &&
+                 nir_src_is_const(intr->src[1]) &&
+                 !nir_src_as_uint(intr->src[1]) &&
+                 nir_intrinsic_io_semantics(ld).location == so.location &&
+                 nir_intrinsic_component(ld) == nir_intrinsic_component(intr) &&
+                 nir_intrinsic_write_mask(intr) ==
+                    nir_component_mask(ld->def.num_components) &&
+                 so.num_slots == 1;
+            stored |= BITFIELD64_BIT(so.location);
+            break;
+         }
+         default:
+            ok = false;
+            break;
+         }
+      }
+   }
+   ralloc_free(nir);
+   return ok && k == n;
+}
+
+static bool
+varying_layouts_equal(const struct pan_varying_layout *a,
+                      const struct pan_varying_layout *b)
+{
+   if (a->count != b->count || a->generic_size_B != b->generic_size_B)
+      return false;
+   for (unsigned i = 0; i < a->count; i++) {
+      const struct pan_varying_slot *x = &a->slots[i], *y = &b->slots[i];
+      if (x->location != y->location || x->alu_type != y->alu_type ||
+          x->ncomps != y->ncomps || x->section != y->section ||
+          x->offset != y->offset)
+         return false;
+   }
+   return true;
+}
+#endif
+
 static VkResult
 compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
                 struct vk_shader_compile_info *infos,
@@ -5786,6 +5905,11 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
 #endif
       nir_shader *alt_nir =
          want_alt ? nir_shader_clone(NULL, infos[i].nir) : NULL;
+#if PAN_ARCH >= 9
+      const bool gs_pt = infos[i].stage == MESA_SHADER_GEOMETRY && i > 0 &&
+                         infos[i - 1].stage == MESA_SHADER_VERTEX &&
+                         gs_is_passthrough(infos[i].nir);
+#endif
 
       result = panvk_compile_shader(dev, &infos[i], state, vs_varying_layout,
                                     noperspective_varyings_ptr, scissor_loc, prev_gs_outputs,
@@ -5795,6 +5919,21 @@ compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
          ralloc_free(alt_nir);
          goto err_cleanup;
       }
+#if PAN_ARCH >= 9
+      if (gs_pt) {
+         struct panvk_shader *gs =
+            container_of(shaders_out[i], struct panvk_shader, vk);
+         const struct panvk_shader *vs =
+            container_of(shaders_out[i - 1], struct panvk_shader, vk);
+         const struct panvk_shader_variant *hw = panvk_shader_hw_variant(vs);
+
+         gs->gpu_prerast.gs.pt_skip =
+            hw && panvk_priv_mem_check_alloc(hw->spd) &&
+            varying_layouts_equal(
+               &hw->info.varyings.formats,
+               &gs->variants[PANVK_GS_VARIANT_PASSTHROUGH].info.varyings.formats);
+      }
+#endif
 
       if (alt_nir) {
          struct vk_shader_compile_info alt_info = infos[i];

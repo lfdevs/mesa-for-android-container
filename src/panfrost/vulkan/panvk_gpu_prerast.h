@@ -15,7 +15,7 @@
 #include "util/macros.h"
 #include "vulkan/vulkan_core.h"
 
-#define PANVK_GPU_PRERAST_ABI_VERSION 10
+#define PANVK_GPU_PRERAST_ABI_VERSION 11
 #define PANVK_GPU_PRERAST_MAX_EXECUTION_BYTES (256ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_VS_REGION_END (32ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_GS_INDEX_OFFSET PANVK_GPU_PRERAST_VS_REGION_END
@@ -145,6 +145,10 @@ struct panvk_gpu_prerast_gs_info {
    bool passthrough_compiled;
    bool xfb;
    uint8_t scissor_clip_loc;
+   /* Item 8: a pass-through GS (each input vertex emitted once, outputs
+    * copied unchanged) whose VS draws with the same varying layout: draws
+    * skip the GS and run the VS on the hardware. */
+   bool pt_skip;
 };
 
 /* TCS/TES state the tessellation kernels need. The tessellation modes are

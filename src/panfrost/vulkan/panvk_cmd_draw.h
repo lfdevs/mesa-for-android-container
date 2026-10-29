@@ -315,6 +315,9 @@ struct panvk_cmd_graphics_state {
       const struct panvk_shader *shader;
       struct panvk_shader_desc_state desc;
    } gs, tcs, tes;
+   /* Item 8: the GS the last draw ran with (NULL when a pass-through GS was
+    * skipped), to re-emit the VS/FS state when that changes. */
+   const struct panvk_shader *gs_pt_last;
 #else
    /* Geometry shaders are emulated by a compute job between the vertex and
     * tiler jobs (panvk_nir_lower_gs.c). The buffers are the ones that job
