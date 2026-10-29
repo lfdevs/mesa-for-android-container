@@ -25,6 +25,9 @@ struct panvk_occlusion_query_state {
 struct panvk_prims_generated_query_state {
    uint64_t syncobj;
    uint64_t ptr;
+   /* v9 JM: primitives of direct draws counted on the CPU, added to ptr by
+    * one job at the end of the query. */
+   uint64_t cpu_count;
 };
 
 /* A pipeline statistics query has two u64 per enabled statistic, in bit

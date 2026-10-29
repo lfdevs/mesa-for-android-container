@@ -6925,9 +6925,28 @@ v9_count_draw_queries(struct panvk_cmd_buffer *cmdbuf,
    const struct panvk_pstats_query_state *q = &cmdbuf->state.gfx.pstats_query;
    const bool kernels_count = cmdbuf->state.gfx.gs.shader ||
                               cmdbuf->state.gfx.tes.shader;
-   const uint64_t prims_generated =
+   uint64_t prims_generated =
       kernels_count ? 0 : cmdbuf->state.gfx.prims_generated_query.ptr;
    uint32_t counted = 0;
+
+   /* Item 21: a direct draw without primitive restart has a CPU-known
+    * primitive count. It is summed in the command buffer and added by one
+    * job at the query end (CmdEndQueryIndexedEXT) instead of a job per draw.
+    * The sum stays within 32 bits, a draw that would overflow it counts on
+    * the GPU. */
+   if (prims_generated && !draw->indirect.buffer_dev_addr &&
+       !(draw->index.index_size && draw->index.restart_enable)) {
+      const uint32_t vm = cmdbuf->state.gfx.render.view_mask;
+      const uint64_t n =
+         (uint64_t)u_decomposed_prims_for_vertices(draw->prim,
+                                                   draw->vertex.count) *
+         draw->instance.count * (vm ? util_bitcount(vm) : 1);
+      uint64_t *sum = &cmdbuf->state.gfx.prims_generated_query.cpu_count;
+      if (n <= UINT32_MAX - *sum) {
+         *sum += n;
+         prims_generated = 0;
+      }
+   }
 
    if (q->report) {
       counted = q->mask & (PSTAT(INPUT_ASSEMBLY_VERTICES) |

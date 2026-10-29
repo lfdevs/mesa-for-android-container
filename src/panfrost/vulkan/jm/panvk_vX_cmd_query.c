@@ -306,6 +306,7 @@ panvk_per_arch(CmdBeginQueryIndexedEXT)(VkCommandBuffer commandBuffer,
 #if PAN_ARCH == 9
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
       cmd->state.gfx.prims_generated_query.ptr = report_addr;
+      cmd->state.gfx.prims_generated_query.cpu_count = 0;
       zero_queries = query_view_count(cmd, pool, query);
       break;
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
@@ -427,10 +428,36 @@ panvk_per_arch(CmdEndQueryIndexedEXT)(VkCommandBuffer commandBuffer,
       break;
    }
 #if PAN_ARCH == 9
-   case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+   case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
+      /* Item 21: the direct draws' CPU-counted primitives, as one point
+       * list draw of that many vertices (sum <= UINT32_MAX). */
+      const uint64_t n = cmd->state.gfx.prims_generated_query.cpu_count;
+      const uint64_t report = cmd->state.gfx.prims_generated_query.ptr;
+      struct pan_ptr c =
+         n && report ? panvk_cmd_alloc_dev_mem(
+                          cmd, desc, sizeof(VkDrawIndirectCommand), 16)
+                     : (struct pan_ptr){0};
+      if (c.gpu) {
+         *(VkDrawIndirectCommand *)c.cpu = (VkDrawIndirectCommand){
+            .vertexCount = (uint32_t)n,
+            .instanceCount = 1,
+         };
+         const struct panlib_update_pstats_draw_args args = {
+            .stats = report,
+            .slots = 0xfff0f,
+            .cmd = c.gpu,
+            .prim = MESA_PRIM_POINTS,
+            .view_count = 1,
+         };
+         struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmd);
+         panlib_update_pstats_draw_struct(&precomp_ctx, panlib_1d(1),
+                                          PANLIB_BARRIER_JM_BARRIER, args);
+      }
+      cmd->state.gfx.prims_generated_query.cpu_count = 0;
       cmd->state.gfx.prims_generated_query.ptr = 0;
       view_count = query_view_count(cmd, pool, query);
       break;
+   }
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
       cmd->state.gfx.xfb.queries[index] = 0;
       break;
