@@ -62,6 +62,9 @@ enum panvk_perf_knob {
     * LOAD pass waits for earlier fragment jobs only if one of them may
     * have written what the pass loads. */
    PANVK_PERF_PRELOAD_BARRIER_TRACK = 1 << 12,
+   /* Build 116. PANVK_LOGICOP_FPK: logic ops that ignore the destination
+    * (CLEAR, COPY, COPY_INVERTED, SET) keep forward pixel kill. */
+   PANVK_PERF_LOGICOP_FPK = 1 << 13,
 };
 
 extern uint32_t panvk_perf_knobs;

@@ -17,6 +17,7 @@
 
 #include "panvk_blend.h"
 #include "panvk_cmd_buffer.h"
+#include "panvk_perf_knobs.h"
 #include "panvk_device.h"
 #include "panvk_meta.h"
 #include "panvk_shader.h"
@@ -225,6 +226,27 @@ emit_blend_desc(const struct pan_blend_state *state, uint8_t rt_idx,
    }
 }
 
+/* Whether a logic op combines with the destination. CLEAR, COPY,
+ * COPY_INVERTED and SET give the same result whatever lies underneath, so
+ * forward pixel kill may drop earlier fragments (PANVK_LOGICOP_FPK=0: every
+ * logic op counts as a destination read, as 0138). */
+static bool
+logicop_reads_dest(enum pipe_logicop func)
+{
+   if (!PANVK_PERF(LOGICOP_FPK))
+      return true;
+
+   switch (func) {
+   case PIPE_LOGICOP_CLEAR:
+   case PIPE_LOGICOP_COPY:
+   case PIPE_LOGICOP_COPY_INVERTED:
+   case PIPE_LOGICOP_SET:
+      return false;
+   default:
+      return true;
+   }
+}
+
 static bool
 blend_needs_shader(const struct pan_blend_state *state, unsigned rt_idx,
                    unsigned *ff_blend_constant)
@@ -378,9 +400,11 @@ panvk_per_arch(blend_emit_descs)(struct panvk_cmd_buffer *cmdbuf,
       pan_blend_optimize_equation(&rt->equation, rt->format, bs.constants);
 
       /* A logic op reads the destination (gallium's load_dest): forward
-       * pixel kill must not drop the fragments it combines with. */
+       * pixel kill must not drop the fragments it combines with. A partial
+       * write mask is caught by pan_blend_reads_dest(). */
       blend_info->any_dest_read |=
-         bs.logicop_enable || pan_blend_reads_dest(rt->equation);
+         (bs.logicop_enable && logicop_reads_dest(bs.logicop_func)) ||
+         pan_blend_reads_dest(rt->equation);
 
       if (blend_needs_shader(&bs, i, &ff_blend_constant)) {
          nir_alu_type src0_type = fs_info->bifrost.blend[loc].type;
