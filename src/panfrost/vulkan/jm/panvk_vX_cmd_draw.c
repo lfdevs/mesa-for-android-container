@@ -6293,6 +6293,20 @@ v9_prerast_reserve_jobs(struct panvk_cmd_buffer *cmdbuf, uint32_t jobs)
 /* Jobs of one iteration, including a nested GS lowering and its draw. */
 #define V9_TESS_ITERATION_JOBS 32
 
+/* jm-v7 0142: PANVK_V9_TESS_EXACT=0 = old (direct tess draws plan
+ * iterations for chunk cuts that cannot happen, and run the VS, TCS and
+ * tessellator jobs, empty, in every iteration). */
+static bool
+v9_tess_exact_on(void)
+{
+   static int v = -1;
+   if (v < 0) {
+      const char *e = getenv("PANVK_V9_TESS_EXACT");
+      v = !(e && !strcmp(e, "0"));
+   }
+   return v;
+}
+
 /* The v9 tess arena: per-patch TCS outputs, counts and point allocations for
  * the patches of a chunk, then an index budget shared by the chunk and the
  * domain points of those indices. A patch has no more domain points than
@@ -6438,6 +6452,8 @@ v9_tess_draw(struct panvk_cmd_buffer *cmdbuf,
    const uint32_t min_keep = MAX2(
       MIN2(max_patches, idx_limit / PANVK_GPU_PRERAST_TESS_MAX_INDICES), 1);
    uint64_t iters = V9_TESS_INDIRECT_ITERATIONS;
+   /* jm-v7 0142: a direct draw whose patches fit one chunk, at any level. */
+   bool one_chunk = false;
    if (!indirect) {
       const uint32_t ppi = draw->vertex.count / ps;
       const uint64_t patches = (uint64_t)ppi * draw->instance.count;
@@ -6448,7 +6464,17 @@ v9_tess_draw(struct panvk_cmd_buffer *cmdbuf,
             : (uint64_t)draw->instance.count *
                  DIV_ROUND_UP((uint64_t)ppi, max_patches);
 
-      iters = planned + 2 * DIV_ROUND_UP(patches, min_keep);
+      /* jm-v7 0142: panlib_tess_draw() cuts a chunk at idx_limit only when
+       * its patches can pass it at the maximum level. When no chunk can
+       * (chunks hold at most max_patches), the GPU runs exactly the planned
+       * chunks, and each needs one iteration plus one per further range, so
+       * the 2 x patches / min_keep iterations for cuts would run empty.
+       * PANVK_V9_TESS_EXACT=0 = old. */
+      const bool cuts = (uint64_t)MIN2(max_patches, patches) *
+                           PANVK_GPU_PRERAST_TESS_MAX_INDICES > idx_limit;
+      const bool exact = v9_tess_exact_on();
+      one_chunk = exact && !cuts && planned == 1;
+      iters = planned + (!exact || cuts ? 2 * DIV_ROUND_UP(patches, min_keep) : 0);
       if (range)
          iters += DIV_ROUND_UP(patches * PANVK_GPU_PRERAST_TESS_MAX_INDICES,
                                range);
@@ -6603,46 +6629,58 @@ v9_tess_draw(struct panvk_cmd_buffer *cmdbuf,
       panlib_tess_step(&ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER, td.gpu,
                        tcs_stat);
 
-      /* VS over the chunk, sized by its patch job. */
-      struct v9_prerast_vs_job vsj;
-      ok = v9_prerast_vs(cmdbuf, &vs_src, arena, &vsj) &&
-           v9_prerast_indirect(cmdbuf, &vs_src, &vsj, NULL, TD(chunk_vertex),
-                               0);
-      if (!ok)
-         break;
-      v9_prerast_add_job(cmdbuf, &vsj.job);
+      /* jm-v7 0142: past the first iteration of a one-chunk draw, the step
+       * starts no chunk (vs_draw, tcs_grid and nr_patches are 0), so the VS,
+       * TCS and tessellator jobs would run empty: only the next index range
+       * is drawn. */
+      const bool next_range = one_chunk && it;
 
-      /* TCS, one workgroup per patch of the chunk. */
-      struct pan_ptr push;
-      ok = panvk_per_arch(cmd_prepare_gfx_push_uniforms)(cmdbuf, tcs_v, &push,
-                                                         1) == VK_SUCCESS;
-      if (!ok)
-         break;
-      if (shader_uses_sysval(tcs_v, graphics, gpu_prerast_params))
-         *(uint64_t *)((uint8_t *)push.cpu +
-                       shader_remapped_sysval_offset(
-                          tcs_v, sysval_offset(graphics, gpu_prerast_params))) =
-            vsj.params;
-      if (shader_uses_sysval(tcs_v, graphics, gpu_prerast_tess))
-         *(uint64_t *)((uint8_t *)push.cpu +
-                       shader_remapped_sysval_offset(
-                          tcs_v, sysval_offset(graphics, gpu_prerast_tess))) =
-            TD(p);
-      struct pan_ptr tcs_job = v9_prerast_job(
-         cmdbuf, tcs_v, tcs_desc->res_table, push.gpu, max_patches, 1, 1, true);
-      ok = tcs_job.gpu != 0;
-      if (!ok)
-         break;
-      panlib_v9_compute_job_grid(&ctx, panlib_1d(1), patch_barrier,
-                                 tcs_job.gpu, TD(tcs_grid));
-      v9_prerast_add_job(cmdbuf, &tcs_job);
+      if (!next_range) {
+         /* VS over the chunk, sized by its patch job. */
+         struct v9_prerast_vs_job vsj;
+         ok = v9_prerast_vs(cmdbuf, &vs_src, arena, &vsj) &&
+              v9_prerast_indirect(cmdbuf, &vs_src, &vsj, NULL,
+                                  TD(chunk_vertex), 0);
+         if (!ok)
+            break;
+         v9_prerast_add_job(cmdbuf, &vsj.job);
 
-      panlib_tessellate(&ctx, tess_grid, PANLIB_BARRIER_JM_BARRIER, TD(p),
-                        domain, POLY_TESS_MODE_COUNT);
+         /* TCS, one workgroup per patch of the chunk. */
+         struct pan_ptr push;
+         ok = panvk_per_arch(cmd_prepare_gfx_push_uniforms)(
+                 cmdbuf, tcs_v, &push, 1) == VK_SUCCESS;
+         if (!ok)
+            break;
+         if (shader_uses_sysval(tcs_v, graphics, gpu_prerast_params))
+            *(uint64_t *)((uint8_t *)push.cpu +
+                          shader_remapped_sysval_offset(
+                             tcs_v,
+                             sysval_offset(graphics, gpu_prerast_params))) =
+               vsj.params;
+         if (shader_uses_sysval(tcs_v, graphics, gpu_prerast_tess))
+            *(uint64_t *)((uint8_t *)push.cpu +
+                          shader_remapped_sysval_offset(
+                             tcs_v,
+                             sysval_offset(graphics, gpu_prerast_tess))) =
+               TD(p);
+         struct pan_ptr tcs_job =
+            v9_prerast_job(cmdbuf, tcs_v, tcs_desc->res_table, push.gpu,
+                           max_patches, 1, 1, true);
+         ok = tcs_job.gpu != 0;
+         if (!ok)
+            break;
+         panlib_v9_compute_job_grid(&ctx, panlib_1d(1), patch_barrier,
+                                    tcs_job.gpu, TD(tcs_grid));
+         v9_prerast_add_job(cmdbuf, &tcs_job);
+
+         panlib_tessellate(&ctx, tess_grid, PANLIB_BARRIER_JM_BARRIER, TD(p),
+                           domain, POLY_TESS_MODE_COUNT);
+      }
       panlib_tess_draw(&ctx, panlib_1d(1), PANLIB_BARRIER_JM_BARRIER, td.gpu,
                        c_invs, c_prims, prims_generated);
-      panlib_tessellate(&ctx, tess_grid, PANLIB_BARRIER_JM_BARRIER, TD(p),
-                        domain, POLY_TESS_MODE_WITH_COUNTS);
+      if (!next_range)
+         panlib_tessellate(&ctx, tess_grid, PANLIB_BARRIER_JM_BARRIER, TD(p),
+                           domain, POLY_TESS_MODE_WITH_COUNTS);
 
       /* This iteration's index range with the TES as the VS: a MALLOC_VERTEX
        * draw, or another gpu_prerast lowering when nested. */
