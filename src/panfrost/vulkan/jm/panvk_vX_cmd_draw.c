@@ -31,6 +31,7 @@
 #include "panvk_priv_bo.h"
 #include "panvk_shader.h"
 #include "panvk_v7_knobs.h"
+#include "panvk_perf_knobs.h"
 
 #include "draw_helper.h"
 #include "libpan/draw_helper_vp.h"
@@ -5133,6 +5134,8 @@ v9_prerast_job(struct panvk_cmd_buffer *cmdbuf,
       cfg.workgroup_count_x = x;
       cfg.workgroup_count_y = y;
       cfg.workgroup_count_z = z;
+      cfg.allow_merging_workgroups =
+         PANVK_PERF(V9_JM_MERGE_WG) && cs->info.cs.allow_merging_workgroups;
       cfg.task_increment = 1;
       cfg.task_axis = MALI_TASK_AXIS_Z;
       cfg.compute.resources = res_table;

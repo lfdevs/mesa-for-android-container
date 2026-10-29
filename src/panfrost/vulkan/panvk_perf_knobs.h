@@ -65,6 +65,10 @@ enum panvk_perf_knob {
    /* Build 116. PANVK_LOGICOP_FPK: logic ops that ignore the destination
     * (CLEAR, COPY, COPY_INVERTED, SET) keep forward pixel kill. */
    PANVK_PERF_LOGICOP_FPK = 1 << 13,
+   /* PANVK_V9_JM_MERGE_WG: v9 JM compute jobs (vkCmdDispatch, libpan
+    * kernels, gpu_prerast) set "Allow merging workgroups" from the shader,
+    * as CSF does. */
+   PANVK_PERF_V9_JM_MERGE_WG = 1 << 14,
 };
 
 extern uint32_t panvk_perf_knobs;

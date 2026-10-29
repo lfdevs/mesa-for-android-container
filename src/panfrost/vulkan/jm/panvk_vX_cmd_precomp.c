@@ -12,6 +12,7 @@
 #include "panvk_macros.h"
 #include "panvk_mempool.h"
 #include "panvk_precomp_cache.h"
+#include "panvk_perf_knobs.h"
 
 void
 panvk_per_arch(dispatch_precomp)(struct panvk_precomp_ctx *ctx,
@@ -83,6 +84,9 @@ panvk_per_arch(dispatch_precomp)(struct panvk_precomp_ctx *ctx,
       cfg.workgroup_count_x = grid.count[0];
       cfg.workgroup_count_y = grid.count[1];
       cfg.workgroup_count_z = grid.count[2];
+      cfg.allow_merging_workgroups =
+         PANVK_PERF(V9_JM_MERGE_WG) &&
+         shader->info.cs.allow_merging_workgroups;
       /* Same as panfrost (Valhall JM). */
       cfg.task_increment = 1;
       cfg.task_axis = MALI_TASK_AXIS_Z;

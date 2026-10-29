@@ -22,6 +22,7 @@
 #include "panvk_macros.h"
 #include "panvk_meta.h"
 #include "panvk_physical_device.h"
+#include "panvk_perf_knobs.h"
 
 #include "pan_desc.h"
 #include "pan_encoder.h"
@@ -276,6 +277,8 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
       cfg.workgroup_count_x = wg_count.x;
       cfg.workgroup_count_y = wg_count.y;
       cfg.workgroup_count_z = wg_count.z;
+      cfg.allow_merging_workgroups =
+         PANVK_PERF(V9_JM_MERGE_WG) && cs->info.cs.allow_merging_workgroups;
       /* Same as panfrost (Valhall JM). */
       cfg.task_increment = 1;
       cfg.task_axis = MALI_TASK_AXIS_Z;
