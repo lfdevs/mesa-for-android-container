@@ -16,6 +16,9 @@ on:
 permissions:
   contents: write
 
+env:
+  MESA_SOURCE_REF: ${{ github.event.inputs.tag }}
+
 jobs:
   debian-trixie:
     runs-on: ubuntu-24.04-arm
@@ -47,19 +50,32 @@ jobs:
           ccache --zero-stats
           ccache --show-stats
 
-      - name: Clone repository
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Configure Git
         run: |
-          cd ~
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          git clone -b ${{ github.event.inputs.tag }} --depth 1 ${{ github.server_url }}/${{ github.repository }}.git
 
       - name: Set release name suffix
         shell: bash
         run: |
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
+          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
+          checked_out_tag=
+          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
+            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
+            checked_out_tag="$requested_ref"
+          fi
+          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+            build_date="${BASH_REMATCH[2]}"
+          fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_debian_trixie_arm64" >> "$GITHUB_ENV"
 
       - name: Build Mesa
@@ -67,7 +83,7 @@ jobs:
         run: |
           export CCACHE_DIR=/root/.ccache
           echo "Building Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           meson setup build/ \
               --prefix=/usr \
               -Dplatforms=x11,wayland \
@@ -108,7 +124,7 @@ jobs:
         shell: bash
         run: |
           echo "Packaging Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           mkdir /tmp/mesa-install-tmp
           DESTDIR=/tmp/mesa-install-tmp meson install -C build/
           tar -zcvf turnip_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
@@ -123,8 +139,8 @@ jobs:
         with:
           name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ~/mesa-for-android-container/*.tar.gz
-            ~/mesa-for-android-container/sha256sums.txt
+            ${{ github.workspace }}/*.tar.gz
+            ${{ github.workspace }}/sha256sums.txt
           retention-days: 90
 
   ubuntu-noble:
@@ -154,19 +170,32 @@ jobs:
           ccache --zero-stats
           ccache --show-stats
 
-      - name: Clone repository
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Configure Git
         run: |
-          cd ~
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          git clone -b ${{ github.event.inputs.tag }} --depth 1 ${{ github.server_url }}/${{ github.repository }}.git
 
       - name: Set release name suffix
         shell: bash
         run: |
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
+          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
+          checked_out_tag=
+          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
+            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
+            checked_out_tag="$requested_ref"
+          fi
+          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+            build_date="${BASH_REMATCH[2]}"
+          fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_ubuntu_noble_arm64" >> "$GITHUB_ENV"
 
       - name: Build Mesa
@@ -175,7 +204,7 @@ jobs:
           export CCACHE_DIR=~/.ccache
           export LLVM_CONFIG=/usr/lib/llvm-20/bin/llvm-config
           echo "Building Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           meson setup build/ \
               --prefix=/usr \
               -Dplatforms=x11,wayland \
@@ -216,7 +245,7 @@ jobs:
         shell: bash
         run: |
           echo "Packaging Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           sudo mkdir /tmp/mesa-install-tmp
           sudo DESTDIR=/tmp/mesa-install-tmp meson install -C build/
           sudo tar -zcvf turnip_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
@@ -233,8 +262,8 @@ jobs:
         with:
           name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ~/mesa-for-android-container/*.tar.gz
-            ~/mesa-for-android-container/sha256sums.txt
+            ${{ github.workspace }}/*.tar.gz
+            ${{ github.workspace }}/sha256sums.txt
           retention-days: 90
 
   ubuntu-questing:
@@ -267,19 +296,32 @@ jobs:
           ccache --zero-stats
           ccache --show-stats
 
-      - name: Clone repository
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Configure Git
         run: |
-          cd ~
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          git clone -b ${{ github.event.inputs.tag }} --depth 1 ${{ github.server_url }}/${{ github.repository }}.git
 
       - name: Set release name suffix
         shell: bash
         run: |
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
+          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
+          checked_out_tag=
+          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
+            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
+            checked_out_tag="$requested_ref"
+          fi
+          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+            build_date="${BASH_REMATCH[2]}"
+          fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_ubuntu_questing_arm64" >> "$GITHUB_ENV"
 
       - name: Build Mesa
@@ -288,7 +330,7 @@ jobs:
           export CCACHE_DIR=/root/.ccache
           export LLVM_CONFIG=/usr/lib/llvm-20/bin/llvm-config
           echo "Building Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           meson setup build/ \
               --prefix=/usr \
               -Dplatforms=x11,wayland \
@@ -329,7 +371,7 @@ jobs:
         shell: bash
         run: |
           echo "Packaging Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           mkdir /tmp/mesa-install-tmp
           DESTDIR=/tmp/mesa-install-tmp meson install -C build/
           tar -zcvf turnip_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
@@ -344,8 +386,8 @@ jobs:
         with:
           name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ~/mesa-for-android-container/*.tar.gz
-            ~/mesa-for-android-container/sha256sums.txt
+            ${{ github.workspace }}/*.tar.gz
+            ${{ github.workspace }}/sha256sums.txt
           retention-days: 90
 
   ubuntu-resolute:
@@ -378,19 +420,32 @@ jobs:
           ccache --zero-stats
           ccache --show-stats
 
-      - name: Clone repository
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Configure Git
         run: |
-          cd ~
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          git clone -b ${{ github.event.inputs.tag }} --depth 1 ${{ github.server_url }}/${{ github.repository }}.git
 
       - name: Set release name suffix
         shell: bash
         run: |
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
+          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
+          checked_out_tag=
+          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
+            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
+            checked_out_tag="$requested_ref"
+          fi
+          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+            build_date="${BASH_REMATCH[2]}"
+          fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_ubuntu_resolute_arm64" >> "$GITHUB_ENV"
 
       - name: Build Mesa
@@ -399,7 +454,7 @@ jobs:
           export CCACHE_DIR=/root/.ccache
           export LLVM_CONFIG=/usr/lib/llvm-21/bin/llvm-config
           echo "Building Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           meson setup build/ \
               --prefix=/usr \
               -Dplatforms=x11,wayland \
@@ -440,7 +495,7 @@ jobs:
         shell: bash
         run: |
           echo "Packaging Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           mkdir /tmp/mesa-install-tmp
           DESTDIR=/tmp/mesa-install-tmp meson install -C build/
           tar -zcvf turnip_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
@@ -455,8 +510,8 @@ jobs:
         with:
           name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ~/mesa-for-android-container/*.tar.gz
-            ~/mesa-for-android-container/sha256sums.txt
+            ${{ github.workspace }}/*.tar.gz
+            ${{ github.workspace }}/sha256sums.txt
           retention-days: 90
 
   fedora-43:
@@ -490,19 +545,32 @@ jobs:
           ccache --zero-stats
           ccache --show-stats
 
-      - name: Clone repository
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Configure Git
         run: |
-          cd ~
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          git clone -b ${{ github.event.inputs.tag }} --depth 1 ${{ github.server_url }}/${{ github.repository }}.git
 
       - name: Set release name suffix
         shell: bash
         run: |
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
+          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
+          checked_out_tag=
+          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
+            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
+            checked_out_tag="$requested_ref"
+          fi
+          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+            build_date="${BASH_REMATCH[2]}"
+          fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_fedora_43_arm64" >> "$GITHUB_ENV"
 
       - name: Build Mesa
@@ -510,7 +578,7 @@ jobs:
         run: |
           export CCACHE_DIR=/root/.ccache
           echo "Building Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           meson setup build/ \
               --prefix=/usr \
               -Dplatforms=x11,wayland \
@@ -551,7 +619,7 @@ jobs:
         shell: bash
         run: |
           echo "Packaging Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           mkdir /tmp/mesa-install-tmp
           DESTDIR=/tmp/mesa-install-tmp meson install -C build/
           tar -zcvf turnip_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
@@ -566,8 +634,8 @@ jobs:
         with:
           name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ~/mesa-for-android-container/*.tar.gz
-            ~/mesa-for-android-container/sha256sums.txt
+            ${{ github.workspace }}/*.tar.gz
+            ${{ github.workspace }}/sha256sums.txt
           retention-days: 90
 
   fedora-44:
@@ -601,19 +669,32 @@ jobs:
           ccache --zero-stats
           ccache --show-stats
 
-      - name: Clone repository
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Configure Git
         run: |
-          cd ~
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          git clone -b ${{ github.event.inputs.tag }} --depth 1 ${{ github.server_url }}/${{ github.repository }}.git
 
       - name: Set release name suffix
         shell: bash
         run: |
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
+          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
+          checked_out_tag=
+          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
+            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
+            checked_out_tag="$requested_ref"
+          fi
+          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+            build_date="${BASH_REMATCH[2]}"
+          fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_fedora_44_arm64" >> "$GITHUB_ENV"
 
       - name: Build Mesa
@@ -621,7 +702,7 @@ jobs:
         run: |
           export CCACHE_DIR=/root/.ccache
           echo "Building Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           meson setup build/ \
               --prefix=/usr \
               -Dplatforms=x11,wayland \
@@ -662,7 +743,7 @@ jobs:
         shell: bash
         run: |
           echo "Packaging Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           mkdir /tmp/mesa-install-tmp
           DESTDIR=/tmp/mesa-install-tmp meson install -C build/
           tar -zcvf turnip_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
@@ -677,8 +758,8 @@ jobs:
         with:
           name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ~/mesa-for-android-container/*.tar.gz
-            ~/mesa-for-android-container/sha256sums.txt
+            ${{ github.workspace }}/*.tar.gz
+            ${{ github.workspace }}/sha256sums.txt
           retention-days: 90
 
   archlinux:
@@ -720,25 +801,37 @@ jobs:
             ccache --show-stats
           '
 
-      - name: Clone repository
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          repository: lfdevs/archlinuxarm-PKGBUILDs
+          ref: ${{ github.event.inputs.tag == 'turnip-main' && 'turnip' || github.event.inputs.tag }}
+          path: archlinuxarm-PKGBUILDs
+          fetch-depth: 0
+
+      - name: Configure Git
         run: |
+          sudo chown -R runner:runner "${{ github.workspace }}/archlinuxarm-PKGBUILDs"
           sudo -u runner bash -c '
-            cd /home/runner
             git config --global user.email "actions@github.com"
             git config --global user.name "GitHub Actions"
-            if [ "${{ github.event.inputs.tag }}" == "turnip-main" ]; then
-              git clone -b turnip --depth 1 https://github.com/lfdevs/archlinuxarm-PKGBUILDs.git
-            else
-              git clone -b ${{ github.event.inputs.tag }} --depth 1 https://github.com/lfdevs/archlinuxarm-PKGBUILDs.git
-            fi
           '
 
       - name: Set release name suffix
         shell: bash
         run: |
-          cd /home/runner/archlinuxarm-PKGBUILDs/extra/mesa
+          cd "${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa"
           version=$(awk -F= '/^pkgver=/{print $2; exit}' PKGBUILD)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
+          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
+          checked_out_tag=
+          if git -C "${{ github.workspace }}/archlinuxarm-PKGBUILDs" show-ref --verify --quiet "refs/tags/$requested_ref" \
+            && ! git -C "${{ github.workspace }}/archlinuxarm-PKGBUILDs" symbolic-ref --quiet HEAD >/dev/null; then
+            checked_out_tag="$requested_ref"
+          fi
+          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+            build_date="${BASH_REMATCH[2]}"
+          fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-devel-${build_date}_archlinux_arm64" >> "$GITHUB_ENV"
 
       - name: Build Mesa
@@ -747,7 +840,7 @@ jobs:
           sudo -u runner bash -c '
             export CCACHE_DIR=/home/runner/.ccache
             echo "Building Mesa..."
-            cd /home/runner/archlinuxarm-PKGBUILDs/extra/mesa
+            cd "${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa"
             makepkg -s --noconfirm
             echo "Mesa build completed successfully!"
           '
@@ -762,7 +855,7 @@ jobs:
       - name: Rename packages
         shell: bash
         run: |
-          cd /home/runner/archlinuxarm-PKGBUILDs/extra/mesa
+          cd "${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa"
           for f in vulkan-freedreno*.pkg.tar.xz; do
             [[ -f "$f" ]] || continue
             newname="${f//:/-}"
@@ -772,7 +865,7 @@ jobs:
       - name: Calculate checksums
         shell: bash
         run: |
-          cd /home/runner/archlinuxarm-PKGBUILDs/extra/mesa
+          cd "${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa"
           echo "Calculating sha256 checksums..."
           find . -maxdepth 1 \( -name "vulkan-freedreno*.pkg.tar.xz" \) -type f -printf "%P\0" | xargs -0 sha256sum | sort -k2 > sha256sums.txt
           cat sha256sums.txt && echo
@@ -782,8 +875,8 @@ jobs:
         with:
           name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            /home/runner/archlinuxarm-PKGBUILDs/extra/mesa/vulkan-freedreno*.pkg.tar.xz
-            /home/runner/archlinuxarm-PKGBUILDs/extra/mesa/sha256sums.txt
+            ${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa/vulkan-freedreno*.pkg.tar.xz
+            ${{ github.workspace }}/archlinuxarm-PKGBUILDs/extra/mesa/sha256sums.txt
           retention-days: 90
 
   void-linux:
@@ -824,26 +917,39 @@ jobs:
           ccache --max-size=2G
           ccache --zero-stats
 
-      - name: Clone repository
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Configure Git
         run: |
-          cd ~
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          git clone -b ${{ github.event.inputs.tag }} --depth 1 ${{ github.server_url }}/${{ github.repository }}.git
 
       - name: Set release name suffix
         shell: bash
         run: |
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
+          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
+          checked_out_tag=
+          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
+            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
+            checked_out_tag="$requested_ref"
+          fi
+          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+            build_date="${BASH_REMATCH[2]}"
+          fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_void_arm64" >> "$GITHUB_ENV"
 
       - name: Build Mesa
         shell: bash
         run: |
           export CCACHE_DIR=/root/.ccache
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           meson setup build/ \
             --prefix=/usr \
             -Dplatforms=x11,wayland \
@@ -883,7 +989,7 @@ jobs:
         shell: bash
         run: |
           echo "Packaging Mesa..."
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           mkdir /tmp/mesa-install-tmp
           DESTDIR=/tmp/mesa-install-tmp meson install -C build/
           tar -zcvf turnip_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
@@ -898,8 +1004,8 @@ jobs:
         with:
           name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ~/mesa-for-android-container/*.tar.gz
-            ~/mesa-for-android-container/sha256sums.txt
+            ${{ github.workspace }}/*.tar.gz
+            ${{ github.workspace }}/sha256sums.txt
           retention-days: 90
 
   alpine-324:
@@ -914,26 +1020,39 @@ jobs:
           restore-keys: |
             ccache-${{ runner.os }}-${{ runner.arch }}-alpine-
 
-      - name: Clone repository
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Configure Git
         run: |
-          cd ~
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          git clone -b ${{ github.event.inputs.tag }} --depth 1 ${{ github.server_url }}/${{ github.repository }}.git
 
       - name: Set release name suffix
         shell: bash
         run: |
-          cd ~/mesa-for-android-container
+          cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
+          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
+          checked_out_tag=
+          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
+            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
+            checked_out_tag="$requested_ref"
+          fi
+          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+            build_date="${BASH_REMATCH[2]}"
+          fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_alpine_3.24_arm64" >> "$GITHUB_ENV"
 
       - name: Build and Package Mesa in Alpine Container
         run: |
           mkdir -p ~/.ccache
           docker run --privileged --rm \
-            -v /home/runner/mesa-for-android-container:/mesa-for-android-container \
+            -v "$GITHUB_WORKSPACE:/mesa-for-android-container" \
             -v /home/runner/.ccache:/root/.ccache \
             -e CCACHE_DIR=/root/.ccache \
             -e MESA_RELEASE_NAME_SUFFIX=${{ env.MESA_RELEASE_NAME_SUFFIX }} \
@@ -1005,8 +1124,8 @@ jobs:
         with:
           name: turnip_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ~/mesa-for-android-container/*.tar.gz
-            ~/mesa-for-android-container/sha256sums.txt
+            ${{ github.workspace }}/*.tar.gz
+            ${{ github.workspace }}/sha256sums.txt
           retention-days: 90
 
   draft-release:
