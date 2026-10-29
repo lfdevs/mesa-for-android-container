@@ -69,6 +69,10 @@ enum panvk_perf_knob {
     * kernels, gpu_prerast) set "Allow merging workgroups" from the shader,
     * as CSF does. */
    PANVK_PERF_V9_JM_MERGE_WG = 1 << 14,
+   /* PANVK_PRERAST_MERGE_WG: v9+ gpu_prerast kernels (lowered VS/TES, GS,
+    * polygon), one invocation per workgroup, are compiled for and
+    * dispatched with "Allow merging workgroups". */
+   PANVK_PERF_PRERAST_MERGE_WG = 1 << 15,
 };
 
 extern uint32_t panvk_perf_knobs;

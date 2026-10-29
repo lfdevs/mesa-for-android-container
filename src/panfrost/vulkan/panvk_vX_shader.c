@@ -1493,6 +1493,38 @@ panvk_gpu_prerast_is_restart(nir_builder *b, nir_def *restart_en,
    return nir_iand(b, restart_en, nir_ieq_imm(b, idx, 0xffffffff));
 }
 
+/* 116: the gpu_prerast kernels (lowered VS/TES, polygon, GS kernel) run one
+ * invocation per 1x1x1 workgroup, so without merging each invocation takes
+ * a whole warp. When the kernel has no workgroup barrier, shared memory or
+ * subgroup op, compile it with the merged-workgroup divergence options (the
+ * workgroup ID, from which every kernel derives its vertex/primitive, is
+ * then divergent) so it may be dispatched with "Allow merging workgroups",
+ * as vkCmdDispatch shaders are. Descriptor indices need no extra
+ * non-uniform lowering: an index that is dynamically uniform in the source
+ * stage is the same for every invocation of the dispatch.
+ * PANVK_PRERAST_MERGE_WG=0: one invocation per warp, as before.
+ */
+static bool
+panvk_gpu_prerast_merge_wg(nir_shader *nir)
+{
+   if (!PANVK_PERF(PRERAST_MERGE_WG))
+      return false;
+
+   assert(nir->info.stage == MESA_SHADER_COMPUTE);
+   assert(nir->info.workgroup_size[0] == 1 &&
+          nir->info.workgroup_size[1] == 1 &&
+          nir->info.workgroup_size[2] == 1);
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+   if (!valhall_can_merge_workgroups(nir))
+      return false;
+
+   nir->options = pan_get_nir_shader_compiler_options(
+      PAN_ARCH, MESA_SHADER_COMPUTE, true);
+   nir_foreach_function_impl(impl, nir)
+      nir_progress(true, impl, ~nir_metadata_divergence);
+   return true;
+}
+
 static nir_shader *
 panvk_gpu_prerast_polygon_nir(const nir_shader_compiler_options *options,
                               uint32_t record_stride, uint32_t pos_offset)
@@ -2624,6 +2656,12 @@ panvk_hash_state(struct vk_physical_device *device,
       panvk_v7_knob_texel_width(),
    };
    _mesa_blake3_update(&blake3_ctx, v7_knobs, sizeof(v7_knobs));
+#endif
+#if PAN_ARCH >= 9
+   /* 116: gpu_prerast kernels compiled for merged workgroups or not. */
+   const bool prerast_merge_wg = PANVK_PERF(PRERAST_MERGE_WG);
+   _mesa_blake3_update(&blake3_ctx, &prerast_merge_wg,
+                       sizeof(prerast_merge_wg));
 #endif
 #if PAN_ARCH < 9
    /* jm-v7 108: outside the state != NULL block, like the compile-side
@@ -4796,6 +4834,15 @@ panvk_compile_shader(struct panvk_device *dev,
          (want_prerast || writes_vp) ? PANVK_VS_VARIANT_GPU_PASSTHROUGH
                                      : PANVK_VS_VARIANT_HW;
       struct panvk_gpu_prerast_out_types out_types = {0};
+      /* v9 JM: a merged lowered VS fetched instance-rate attributes with a
+       * divisor from the wrong element (PanProbe draw_params 'divisor', 1
+       * vertex x 6 instances, 2 of 6 instances wrong on the G57; CSF passes
+       * the same case), so a v9 VS that reads vertex inputs is not merged.
+       * TES, GS and polygon kernels fetch no vertex attributes.
+       */
+      const bool vs_fetches_attribs = PAN_ARCH == 9 &&
+                                      info->stage == MESA_SHADER_VERTEX &&
+                                      info->nir->info.inputs_read != 0;
 #else
       const enum panvk_vs_variant last_variant = PANVK_VS_VARIANT_HW;
 #endif
@@ -4975,11 +5022,18 @@ panvk_compile_shader(struct panvk_device *dev,
 
          variant->own_bin = true;
 
+#if PAN_ARCH >= 9
+         const bool merge_wg = gpu_lower && !vs_fetches_attribs &&
+                               panvk_gpu_prerast_merge_wg(nir);
+#endif
+
          result = panvk_compile_nir(dev, nir, info->flags, &inputs, state,
                                     noperspective_varyings,
                                     &shader->desc_info, variant);
 
 #if PAN_ARCH >= 9
+         if (result == VK_SUCCESS && merge_wg)
+            variant->info.cs.allow_merging_workgroups = true;
          if (result == VK_SUCCESS && gpu_lower)
             shader->gpu_prerast.lowered_vs_compiled = true;
          if (result == VK_SUCCESS && v == PANVK_VS_VARIANT_GPU_PASSTHROUGH)
@@ -5019,6 +5073,7 @@ panvk_compile_shader(struct panvk_device *dev,
             nir_shader_intrinsics_pass(nir, panvk_lower_cull_dist_flags_intr,
                                        nir_metadata_control_flow, NULL);
          }
+         const bool merge_wg = panvk_gpu_prerast_merge_wg(nir);
          result = panvk_compile_nir(dev, nir, info->flags, &poly_inputs, state,
                                     NULL, &shader->desc_info, variant);
          ralloc_free(nir);
@@ -5026,6 +5081,7 @@ panvk_compile_shader(struct panvk_device *dev,
             panvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
             return result;
          }
+         variant->info.cs.allow_merging_workgroups = merge_wg;
          shader->gpu_prerast.polygon_compiled = true;
       }
 #endif
@@ -5100,12 +5156,14 @@ panvk_compile_shader(struct panvk_device *dev,
       k_inputs.varying_layout = NULL;
       k_inputs.view_mask = 0;
       kernel->own_bin = true;
+      const bool merge_wg = panvk_gpu_prerast_merge_wg(nir);
       result = panvk_compile_nir(dev, nir, info->flags, &k_inputs, state, NULL,
                                  &shader->desc_info, kernel);
       if (result != VK_SUCCESS) {
          panvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
          return result;
       }
+      kernel->info.cs.allow_merging_workgroups = merge_wg;
       gs->kernel_compiled = true;
       break;
    }
