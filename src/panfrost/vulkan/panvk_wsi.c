@@ -764,10 +764,18 @@ panvk_wsi_init(struct panvk_physical_device *physical_device)
     * each read, and on kbase (X6 Pro, v11) that costs more than the
     * uncached read it saves: D3D11 FL 11_1 at 640x360 257 fps cached vs
     * 831 uncached, the cube 255 vs 271, SquidRoom equal.  So the uncached
-    * buffer is the default again; PANVK_WSI_SW_CACHED=1 reads cached.
+    * buffer was the default again (0160).  On the MediaTek v14 SM-X946B the
+    * opposite holds: D3D11 cube 258 fps uncached vs 733 cached (116: 766),
+    * and v13 lost the same way from 120 on (cube 964 on 118, ~600 after).
+    * An automatic choice (timing an invalidate + frame read of each type at
+    * the first swapchain) picked cached on the X6 Pro too, where FL 11_1
+    * runs 470 vs 800 fps, so the cost is not in the CPU read alone.  Default
+    * by arch: cached on v13+, uncached below.  PANVK_WSI_SW_CACHED=1/0
+    * forces it.
     */
-   physical_device->wsi_device.sw_cached_noncoherent =
-      debug_get_bool_option("PANVK_WSI_SW_CACHED", false);
+   physical_device->wsi_device.sw_cached_noncoherent = debug_get_bool_option(
+      "PANVK_WSI_SW_CACHED",
+      pan_arch(physical_device->kmod.dev->props.gpu_id) >= 13);
 
    /* MIT-SHM sw present: the event thread collects each put's GetGeometry
     * reply, so the present thread copies and sends the next frame while
