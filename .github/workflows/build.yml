@@ -129,8 +129,8 @@ jobs:
         with:
           name: mesa-for-android-container_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ${{ github.workspace }}/*.tar.gz
-            ${{ github.workspace }}/sha256sums.txt
+            *.tar.gz
+            sha256sums.txt
           retention-days: 90
 
   ubuntu-noble:
@@ -245,8 +245,8 @@ jobs:
         with:
           name: mesa-for-android-container_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ${{ github.workspace }}/*.tar.gz
-            ${{ github.workspace }}/sha256sums.txt
+            *.tar.gz
+            sha256sums.txt
           retention-days: 90
 
   ubuntu-questing:
@@ -362,8 +362,8 @@ jobs:
         with:
           name: mesa-for-android-container_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ${{ github.workspace }}/*.tar.gz
-            ${{ github.workspace }}/sha256sums.txt
+            *.tar.gz
+            sha256sums.txt
           retention-days: 90
 
   ubuntu-resolute:
@@ -479,8 +479,8 @@ jobs:
         with:
           name: mesa-for-android-container_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ${{ github.workspace }}/*.tar.gz
-            ${{ github.workspace }}/sha256sums.txt
+            *.tar.gz
+            sha256sums.txt
           retention-days: 90
 
   fedora-43:
@@ -596,8 +596,8 @@ jobs:
         with:
           name: mesa-for-android-container_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ${{ github.workspace }}/*.tar.gz
-            ${{ github.workspace }}/sha256sums.txt
+            *.tar.gz
+            sha256sums.txt
           retention-days: 90
 
   fedora-44:
@@ -713,8 +713,8 @@ jobs:
         with:
           name: mesa-for-android-container_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ${{ github.workspace }}/*.tar.gz
-            ${{ github.workspace }}/sha256sums.txt
+            *.tar.gz
+            sha256sums.txt
           retention-days: 90
 
   archlinux:
@@ -951,8 +951,8 @@ jobs:
         with:
           name: mesa-for-android-container_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ${{ github.workspace }}/*.tar.gz
-            ${{ github.workspace }}/sha256sums.txt
+            *.tar.gz
+            sha256sums.txt
           retention-days: 90
 
   alpine-324:
@@ -1064,8 +1064,8 @@ jobs:
         with:
           name: mesa-for-android-container_${{ env.MESA_RELEASE_NAME_SUFFIX }}
           path: |
-            ${{ github.workspace }}/*.tar.gz
-            ${{ github.workspace }}/sha256sums.txt
+            *.tar.gz
+            sha256sums.txt
           retention-days: 90
 
   draft-release:
