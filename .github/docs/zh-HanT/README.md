@@ -43,7 +43,7 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 |    Fedora 43     |             [25.2.7-4.fc43](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-25.2.7-4.fc43-adreno)             |               [turnip-25.2.7-4.fc43](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-25.2.7-4.fc43)                |
 |    Arch Linux    |               [27.0.0-91](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025-r1)               |              [turnip-27.0.0-90](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025)              |
 
-若需要 Termux native 版本，請使用該 PR 的建置產物：<https://github.com/lfdevs/termux-packages/pull/25>
+Termux native 版本可在另一個儲存庫的 Releases 中取得：<https://github.com/lfdevs/termux-packages/releases/latest>
 
 ### 直接解壓
 
@@ -122,10 +122,14 @@ MESA_LOADER_DRIVER_OVERRIDE=kgsl
 ```
 
 > [!TIP]
-> 若執行某些程式或遊戲時出現畫面撕裂問題，可新增以下兩個環境變數以強制開啟垂直同步：
-> ```bash
-> vblank_mode=3 MESA_VK_WSI_PRESENT_MODE=mailbox
-> ```
+>
+> - 若執行某些程式或遊戲時出現畫面撕裂問題，可新增以下兩個環境變數以強制開啟垂直同步：
+>
+>   ```bash
+>   vblank_mode=3 MESA_VK_WSI_PRESENT_MODE=mailbox
+>   ```
+>
+> - `27.0.0-devel-20261025` 及以上版本預設為 X11 和 XWayland 啟用 [present wait fence](https://github.com/lfdevs/mesa-for-android-container/pull/96)，以避免某些應用程式或遊戲出現畫面撕裂問題，這可能會影響極限效能。如果你不需要此功能，可以設定 `MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE=1` 來停用它。
 
 ## 開發
 如果你是開發者，想要建置本專案的驅動程式或貢獻程式碼，請參閱[開發文件](../common/development.md)。

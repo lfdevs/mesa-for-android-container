@@ -43,7 +43,7 @@ Depending on your Linux distribution, go to [Releases](https://github.com/lfdevs
 |     Fedora 43      |             [25.2.7-4.fc43](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-25.2.7-4.fc43-adreno)             |               [turnip-25.2.7-4.fc43](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-25.2.7-4.fc43)                |
 |     Arch Linux     |               [27.0.0-91](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025-r1)               |              [turnip-27.0.0-90](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025)              |
 
-If you need the Termux native version, please use the build artifacts from this PR: <https://github.com/lfdevs/termux-packages/pull/25>
+The Termux native version is available in the Releases of the other repository: <https://github.com/lfdevs/termux-packages/releases/latest>
 
 ### Direct Extraction
 
@@ -122,10 +122,14 @@ MESA_LOADER_DRIVER_OVERRIDE=kgsl
 ```
 
 > [!TIP]
-> If screen tearing issues occur when running certain programs or games, you can add the following two environment variables to force-enable vertical sync:
-> ```bash
-> vblank_mode=3 MESA_VK_WSI_PRESENT_MODE=mailbox
-> ```
+>
+> - If screen tearing issues occur when running certain programs or games, you can add the following two environment variables to force-enable vertical sync:
+>
+>   ```bash
+>   vblank_mode=3 MESA_VK_WSI_PRESENT_MODE=mailbox
+>   ```
+>
+> - Versions `27.0.0-devel-20261025` and later enable [present wait fence](https://github.com/lfdevs/mesa-for-android-container/pull/96) by default for X11 and XWayland to avoid screen tearing in some applications and games. This may affect peak performance. If you do not need this feature, set `MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE=1`.
 
 ## Development
 If you are a developer and want to build the drivers from this project or contribute code, please refer to the [development documentation](docs/common/development.md).
