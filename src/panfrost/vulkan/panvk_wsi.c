@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "util/u_debug.h"
+
 #if defined(HAVE_PAN_KMOD_KBASE)
 #include "lib/kmod/kbase_kmod.h"
 #endif
@@ -757,12 +759,15 @@ panvk_wsi_init(struct panvk_physical_device *physical_device)
       panvk_can_present_on_device;
 
    /* The sw path reads every frame back on the CPU.  Without IO coherency
-    * the only coherent host-visible type is the uncached one, so read
-    * through the cached type and invalidate instead.
-    * PANVK_WSI_SW_CACHED=0 keeps the uncached buffer.
+    * the only coherent host-visible type is the uncached one.  Reading
+    * through the cached type needs a DC CIVAC over the whole frame before
+    * each read, and on kbase (X6 Pro, v11) that costs more than the
+    * uncached read it saves: D3D11 FL 11_1 at 640x360 257 fps cached vs
+    * 831 uncached, the cube 255 vs 271, SquidRoom equal.  So the uncached
+    * buffer is the default again; PANVK_WSI_SW_CACHED=1 reads cached.
     */
    physical_device->wsi_device.sw_cached_noncoherent =
-      PANVK_PERF(WSI_SW_CACHED);
+      debug_get_bool_option("PANVK_WSI_SW_CACHED", false);
 
    /* MIT-SHM sw present: the event thread collects each put's GetGeometry
     * reply, so the present thread copies and sends the next frame while
