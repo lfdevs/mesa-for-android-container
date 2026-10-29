@@ -1037,6 +1037,9 @@ bc_xcode_wg(uint32_t wg[2])
    wg[1] = cached[1];
 }
 
+/* Set on the BC transcoder prewarm threads (item 7). */
+static thread_local bool bc_prewarm_worker;
+
 /* Shader of a transcoded (panvk_bc_xcoded()) image. */
 enum bc_xcode_shader {
    BC_XCODE_ETC2,   /* BC1-BC5 -> ETC2/EAC, panvk_bc_etc2.comp */
@@ -1091,6 +1094,13 @@ get_bc_xcode_pipeline(struct panvk_device *dev, enum bc_xcode_shader shader,
    };
    bc_xcode_wg(key.wg);
    VkPipeline cached = vk_meta_lookup_pipeline(&dev->meta, &key, sizeof(key));
+   /* Item 7: a compile started at image creation is waited for, not
+    * repeated. The worker itself never waits. */
+   if (cached == VK_NULL_HANDLE && !bc_prewarm_worker && mode < 32 &&
+       (p_atomic_read(&dev->bc.prewarm_started) & BITFIELD_BIT(mode))) {
+      util_queue_fence_wait(&dev->bc.prewarm_fence[mode]);
+      cached = vk_meta_lookup_pipeline(&dev->meta, &key, sizeof(key));
+   }
    if (cached != VK_NULL_HANDLE) {
       *pipeline_out = cached;
       return VK_SUCCESS;
@@ -1136,6 +1146,79 @@ get_bc_xcode_pipeline(struct panvk_device *dev, enum bc_xcode_shader shader,
 
    return vk_meta_create_compute_pipeline(&dev->vk, &dev->meta, &info, &key,
                                           sizeof(key), pipeline_out);
+}
+
+/* Item 7 (perf plan): the transcoder pipelines of a BC image's mode are
+ * compiled on a background thread from the image's creation (the first
+ * image of each mode), so a level load that creates several BC formats
+ * compiles them in parallel and before the uploads are recorded. A
+ * recording that needs one waits for it in get_bc_xcode_pipeline().
+ * PANVK_BC_PREWARM=0 keeps the compile at the first upload. */
+struct bc_prewarm_job {
+   struct panvk_device *dev;
+   enum bc_xcode_shader shader;
+   uint32_t mode;
+};
+
+static void
+bc_prewarm_run(void *data, void *gdata, int thread_index)
+{
+   struct bc_prewarm_job *job = data;
+   VkPipelineLayout layout;
+   VkPipeline pipeline;
+
+   bc_prewarm_worker = true;
+   get_bc_xcode_pipeline(job->dev, job->shader, job->mode, false, &layout,
+                         &pipeline);
+   if (job->shader == BC_XCODE_ETC2)
+      get_bc_xcode_pipeline(job->dev, job->shader, job->mode, true, &layout,
+                            &pipeline);
+}
+
+static void
+bc_prewarm_free(void *data, void *gdata, int thread_index)
+{
+   free(data);
+}
+
+void
+panvk_per_arch(bc_xcode_prewarm)(struct panvk_device *dev,
+                                 const struct panvk_image *img)
+{
+   if (!panvk_bc_xcoded(img) || !debug_get_bool_option("PANVK_BC_PREWARM", true))
+      return;
+
+   const uint32_t mode = bc_xcode_mode(img->vk.format);
+   if (mode >= ARRAY_SIZE(dev->bc.prewarm_fence) ||
+       (p_atomic_read(&dev->bc.prewarm_started) & BITFIELD_BIT(mode)))
+      return;
+
+   simple_mtx_lock(&dev->bc.prewarm_lock);
+   if (dev->bc.prewarm_started & BITFIELD_BIT(mode)) {
+      simple_mtx_unlock(&dev->bc.prewarm_lock);
+      return;
+   }
+   struct bc_prewarm_job *job = malloc(sizeof(*job));
+   if (!dev->bc.prewarm_queue_ok) {
+      /* 3 threads: the 4-5 lowmem modes of a typical game in two rounds,
+       * leaving cores for the application's own loading threads. */
+      for (unsigned i = 0; i < ARRAY_SIZE(dev->bc.prewarm_fence); i++)
+         util_queue_fence_init(&dev->bc.prewarm_fence[i]);
+      dev->bc.prewarm_queue_ok =
+         util_queue_init(&dev->bc.prewarm_queue, "panvk_bcpre", 16, 3,
+                         UTIL_QUEUE_INIT_RESIZE_IF_FULL, NULL);
+   }
+   if (job && dev->bc.prewarm_queue_ok) {
+      *job = (struct bc_prewarm_job){dev, bc_xcode_shader(img), mode};
+      util_queue_add_job(&dev->bc.prewarm_queue, job,
+                         &dev->bc.prewarm_fence[mode], bc_prewarm_run,
+                         bc_prewarm_free, 0);
+      p_atomic_set(&dev->bc.prewarm_started,
+                   dev->bc.prewarm_started | BITFIELD_BIT(mode));
+   } else {
+      free(job);
+   }
+   simple_mtx_unlock(&dev->bc.prewarm_lock);
 }
 
 static uint64_t bc_eac_lut_addr(struct panvk_device *dev, uint32_t mode);
@@ -1580,6 +1663,11 @@ panvk_per_arch(device_bc_finish)(struct panvk_device *dev)
    for (unsigned k = 0; k < ARRAY_SIZE(dev->bc.eac_lut); k++) {
       panvk_priv_bo_unref(dev->bc.eac_lut[k]);
       dev->bc.eac_lut[k] = NULL;
+   }
+   if (dev->bc.prewarm_queue_ok) {
+      util_queue_finish(&dev->bc.prewarm_queue);
+      util_queue_destroy(&dev->bc.prewarm_queue);
+      dev->bc.prewarm_queue_ok = false;
    }
    panvk_bc_raw_device_finish(dev);
    vk_meta_device_finish(&dev->vk, &dev->meta);

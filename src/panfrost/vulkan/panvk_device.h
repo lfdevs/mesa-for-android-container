@@ -30,10 +30,13 @@
 #include "util/u_dynarray.h"
 #include "util/u_call_once.h"
 #include "util/u_printf.h"
+#include "util/u_queue.h"
 #include "util/vma.h"
 
 /* 128 MiB */
 #define PANVK_POLY_HEAP_SIZE (1 << 27)
+struct panvk_image;
+
 /* On JM hardware, we need to allocate a buffer depending on vertex count.
  *
  * As a result, for indirect and indexed draw we allocate a large buffer with
@@ -128,6 +131,14 @@ struct panvk_device {
       /* csf-v11/206: expanded EAC endpoint pair tables (panvk_bc_eac_lut.h)
        * per kind, created at the first transcode that needs one. */
       struct panvk_priv_bo *eac_lut[3];
+      /* Item 7: transcoder pipelines compiled from image creation, one
+       * fence per bc_xcode_mode() (panvk_vX_cmd_meta.c). */
+      void (*prewarm)(struct panvk_device *dev, const struct panvk_image *img);
+      simple_mtx_t prewarm_lock;
+      struct util_queue prewarm_queue;
+      bool prewarm_queue_ok;
+      uint32_t prewarm_started;
+      struct util_queue_fence prewarm_fence[10];
    } bc;
 
    /* BC raw store (csf-v11/201), under the lock in panvk_image.c: the
@@ -515,6 +526,8 @@ void panvk_per_arch(destroy_device)(struct panvk_device *device,
 /* Device teardown of the BC emulation state (csf-v11/200), then of the
  * vk_meta device (it replaces panvk_meta_cleanup() in destroy_device). */
 void panvk_per_arch(device_bc_finish)(struct panvk_device *dev);
+void panvk_per_arch(bc_xcode_prewarm)(struct panvk_device *dev,
+                                      const struct panvk_image *img);
 
 /* The gpu_prerast arena (tess = false) or the tessellation arena,
  * allocated on first use on v10+ (csf-v11/205). Returns a zero

@@ -350,6 +350,7 @@ panvk_meta_init(struct panvk_device *device)
    if (result != VK_SUCCESS)
       return result;
 
+   device->bc.prewarm = panvk_per_arch(bc_xcode_prewarm);
    device->meta.use_stencil_export = true;
    device->meta.use_rect_list_pipeline = true;
    device->meta.max_bind_map_buffer_size_B = 64 * 1024;

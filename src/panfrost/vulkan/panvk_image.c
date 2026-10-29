@@ -1045,6 +1045,12 @@ panvk_image_init(struct panvk_image *image,
          image->bc_raw_store = raw_store;
       }
    }
+   if (panvk_bc_xcoded(image)) {
+      struct panvk_device *dev = to_panvk_device(image->vk.base.device);
+
+      if (dev->bc.prewarm)
+         dev->bc.prewarm(dev, image);
+   }
 
    /* Add any create/usage flags that might be needed for meta operations.
     * This is run before the modifier selection because some
