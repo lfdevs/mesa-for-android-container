@@ -1,6 +1,7 @@
 #version 450
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference_uvec2 : require
+#extension GL_EXT_control_flow_attributes : require
 
 #ifdef PANVK_BC_FS
 /* Fragment variant (-DPANVK_BC_FS -S frag): decode into a colour attachment. */
@@ -899,6 +900,69 @@ DecodedInterpolation decode_bc7f_mode7(uvec4 payload, int p)
 }
 #endif
 
+#if !defined(PANVK_BC_FS) && defined(PANVK_BC_FAST)
+/* 117: compute decode, one invocation per 4x4 block with the fast decoders
+ * (csf-v11/211, bit-identical): each mode decodes its 16 texels with
+ * constant texel indices, so the bit fields that do not depend on the texel
+ * (endpoints, p-bits, partition) are extracted once per block. Rows are
+ * written as 16 bytes when inside the region. */
+#define BC7_BLOCK(fn)                                                       \
+    [[unroll]] for (int p = 0; p < 16; p++)                                 \
+        o[p] = packUnorm4x8(bc7f_color(fn(payload, p)));
+
+void main()
+{
+    int bx = int(gl_GlobalInvocationID.x);
+    int by = int(gl_GlobalInvocationID.y);
+    int z = int(gl_GlobalInvocationID.z);
+
+    if (bx * 4 >= registers.width || by * 4 >= registers.height ||
+        z >= registers.depth)
+        return;
+
+    uvec4 payload = InBuf4(registers.src).data[
+        (uint(z) * registers.src_slice_B + uint(by) * registers.src_row_B) / 16u +
+        uint(bx)];
+    int mode = findLSB(payload.x);
+
+    uint row_B = registers.dst_row_B;
+    uvec2 dst = registers.dst;
+    bool vec_ok = ((dst.x | row_B | registers.dst_slice_B) & 15u) == 0u;
+    uint out_word = (uint(z) * registers.dst_slice_B + uint(by * 4) * row_B) / 4u +
+                    uint(bx * 4);
+    OutBuf obuf = OutBuf(dst);
+    OutBuf4 obuf4 = OutBuf4(dst);
+
+    uint o[16];
+    switch (mode) {
+    case 0: BC7_BLOCK(decode_bc7f_mode0) break;
+    case 1: BC7_BLOCK(decode_bc7f_mode1) break;
+    case 2: BC7_BLOCK(decode_bc7f_mode2) break;
+    case 3: BC7_BLOCK(decode_bc7f_mode3) break;
+    case 4: BC7_BLOCK(decode_bc7f_mode4) break;
+    case 5: BC7_BLOCK(decode_bc7f_mode5) break;
+    case 6: BC7_BLOCK(decode_bc7f_mode6) break;
+    case 7: BC7_BLOCK(decode_bc7f_mode7) break;
+    default:
+        [[unroll]] for (int p = 0; p < 16; p++)
+            o[p] = 0u;
+        break;
+    }
+
+    [[unroll]] for (int py = 0; py < 4; py++) {
+        if (by * 4 + py >= registers.height)
+            break;
+        uint ow = out_word + uint(py) * (row_B / 4u);
+        if (vec_ok && bx * 4 + 4 <= registers.width) {
+            obuf4.data[ow / 4u] = uvec4(o[4 * py], o[4 * py + 1], o[4 * py + 2], o[4 * py + 3]);
+        } else {
+            [[unroll]] for (int px = 0; px < 4; px++)
+                if (bx * 4 + px < registers.width)
+                    obuf.data[ow + uint(px)] = o[4 * py + px];
+        }
+    }
+}
+#else
 void main()
 {
     int format = registers.format;
@@ -1051,3 +1115,4 @@ void main()
     obuf.data[out_word + uint(x)] = packUnorm4x8(decompressed_color);
 #endif
 }
+#endif

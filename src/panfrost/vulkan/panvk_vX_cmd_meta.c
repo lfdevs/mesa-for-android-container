@@ -913,7 +913,9 @@ bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
    disp->CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
    disp->CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                           sizeof(push), &push);
-   disp->CmdDispatch(cmd, DIV_ROUND_UP(w, 8), DIV_ROUND_UP(h, 8), d);
+   /* 117: the compute decoders run one invocation per 4x4 block (8x8 blocks
+    * per workgroup). */
+   disp->CmdDispatch(cmd, DIV_ROUND_UP(w, 32), DIV_ROUND_UP(h, 32), d);
 }
 
 /* BC lowmem transcoder (csf-v11/197), see bc/panvk_bc_etc2.comp. Included

@@ -1,6 +1,7 @@
 #version 450
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference_uvec2 : require
+#extension GL_EXT_control_flow_attributes : require
 
 #ifdef PANVK_BC_FS
 /* Fragment variant (-DPANVK_BC_FS -S frag): decode into a colour attachment. */
@@ -16,6 +17,12 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer InB
 layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer OutBuf {
     uint data[];
 };
+
+#ifndef PANVK_BC_FS
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer OutBuf4 {
+    uvec4 data[];
+};
+#endif
 
 layout(push_constant) uniform Registers
 {
@@ -293,6 +300,78 @@ float decode_alpha_4bit(uvec2 payload, int pixel)
     return float((payload[offset >> 5] >> (offset & 31)) & 0xf) / 15.0;
 }
 
+#ifndef PANVK_BC_FS
+/* 117: one invocation per 4x4 block. The endpoints and the four palette
+ * colours are decoded once per block (the same functions as the per-texel
+ * fragment variant, so the result is bit-identical), the 16 texels are
+ * picked from the palette and written as four 16-byte rows when the whole
+ * row is inside the region. */
+vec4 pick4(vec4 c0, vec4 c1, vec4 c2, vec4 c3, uint i)
+{
+    return (i & 2u) != 0u ? ((i & 1u) != 0u ? c3 : c2)
+                          : ((i & 1u) != 0u ? c1 : c0);
+}
+
+void main()
+{
+    int format = registers.format;
+    int bx = int(gl_GlobalInvocationID.x);
+    int by = int(gl_GlobalInvocationID.y);
+    int z = int(gl_GlobalInvocationID.z);
+
+    if (bx * 4 >= registers.width || by * 4 >= registers.height ||
+        z >= registers.depth)
+        return;
+
+    InBuf ibuf = InBuf(registers.src);
+    uint bw = (format <= VK_FORMAT_BC1_RGBA_SRGB_BLOCK) ? 2u : 4u;
+    uint w = (uint(z) * registers.src_slice_B + uint(by) * registers.src_row_B) / 4u +
+             uint(bx) * bw;
+    uvec2 color_payload = bw == 2u ? uvec2(ibuf.data[w], ibuf.data[w + 1u])
+                                   : uvec2(ibuf.data[w + 2u], ibuf.data[w + 3u]);
+    uvec2 alpha_payload = bw == 2u ? uvec2(0u)
+                                   : uvec2(ibuf.data[w], ibuf.data[w + 1u]);
+    vec3 ep0, ep1;
+    bool opaque_mode = decode_endpoints_color(format, color_payload.x, ep0, ep1);
+    vec4 c0 = interpolate_endpoint_color(ep0, ep1, 0, opaque_mode);
+    vec4 c1 = interpolate_endpoint_color(ep0, ep1, 1, opaque_mode);
+    vec4 c2 = interpolate_endpoint_color(ep0, ep1, 2, opaque_mode);
+    vec4 c3 = interpolate_endpoint_color(ep0, ep1, 3, opaque_mode);
+
+    uint row_B = registers.dst_row_B;
+    uvec2 dst = registers.dst;
+    bool vec_ok = ((dst.x | row_B | registers.dst_slice_B) & 15u) == 0u;
+    uint out_word = (uint(z) * registers.dst_slice_B + uint(by * 4) * row_B) / 4u +
+                    uint(bx * 4);
+    OutBuf obuf = OutBuf(dst);
+    OutBuf4 obuf4 = OutBuf4(dst);
+
+    [[unroll]] for (int py = 0; py < 4; py++) {
+        if (by * 4 + py >= registers.height)
+            break;
+        uint o[4];
+        [[unroll]] for (int px = 0; px < 4; px++) {
+            int p = 4 * py + px;
+            vec4 decoded = pick4(c0, c1, c2, c3, (color_payload.y >> (2 * p)) & 3u);
+            if (bw == 4u) {
+                if (format <= VK_FORMAT_BC2_SRGB_BLOCK)
+                    decoded.a = decode_alpha_4bit(alpha_payload, p);
+                else
+                    decoded.a = decode_alpha_rgtc(alpha_payload, p);
+            }
+            o[px] = packUnorm4x8(decoded);
+        }
+        uint ow = out_word + uint(py) * (row_B / 4u);
+        if (vec_ok && bx * 4 + 4 <= registers.width) {
+            obuf4.data[ow / 4u] = uvec4(o[0], o[1], o[2], o[3]);
+        } else {
+            [[unroll]] for (int px = 0; px < 4; px++)
+                if (bx * 4 + px < registers.width)
+                    obuf.data[ow + uint(px)] = o[px];
+        }
+    }
+}
+#else
 void main()
 {
     int format = registers.format;
@@ -346,3 +425,4 @@ void main()
     obuf.data[out_word + uint(x)] = packUnorm4x8(decoded);
 #endif
 }
+#endif

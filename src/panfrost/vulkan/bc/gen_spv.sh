@@ -3,7 +3,9 @@
 set -eu
 cd "$(dirname "$0")"
 for s in s3tc rgtc bc6 bc7; do
-   glslangValidator -V --target-env vulkan1.1 --vn panvk_bc_${s}_spv \
+   # 117: the BC7 compute (block) decoder uses the fast decoders.
+   fast=""; [ $s = bc7 ] && fast=-DPANVK_BC_FAST
+   glslangValidator -V --target-env vulkan1.1 $fast --vn panvk_bc_${s}_spv \
       -o panvk_bc_${s}_spv.h panvk_bc_${s}.comp
    glslangValidator -V --target-env vulkan1.1 -S frag -DPANVK_BC_FS \
       --vn panvk_bc_${s}_fs_spv -o panvk_bc_${s}_fs_spv.h panvk_bc_${s}.comp

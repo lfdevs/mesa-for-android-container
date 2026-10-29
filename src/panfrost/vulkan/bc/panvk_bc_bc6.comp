@@ -2,7 +2,7 @@
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference_uvec2 : require
 
-#ifdef PANVK_BC_BLOCK
+#ifndef PANVK_BC_FS
 #extension GL_EXT_control_flow_attributes : require
 #endif
 
@@ -28,6 +28,12 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer InB
 layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer OutBuf {
     uint data[];
 };
+
+#if !defined(PANVK_BC_FS) && !defined(PANVK_BC_BLOCK)
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer Out4 {
+    uvec4 data[];
+};
+#endif
 
 #ifdef PANVK_BC_BLOCK
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer In4 {
@@ -835,7 +841,7 @@ DecodedInterpolation decode_bc6_mode30(uvec4 payload, int linear_pixel, int part
     return DecodedInterpolation(ep0, ep1, w);
 }
 
-#ifndef PANVK_BC_BLOCK
+#ifdef PANVK_BC_FS
 void main()
 {
     int format = registers.format;
@@ -953,7 +959,7 @@ void main()
     obuf.data[out_word + 2u * uint(x) + 1u] = packed_ba;
 #endif
 }
-#else /* PANVK_BC_BLOCK */
+#else /* compute: PANVK_BC_BLOCK or the linear block decode */
 
 /* Endpoints of both subsets of a block: the per-texel decoders above at
  * texel 0 with part 0 and 1, so the endpoint arithmetic is the exact same
@@ -1016,6 +1022,7 @@ addr_mad(uvec2 a, uint m0, uint m1)
     return a;
 }
 
+#ifdef PANVK_BC_BLOCK
 void main()
 {
     uint x = gl_GlobalInvocationID.x;
@@ -1131,4 +1138,104 @@ void main()
         }
     }
 }
+#else /* !PANVK_BC_BLOCK */
+/* 117: linear decode, one invocation per 4x4 block: the endpoints of both
+ * subsets once per block (bc6_block_endpoints()) and per-texel weights from
+ * the index bits, as the PANVK_BC_BLOCK variant, written as R16G16B16A16
+ * like the per-texel fragment variant (bit-identical). */
+void main()
+{
+    int format = registers.format;
+    int bx = int(gl_GlobalInvocationID.x);
+    int by = int(gl_GlobalInvocationID.y);
+    int z = int(gl_GlobalInvocationID.z);
+
+    if (bx * 4 >= registers.width || by * 4 >= registers.height ||
+        z >= registers.depth)
+        return;
+
+    InBuf ibuf = InBuf(registers.src);
+    uint w = (uint(z) * registers.src_slice_B + uint(by) * registers.src_row_B) / 4u +
+             uint(bx) * 4u;
+    uvec4 payload = uvec4(ibuf.data[w], ibuf.data[w + 1u], ibuf.data[w + 2u], ibuf.data[w + 3u]);
+
+    is_signed = (format == VK_FORMAT_BC6H_SFLOAT_BLOCK);
+
+    int mode = extract_bits(payload, 0, 5);
+    int part_index = extract_bits(payload, 77, 5);
+    bool one = mode == 3 || mode == 7 || mode == 11 || mode == 15;
+    uint pmask = one ? 0u : uint(partition_table2[part_index]);
+    int anchor = one ? 16 : anchor_table2[part_index];
+
+    DecodedInterpolation s0, s1;
+    bc6_block_endpoints(payload, mode, s0, s1);
+
+    uint sh = one ? 1u : 18u;
+    uvec2 st = uvec2((payload.z >> sh) | (payload.w << (32u - sh)),
+                     payload.w >> sh);
+    int k = one ? 4 : 3;
+    int wa = one ? 136 : 292;
+
+    uint row_B = registers.dst_row_B;
+    uvec2 dst = registers.dst;
+    bool vec_ok = ((dst.x | row_B | registers.dst_slice_B) & 15u) == 0u;
+    uint out_word = (uint(z) * registers.dst_slice_B + uint(by * 4) * row_B) / 4u +
+                    uint(bx * 4) * 2u;
+    OutBuf obuf = OutBuf(dst);
+    Out4 obuf4 = Out4(dst);
+
+    [[unroll]] for (int py = 0; py < 4; py++) {
+        if (by * 4 + py >= registers.height)
+            break;
+        uint o[8];
+        [[unroll]] for (int px = 0; px < 4; px++) {
+            int p = 4 * py + px;
+            int off = p == 0 ? 0 : k * p - 1 - int(p > anchor);
+            int nb = (p == 0 ? k - 1 : k) - int(p == anchor);
+            uint lo = off < 32 ? st.x : st.y;
+            uint hi = off < 32 ? st.y : 0u;
+            uint r = uint(off) & 31u;
+            uint v = (lo >> r) | ((hi << 1u) << (31u - r));
+            int idx = int(v & ((1u << nb) - 1u));
+            int wt = (idx * wa + 16) >> 5;
+
+            bool sub = ((pmask >> p) & 1u) != 0u;
+            DecodedInterpolation interp = DecodedInterpolation(
+                sub ? s1.ep0 : s0.ep0, sub ? s1.ep1 : s0.ep1, wt);
+            ivec3 rgba_result = interpolate_endpoint(interp);
+
+            // Squeeze range.
+            if (is_signed)
+            {
+                ivec3 neg_result = 0x8000 | (((-rgba_result) * 31) >> 5);
+                ivec3 pos_result = (rgba_result * 31) >> 5;
+                rgba_result = mix(pos_result, neg_result, lessThan(rgba_result, ivec3(0)));
+
+                // Fixup for -0.0. Seems to not be emitted by hardware decoder.
+                rgba_result = mix(rgba_result, ivec3(0), equal(rgba_result, ivec3(0x8000)));
+            }
+            else
+            {
+                rgba_result = (rgba_result * 31) >> 6;
+            }
+
+            o[2 * px] = (uint(rgba_result.r) & 0xFFFFu) |
+                        (uint(rgba_result.g) & 0xFFFFu) << 16;
+            o[2 * px + 1] = (uint(rgba_result.b) & 0xFFFFu) | (0x3C00u << 16);
+        }
+        uint ow = out_word + uint(py) * (row_B / 4u);
+        if (vec_ok && bx * 4 + 4 <= registers.width) {
+            obuf4.data[ow / 4u] = uvec4(o[0], o[1], o[2], o[3]);
+            obuf4.data[ow / 4u + 1u] = uvec4(o[4], o[5], o[6], o[7]);
+        } else {
+            [[unroll]] for (int px = 0; px < 4; px++) {
+                if (bx * 4 + px < registers.width) {
+                    obuf.data[ow + 2u * uint(px)] = o[2 * px];
+                    obuf.data[ow + 2u * uint(px) + 1u] = o[2 * px + 1];
+                }
+            }
+        }
+    }
+}
+#endif
 #endif

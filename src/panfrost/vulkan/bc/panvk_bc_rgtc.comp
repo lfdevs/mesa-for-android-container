@@ -1,6 +1,7 @@
 #version 450
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference_uvec2 : require
+#extension GL_EXT_control_flow_attributes : require
 
 #ifdef PANVK_BC_FS
 /* Fragment variant (-DPANVK_BC_FS -S frag): decode into a colour attachment. */
@@ -16,6 +17,12 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer InB
 layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer OutBuf {
     uint data[];
 };
+
+#ifndef PANVK_BC_FS
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer OutBuf4 {
+    uvec4 data[];
+};
+#endif
 
 layout(push_constant) uniform Registers
 {
@@ -139,6 +146,69 @@ float decode_alpha_rgtc_snorm(uvec2 payload, int linear_pixel)
 
 
 
+#ifndef PANVK_BC_FS
+/* 117: one invocation per 4x4 block (bit-identical to the per-texel
+ * fragment variant: the same per-texel functions with constant texel
+ * indices), rows written as 16 bytes when inside the region. */
+void main()
+{
+    int format = registers.format;
+    int bx = int(gl_GlobalInvocationID.x);
+    int by = int(gl_GlobalInvocationID.y);
+    int z = int(gl_GlobalInvocationID.z);
+
+    if (bx * 4 >= registers.width || by * 4 >= registers.height ||
+        z >= registers.depth)
+        return;
+
+    InBuf ibuf = InBuf(registers.src);
+    bool bc5 = (format == VK_FORMAT_BC5_UNORM_BLOCK || format == VK_FORMAT_BC5_SNORM_BLOCK);
+    bool is_snorm = (format == VK_FORMAT_BC4_SNORM_BLOCK || format == VK_FORMAT_BC5_SNORM_BLOCK);
+    uint bw = bc5 ? 4u : 2u;
+    uint w = (uint(z) * registers.src_slice_B + uint(by) * registers.src_row_B) / 4u +
+             uint(bx) * bw;
+    uvec4 payload = uvec4(ibuf.data[w], ibuf.data[w + 1u],
+                          bc5 ? ibuf.data[w + 2u] : 0u,
+                          bc5 ? ibuf.data[w + 3u] : 0u);
+
+    uint row_B = registers.dst_row_B;
+    uvec2 dst = registers.dst;
+    bool vec_ok = ((dst.x | row_B | registers.dst_slice_B) & 15u) == 0u;
+    uint out_word = (uint(z) * registers.dst_slice_B + uint(by * 4) * row_B) / 4u +
+                    uint(bx * 4);
+    OutBuf obuf = OutBuf(dst);
+    OutBuf4 obuf4 = OutBuf4(dst);
+
+    [[unroll]] for (int py = 0; py < 4; py++) {
+        if (by * 4 + py >= registers.height)
+            break;
+        uint o[4];
+        [[unroll]] for (int px = 0; px < 4; px++) {
+            int p = 4 * py + px;
+            vec2 rg = vec2(0.0);
+            if (is_snorm) {
+                rg.x = decode_alpha_rgtc_snorm(payload.xy, p);
+                if (bc5)
+                    rg.y = decode_alpha_rgtc_snorm(payload.zw, p);
+                o[px] = packSnorm2x16(rg);
+            } else {
+                rg.x = decode_alpha_rgtc(payload.xy, p);
+                if (bc5)
+                    rg.y = decode_alpha_rgtc(payload.zw, p);
+                o[px] = packUnorm2x16(rg);
+            }
+        }
+        uint ow = out_word + uint(py) * (row_B / 4u);
+        if (vec_ok && bx * 4 + 4 <= registers.width) {
+            obuf4.data[ow / 4u] = uvec4(o[0], o[1], o[2], o[3]);
+        } else {
+            [[unroll]] for (int px = 0; px < 4; px++)
+                if (bx * 4 + px < registers.width)
+                    obuf.data[ow + uint(px)] = o[px];
+        }
+    }
+}
+#else
 void main()
 {
     int format = registers.format;
@@ -193,3 +263,4 @@ void main()
 #endif
     }
 }
+#endif
