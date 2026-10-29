@@ -45,6 +45,15 @@ args = parser.parse_args()
 
 git_sha1 = os.environ.get('MESA_GIT_SHA1_OVERRIDE', get_git_sha1())[:10]
 if git_sha1:
-    write_if_different('#define MESA_GIT_SHA1 " (git-' + git_sha1 + ')"')
+    # PanVK-kbase: last applied jm-v7-wip patch (written by prepare-rc5-tree.sh) and build date
+    import datetime
+    extra = ''
+    try:
+        with open(os.path.join(os.path.dirname(sys.argv[0]), '..', '.panvk-patchlevel')) as f:
+            extra = ', ' + f.read().strip()
+    except OSError:
+        pass
+    extra += ', ' + datetime.date.today().isoformat()
+    write_if_different('#define MESA_GIT_SHA1 " (git-' + git_sha1 + extra + ')"')
 else:
     write_if_different('#define MESA_GIT_SHA1 ""')
