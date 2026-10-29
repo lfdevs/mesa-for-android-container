@@ -3720,6 +3720,21 @@ kbase_busy_cancel_locked(struct kbase_kmod_dev *kd,
    slot->busy_counted = false;
 }
 
+uint64_t
+kbase_kmod_bo_committed_size(struct pan_kmod_dev *dev, struct pan_kmod_bo *bo)
+{
+   if (dev->ops != &kbase_kmod_ops)
+      return bo->size;
+
+   struct kbase_kmod_bo *kb = container_of(bo, struct kbase_kmod_bo, base);
+   union kbase_ioctl_mem_query q = {
+      .in = {.gpu_addr = kb->gpu_va, .query = KBASE_MEM_QUERY_COMMIT_SIZE},
+   };
+   if (ioctl(dev->fd, KBASE_IOCTL_MEM_QUERY, &q) < 0)
+      return bo->size;
+   return MIN2(q.out.value * kbase_kmod_page_size(), bo->size);
+}
+
 void
 kbase_kmod_jm_busy_track(struct pan_kmod_dev *dev)
 {

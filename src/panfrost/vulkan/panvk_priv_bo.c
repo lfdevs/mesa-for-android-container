@@ -11,6 +11,7 @@
 #include "panvk_device.h"
 #include "panvk_priv_bo.h"
 
+#include "kmod/kbase_kmod.h"
 #include "kmod/pan_kmod.h"
 #include "pan_props.h"
 
@@ -36,6 +37,18 @@ panvk_priv_bo_create(struct panvk_device *dev, uint64_t size, uint32_t flags,
 }
 
 struct panvk_mem_stats panvk_mem_stats;
+
+/* jm-v7-wip 0166: PANVK_GPU_STATS counts a grow-on-fault BO (JM tiler heap,
+ * varyings, GS and tess buffers) at its committed size, as the memory v10+
+ * reports, not at its reserved size. Only tracked with the env set. */
+static struct {
+   simple_mtx_t lock;
+   struct list_head list;
+   uint64_t full_B;
+} panvk_gpu_grow = {
+   .lock = SIMPLE_MTX_INITIALIZER,
+   .list = {&panvk_gpu_grow.list, &panvk_gpu_grow.list},
+};
 
 static void
 panvk_mem_account(enum panvk_mem_kind kind, int64_t delta)
@@ -155,6 +168,13 @@ panvk_priv_bo_create_kind(struct panvk_device *dev, uint64_t size,
    p_atomic_set(&priv_bo->refcnt, 1);
    priv_bo->mem_kind = kind;
    panvk_mem_account(kind, pan_kmod_bo_size(bo));
+   if ((bo->flags & PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT) && panvk_gpu_stats_path()) {
+      simple_mtx_lock(&panvk_gpu_grow.lock);
+      list_addtail(&priv_bo->grow_link, &panvk_gpu_grow.list);
+      panvk_gpu_grow.full_B += pan_kmod_bo_size(bo);
+      simple_mtx_unlock(&panvk_gpu_grow.lock);
+      priv_bo->grow_tracked = true;
+   }
 
    *out = priv_bo;
    return VK_SUCCESS;
@@ -202,6 +222,12 @@ panvk_priv_bo_destroy(struct panvk_priv_bo *priv_bo)
    struct panvk_device *dev = priv_bo->dev;
 
    panvk_mem_account(priv_bo->mem_kind, -(int64_t)pan_kmod_bo_size(priv_bo->bo));
+   if (priv_bo->grow_tracked) {
+      simple_mtx_lock(&panvk_gpu_grow.lock);
+      list_del(&priv_bo->grow_link);
+      panvk_gpu_grow.full_B -= pan_kmod_bo_size(priv_bo->bo);
+      simple_mtx_unlock(&panvk_gpu_grow.lock);
+   }
    panvk_address_binding_report(dev, NULL, priv_bo->addr.dev,
                                 pan_kmod_bo_size(priv_bo->bo),
                                 VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT);
@@ -536,6 +562,12 @@ panvk_gpu_stats_busy(uint64_t freq, uint64_t devmem, uint64_t start,
    uint64_t vram = devmem;
    for (unsigned k = 0; k < PANVK_MEM_KIND_COUNT; k++)
       vram += p_atomic_read_relaxed(&panvk_mem_stats.bytes[k]);
+   /* Grow-on-fault BOs: committed instead of reserved bytes (0166). */
+   simple_mtx_lock(&panvk_gpu_grow.lock);
+   vram -= MIN2(vram, panvk_gpu_grow.full_B);
+   list_for_each_entry(struct panvk_priv_bo, b, &panvk_gpu_grow.list, grow_link)
+      vram += kbase_kmod_bo_committed_size(b->dev->kmod.dev, b->bo);
+   simple_mtx_unlock(&panvk_gpu_grow.lock);
 
    char tmp[4096];
    snprintf(tmp, sizeof(tmp), "%s.tmp", path);

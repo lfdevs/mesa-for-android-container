@@ -57,6 +57,10 @@ void kbase_kmod_jm_clean_imports(struct pan_kmod_dev *dev);
  * PANVK_GPU_STATS), and read it in ns. */
 void kbase_kmod_jm_busy_track(struct pan_kmod_dev *dev);
 uint64_t kbase_kmod_jm_busy_ns(struct pan_kmod_dev *dev);
+/* Bytes of the BO backed by pages (a GROW_ON_GPF region commits on GPU page
+ * faults), one KBASE_IOCTL_MEM_QUERY; the BO size off kbase or on error. */
+uint64_t kbase_kmod_bo_committed_size(struct pan_kmod_dev *dev,
+                                      struct pan_kmod_bo *bo);
 struct pan_kmod_bo *kbase_kmod_bo_import_host(struct pan_kmod_dev *dev,
                                             void *host_ptr, uint64_t size);
 

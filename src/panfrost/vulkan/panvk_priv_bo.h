@@ -85,6 +85,10 @@ struct panvk_priv_bo {
    /* csf-v11 230: when non-zero, addr.dev is a kbase MEM_ALIAS region of
     * this many bytes over the BO (sparse device TLS), unmapped on destroy. */
    uint64_t alias_size;
+   /* PANVK_GPU_STATS: a grow-on-fault BO on panvk_gpu_stats' list, whose
+    * VRAM is its committed size, not its full size. */
+   bool grow_tracked;
+   struct list_head grow_link;
 };
 
 VkResult panvk_priv_bo_create(struct panvk_device *dev, uint64_t size,
