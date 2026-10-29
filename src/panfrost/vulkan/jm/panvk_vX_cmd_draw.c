@@ -7049,6 +7049,24 @@ v9_attachmentless_samples(struct panvk_cmd_buffer *cmdbuf)
 static void
 v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
 {
+   /* Item 8 on v9 JM, as panvk_cmd_draw() on CSF: a pass-through GS
+    * (pt_skip) is skipped and the VS draws on the hardware, unless a
+    * pipeline statistics query needs the GS counters. */
+   const struct panvk_shader *bound_gs = cmdbuf->state.gfx.gs.shader;
+   const struct panvk_shader *eff_gs = bound_gs;
+
+   if (!info->gpu_prerast_generated && bound_gs &&
+       bound_gs->gpu_prerast.gs.pt_skip &&
+       !cmdbuf->state.gfx.pstats_query.report)
+      eff_gs = NULL;
+   if (eff_gs != cmdbuf->state.gfx.gs_pt_last) {
+      gfx_state_set_dirty(cmdbuf, VS);
+      gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+      gfx_state_set_dirty(cmdbuf, FS);
+      cmdbuf->state.gfx.gs_pt_last = eff_gs;
+   }
+   cmdbuf->state.gfx.gs.shader = eff_gs;
+
    struct panvk_cond_render_mark cond;
    panvk_per_arch(cmd_cond_render_begin)(cmdbuf, &cond);
 
@@ -7102,6 +7120,7 @@ v9_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info *info)
    cmdbuf->state.gfx.prims_generated_query.ptr = prims_generated;
 
    panvk_per_arch(cmd_cond_render_end)(cmdbuf, &cond);
+   cmdbuf->state.gfx.gs.shader = bound_gs;
 }
 
 VKAPI_ATTR void VKAPI_CALL
