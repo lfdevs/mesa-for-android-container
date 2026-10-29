@@ -53,6 +53,10 @@ bool kbase_kmod_wait_atom(struct pan_kmod_dev *dev, uint64_t atom_number,
                          int64_t timeout_ns);
 void kbase_kmod_atom_release(struct pan_kmod_dev *dev, uint64_t atom_num);
 void kbase_kmod_jm_clean_imports(struct pan_kmod_dev *dev);
+/* JM only: track the time with atoms in flight (enable once, for
+ * PANVK_GPU_STATS), and read it in ns. */
+void kbase_kmod_jm_busy_track(struct pan_kmod_dev *dev);
+uint64_t kbase_kmod_jm_busy_ns(struct pan_kmod_dev *dev);
 struct pan_kmod_bo *kbase_kmod_bo_import_host(struct pan_kmod_dev *dev,
                                             void *host_ptr, uint64_t size);
 

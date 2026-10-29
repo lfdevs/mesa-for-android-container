@@ -549,6 +549,20 @@ panvk_per_arch(gpu_queue_submit)(struct vk_queue *vk_queue, struct vk_queue_subm
                                    panvk_jm_kbase_wait_atoms, targets, NULL);
    }
 
+   /* PANVK_GPU_STATS: JM chains have no cheap GPU timestamps (they need
+    * PERMON and write jobs), so the busy time is the CPU-observed time with
+    * atoms in flight. It is reported as consecutive intervals on a busy-time
+    * axis shared by the device's queues, so their union is that time. */
+   if (panvk_gpu_stats_path()) {
+      const struct panvk_physical_device *pdev =
+         to_panvk_physical_device(dev->vk.physical);
+      const uint64_t busy = kbase_kmod_jm_busy_ns(dev->kmod.dev);
+      panvk_gpu_stats_busy(1000000000ull,
+                           p_atomic_read_relaxed(&pdev->memory.heap_used),
+                           queue->stats_busy_ns, busy);
+      queue->stats_busy_ns = busy;
+   }
+
    return VK_SUCCESS;
 }
 
@@ -587,6 +601,8 @@ panvk_per_arch(create_gpu_queue)(struct panvk_device *device,
       goto err_finish_queue;
 
    queue->vk.driver_submit = panvk_per_arch(gpu_queue_submit);
+   if (panvk_gpu_stats_path())
+      kbase_kmod_jm_busy_track(device->kmod.dev);
    *out_queue = &queue->vk;
    return VK_SUCCESS;
 

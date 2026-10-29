@@ -149,6 +149,8 @@ struct kbase_atom_slot {
    uint32_t core_req;
    bool completed;
    bool errored;
+   /* Counted in kbase_kmod_dev::busy_inflight (PANVK_GPU_STATS on JM). */
+   bool busy_counted;
    uint32_t waiters;
 };
 
@@ -235,6 +237,11 @@ struct kbase_kmod_dev {
 
    simple_mtx_t atoms_lock;
    simple_mtx_t atoms_read_lock;
+   /* JM GPU stats (kbase_kmod_jm_busy_ns()), under atoms_lock: time with at
+    * least one atom of this context submitted and not yet completed. */
+   bool busy_track;
+   uint32_t busy_inflight;
+   uint64_t busy_start_ns, busy_ns;
    struct kbase_atom_slot atoms[KBASE_MAX_ATOMS];
    uint64_t next_atom_number;
    unsigned atom_stride;
@@ -3523,6 +3530,11 @@ kbase_atom_process_event_locked(struct kbase_kmod_dev *kd,
          struct kbase_atom_slot *s = &kd->atoms[i];
          s->completed = true;
          s->errored = errored;
+         if (s->busy_counted) {
+            s->busy_counted = false;
+            if (!--kd->busy_inflight)
+               kd->busy_ns += os_time_get_nano() - kd->busy_start_ns;
+         }
          if (errored)
             mesa_loge("kbase: JM atom %u failed: event=0x%x core_req=0x%x",
                       num, ev->event_code, s->core_req);
@@ -3684,6 +3696,49 @@ kbase_wait_atom(struct kbase_kmod_dev *kd, uint64_t atom_num,
    }
 }
 
+/* JM GPU stats: count the atom in flight before JOB_SUBMIT (its event can't
+ * come earlier), and back out when the ioctl fails. */
+static void
+kbase_busy_begin(struct kbase_kmod_dev *kd, struct kbase_atom_slot *slot)
+{
+   slot->busy_counted = false;
+   if (!kd->busy_track)
+      return;
+   simple_mtx_lock(&kd->atoms_lock);
+   if (!kd->busy_inflight++)
+      kd->busy_start_ns = os_time_get_nano();
+   slot->busy_counted = true;
+   simple_mtx_unlock(&kd->atoms_lock);
+}
+
+static void
+kbase_busy_cancel_locked(struct kbase_kmod_dev *kd,
+                         struct kbase_atom_slot *slot)
+{
+   if (slot->busy_counted && !--kd->busy_inflight)
+      kd->busy_ns += os_time_get_nano() - kd->busy_start_ns;
+   slot->busy_counted = false;
+}
+
+void
+kbase_kmod_jm_busy_track(struct pan_kmod_dev *dev)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   kd->busy_track = !kd->is_csf;
+}
+
+uint64_t
+kbase_kmod_jm_busy_ns(struct pan_kmod_dev *dev)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   simple_mtx_lock(&kd->atoms_lock);
+   uint64_t ns = kd->busy_ns;
+   if (kd->busy_inflight)
+      ns += os_time_get_nano() - kd->busy_start_ns;
+   simple_mtx_unlock(&kd->atoms_lock);
+   return ns;
+}
+
 uint64_t
 kbase_kmod_job_submit(struct pan_kmod_dev *dev, uint64_t jc,
                       uint32_t core_req, struct pan_kmod_bo **bos,
@@ -3725,9 +3780,11 @@ kbase_kmod_job_submit(struct pan_kmod_dev *dev, uint64_t jc,
       .nr_atoms = 1,
       .stride = kd->atom_stride,
    };
+   kbase_busy_begin(kd, slot);
    if (ioctl(dev->fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0) {
       mesa_loge("kbase: JOB_SUBMIT failed: %s", strerror(errno));
       simple_mtx_lock(&kd->atoms_lock);
+      kbase_busy_cancel_locked(kd, slot);
       slot->atom_number = 0;
       simple_mtx_unlock(&kd->atoms_lock);
       return 0;
@@ -3776,9 +3833,11 @@ kbase_kmod_job_submit_dep(struct pan_kmod_dev *dev, uint64_t jc,
       .nr_atoms = 1,
       .stride = kd->atom_stride,
    };
+   kbase_busy_begin(kd, slot);
    if (ioctl(dev->fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0) {
       mesa_loge("kbase: JOB_SUBMIT(dep) failed: %s", strerror(errno));
       simple_mtx_lock(&kd->atoms_lock);
+      kbase_busy_cancel_locked(kd, slot);
       slot->atom_number = 0;
       simple_mtx_unlock(&kd->atoms_lock);
       return 0;

@@ -40,6 +40,8 @@ struct panvk_gpu_queue {
    /* v67b: last fragment atom per tiler heap half, last vtc atom */
    uint64_t half_frag_atom[2];
    uint64_t last_vtc_atom;
+   /* PANVK_GPU_STATS: kbase_kmod_jm_busy_ns() at the last report. */
+   uint64_t stats_busy_ns;
 #if PAN_ARCH == 9
    /* Atom numbers submitted by the current vkQueueSubmit (see dep_type()). */
    BITSET_DECLARE(submit_atoms, 256);
