@@ -107,6 +107,21 @@ fd_kgsl_dmabuf_enabled(void)
           (backend && strcmp(backend, "kgsl") == 0);
 }
 
+static bool
+fd_termux_va_bridge_active(void)
+{
+   const char *force = os_get_option("TERMUX_VA_BRIDGE");
+   if (force && *force)
+      return strcmp(force, "0") != 0 && strcmp(force, "false") != 0 &&
+             strcmp(force, "off") != 0;
+
+   /* The daemon socket can remain present for the whole desktop session.
+    * Use the VA driver's process-level selection to distinguish a VA client
+    * from an unrelated OpenGL application in the same session. */
+   const char *driver = os_get_option("LIBVA_DRIVER_NAME");
+   return driver && strcmp(driver, "termuxva") == 0;
+}
+
 static const char *
 fd_screen_get_name(struct pipe_screen *pscreen)
 {
@@ -402,10 +417,13 @@ fd_init_screen_caps(struct fd_screen *screen)
    u_init_pipe_screen_caps(&screen->base, 1);
 
    /* KGSL mappings are not CPU/GPU coherent on the Android kernels used by
-    * DRM-less containers.  Do not let upload managers keep persistent maps:
-    * they otherwise never call buffer_unmap after writing vertex and
-    * constant data, leaving no point at which the cache can be cleaned. */
-   if (screen->is_kgsl)
+    * the termux-va bridge.  Do not let upload managers keep persistent maps
+    * while the bridge is active: they otherwise never call buffer_unmap after
+    * writing vertex and constant data, leaving no point at which the cache
+    * can be cleaned.  Ordinary KGSL OpenGL clients retain persistent maps so
+    * that ARB_buffer_storage and the corresponding GL 4.4+ capabilities stay
+    * available. */
+   if (screen->is_kgsl && fd_termux_va_bridge_active())
       caps->buffer_map_persistent_coherent = false;
 
    /* On the kgsl stack the screen's control fd may be a display/controller fd
