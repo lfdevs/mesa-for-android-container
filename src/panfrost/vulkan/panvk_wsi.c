@@ -52,7 +52,9 @@ panvk_can_present_on_device(VkPhysicalDevice pdevice, int fd)
 #include <android/native_window.h>
 #include <android/hardware_buffer.h>
 #include "util/log.h"
+#include "util/os_time.h"
 #include "util/timespec.h"
+#include "util/u_atomic.h"
 #include "util/u_thread.h"
 #include "wsi_common_private.h"
 #include "wsi_common_queue.h"
@@ -315,6 +317,11 @@ panvk_android_swapchain_wait_for_present2(struct wsi_swapchain *swapchain,
    return result;
 }
 
+/* Item 16 (perf plan): present-thread time per post, split into the window
+ * dequeue (ANativeWindow_lock), the copy (AHB lock + rows) and the queue
+ * (unlockAndPost), reported on the PANVK_FPS_LOG lines. */
+static uint64_t panvk_post_ns[3], panvk_post_n;
+
 /* Copies the image into the window and posts it.  The image's present
  * fence has signalled. */
 static void
@@ -323,7 +330,9 @@ panvk_android_swapchain_post(struct panvk_android_swapchain *chain,
 {
    if (chain->window && chain->images[image_index].ahb) {
       ANativeWindow_Buffer win_buf;
+      const uint64_t t0 = os_time_get_nano();
       if (ANativeWindow_lock(chain->window, &win_buf, NULL) == 0) {
+         const uint64_t t1 = os_time_get_nano();
          void *ahb_data = NULL;
          AHardwareBuffer_Desc desc;
          AHardwareBuffer_describe(chain->images[image_index].ahb, &desc);
@@ -354,7 +363,13 @@ panvk_android_swapchain_post(struct panvk_android_swapchain *chain,
             }
             AHardwareBuffer_unlock(chain->images[image_index].ahb, NULL);
          }
+         const uint64_t t2 = os_time_get_nano();
          ANativeWindow_unlockAndPost(chain->window);
+         const uint64_t t3 = os_time_get_nano();
+         p_atomic_add(&panvk_post_ns[0], t1 - t0);
+         p_atomic_add(&panvk_post_ns[1], t2 - t1);
+         p_atomic_add(&panvk_post_ns[2], t3 - t2);
+         p_atomic_inc(&panvk_post_n);
       }
    }
 }
@@ -914,7 +929,7 @@ static void
 panvk_fps_log_line(const char *kind, const char *reason, uint64_t span_ns,
                    uint64_t frames, uint64_t max_ns)
 {
-   char line[256];
+   char line[384];
 
    snprintf(line, sizeof(line),
             "%s t_ms=%" PRIu64 " frames=%" PRIu64
@@ -924,6 +939,18 @@ panvk_fps_log_line(const char *kind, const char *reason, uint64_t span_ns,
             frames ? (double)span_ns / 1e6 / (double)frames : 0.0,
             (double)max_ns / 1e6, panvk_fps.total, reason ? " reason=" : "",
             reason ? reason : "");
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   /* Item 16: running averages of the Android present thread's post. */
+   const uint64_t posts = p_atomic_read(&panvk_post_n);
+   if (posts) {
+      const size_t len = strlen(line);
+      snprintf(line + len, sizeof(line) - len,
+               " post_lock_ms=%.3f post_copy_ms=%.3f post_queue_ms=%.3f",
+               p_atomic_read(&panvk_post_ns[0]) / 1e6 / posts,
+               p_atomic_read(&panvk_post_ns[1]) / 1e6 / posts,
+               p_atomic_read(&panvk_post_ns[2]) / 1e6 / posts);
+   }
+#endif
    if (panvk_fps.fp)
       fprintf(panvk_fps.fp, "%s\n", line);
    else
