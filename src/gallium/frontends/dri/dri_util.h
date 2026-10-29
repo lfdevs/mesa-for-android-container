@@ -139,6 +139,9 @@ dri_query_renderer_integer(struct dri_screen *_screen, int param,
 
 PUBLIC void
 dri_flush_drawable(struct dri_drawable *dPriv);
+/* Set the window-system policy before the context is made current. */
+PUBLIC void
+dri_disable_present_wait_fence(struct dri_context *ctx, bool disable);
 PUBLIC void
 dri_flush(struct dri_context *cPriv,
           struct dri_drawable *dPriv,

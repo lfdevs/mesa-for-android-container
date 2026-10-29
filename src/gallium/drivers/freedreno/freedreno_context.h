@@ -362,6 +362,7 @@ struct fd_context {
     * the window-system presentation path.
     */
    bool explicit_present_fence;
+   bool disable_present_wait_fence;
 
    /*
     * Counter to keep track of batch's most recent update.  Ie. the batch with

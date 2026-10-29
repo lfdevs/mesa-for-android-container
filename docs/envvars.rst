@@ -1081,6 +1081,21 @@ Hasvk driver environment variables
 DRI environment variables
 -------------------------
 
+.. envvar:: MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE
+
+   Controls the X11 Present wait-fence bridge and the shared KGSL
+   presentation-completion wait. For native Wayland EGL contexts the
+   default is ``true``, restoring the earlier nonblocking presentation
+   behavior. For X11 contexts, including XWayland and Termux:X11, the
+   default is ``false``, preserving the Present wait-fence bridge.
+
+   Set ``1`` to disable both presentation mechanisms, or ``0`` to keep
+   them enabled, including the conservative KGSL completion wait on
+   native Wayland. This does not disable resource submission, OpenGL
+   synchronization objects, or EGL native fences. Disabling the wait
+   does not add an asynchronous fence handoff to the compositor; visual
+   correctness still depends on the existing buffer synchronization.
+
 .. envvar:: DRI_NO_MSAA
 
    disable MSAA for GLX/EGL MSAA visuals

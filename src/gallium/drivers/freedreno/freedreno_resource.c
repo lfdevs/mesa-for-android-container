@@ -770,9 +770,11 @@ fd_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
     * If the window-system path is not carrying the next submission's native
     * fence explicitly, wait here before handing the resource to an
     * implicit-sync consumer.  The explicit Present-fence path avoids this
-    * per-frame CPU stall.
+    * per-frame CPU stall. The compatibility opt-out restores the previous
+    * window-system behavior without changing resource submission or API fences.
     */
-   if (ctx->screen->is_kgsl && !ctx->explicit_present_fence)
+   if (ctx->screen->is_kgsl && !ctx->explicit_present_fence &&
+       !ctx->disable_present_wait_fence)
       fd_resource_wait(ctx, rsc, FD_BO_PREP_READ);
 }
 

@@ -147,6 +147,9 @@ fd_set_context_param(struct pipe_context *pctx, enum pipe_context_param param,
    case PIPE_CONTEXT_PARAM_EXPLICIT_PRESENT_FENCE:
       ctx->explicit_present_fence = value;
       break;
+   case PIPE_CONTEXT_PARAM_DISABLE_PRESENT_WAIT_FENCE:
+      ctx->disable_present_wait_fence = value;
+      break;
    default:
       break;
    }

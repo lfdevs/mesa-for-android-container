@@ -27,6 +27,7 @@
 		dri_query_renderer_string;
 		dri_query_renderer_integer;
 		dri_flush_drawable;
+		dri_disable_present_wait_fence;
 		dri_flush;
 		dri_invalidate_drawable;
 		dri2GalliumConfigQuery*;

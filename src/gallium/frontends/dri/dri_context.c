@@ -32,6 +32,7 @@
 #include "dri_screen.h"
 #include "dri_drawable.h"
 #include "dri_context.h"
+#include "dri_util.h"
 #include "frontend/drm_driver.h"
 
 #include "pipe/p_context.h"
@@ -41,6 +42,16 @@
 #include "util/u_cpu_detect.h"
 #include "util/u_memory.h"
 #include "util/u_debug.h"
+
+void
+dri_disable_present_wait_fence(struct dri_context *ctx, bool disable)
+{
+   struct pipe_context *pipe = ctx->st->pipe;
+   if (pipe->set_context_param)
+      pipe->set_context_param(pipe,
+                              PIPE_CONTEXT_PARAM_DISABLE_PRESENT_WAIT_FENCE,
+                              disable);
+}
 
 struct dri_context *
 dri_create_context(struct dri_screen *screen,
@@ -135,6 +146,9 @@ dri_create_context(struct dri_screen *screen,
 
    if (!thread_safe)
       enable_glthread = false;
+
+   dri_disable_present_wait_fence(ctx, debug_get_bool_option(
+      "MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE", false));
 
    /* Do this last. */
    if (enable_glthread)

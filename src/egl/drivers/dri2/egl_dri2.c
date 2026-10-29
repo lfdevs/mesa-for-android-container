@@ -1330,6 +1330,15 @@ dri2_create_context(_EGLDisplay *disp, _EGLConfig *conf,
    if (!dri2_ctx->dri_context)
       goto cleanup;
 
+   if (disp->Platform == _EGL_PLATFORM_WAYLAND) {
+      /* Native Wayland has no X11 Present wait-fence bridge. Keep its
+       * pre-bridge default, with the same environment override as DRI3.
+       * This is a context policy, so later attachment flushes agree too.
+       */
+      dri_disable_present_wait_fence(dri2_ctx->dri_context,
+         debug_get_bool_option("MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE", true));
+   }
+
    mtx_unlock(&dri2_dpy->lock);
 
    return &dri2_ctx->base;
