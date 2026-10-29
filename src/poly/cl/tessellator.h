@@ -110,6 +110,19 @@ struct CHWTessellator {
    struct INDEX_PATCH_CONTEXT2 IndexPatchCtx2;
 };
 
+/* The per-edge and per-axis arrays below stay in registers only while every
+ * index is a constant. The edge and ring loops hold nested loops, so they are
+ * not unrolled, and one array[edge] there puts the whole array in thread
+ * local storage, read back from memory in the innermost generation loops.
+ * These read an element through selects instead.
+ */
+#define TESS_SEL2(a, i, f) ((i) ? (a)[1] f : (a)[0] f)
+#define TESS_SEL3(a, i, f)                                                     \
+   ((i) == 0 ? (a)[0] f : (i) == 1 ? (a)[1] f : (a)[2] f)
+#define TESS_SEL4(a, i, f)                                                     \
+   ((i) < 2 ? ((i) == 0 ? (a)[0] f : (a)[1] f)                                 \
+            : ((i) == 2 ? (a)[2] f : (a)[3] f))
+
 #define FXP_INTEGER_BITS  15
 #define FXP_FRACTION_BITS 16
 #define FXP_FRACTION_MASK 0x0000ffff
@@ -271,32 +284,79 @@ fxpFloor(const FXP input)
    return (input & FXP_INTEGER_MASK);
 }
 
+/* Single exit: an early return leaves the inlined return value variable
+ * unwritten on some paths, and once the ifs are flattened to selects that
+ * stale value is carried around every enclosing loop (one register each).
+ */
 static inline int
 PatchIndexValue(private struct CHWTessellator *ctx, int index)
 {
+   int r = index;
+
    if (ctx->bUsingPatchedIndices) {
       // assumed remapped outide indices are > remapped inside vertices
       if (index >= ctx->IndexPatchCtx.outsidePointIndexPatchBase) {
-         if (index == ctx->IndexPatchCtx.outsidePointIndexBadValue)
-            return ctx->IndexPatchCtx.outsidePointIndexReplacementValue;
-         else
-            return index + ctx->IndexPatchCtx.outsidePointIndexDeltaToRealValue;
+         r = index == ctx->IndexPatchCtx.outsidePointIndexBadValue
+                ? ctx->IndexPatchCtx.outsidePointIndexReplacementValue
+                : index + ctx->IndexPatchCtx.outsidePointIndexDeltaToRealValue;
       } else {
-         if (index == ctx->IndexPatchCtx.insidePointIndexBadValue)
-            return ctx->IndexPatchCtx.insidePointIndexReplacementValue;
-         else
-            return index + ctx->IndexPatchCtx.insidePointIndexDeltaToRealValue;
+         r = index == ctx->IndexPatchCtx.insidePointIndexBadValue
+                ? ctx->IndexPatchCtx.insidePointIndexReplacementValue
+                : index + ctx->IndexPatchCtx.insidePointIndexDeltaToRealValue;
       }
    } else if (ctx->bUsingPatchedIndices2) {
       if (index == ctx->IndexPatchCtx2.cornerCaseBadValue) {
-         return ctx->IndexPatchCtx2.cornerCaseReplacementValue;
+         r = ctx->IndexPatchCtx2.cornerCaseReplacementValue;
       } else if (index >= ctx->IndexPatchCtx2.baseIndexToInvert) {
-         return ctx->IndexPatchCtx2.indexInversionEndPoint - index;
+         r = ctx->IndexPatchCtx2.indexInversionEndPoint - index;
       }
    }
 
-   return index;
+   return r;
 }
+
+/* End of a stitch: the patch contexts are only read while a flag is set, but
+ * the compiler cannot see that, so clear them too: nothing then stays live
+ * from one edge to the next.
+ */
+static inline void
+ResetIndexPatch(private struct CHWTessellator *ctx)
+{
+   ctx->bUsingPatchedIndices = false;
+   ctx->bUsingPatchedIndices2 = false;
+   ctx->IndexPatchCtx.insidePointIndexDeltaToRealValue = 0;
+   ctx->IndexPatchCtx.insidePointIndexBadValue = 0;
+   ctx->IndexPatchCtx.insidePointIndexReplacementValue = 0;
+   ctx->IndexPatchCtx.outsidePointIndexPatchBase = 0;
+   ctx->IndexPatchCtx.outsidePointIndexDeltaToRealValue = 0;
+   ctx->IndexPatchCtx.outsidePointIndexBadValue = 0;
+   ctx->IndexPatchCtx.outsidePointIndexReplacementValue = 0;
+   ctx->IndexPatchCtx2.baseIndexToInvert = 0;
+   ctx->IndexPatchCtx2.indexInversionEndPoint = 0;
+   ctx->IndexPatchCtx2.cornerCaseBadValue = 0;
+   ctx->IndexPatchCtx2.cornerCaseReplacementValue = 0;
+}
+
+/* Run a ring stitch with the index patching mode as a constant: the copy for
+ * the unpatched edges (most of them) then carries none of the patch state
+ * through its triangle loops.
+ */
+#define TESS_STITCH(ctx, call)                                                 \
+   do {                                                                        \
+      if ((ctx).bUsingPatchedIndices) {                                        \
+         (ctx).bUsingPatchedIndices = true;                                    \
+         (ctx).bUsingPatchedIndices2 = false;                                  \
+         call;                                                                 \
+      } else if ((ctx).bUsingPatchedIndices2) {                                \
+         (ctx).bUsingPatchedIndices = false;                                   \
+         (ctx).bUsingPatchedIndices2 = true;                                   \
+         call;                                                                 \
+      } else {                                                                 \
+         (ctx).bUsingPatchedIndices = false;                                   \
+         (ctx).bUsingPatchedIndices2 = false;                                  \
+         call;                                                                 \
+      }                                                                        \
+   } while (0)
 
 static inline void
 DefinePoint(global struct poly_tess_point *out, FXP fxpU, FXP fxpV)
@@ -389,6 +449,18 @@ ComputeTessFactorCtx(bool odd, FXP fxpTessFactor,
       floatToFixed(1.0f / (float)numCeilSegments);
 }
 
+/* The patch functions recompute TESS_FACTOR_CONTEXTs where they are used
+ * instead of keeping one per edge and axis live through the whole patch:
+ * that state is what made the tessellator spill.
+ */
+static inline int
+TessFactorNumHalfPoints(bool odd, FXP fxpTessFactor)
+{
+   TESS_FACTOR_CONTEXT c;
+   ComputeTessFactorCtx(odd, fxpTessFactor, &c);
+   return c.numHalfTessFactorPoints;
+}
+
 static inline FXP
 PlacePointIn1D(private const TESS_FACTOR_CONTEXT *TessFactorCtx, bool odd,
                int point)
@@ -399,9 +471,9 @@ PlacePointIn1D(private const TESS_FACTOR_CONTEXT *TessFactorCtx, bool odd,
       point = (TessFactorCtx->numHalfTessFactorPoints << 1) - point - odd;
    }
 
-   // special casing middle since 16 bit fixed math below can't reproduce 0.5 exactly
-   if (point == TessFactorCtx->numHalfTessFactorPoints)
-      return FXP_ONE_HALF;
+   // special casing middle since 16 bit fixed math below can't reproduce 0.5
+   // exactly (single exit, see PatchIndexValue())
+   bool middle = point == TessFactorCtx->numHalfTessFactorPoints;
 
    unsigned int indexOnCeilHalfTessFactor = point;
    unsigned int indexOnFloorHalfTessFactor = indexOnCeilHalfTessFactor;
@@ -431,7 +503,7 @@ PlacePointIn1D(private const TESS_FACTOR_CONTEXT *TessFactorCtx, bool odd,
    if (bFlip) {
       fxpLocation = FXP_ONE - fxpLocation;
    }
-   return fxpLocation;
+   return middle ? FXP_ONE_HALF : fxpLocation;
 }
 
 static inline void
@@ -592,11 +664,7 @@ loop_end(int N)
 static inline uint32_t
 finalPointPositionTable(uint32_t x)
 {
-   if (x == 0)
-      return 0;
-   if (x == 1)
-      return 0x20;
-
+   /* Single exit, see PatchIndexValue(). */
    uint32_t shift;
    if ((x & 1) == 0) {
       shift = 1;
@@ -616,7 +684,7 @@ finalPointPositionTable(uint32_t x)
    uint32_t shifted = items_to_shift >> shift;
 
    uint32_t bias = min(0xfu, shifted >> 16);
-   return bias + (shifted & 0xffff);
+   return x == 0 ? 0 : x == 1 ? 0x20 : bias + (shifted & 0xffff);
 }
 
 static inline void
@@ -858,8 +926,6 @@ poly_tess_tri_process(constant struct poly_tess_params *p, uint32_t patch,
    FXP insideTessFactor;
    bool outsideTessFactorOdd[TRI_EDGES];
    bool insideTessFactorOdd;
-   TESS_FACTOR_CONTEXT outsideTessFactorCtx[TRI_EDGES];
-   TESS_FACTOR_CONTEXT insideTessFactorCtx;
    // Stuff below is just specific to the traversal order
    // this code happens to use to generate points/lines
    int numPointsForOutsideEdge[TRI_EDGES];
@@ -892,6 +958,11 @@ poly_tess_tri_process(constant struct poly_tess_params *p, uint32_t patch,
       }
       insideTessFactorOdd = odd;
    }
+
+   /* The edge odd flags as bits: one register through the loops. */
+   uint outsideOddBits = outsideTessFactorOdd[0] |
+                         (outsideTessFactorOdd[1] << 1) |
+                         (outsideTessFactorOdd[2] << 2);
 
    // Save fixed point TessFactors
    for (int edge = 0; edge < TRI_EDGES; edge++) {
@@ -934,13 +1005,8 @@ poly_tess_tri_process(constant struct poly_tess_params *p, uint32_t patch,
       }
    }
 
-   // Compute per-TessFactor metadata
-   for (int edge = 0; edge < TRI_EDGES; edge++) {
-      ComputeTessFactorCtx(outsideTessFactorOdd[edge], outsideTessFactor[edge],
-                           &outsideTessFactorCtx[edge]);
-   }
-   ComputeTessFactorCtx(insideTessFactorOdd, insideTessFactor,
-                        &insideTessFactorCtx);
+   // Per-TessFactor metadata (TESS_FACTOR_CONTEXT) is computed where it is
+   // used, see TessFactorNumHalfPoints().
 
    // Compute some initial data.
    int NumPoints = 0;
@@ -981,7 +1047,11 @@ poly_tess_tri_process(constant struct poly_tess_params *p, uint32_t patch,
       int pointOffset = 0;
       for (int edge = 0; edge < TRI_EDGES; edge++) {
          int odd = edge & 0x1;
-         int endPoint = numPointsForOutsideEdge[edge] - 1;
+         bool edgeOdd = ((outsideOddBits >> edge) & 1);
+         FXP edgeFactor = TESS_SEL3(outsideTessFactor, edge, );
+         int endPoint = NumPointsForTessFactor(edgeOdd, edgeFactor) - 1;
+         TESS_FACTOR_CONTEXT edgeCtx;
+         ComputeTessFactorCtx(edgeOdd, edgeFactor, &edgeCtx);
          // don't include end, since next edge starts with it.
          for (int p = 0; p < endPoint; p++, pointOffset++) {
             // whether to reverse point order given we are defining V or U (W
@@ -990,8 +1060,7 @@ poly_tess_tri_process(constant struct poly_tess_params *p, uint32_t patch,
             // below edge2, UV, has U decreasing, so reverse 1D points below
             int q = odd ? p : endPoint - p;
 
-            FXP fxpParam = PlacePointIn1D(&outsideTessFactorCtx[edge],
-                                          outsideTessFactorOdd[edge], q);
+            FXP fxpParam = PlacePointIn1D(&edgeCtx, edgeOdd, q);
             DefinePoint(&ctx.Point[pointOffset], (edge == 0) ? 0 : fxpParam,
                         (edge == 0)   ? fxpParam
                         : (edge == 2) ? FXP_ONE - fxpParam
@@ -1000,6 +1069,9 @@ poly_tess_tri_process(constant struct poly_tess_params *p, uint32_t patch,
       }
 
       // Generate interior ring points, clockwise spiralling in
+      TESS_FACTOR_CONTEXT insideTessFactorCtx;
+      ComputeTessFactorCtx(insideTessFactorOdd, insideTessFactor,
+                           &insideTessFactorCtx);
       int numRings = (numPointsForInsideTessFactor >> 1);
       for (int ring = 1; ring < numRings; ring++) {
          int startPoint = ring;
@@ -1091,8 +1163,11 @@ poly_tess_tri_process(constant struct poly_tess_params *p, uint32_t patch,
          int edge0InsidePointBaseOffset = insideOffset;
          int edge0OutsidePointBaseOffset = outsideEdgePointBaseOffset;
          for (int edge = 0; edge < TRI_EDGES; edge++) {
-            int outsidePoints = ring == 1 ? numPointsForOutsideEdge[edge]
-                                          : (numPointsForInsideEdge + 2);
+            bool edgeOdd = ((outsideOddBits >> edge) & 1);
+            FXP edgeFactor = TESS_SEL3(outsideTessFactor, edge, );
+            int outsidePoints = ring == 1
+                                   ? NumPointsForTessFactor(edgeOdd, edgeFactor)
+                                   : (numPointsForInsideEdge + 2);
 
             int numTriangles = numPointsForInsideEdge + outsidePoints - 2;
 
@@ -1123,22 +1198,20 @@ poly_tess_tri_process(constant struct poly_tess_params *p, uint32_t patch,
                insideBaseOffset = insideOffset;
                outsideBaseOffset = outsideEdgePointBaseOffset;
             }
-            if (ring == 1) {
+            TESS_STITCH(ctx, if (ring == 1) {
                StitchTransition(
                   &ctx, /*baseIndexOffset: */ NumIndices, insideBaseOffset,
-                  insideTessFactorCtx.numHalfTessFactorPoints,
+                  TessFactorNumHalfPoints(insideTessFactorOdd,
+                                          insideTessFactor),
                   insideTessFactorOdd, outsideBaseOffset,
-                  outsideTessFactorCtx[edge].numHalfTessFactorPoints,
-                  outsideTessFactorOdd[edge]);
+                  TessFactorNumHalfPoints(edgeOdd, edgeFactor), edgeOdd);
             } else {
                StitchRegular(&ctx, /*bTrapezoid*/ true, DIAGONALS_MIRRORED,
                              /*baseIndexOffset: */ NumIndices,
                              numPointsForInsideEdge, insideBaseOffset,
                              outsideBaseOffset);
-            }
-            if (2 == edge) {
-               ctx.bUsingPatchedIndices = false;
-            }
+            });
+            ResetIndexPatch(&ctx);
             NumIndices += numTriangles * 3;
             outsideEdgePointBaseOffset += outsidePoints - 1;
             insideOffset += numPointsForInsideEdge - 1;
@@ -1187,8 +1260,6 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
    FXP insideTessFactor[QUAD_AXES];
    bool outsideTessFactorOdd[QUAD_EDGES];
    bool insideTessFactorOdd[QUAD_AXES];
-   TESS_FACTOR_CONTEXT outsideTessFactorCtx[QUAD_EDGES];
-   TESS_FACTOR_CONTEXT insideTessFactorCtx[QUAD_AXES];
    // Stuff below is just specific to the traversal order
    // this code happens to use to generate points/lines
    int numPointsForOutsideEdge[QUAD_EDGES];
@@ -1230,6 +1301,13 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
       }
       insideTessFactorOdd[U] = insideTessFactorOdd[V] = odd;
    }
+
+   /* The odd flags as bits (edges 0-3, axes 4-5): one register through the
+    * loops instead of six (see TESS_SEL*). */
+   uint oddBits = outsideTessFactorOdd[0] | (outsideTessFactorOdd[1] << 1) |
+                  (outsideTessFactorOdd[2] << 2) |
+                  (outsideTessFactorOdd[3] << 3) |
+                  (insideTessFactorOdd[U] << 4) | (insideTessFactorOdd[V] << 5);
 
    // Save fixed point TessFactors
    for (int edge = 0; edge < QUAD_EDGES; edge++) {
@@ -1273,16 +1351,8 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
       }
    }
 
-   // Compute TessFactor-specific metadata
-   for (int edge = 0; edge < QUAD_EDGES; edge++) {
-      ComputeTessFactorCtx(outsideTessFactorOdd[edge], outsideTessFactor[edge],
-                           &outsideTessFactorCtx[edge]);
-   }
-
-   for (int axis = 0; axis < QUAD_AXES; axis++) {
-      ComputeTessFactorCtx(insideTessFactorOdd[axis], insideTessFactor[axis],
-                           &insideTessFactorCtx[axis]);
-   }
+   // TessFactor-specific metadata (TESS_FACTOR_CONTEXT) is computed where it
+   // is used, see TessFactorNumHalfPoints().
 
    int NumPoints = 0;
 
@@ -1319,12 +1389,15 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
       for (int edge = 0; edge < QUAD_EDGES; edge++) {
          int odd = edge & 0x1;
          // don't include end, since next edge starts with it.
-         int endPoint = numPointsForOutsideEdge[edge] - 1;
+         bool edgeOdd = ((oddBits >> edge) & 1);
+         FXP edgeFactor = TESS_SEL4(outsideTessFactor, edge, );
+         int endPoint = NumPointsForTessFactor(edgeOdd, edgeFactor) - 1;
+         TESS_FACTOR_CONTEXT edgeCtx;
+         ComputeTessFactorCtx(edgeOdd, edgeFactor, &edgeCtx);
          for (int p = 0; p < endPoint; p++, pointOffset++) {
             int q =
                ((edge == 1) || (edge == 2)) ? p : endPoint - p; // reverse order
-            FXP fxpParam = PlacePointIn1D(&outsideTessFactorCtx[edge],
-                                          outsideTessFactorOdd[edge], q);
+            FXP fxpParam = PlacePointIn1D(&edgeCtx, edgeOdd, q);
 
             FXP u = odd ? fxpParam : ((edge == 2) ? FXP_ONE : 0);
             FXP v = odd ? ((edge == 3) ? FXP_ONE : 0) : fxpParam;
@@ -1347,23 +1420,29 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
          };
 
          for (int edge = 0; edge < QUAD_EDGES; edge++) {
-            int odd[QUAD_AXES] = {edge & 0x1, ((edge + 1) & 0x1)};
+            int odd0 = edge & 0x1, odd1 = (edge + 1) & 0x1;
+            bool perpOdd = ((oddBits >> (4 + odd0)) & 1);
+            bool edgeOdd = ((oddBits >> (4 + odd1)) & 1);
+            TESS_FACTOR_CONTEXT perpCtx, edgeCtx;
+            ComputeTessFactorCtx(perpOdd, TESS_SEL2(insideTessFactor, odd0, ),
+                                 &perpCtx);
+            ComputeTessFactorCtx(edgeOdd, TESS_SEL2(insideTessFactor, odd1, ),
+                                 &edgeCtx);
             int perpendicularAxisPoint =
-               (edge < 2) ? startPoint : endPoint[odd[0]];
-            FXP fxpPerpParam = PlacePointIn1D(&insideTessFactorCtx[odd[0]],
-                                              insideTessFactorOdd[odd[0]],
-                                              perpendicularAxisPoint);
+               (edge < 2) ? startPoint : TESS_SEL2(endPoint, odd0, );
+            FXP fxpPerpParam =
+               PlacePointIn1D(&perpCtx, perpOdd, perpendicularAxisPoint);
+            int edgeEnd = TESS_SEL2(endPoint, odd1, );
 
-            for (int p = startPoint; p < endPoint[odd[1]]; p++,
+            for (int p = startPoint; p < edgeEnd; p++,
                      pointOffset++) // don't include end: next edge starts with
                                     // it.
             {
-               bool odd_ = odd[1];
+               bool odd_ = odd1;
                int q = ((edge == 1) || (edge == 2))
                           ? p
-                          : endPoint[odd_] - (p - startPoint);
-               FXP fxpParam = PlacePointIn1D(&insideTessFactorCtx[odd_],
-                                             insideTessFactorOdd[odd_], q);
+                          : edgeEnd - (p - startPoint);
+               FXP fxpParam = PlacePointIn1D(&edgeCtx, edgeOdd, q);
                DefinePoint(&ctx.Point[pointOffset],
                            odd_ ? fxpPerpParam : fxpParam,
                            odd_ ? fxpParam : fxpPerpParam);
@@ -1372,22 +1451,26 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
       }
       // For even tessellation, the inner "ring" is degenerate - a row of points
       if ((numPointsForInsideTessFactor[U] > numPointsForInsideTessFactor[V]) &&
-          !insideTessFactorOdd[V]) {
+          !((oddBits >> 5) & 1)) {
          int startPoint = numRings;
          int endPoint = numPointsForInsideTessFactor[U] - 1 - startPoint;
+         TESS_FACTOR_CONTEXT ctxU;
+         ComputeTessFactorCtx(((oddBits >> 4) & 1), insideTessFactor[U],
+                              &ctxU);
          for (int p = startPoint; p <= endPoint; p++, pointOffset++) {
-            FXP fxpParam = PlacePointIn1D(&insideTessFactorCtx[U],
-                                          insideTessFactorOdd[U], p);
+            FXP fxpParam = PlacePointIn1D(&ctxU, ((oddBits >> 4) & 1), p);
             DefinePoint(&ctx.Point[pointOffset], fxpParam, FXP_ONE_HALF);
          }
       } else if ((numPointsForInsideTessFactor[V] >=
                   numPointsForInsideTessFactor[U]) &&
-                 !insideTessFactorOdd[U]) {
+                 !((oddBits >> 4) & 1)) {
          int startPoint = numRings;
          int endPoint = numPointsForInsideTessFactor[V] - 1 - startPoint;
+         TESS_FACTOR_CONTEXT ctxV;
+         ComputeTessFactorCtx(((oddBits >> 5) & 1), insideTessFactor[V],
+                              &ctxV);
          for (int p = endPoint; p >= startPoint; p--, pointOffset++) {
-            FXP fxpParam = PlacePointIn1D(&insideTessFactorCtx[V],
-                                          insideTessFactorOdd[V], p);
+            FXP fxpParam = PlacePointIn1D(&ctxV, ((oddBits >> 5) & 1), p);
             DefinePoint(&ctx.Point[pointOffset], FXP_ONE_HALF, fxpParam);
          }
       }
@@ -1429,10 +1512,11 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
          unsigned m = U_major ? V : U;
 
          /* Handle degenerate ring */
-         if (insideTessFactorOdd[m]) {
-            NumIndices += 12 * ((numPointsForInsideTessFactor[M] >> 1) -
-                                (numPointsForInsideTessFactor[m] >> 1));
-            NumIndices += (insideTessFactorOdd[M] ? 6 : 12);
+         if (((oddBits >> (4 + m)) & 1)) {
+            NumIndices +=
+               12 * ((TESS_SEL2(numPointsForInsideTessFactor, M, ) >> 1) -
+                     (TESS_SEL2(numPointsForInsideTessFactor, m, ) >> 1));
+            NumIndices += (((oddBits >> (4 + M)) & 1) ? 6 : 12);
          }
 
          // Generate the draw and allocate the index buffer with the size
@@ -1446,15 +1530,8 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
          // Even partitioning causes degenerate row of points,
          // which results in exceptions to the point ordering conventions
          // when travelling around the rings counterclockwise.
-         !insideTessFactorOdd[V] ? numPointRowsToCenter[V] - 1 : -1,
-         !insideTessFactorOdd[U] ? numPointRowsToCenter[U] - 1 : -1,
-      };
-
-      int numPointsForOutsideEdge_[QUAD_EDGES] = {
-         numPointsForOutsideEdge[Ueq0],
-         numPointsForOutsideEdge[Veq0],
-         numPointsForOutsideEdge[Ueq1],
-         numPointsForOutsideEdge[Veq1],
+         !((oddBits >> 5) & 1) ? numPointRowsToCenter[V] - 1 : -1,
+         !((oddBits >> 4) & 1) ? numPointRowsToCenter[U] - 1 : -1,
       };
 
       int insideEdgePointBaseOffset_ = insideEdgePointBaseOffset;
@@ -1472,9 +1549,16 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
 
          for (int edge = 0; edge < QUAD_EDGES; edge++) {
             int odd = (edge + 1) & 0x1;
+            int insideEdgePoints = TESS_SEL2(numPointsForInsideEdge, odd, );
+            bool edgeOdd = ((oddBits >> edge) & 1);
+            FXP edgeFactor = TESS_SEL4(outsideTessFactor, edge, );
+            /* The outside row of a ring is the inside row of the one before. */
+            int outsideEdgePoints = ring == 1
+                                       ? NumPointsForTessFactor(edgeOdd, edgeFactor)
+                                       : insideEdgePoints + 2;
+            bool degenerateRing = ring == TESS_SEL2(degeneratePointRing, odd, );
 
-            int numTriangles =
-               numPointsForInsideEdge[odd] + numPointsForOutsideEdge_[edge] - 2;
+            int numTriangles = insideEdgePoints + outsideEdgePoints - 2;
             int insideBaseOffset;
             int outsideBaseOffset;
 
@@ -1485,12 +1569,11 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
             // it so that when Stitch() calls AddIndex(), that function will do
             // any necessary index adjustment.
             if (edge == 3) {
-               if (ring == degeneratePointRing[odd]) {
+               if (degenerateRing) {
                   ctx.IndexPatchCtx2.baseIndexToInvert =
                      insideEdgePointBaseOffset_ + 1;
                   ctx.IndexPatchCtx2.cornerCaseBadValue =
-                     outsideEdgePointBaseOffset +
-                     numPointsForOutsideEdge_[edge] - 1;
+                     outsideEdgePointBaseOffset + outsideEdgePoints - 1;
                   ctx.IndexPatchCtx2.cornerCaseReplacementValue =
                      edge0OutsidePointBaseOffset;
                   ctx.IndexPatchCtx2.indexInversionEndPoint =
@@ -1502,7 +1585,7 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
                   ctx.IndexPatchCtx.insidePointIndexDeltaToRealValue =
                      insideEdgePointBaseOffset_;
                   ctx.IndexPatchCtx.insidePointIndexBadValue =
-                     numPointsForInsideEdge[odd] - 1;
+                     insideEdgePoints - 1;
                   ctx.IndexPatchCtx.insidePointIndexReplacementValue =
                      edge0InsidePointBaseOffset;
                   ctx.IndexPatchCtx.outsidePointIndexPatchBase =
@@ -1513,7 +1596,7 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
                      ctx.IndexPatchCtx.outsidePointIndexPatchBase;
                   ctx.IndexPatchCtx.outsidePointIndexBadValue =
                      ctx.IndexPatchCtx.outsidePointIndexPatchBase +
-                     numPointsForOutsideEdge_[edge] - 1;
+                     outsideEdgePoints - 1;
                   ctx.IndexPatchCtx.outsidePointIndexReplacementValue =
                      edge0OutsidePointBaseOffset;
 
@@ -1522,7 +1605,7 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
                      ctx.IndexPatchCtx.outsidePointIndexPatchBase;
                   ctx.bUsingPatchedIndices = true;
                }
-            } else if ((edge == 2) && (ring == degeneratePointRing[odd])) {
+            } else if ((edge == 2) && degenerateRing) {
                ctx.IndexPatchCtx2.baseIndexToInvert =
                   insideEdgePointBaseOffset_;
                ctx.IndexPatchCtx2.cornerCaseBadValue = -1;         // unused
@@ -1536,29 +1619,27 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
                insideBaseOffset = insideEdgePointBaseOffset_;
                outsideBaseOffset = outsideEdgePointBaseOffset;
             }
-            if (ring == 1) {
+            TESS_STITCH(ctx, if (ring == 1) {
                StitchTransition(
                   &ctx, /*baseIndexOffset: */ NumIndices, insideBaseOffset,
-                  insideTessFactorCtx[odd].numHalfTessFactorPoints,
-                  insideTessFactorOdd[odd], outsideBaseOffset,
-                  outsideTessFactorCtx[edge].numHalfTessFactorPoints,
-                  outsideTessFactorOdd[edge]);
+                  TessFactorNumHalfPoints(((oddBits >> (4 + odd)) & 1),
+                                          TESS_SEL2(insideTessFactor, odd, )),
+                  ((oddBits >> (4 + odd)) & 1), outsideBaseOffset,
+                  TessFactorNumHalfPoints(edgeOdd, edgeFactor), edgeOdd);
             } else {
                StitchRegular(&ctx, /*bTrapezoid*/ true, DIAGONALS_MIRRORED,
                              /*baseIndexOffset: */ NumIndices,
-                             numPointsForInsideEdge[odd], insideBaseOffset,
+                             insideEdgePoints, insideBaseOffset,
                              outsideBaseOffset);
-            }
-            ctx.bUsingPatchedIndices = false;
-            ctx.bUsingPatchedIndices2 = false;
+            });
+            ResetIndexPatch(&ctx);
             NumIndices += numTriangles * 3;
-            outsideEdgePointBaseOffset += numPointsForOutsideEdge_[edge] - 1;
-            if ((edge == 2) && (ring == degeneratePointRing[odd])) {
-               insideEdgePointBaseOffset_ -= numPointsForInsideEdge[odd] - 1;
+            outsideEdgePointBaseOffset += outsideEdgePoints - 1;
+            if ((edge == 2) && degenerateRing) {
+               insideEdgePointBaseOffset_ -= insideEdgePoints - 1;
             } else {
-               insideEdgePointBaseOffset_ += numPointsForInsideEdge[odd] - 1;
+               insideEdgePointBaseOffset_ += insideEdgePoints - 1;
             }
-            numPointsForOutsideEdge_[edge] = numPointsForInsideEdge[odd];
          }
       }
 
@@ -1566,12 +1647,12 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
       // This triangulation may be producing diagonals that are asymmetric about
       // the center of the patch in this region.
       if ((numPointsForInsideTessFactor[U] > numPointsForInsideTessFactor[V]) &&
-          insideTessFactorOdd[V]) {
+          ((oddBits >> 5) & 1)) {
          ctx.bUsingPatchedIndices2 = true;
          int stripNumQuads = (((numPointsForInsideTessFactor[U] >> 1) -
                                (numPointsForInsideTessFactor[V] >> 1))
                               << 1) +
-                             (insideTessFactorOdd[U] ? 1 : 2);
+                             (((oddBits >> 4) & 1) ? 1 : 2);
          ctx.IndexPatchCtx2.baseIndexToInvert =
             outsideEdgePointBaseOffset + stripNumQuads + 2;
          ctx.IndexPatchCtx2.cornerCaseBadValue =
@@ -1591,19 +1672,19 @@ poly_tess_quad_process(constant struct poly_tess_params *p, uint32_t patch,
          NumIndices += stripNumQuads * 6;
       } else if ((numPointsForInsideTessFactor[V] >=
                   numPointsForInsideTessFactor[U]) &&
-                 insideTessFactorOdd[U]) {
+                 ((oddBits >> 4) & 1)) {
          ctx.bUsingPatchedIndices2 = true;
          int stripNumQuads = (((numPointsForInsideTessFactor[V] >> 1) -
                                (numPointsForInsideTessFactor[U] >> 1))
                               << 1) +
-                             (insideTessFactorOdd[V] ? 1 : 2);
+                             (((oddBits >> 5) & 1) ? 1 : 2);
          ctx.IndexPatchCtx2.baseIndexToInvert =
             outsideEdgePointBaseOffset + stripNumQuads + 1;
          ctx.IndexPatchCtx2.cornerCaseBadValue = -1; // unused
          ctx.IndexPatchCtx2.indexInversionEndPoint =
             ctx.IndexPatchCtx2.baseIndexToInvert +
             ctx.IndexPatchCtx2.baseIndexToInvert + stripNumQuads;
-         DIAGONALS diag = insideTessFactorOdd[V]
+         DIAGONALS diag = ((oddBits >> 5) & 1)
                              ? DIAGONALS_INSIDE_TO_OUTSIDE_EXCEPT_MIDDLE
                              : DIAGONALS_INSIDE_TO_OUTSIDE;
          StitchRegular(
