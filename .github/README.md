@@ -41,7 +41,7 @@ Depending on your Linux distribution, go to [Releases](https://github.com/lfdevs
 |     Debian 13      |            [25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-adreno)            |            [turnip-25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-turnip)            |
 |  Ubuntu 24.04 LTS  | [25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-adreno) | [turnip-25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-turnip) |
 |     Fedora 43      |             [25.2.7-4.fc43](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-25.2.7-4.fc43-adreno)             |               [turnip-25.2.7-4.fc43](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-25.2.7-4.fc43)                |
-|     Arch Linux     |               [27.0.0-90](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025)               |              [turnip-27.0.0-90](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025)              |
+|     Arch Linux     |               [27.0.0-91](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025-r1)               |              [turnip-27.0.0-90](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025)              |
 
 If you need the Termux native version, please use the build artifacts from this PR: <https://github.com/lfdevs/termux-packages/pull/25>
 
@@ -68,7 +68,7 @@ Currently, the "Direct Extraction" way supports the following Linux distribution
 
 | Standard Installation Package | Unpatched Turnip Installation Package (usually not needed) |
 | :-: | :-: |
-| [27.0.0-devel-20261025](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025) | [turnip-27.0.0-devel-20261025](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025) |
+| [27.0.0-devel-20261025-r1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025-r1) | [turnip-27.0.0-devel-20261025](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025) |
 
 > [!NOTE]
 > For Adreno 7XX & 8XX, it should no longer be necessary to install unpatched Turnip drivers now. **Patched Turnip** from the standard release should work properly.

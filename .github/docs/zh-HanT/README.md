@@ -41,7 +41,7 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 |    Debian 13     |            [25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-adreno)            |            [turnip-25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-turnip)            |
 | Ubuntu 24.04 LTS | [25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-adreno) | [turnip-25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-turnip) |
 |    Fedora 43     |             [25.2.7-4.fc43](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-25.2.7-4.fc43-adreno)             |               [turnip-25.2.7-4.fc43](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-25.2.7-4.fc43)                |
-|    Arch Linux    |               [27.0.0-90](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025)               |              [turnip-27.0.0-90](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025)              |
+|    Arch Linux    |               [27.0.0-91](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025-r1)               |              [turnip-27.0.0-90](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025)              |
 
 若需要 Termux native 版本，請使用該 PR 的建置產物：<https://github.com/lfdevs/termux-packages/pull/25>
 
@@ -68,7 +68,7 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 
 | 標準安裝包 | 未打補丁的 Turnip 安裝包（通常不需要） |
 | :-: | :--: |
-| [27.0.0-devel-20261025](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025) | [turnip-27.0.0-devel-20261025](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025) |
+| [27.0.0-devel-20261025-r1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025-r1) | [turnip-27.0.0-devel-20261025](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025) |
 
 > [!NOTE]
 > 對於 7XX & 8XX，現在應該不再需要安裝未打補丁的 Turnip 驅動程式了。標準安裝包中打過補丁的 Turnip 驅動程式應該能正常運作。
