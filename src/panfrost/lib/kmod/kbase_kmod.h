@@ -79,8 +79,10 @@ bool kbase_kmod_supports_dmabuf(const struct pan_kmod_dev *dev);
  * page and kick.  Progress is visible through CS_EXTRACT / CS_ACTIVE in
  * the output page.
  */
+/* tiler_oom_handler: request BASE_CSF_TILER_OOM_EXCEPTION_FLAG (uAPI 1.12+;
+ * ignored on older kernels). */
 int kbase_kmod_csf_group_create(struct pan_kmod_dev *dev,
-                                uint32_t cs_queue_count,
+                                uint32_t cs_queue_count, bool tiler_oom_handler,
                                 uint32_t *group_handle);
 
 /* kbase counts va_pages, alias lengths and mmap handle offsets in kernel

@@ -74,6 +74,9 @@ cmdbuf_skips_gpu_heap_ops(const struct panvk_cmd_buffer *cmdbuf)
    return phys_dev->kbase_node_path[0] != '\0';
 }
 
+/* kbase incremental rendering (jm-v7-wip 0161, panvk_vX_gpu_queue.c). */
+DEBUG_GET_ONCE_BOOL_OPTION(kbase_tiler_ir, "PANVK_KBASE_TILER_IR", true)
+
 static bool
 render_needs_zs_crc_ext(struct panvk_cmd_buffer *cmdbuf)
 {
@@ -7572,11 +7575,21 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
          cs_defer(SB_WAIT_ITER(sb_upd_ctx.cur_sb), SB_ITER(sb_upd_ctx.next_sb));
 #endif
 
-      if (cmdbuf_skips_gpu_heap_ops(cmdbuf)) {
+      /* On kbase, FINISH_FRAGMENT without the FRAGMENT_COMPLETED increment
+       * (and no FRAGMENT_END, see cmdbuf_skips_gpu_heap_ops()) still gives
+       * the pass's chunks back to the heap context.  Without it a heap
+       * generation only grows until the queue's heap renewal, and once
+       * earlier passes hold every chunk, the incremental rendering handler
+       * frees nothing and the tiler OOMs forever (firmware hang, X6 Pro
+       * with 8 max chunks).  PANVK_KBASE_TILER_IR=0: old behaviour. */
+      const bool heap_stats = !cmdbuf_skips_gpu_heap_ops(cmdbuf);
+
+      if (!heap_stats && !debug_get_option_kbase_tiler_ir()) {
          /* Heap chunks are reclaimed by the queue's heap renewal. */
       } else if (td_count == 1) {
          cs_load_to(b, completed, cur_tiler, BITFIELD_MASK(4), 40);
-         cs_finish_fragment(b, true, completed_top, completed_bottom, async);
+         cs_finish_fragment(b, heap_stats, completed_top, completed_bottom,
+                            async);
       } else if (td_count > 1) {
          cs_while(b, MALI_CS_CONDITION_GREATER, tiler_count) {
             cs_load_to(b, completed, cur_tiler, BITFIELD_MASK(4), 40);
@@ -7586,7 +7599,8 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
                cs_add_imm64(b, cur_tiler, cur_tiler, pan_size(TILER_CONTEXT));
             cs_add_imm32(b, tiler_count, tiler_count, -1);
          }
-         cs_frag_end(b, async);
+         if (heap_stats)
+            cs_frag_end(b, async);
       }
 
 #if PAN_ARCH >= 11

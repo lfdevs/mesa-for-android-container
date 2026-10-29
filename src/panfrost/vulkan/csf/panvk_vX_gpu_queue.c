@@ -1110,6 +1110,15 @@ kbase_queue_wait_current(struct panvk_gpu_queue *queue,
    return VK_SUCCESS;
 }
 
+/* All subqueues in one kbase queue group (CS i = subqueue i, the panthor
+ * layout), with the tiler OOM exception flag.  At max_chunks kbase then
+ * answers a tiler OOM with a NULL chunk instead of terminating the group, and
+ * the firmware runs the fragment CS's TILER_OOM handler (incremental
+ * rendering, panvk_vX_exception_handler.c), which only reaches CSs of the
+ * group that hit the OOM.  One group per subqueue (PANVK_KBASE_TILER_IR=0,
+ * the old layout) turns every heap exhaustion into DEVICE_LOST. */
+DEBUG_GET_ONCE_BOOL_OPTION(kbase_one_group, "PANVK_KBASE_TILER_IR", true)
+
 static void
 kbase_destroy_group(struct panvk_gpu_queue *queue)
 {
@@ -1126,10 +1135,18 @@ kbase_destroy_group(struct panvk_gpu_queue *queue)
       subq->kbase.ringbuf_bo = NULL;
       subq->kbase.user_io = NULL;
 
-      if (subq->kbase.group_handle != UINT32_MAX) {
-         kbase_kmod_csf_group_destroy(dev->kmod.dev,
-                                      subq->kbase.group_handle);
-         subq->kbase.group_handle = UINT32_MAX;
+   }
+
+   /* In the one-group layout every subqueue holds the same handle. */
+   for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++) {
+      const uint32_t handle = queue->subqueues[i].kbase.group_handle;
+
+      if (handle == UINT32_MAX)
+         continue;
+      kbase_kmod_csf_group_destroy(dev->kmod.dev, handle);
+      for (uint32_t j = i; j < PANVK_SUBQUEUE_COUNT; j++) {
+         if (queue->subqueues[j].kbase.group_handle == handle)
+            queue->subqueues[j].kbase.group_handle = UINT32_MAX;
       }
    }
 }
@@ -1145,11 +1162,17 @@ kbase_create_group(struct panvk_gpu_queue *queue)
    for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++)
       queue->subqueues[i].kbase.group_handle = UINT32_MAX;
 
+   const bool one_group = debug_get_option_kbase_one_group();
+
    for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++) {
       struct panvk_subqueue *subq = &queue->subqueues[i];
 
-      if (kbase_kmod_csf_group_create(dev->kmod.dev, 1,
-                                      &subq->kbase.group_handle)) {
+      if (one_group && i > 0) {
+         subq->kbase.group_handle = queue->subqueues[0].kbase.group_handle;
+      } else if (kbase_kmod_csf_group_create(
+                    dev->kmod.dev, one_group ? PANVK_SUBQUEUE_COUNT : 1,
+                    one_group,
+                    &subq->kbase.group_handle)) {
          result = panvk_errorf(dev, VK_ERROR_INITIALIZATION_FAILED,
                                "Failed to create a kbase queue group");
          goto err_destroy_group;
@@ -1199,7 +1222,7 @@ kbase_create_group(struct panvk_gpu_queue *queue)
       }
 
       subq->kbase.user_io = kbase_kmod_csf_queue_bind(
-         dev->kmod.dev, subq->kbase.group_handle, 0,
+         dev->kmod.dev, subq->kbase.group_handle, one_group ? i : 0,
          subq->kbase.ringbuf_dev,
          KBASE_RINGBUF_SIZE);
       if (!subq->kbase.user_io) {

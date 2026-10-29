@@ -957,11 +957,12 @@ kbase_kmod_get_flush_id(const struct pan_kmod_dev *dev)
  * tiler unit, all fragment/compute endpoints.  Priority 0 is
  * BASE_QUEUE_GROUP_PRIORITY_HIGH: resist CSG rotation so the Pixel kbase
  * off-slot heap-reclaim shrinker cannot empty our tiler heaps under memory
- * pressure.  Tiler heap growth is serviced by the kernel OOM path, so no
- * CSI exception handler is requested (BASE_CSF_TILER_OOM_EXCEPTION_FLAG was
- * tried and is ineffective: the group is terminated on an unhandled OOM
- * regardless).  csi_handlers/dvs_buf stay 0 in every layout, so the kernel
- * compat handlers build the same request whichever layout is used. */
+ * pressure.  Tiler heap growth is serviced by the kernel OOM path.  At
+ * max_chunks kbase terminates the group, unless csi_handlers has
+ * BASE_CSF_TILER_OOM_EXCEPTION_FLAG: it then answers with a NULL chunk and
+ * the firmware raises TILER_OOM on the CS that registered the incremental
+ * rendering handler (jm-v7-wip 0161: the fragment CS, same group as the
+ * vertex/tiler CS).  The 1_6 layout has no csi_handlers. */
 #define KBASE_GROUP_CREATE_IN(cs_count)                                        \
    .tiler_mask = 1, .fragment_mask = ~0ull, .compute_mask = ~0ull,            \
    .cs_min = (cs_count), .priority = 0, .tiler_max = 1, .fragment_max = 64,   \
@@ -969,7 +970,8 @@ kbase_kmod_get_flush_id(const struct pan_kmod_dev *dev)
 
 static int
 kbase_csf_group_create_ioctl(int fd, unsigned layout, bool fault_report,
-                             uint32_t cs_queue_count, uint32_t *group_handle)
+                             uint32_t cs_queue_count, uint8_t csi_handlers,
+                             uint32_t *group_handle)
 {
    STATIC_ASSERT(sizeof(union kbase_ioctl_cs_queue_group_create_1_6) == 32);
    STATIC_ASSERT(sizeof(union kbase_ioctl_cs_queue_group_create_1_18) == 40);
@@ -979,6 +981,7 @@ kbase_csf_group_create_ioctl(int fd, unsigned layout, bool fault_report,
       /* uAPI 1.25+: ask for recoverable CS faults through read(). */
       union kbase_ioctl_cs_queue_group_create req = {
          .in = { KBASE_GROUP_CREATE_IN(cs_queue_count),
+                 .csi_handlers = csi_handlers,
                  .cs_fault_report_enable = fault_report },
       };
       if (ioctl(fd, KBASE_IOCTL_CS_QUEUE_GROUP_CREATE, &req))
@@ -986,7 +989,8 @@ kbase_csf_group_create_ioctl(int fd, unsigned layout, bool fault_report,
       *group_handle = req.out.group_handle;
    } else if (layout == 40) {
       union kbase_ioctl_cs_queue_group_create_1_18 req = {
-         .in = { KBASE_GROUP_CREATE_IN(cs_queue_count) },
+         .in = { KBASE_GROUP_CREATE_IN(cs_queue_count),
+                 .csi_handlers = csi_handlers },
       };
       if (ioctl(fd, KBASE_IOCTL_CS_QUEUE_GROUP_CREATE_1_18, &req))
          return -1;
@@ -1004,12 +1008,16 @@ kbase_csf_group_create_ioctl(int fd, unsigned layout, bool fault_report,
 
 int
 kbase_kmod_csf_group_create(struct pan_kmod_dev *dev, uint32_t cs_queue_count,
-                            uint32_t *group_handle)
+                            bool tiler_oom_handler, uint32_t *group_handle)
 {
    struct kbase_kmod_dev *kbase_dev =
       container_of(dev, struct kbase_kmod_dev, base);
    const bool fault_report =
       pan_kmod_driver_version_at_least(&dev->driver, 1, 25);
+   const uint8_t csi_handlers =
+      tiler_oom_handler && pan_kmod_driver_version_at_least(&dev->driver, 1, 12)
+         ? BASE_CSF_TILER_OOM_EXCEPTION_FLAG
+         : 0;
    unsigned layouts[3], n;
    int err = 0;
 
@@ -1019,13 +1027,23 @@ kbase_kmod_csf_group_create(struct pan_kmod_dev *dev, uint32_t cs_queue_count,
                                                    dev->driver.version.minor,
                                                    layouts);
 
+   /* The kernel's 1_6 compat handler drops csi_handlers (CSF 1.19-1.24
+    * kernels such as MediaTek 1.21 try 32 bytes first): try the layouts that
+    * carry the flag first. */
+   if (csi_handlers && n > 1 && layouts[0] == 32) {
+      memmove(layouts, layouts + 1, (n - 1) * sizeof(layouts[0]));
+      layouts[n - 1] = 32;
+   }
+
    for (unsigned i = 0; i < n; i++) {
       if (kbase_csf_group_create_ioctl(dev->fd, layouts[i], fault_report,
-                                       cs_queue_count, group_handle) == 0) {
+                                       cs_queue_count, csi_handlers,
+                                       group_handle) == 0) {
          if (p_atomic_cmpxchg(&kbase_dev->group_create_layout, 0,
                               layouts[i]) == 0)
-            mesa_logi("kbase: queue_group_create layout=%u bytes",
-                      layouts[i]);
+            mesa_logi("kbase: queue_group_create layout=%u bytes, %u CS, "
+                      "csi_handlers 0x%x",
+                      layouts[i], cs_queue_count, csi_handlers);
          return 0;
       }
 
