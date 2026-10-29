@@ -1158,7 +1158,10 @@ struct bc_prewarm_job {
    struct panvk_device *dev;
    enum bc_xcode_shader shader;
    uint32_t mode;
+   bool batch;
 };
+
+static uint32_t bc_xcode_batch_max(void);
 
 static void
 bc_prewarm_run(void *data, void *gdata, int thread_index)
@@ -1170,7 +1173,7 @@ bc_prewarm_run(void *data, void *gdata, int thread_index)
    bc_prewarm_worker = true;
    get_bc_xcode_pipeline(job->dev, job->shader, job->mode, false, &layout,
                          &pipeline);
-   if (job->shader == BC_XCODE_ETC2)
+   if (job->batch)
       get_bc_xcode_pipeline(job->dev, job->shader, job->mode, true, &layout,
                             &pipeline);
 }
@@ -1209,7 +1212,15 @@ panvk_per_arch(bc_xcode_prewarm)(struct panvk_device *dev,
                          UTIL_QUEUE_INIT_RESIZE_IF_FULL, NULL);
    }
    if (job && dev->bc.prewarm_queue_ok) {
-      *job = (struct bc_prewarm_job){dev, bc_xcode_shader(img), mode};
+      /* The XC_BATCH pipeline only when the image can take a batched
+       * upload (bc_xcode_batchable(): one-layer 2D mip chains). Compiling it
+       * for every ETC2 image doubled the cold-cache cost of the others
+       * (bc_decode, 2 layers: 9.3 s on build 120 vs 5.0 s on 118). */
+      const bool batch = bc_xcode_shader(img) == BC_XCODE_ETC2 &&
+                         img->vk.image_type == VK_IMAGE_TYPE_2D &&
+                         img->vk.array_layers == 1 &&
+                         img->vk.mip_levels > 1 && bc_xcode_batch_max();
+      *job = (struct bc_prewarm_job){dev, bc_xcode_shader(img), mode, batch};
       util_queue_add_job(&dev->bc.prewarm_queue, job,
                          &dev->bc.prewarm_fence[mode], bc_prewarm_run,
                          bc_prewarm_free, 0);
