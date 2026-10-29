@@ -134,7 +134,7 @@ dev_tls_release(struct panvk_cmd_buffer *cmdbuf)
  * exist, and kbase commits and zeroes all of them. The "device TLS" log
  * line prints the real numbers.
  *
- * PANVK_TLS_SPARSE=1 (default on kbase): one BO holds a slab per present
+ * PANVK_TLS_SPARSE=1 (default on kbase before v14): one BO holds a slab per present
  * core, and a KBASE_IOCTL_MEM_ALIAS region spans the whole core-ID range
  * with each present core's slot mapped to its own slab. The slots of absent
  * cores alias the first slab (no extra pages; nothing runs there), so the
@@ -158,7 +158,15 @@ static bool
 dev_tls_sparse(void)
 {
    static int v = -1;
-   return dev_tls_knob(&v, "PANVK_TLS_SPARSE", 1) != 0;
+   /* v14 (Mali-G1-Ultra, mask 0x3300ff): with the alias region, shaders
+    * that spill read back garbage pointers (GPU read faults at 0x0,
+    * 0x3f800000, 0x144xxxxxxxx; DXVK D3D9 cube DEVICE_LOST in most 15 s
+    * runs), never with the full BO. The v14 stack placement does not match
+    * the per-core slots the alias assumes. Full BO by default there;
+    * PANVK_TLS_SPARSE=1 still forces the alias.
+    * ponytail: off for all of v14; re-enable once the v14 core-to-slot
+    * mapping is known. */
+   return dev_tls_knob(&v, "PANVK_TLS_SPARSE", PAN_ARCH < 14) != 0;
 }
 
 static uint64_t
