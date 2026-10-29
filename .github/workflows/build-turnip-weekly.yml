@@ -188,7 +188,7 @@ jobs:
           retry 5 30 apt install -y git ccache libxfixes-dev libarchive-dev
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -265,7 +265,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -325,7 +325,7 @@ jobs:
           retry 5 30 sudo apt install -y git ccache libxfixes-dev libarchive-dev
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-runner-${{ github.run_id }}-${{ github.run_attempt }}
@@ -403,7 +403,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: ~/.ccache
@@ -468,7 +468,7 @@ jobs:
           retry 5 30 apt install -y git ccache libxfixes-dev libarchive-dev
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -546,7 +546,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -609,7 +609,7 @@ jobs:
           retry 5 30 apt install -y git ccache libxfixes-dev libarchive-dev
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -687,7 +687,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -751,7 +751,7 @@ jobs:
           retry 5 30 dnf builddep -y mesa
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -828,7 +828,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -892,7 +892,7 @@ jobs:
           retry 5 30 dnf builddep -y mesa
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -969,7 +969,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -1030,7 +1030,7 @@ jobs:
           retry 5 30 pacman -S --noconfirm base-devel git ccache clang directx-headers expat glibc libdisplay-info libdrm libelf libgcc libglvnd libpng libstdc++ libva libx11 libxcb libxext libxml2 libxrandr libxshmfence libxxf86vm llvm llvm-libs lm_sensors rust spirv-llvm-translator spirv-tools systemd-libs vulkan-icd-loader wayland xcb-util-keysyms zlib zstd cbindgen clang cmake elfutils glslang libclc meson python-mako python-packaging python-ply python-pycparser python-yaml rust-bindgen wayland-protocols xorgproto libsysprof-capture valgrind python-sphinx python-sphinx-hawkmoth byacc flex wayland wayland-protocols
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-runner-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1107,7 +1107,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -1168,7 +1168,7 @@ jobs:
           retry 5 30 xbps-install -y bash base-devel git ccache meson ninja pkg-config python3 flex bison libdrm-devel libX11-devel libxcb-devel libxshmfence-devel wayland-devel wayland-protocols zlib-devel expat-devel llvm18-devel clang18 libxml2-devel libarchive-devel python3-Mako python3-packaging python3-yaml python3-ply libffi-devel libzstd-devel glslang
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-void-turnip-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1241,7 +1241,7 @@ jobs:
           ninja -C build/
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -1276,7 +1276,7 @@ jobs:
 
     steps:
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-alpine-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1374,7 +1374,7 @@ jobs:
             "
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: ~/.ccache

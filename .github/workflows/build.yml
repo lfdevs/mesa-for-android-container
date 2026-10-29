@@ -35,7 +35,7 @@ jobs:
           apt install -y git ccache libxfixes-dev libarchive-dev
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -110,7 +110,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -151,7 +151,7 @@ jobs:
           sudo apt install -y git ccache libxfixes-dev libarchive-dev
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-runner-${{ github.run_id }}-${{ github.run_attempt }}
@@ -227,7 +227,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: ~/.ccache
@@ -273,7 +273,7 @@ jobs:
           apt install -y git ccache libxfixes-dev libarchive-dev
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -349,7 +349,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -393,7 +393,7 @@ jobs:
           apt install -y git ccache libxfixes-dev libarchive-dev
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -469,7 +469,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -514,7 +514,7 @@ jobs:
           dnf builddep -y mesa
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -589,7 +589,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -634,7 +634,7 @@ jobs:
           dnf builddep -y mesa
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -709,7 +709,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -759,7 +759,7 @@ jobs:
           chown -R runner:runner /home/runner
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /home/runner/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-runner-${{ github.run_id }}-${{ github.run_attempt }}
@@ -822,7 +822,7 @@ jobs:
           '
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /home/runner/.ccache
@@ -877,7 +877,7 @@ jobs:
             glslang
 
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: /root/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-void-${{ github.run_id }}-${{ github.run_attempt }}
@@ -952,7 +952,7 @@ jobs:
           echo "Mesa build completed successfully!"
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: /root/.ccache
@@ -986,7 +986,7 @@ jobs:
 
     steps:
       - name: Cache ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.ccache
           key: ccache-${{ runner.os }}-${{ runner.arch }}-alpine-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1082,7 +1082,7 @@ jobs:
             "
 
       - name: Save ccache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always()
         with:
           path: ~/.ccache
