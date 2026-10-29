@@ -16,9 +16,6 @@ on:
 permissions:
   contents: write
 
-env:
-  MESA_SOURCE_REF: ${{ github.event.inputs.tag }}
-
 jobs:
   debian-trixie:
     runs-on: ubuntu-24.04-arm
@@ -63,17 +60,14 @@ jobs:
 
       - name: Set release name suffix
         shell: bash
+        env:
+          SOURCE_REF: ${{ github.event.inputs.tag }}
         run: |
           cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
-          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
-          checked_out_tag=
-          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
-            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
-            checked_out_tag="$requested_ref"
-          fi
-          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+          source_ref="${SOURCE_REF#refs/tags/}"
+          if [[ "$source_ref" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
             build_date="${BASH_REMATCH[2]}"
           fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_debian_trixie_arm64" >> "$GITHUB_ENV"
@@ -183,17 +177,14 @@ jobs:
 
       - name: Set release name suffix
         shell: bash
+        env:
+          SOURCE_REF: ${{ github.event.inputs.tag }}
         run: |
           cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
-          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
-          checked_out_tag=
-          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
-            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
-            checked_out_tag="$requested_ref"
-          fi
-          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+          source_ref="${SOURCE_REF#refs/tags/}"
+          if [[ "$source_ref" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
             build_date="${BASH_REMATCH[2]}"
           fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_ubuntu_noble_arm64" >> "$GITHUB_ENV"
@@ -309,17 +300,14 @@ jobs:
 
       - name: Set release name suffix
         shell: bash
+        env:
+          SOURCE_REF: ${{ github.event.inputs.tag }}
         run: |
           cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
-          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
-          checked_out_tag=
-          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
-            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
-            checked_out_tag="$requested_ref"
-          fi
-          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+          source_ref="${SOURCE_REF#refs/tags/}"
+          if [[ "$source_ref" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
             build_date="${BASH_REMATCH[2]}"
           fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_ubuntu_questing_arm64" >> "$GITHUB_ENV"
@@ -433,17 +421,14 @@ jobs:
 
       - name: Set release name suffix
         shell: bash
+        env:
+          SOURCE_REF: ${{ github.event.inputs.tag }}
         run: |
           cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
-          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
-          checked_out_tag=
-          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
-            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
-            checked_out_tag="$requested_ref"
-          fi
-          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+          source_ref="${SOURCE_REF#refs/tags/}"
+          if [[ "$source_ref" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
             build_date="${BASH_REMATCH[2]}"
           fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_ubuntu_resolute_arm64" >> "$GITHUB_ENV"
@@ -558,17 +543,14 @@ jobs:
 
       - name: Set release name suffix
         shell: bash
+        env:
+          SOURCE_REF: ${{ github.event.inputs.tag }}
         run: |
           cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
-          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
-          checked_out_tag=
-          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
-            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
-            checked_out_tag="$requested_ref"
-          fi
-          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+          source_ref="${SOURCE_REF#refs/tags/}"
+          if [[ "$source_ref" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
             build_date="${BASH_REMATCH[2]}"
           fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_fedora_43_arm64" >> "$GITHUB_ENV"
@@ -682,17 +664,14 @@ jobs:
 
       - name: Set release name suffix
         shell: bash
+        env:
+          SOURCE_REF: ${{ github.event.inputs.tag }}
         run: |
           cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
-          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
-          checked_out_tag=
-          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
-            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
-            checked_out_tag="$requested_ref"
-          fi
-          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+          source_ref="${SOURCE_REF#refs/tags/}"
+          if [[ "$source_ref" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
             build_date="${BASH_REMATCH[2]}"
           fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_fedora_44_arm64" >> "$GITHUB_ENV"
@@ -819,17 +798,14 @@ jobs:
 
       - name: Set release name suffix
         shell: bash
+        env:
+          SOURCE_REF: ${{ github.event.inputs.tag }}
         run: |
           cd "$GITHUB_WORKSPACE/archlinuxarm-PKGBUILDs/extra/mesa"
           version=$(awk -F= '/^pkgver=/{print $2; exit}' PKGBUILD)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
-          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
-          checked_out_tag=
-          if git -C "$GITHUB_WORKSPACE/archlinuxarm-PKGBUILDs" show-ref --verify --quiet "refs/tags/$requested_ref" \
-            && ! git -C "$GITHUB_WORKSPACE/archlinuxarm-PKGBUILDs" symbolic-ref --quiet HEAD >/dev/null; then
-            checked_out_tag="$requested_ref"
-          fi
-          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+          source_ref="${SOURCE_REF#refs/tags/}"
+          if [[ "$source_ref" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
             build_date="${BASH_REMATCH[2]}"
           fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-devel-${build_date}_archlinux_arm64" >> "$GITHUB_ENV"
@@ -931,17 +907,14 @@ jobs:
 
       - name: Set release name suffix
         shell: bash
+        env:
+          SOURCE_REF: ${{ github.event.inputs.tag }}
         run: |
           cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
-          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
-          checked_out_tag=
-          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
-            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
-            checked_out_tag="$requested_ref"
-          fi
-          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+          source_ref="${SOURCE_REF#refs/tags/}"
+          if [[ "$source_ref" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
             build_date="${BASH_REMATCH[2]}"
           fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_void_arm64" >> "$GITHUB_ENV"
@@ -1034,17 +1007,14 @@ jobs:
 
       - name: Set release name suffix
         shell: bash
+        env:
+          SOURCE_REF: ${{ github.event.inputs.tag }}
         run: |
           cd "$GITHUB_WORKSPACE"
           version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
-          requested_ref="${MESA_SOURCE_REF#refs/tags/}"
-          checked_out_tag=
-          if git -C "$GITHUB_WORKSPACE" show-ref --verify --quiet "refs/tags/$requested_ref" \
-            && ! git -C "$GITHUB_WORKSPACE" symbolic-ref --quiet HEAD >/dev/null; then
-            checked_out_tag="$requested_ref"
-          fi
-          if [[ "$checked_out_tag" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
+          source_ref="${SOURCE_REF#refs/tags/}"
+          if [[ "$source_ref" =~ ^(mesa|turnip)-.*-devel-([0-9]{8}(-r[0-9]+)?)$ ]]; then
             build_date="${BASH_REMATCH[2]}"
           fi
           echo "MESA_RELEASE_NAME_SUFFIX=${version}-${build_date}_alpine_3.24_arm64" >> "$GITHUB_ENV"
