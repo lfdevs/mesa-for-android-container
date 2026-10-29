@@ -69,6 +69,12 @@
 #define KBASE_SEQNO_MARK_POST_CALL_OFFSET 32
 #define KBASE_SEQNO_MARK_POST_WAIT_OFFSET 40
 #define KBASE_SEQNO_STREAM_PROGRESS_OFFSET 48
+/* PANVK_GPU_STATS (jm-v7-wip 0158): per subqueue, a ring of 64 {start, end}
+ * GPU timestamps of its ring entries, in the seqno BO after the cells. */
+#define KBASE_STATS_TS_OFFSET(sq) (1024 + (sq) * 1024)
+#define KBASE_STATS_TS_JOBS       64
+static_assert(KBASE_STATS_TS_OFFSET(PANVK_SUBQUEUE_COUNT) <= 4096,
+              "GPU stats timestamps must fit in the seqno BO");
 #define KBASE_SEQNO_MARK_PRE_CALL  0x100000000000ull
 #define KBASE_SEQNO_MARK_POST_CALL 0x200000000000ull
 #define KBASE_SEQNO_MARK_POST_WAIT 0x300000000000ull
@@ -431,6 +437,38 @@ kbase_init_seqnos(struct panvk_gpu_queue *queue)
  * into its kernel-owned rings.  Only the FW-unpreserved registers (the top
  * 4 of the register file) are clobbered, which the rest of the driver
  * stays away from. */
+/* PANVK_GPU_STATS: report the GPU busy intervals of the subqueue's retired
+ * ring entries (not yet overwritten by newer entries) and tick the window. */
+static void
+kbase_gpu_stats_collect(struct panvk_gpu_queue *queue, uint32_t subqueue)
+{
+   struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
+   const struct panvk_physical_device *pdev =
+      to_panvk_physical_device(dev->vk.physical);
+   struct panvk_subqueue *subq = &queue->subqueues[subqueue];
+   volatile struct panvk_cs_sync64 *cell =
+      kbase_subqueue_seqno_cell(queue, subqueue);
+   const uint64_t freq = pdev->kmod.dev->props.timestamp_frequency;
+   const uint64_t devmem = p_atomic_read_relaxed(&pdev->memory.heap_used);
+   const uint64_t *ts = (const uint64_t *)((uint8_t *)queue->kbase_seqnos.cpu +
+                                           KBASE_STATS_TS_OFFSET(subqueue));
+
+   kbase_cache_invalidate_range((const void *)cell, kbase_seqno_stride());
+   const uint64_t done = MIN2(cell->seqno, subq->kbase.emitted_jobs);
+   uint64_t j = subq->kbase.stats_done + 1;
+   if (subq->kbase.emitted_jobs >= KBASE_STATS_TS_JOBS)
+      j = MAX2(j, subq->kbase.emitted_jobs - KBASE_STATS_TS_JOBS + 1);
+   if (j <= done) {
+      kbase_cache_invalidate_range(ts, KBASE_STATS_TS_JOBS * 16);
+      for (; j <= done; j++) {
+         const uint64_t *e = &ts[2 * (j % KBASE_STATS_TS_JOBS)];
+         panvk_gpu_stats_busy(freq, devmem, e[0], e[1]);
+      }
+   }
+   subq->kbase.stats_done = MAX2(subq->kbase.stats_done, done);
+   panvk_gpu_stats_busy(freq, devmem, 0, 0);
+}
+
 static VkResult
 kbase_subqueue_reserve_ring(struct panvk_gpu_queue *queue,
                             uint32_t subqueue)
@@ -490,6 +528,10 @@ kbase_subqueue_emit_job(struct panvk_gpu_queue *queue, uint32_t subqueue,
    VkResult result = kbase_subqueue_reserve_ring(queue, subqueue);
    if (result != VK_SUCCESS)
       return result;
+
+   const bool gpu_stats = panvk_gpu_stats_path() != NULL;
+   if (gpu_stats)
+      kbase_gpu_stats_collect(queue, subqueue);
 
    uint32_t offset = subq->kbase.insert % KBASE_RINGBUF_SIZE;
 
@@ -573,6 +615,9 @@ kbase_subqueue_emit_job(struct panvk_gpu_queue *queue, uint32_t subqueue,
    };
    uint64_t seqno_addr = kbase_subqueue_seqno_dev_addr(queue, subqueue);
    uint64_t target_seqno = subq->kbase.emitted_jobs + 1;
+   const uint64_t stats_ts_addr =
+      queue->kbase_seqnos.dev + KBASE_STATS_TS_OFFSET(subqueue) +
+      (target_seqno % KBASE_STATS_TS_JOBS) * 16;
 
    for (uint32_t i = 0; wait_seqnos && i < PANVK_SUBQUEUE_COUNT; i++) {
       if (!wait_seqnos[i])
@@ -624,6 +669,15 @@ kbase_subqueue_emit_job(struct panvk_gpu_queue *queue, uint32_t subqueue,
       cs_wait_slot(&b, SB_ID(LS));
    }
 
+   /* GPU stats: the start timestamp after the cross-subqueue waits, so
+    * waiting on another subqueue does not count as busy. */
+   if (gpu_stats) {
+      cs_move64_to(&b, addr64, stats_ts_addr);
+      cs_store_state(&b, addr64, 0, MALI_CS_STATE_TIMESTAMP,
+                     cs_defer(0, SB_ID(LS)));
+      cs_wait_slot(&b, SB_ID(LS));
+   }
+
    if (stream_size) {
       /* Make CPU-written command-stream/descriptor memory visible to the
        * GPU before calling into it (0x233 flush, same as the panthor
@@ -659,6 +713,21 @@ kbase_subqueue_emit_job(struct panvk_gpu_queue *queue, uint32_t subqueue,
     * system-scope SYNC_ADD64 below.  Nothing is emitted after that sync
     * operation (except the register-less ERROR_BARRIER), so its operands
     * cannot be clobbered while the deferred operation is in flight. */
+   /* GPU stats: the end timestamp once all work retired, cleaned out of the
+    * GPU L2 before the seqno bump makes the entry readable. */
+   if (gpu_stats) {
+      cs_wait_slots(&b, dev->csf.sb.all_mask);
+      cs_move64_to(&b, addr64, stats_ts_addr + 8);
+      cs_store_state(&b, addr64, 0, MALI_CS_STATE_TIMESTAMP,
+                     cs_defer(0, SB_ID(LS)));
+      cs_wait_slot(&b, SB_ID(LS));
+      cs_move32_to(&b, val32, 0);
+      cs_flush_caches(&b, MALI_CS_FLUSH_MODE_CLEAN, MALI_CS_FLUSH_MODE_CLEAN,
+                      MALI_CS_OTHER_FLUSH_MODE_NONE, val32,
+                      cs_defer(0, SB_ID(IMM_FLUSH)));
+      cs_wait_slot(&b, SB_ID(IMM_FLUSH));
+   }
+
    cs_move64_to(&b, addr64, seqno_addr);
    cs_wait_slots(&b, dev->csf.sb.all_mask);
    if (PANVK_DEBUG(KBASE_DIAG)) {

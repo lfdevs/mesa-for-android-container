@@ -122,4 +122,13 @@ void panvk_priv_bo_invalidate(struct panvk_priv_bo *bo, size_t offset, size_t si
 
 void panvk_priv_bo_unref(struct panvk_priv_bo *bo);
 
+/* jm-v7-wip 0158: GPU stats for MangoHud. PANVK_GPU_STATS=<file> (PanPlay
+ * sets it only with MangoHud on): the queue reports GPU busy intervals (GPU
+ * timestamp ticks at freq Hz), and at most every 500 ms the file is
+ * rewritten as "load=<GPU busy %>\nvram=<bytes the driver allocated>\n".
+ * start == end only ticks the window. NULL path = off (no cost). */
+const char *panvk_gpu_stats_path(void);
+void panvk_gpu_stats_busy(uint64_t freq, uint64_t devmem, uint64_t start,
+                          uint64_t end);
+
 #endif

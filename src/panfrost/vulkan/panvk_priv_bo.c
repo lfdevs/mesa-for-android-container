@@ -447,3 +447,102 @@ panvk_mem_report(struct panvk_device *dev, bool final)
       mesa_logi("%s", line);
    simple_mtx_unlock(&panvk_mem_report_lock);
 }
+
+/* jm-v7-wip 0158: PANVK_GPU_STATS (see panvk_priv_bo.h). */
+const char *
+panvk_gpu_stats_path(void)
+{
+   /* Racy first read is fine: every thread stores the same value. */
+   static const char *path;
+   static bool init;
+   if (!init) {
+      const char *p = os_get_option("PANVK_GPU_STATS");
+      path = p && *p ? p : NULL;
+      init = true;
+   }
+   return path;
+}
+
+static struct {
+   simple_mtx_t lock;
+   uint64_t win_ns, busy, n;
+   uint64_t iv[256][2];
+} panvk_gpu_stats = {.lock = SIMPLE_MTX_INITIALIZER};
+
+static int
+panvk_gpu_stats_cmp(const void *a, const void *b)
+{
+   const uint64_t *x = a, *y = b;
+   return x[0] < y[0] ? -1 : x[0] > y[0];
+}
+
+/* Busy ticks of the collected intervals (their union: the subqueues run in
+ * parallel), then empties the list. */
+static uint64_t
+panvk_gpu_stats_union(void)
+{
+   uint64_t sum = 0, s = 0, e = 0;
+   qsort(panvk_gpu_stats.iv, panvk_gpu_stats.n, sizeof(panvk_gpu_stats.iv[0]),
+         panvk_gpu_stats_cmp);
+   for (uint64_t i = 0; i < panvk_gpu_stats.n; i++) {
+      if (panvk_gpu_stats.iv[i][0] > e) {
+         sum += e - s;
+         s = panvk_gpu_stats.iv[i][0];
+         e = panvk_gpu_stats.iv[i][1];
+      } else {
+         e = MAX2(e, panvk_gpu_stats.iv[i][1]);
+      }
+   }
+   panvk_gpu_stats.n = 0;
+   return sum + (e - s);
+}
+
+void
+panvk_gpu_stats_busy(uint64_t freq, uint64_t devmem, uint64_t start,
+                     uint64_t end)
+{
+   const char *path = panvk_gpu_stats_path();
+   if (!path)
+      return;
+
+   const uint64_t now = os_time_get_nano();
+   simple_mtx_lock(&panvk_gpu_stats.lock);
+   if (!panvk_gpu_stats.win_ns)
+      panvk_gpu_stats.win_ns = now;
+   if (end > start) {
+      /* ponytail: a full list is folded early, so an overlap across the
+       * fold counts twice; 256 intervals per 500 ms is ~170 submits/s on
+       * three subqueues before that happens. */
+      if (panvk_gpu_stats.n == ARRAY_SIZE(panvk_gpu_stats.iv))
+         panvk_gpu_stats.busy += panvk_gpu_stats_union();
+      panvk_gpu_stats.iv[panvk_gpu_stats.n][0] = start;
+      panvk_gpu_stats.iv[panvk_gpu_stats.n][1] = end;
+      panvk_gpu_stats.n++;
+   }
+   const uint64_t win = now - panvk_gpu_stats.win_ns;
+   if (win < 500000000ull || !freq) {
+      simple_mtx_unlock(&panvk_gpu_stats.lock);
+      return;
+   }
+   const uint64_t busy = panvk_gpu_stats.busy + panvk_gpu_stats_union();
+   panvk_gpu_stats.busy = 0;
+   panvk_gpu_stats.win_ns = now;
+   simple_mtx_unlock(&panvk_gpu_stats.lock);
+
+   /* Intervals that started in the previous window can push it past 100. */
+   const unsigned load =
+      MIN2((unsigned)((double)busy * 1e11 / ((double)freq * (double)win)),
+           100u);
+   uint64_t vram = devmem;
+   for (unsigned k = 0; k < PANVK_MEM_KIND_COUNT; k++)
+      vram += p_atomic_read_relaxed(&panvk_mem_stats.bytes[k]);
+
+   char tmp[4096];
+   snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+   FILE *f = fopen(tmp, "w");
+   if (!f)
+      return;
+   fprintf(f, "load=%u\nvram=%" PRIu64 "\n", load, vram);
+   fclose(f);
+   rename(tmp, path);
+}

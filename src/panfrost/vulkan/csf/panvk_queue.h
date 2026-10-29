@@ -90,6 +90,9 @@ struct panvk_subqueue {
        * when it retires. */
       uint64_t emitted_jobs;
 
+      /* PANVK_GPU_STATS: last job whose GPU timestamps were reported. */
+      uint64_t stats_done;
+
       uint32_t last_last_job_offset;
       uint32_t last_job_offset;
       uint32_t last_job_size;
