@@ -51,6 +51,7 @@ panvk_can_present_on_device(VkPhysicalDevice pdevice, int fd)
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
 #include <android/native_window.h>
 #include <android/hardware_buffer.h>
+#include "util/log.h"
 #include "util/timespec.h"
 #include "util/u_thread.h"
 #include "wsi_common_private.h"
@@ -326,8 +327,24 @@ panvk_android_swapchain_post(struct panvk_android_swapchain *chain,
          void *ahb_data = NULL;
          AHardwareBuffer_Desc desc;
          AHardwareBuffer_describe(chain->images[image_index].ahb, &desc);
-         if (AHardwareBuffer_lock(chain->images[image_index].ahb,
-                                  AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, NULL, &ahb_data) == 0) {
+         /* The copy writes 4 bytes per pixel.  The window format is not
+          * ours: ANativeWindow_setBuffersGeometry(w, h, 0) from the app
+          * (a resize before it recreates the swapchain) resets it to the
+          * Surface default, e.g. RGB_565, while the present thread still
+          * posts the old swapchain's queued frames.  A 4-byte row stride
+          * then writes past the end of the 2-byte buffer.  Post such a
+          * buffer unchanged. */
+         const bool bpp4 = win_buf.format == WINDOW_FORMAT_RGBA_8888 ||
+                           win_buf.format == WINDOW_FORMAT_RGBX_8888;
+         if (!bpp4) {
+            static bool warned;
+            if (!warned) {
+               warned = true;
+               mesa_logw("panvk: window buffer format %d is not 4 bytes per "
+                         "pixel, frame not copied", win_buf.format);
+            }
+         } else if (AHardwareBuffer_lock(chain->images[image_index].ahb,
+                                         AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN, -1, NULL, &ahb_data) == 0) {
             uint32_t copy_h = win_buf.height < (int)desc.height ? (uint32_t)win_buf.height : desc.height;
             uint32_t copy_w = win_buf.width < (int)desc.width ? (uint32_t)win_buf.width : desc.width;
             for (uint32_t y = 0; y < copy_h; y++) {
