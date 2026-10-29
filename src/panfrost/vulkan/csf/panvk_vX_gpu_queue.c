@@ -1117,7 +1117,12 @@ kbase_queue_wait_current(struct panvk_gpu_queue *queue,
  * rendering, panvk_vX_exception_handler.c), which only reaches CSs of the
  * group that hit the OOM.  One group per subqueue (PANVK_KBASE_TILER_IR=0,
  * the old layout) turns every heap exhaustion into DEVICE_LOST. */
-DEBUG_GET_ONCE_BOOL_OPTION(kbase_one_group, "PANVK_KBASE_TILER_IR", true)
+/* jm-v7-wip 0167: on by default only where verified (v11 X6 Pro, v13 S11
+ * Ultra).  On v14 G1-Ultra the first submit hangs (subqueue 1 timeout,
+ * DEVICE_LOST at vkCreateDevice); v10/v12 are untested.  PANVK_KBASE_TILER_IR
+ * =1 forces it on, =0 off. */
+DEBUG_GET_ONCE_BOOL_OPTION(kbase_one_group, "PANVK_KBASE_TILER_IR",
+                           PAN_ARCH == 11 || PAN_ARCH == 13)
 
 static void
 kbase_destroy_group(struct panvk_gpu_queue *queue)
