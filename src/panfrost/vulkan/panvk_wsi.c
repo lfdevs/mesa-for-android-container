@@ -773,11 +773,16 @@ panvk_wsi_init(struct panvk_physical_device *physical_device)
     * lost the same way as v14 (TB336FU .so bisect, 119 -> 120: D3D12 gears
     * 259 -> 220 fps, D3D11 FL 11_0 214 -> 196).  So uncached only on v11,
     * the one arch where 0160 measured a gain; cached everywhere else, as
-    * before 0160.  PANVK_WSI_SW_CACHED=1/0 forces it.
+    * before 0160.  The arch default is only the starting mode now: with
+    * MIT-SHM present each swapchain measures its frame rate in both modes
+    * and keeps the faster (0171, wsi_common_x11.c x11_sw_ab_frame()).
+    * PANVK_WSI_SW_CACHED=1/0 forces one mode.
     */
    physical_device->wsi_device.sw_cached_noncoherent = debug_get_bool_option(
       "PANVK_WSI_SW_CACHED",
       pan_arch(physical_device->kmod.dev->props.gpu_id) != 11);
+   physical_device->wsi_device.sw_cached_auto =
+      os_get_option("PANVK_WSI_SW_CACHED") == NULL;
 
    /* MIT-SHM sw present: the event thread collects each put's GetGeometry
     * reply, so the present thread copies and sends the next frame while

@@ -1315,6 +1315,8 @@ struct x11_image {
    /* MESA_VK_X11_SW_TIMING: when the app queued it, when its put went out */
    uint64_t                                  sw_t_queued_ns;
    uint64_t                                  sw_t_put_ns;
+   /* sw_ab: the readback buffer is in the cached memory type */
+   bool                                      sw_cached;
    uint64_t                                  present_id;
    VkPresentModeKHR                          present_mode;
    xcb_rectangle_t                           rects[MAX_DAMAGE_RECTS];
@@ -1366,6 +1368,20 @@ struct x11_swapchain {
    bool                                         sw_timing;
    uint64_t                                     sw_t_start_ns, sw_t_frames;
    uint64_t                                     sw_t_n[8], sw_t_sum[8], sw_t_max[8];
+   /* sw_defer_reply with wsi_device::sw_cached_auto: readback memory type
+    * chosen from this swapchain's frame interval, see x11_sw_ab_frame().
+    * Present thread only. */
+   bool                                         sw_ab;
+   bool                                         sw_cached;     /* target mode */
+   uint32_t                                     sw_ab_pending; /* images not in it */
+   uint32_t                                     sw_ab_phase;
+   bool                                         sw_ab_measuring;
+   uint32_t                                     sw_ab_n;
+   uint64_t                                     sw_ab_start_ns; /* first present */
+   uint64_t                                     sw_ab_t0;
+   uint64_t                                     sw_ab_ns[2];   /* [cached] */
+   uint64_t                                     sw_ab_ref_ns;
+   uint64_t                                     sw_ab_decided_ns;
 
    /* Some X servers reject DRI3FenceFromFD for imported pixmaps.  Fall back
     * to Present IdleNotify for implicit-sync image reuse when that happens.
@@ -2064,6 +2080,137 @@ x11_sw_t_frame(struct x11_swapchain *chain)
  * behind the present thread. */
 #define X11_SW_MAX_PENDING_REPLIES 2
 
+/* 0171: which readback memory type is faster depends on the device and on
+ * the workload, not on the frame size or the CPU read alone. On the X6 Pro
+ * (v11), with the same 640x360 swapchain, the cached type + full-frame
+ * invalidate gives the D3D11 cube 382 fps vs 271 uncached, but D3D11 FL
+ * 11_1 505 vs 708. A one-off timing of the invalidate + read at the first
+ * swapchain picked cached for both. So each swapchain measures its own
+ * mean frame interval: the starting mode, the other one, the starting one
+ * again (A, B, A cancels a linear drift), each window X11_SW_AB_WINDOW
+ * frames and at least X11_SW_AB_WINDOW_NS after X11_SW_AB_SETTLE frames /
+ * X11_SW_AB_SETTLE_NS in the mode, the first one X11_SW_AB_START_NS after
+ * the swapchain's first present. It keeps the starting mode unless the
+ * other one is X11_SW_AB_MARGIN faster, and measures again when the
+ * interval drifts by X11_SW_AB_DRIFT (at most every X11_SW_AB_REPROBE_NS).
+ * An image moves to the other type right after its CPU copy, while it is
+ * idle. */
+#define X11_SW_AB_SETTLE 30
+#define X11_SW_AB_SETTLE_NS (250ull * 1000 * 1000)
+#define X11_SW_AB_WINDOW 120
+#define X11_SW_AB_WINDOW_NS (500ull * 1000 * 1000)
+#define X11_SW_AB_START_NS (1000ull * 1000 * 1000)
+#define X11_SW_AB_MARGIN 0.03
+#define X11_SW_AB_DRIFT 0.25
+#define X11_SW_AB_REPROBE_NS (10ull * 1000 * 1000 * 1000)
+
+static void
+x11_sw_ab_set_mode(struct x11_swapchain *chain, bool cached)
+{
+   chain->sw_cached = cached;
+   chain->sw_ab_n = 0;
+   chain->sw_ab_measuring = false;
+   chain->sw_ab_pending = 0;
+   for (uint32_t i = 0; i < chain->base.image_count; i++)
+      chain->sw_ab_pending += chain->images[i].sw_cached != cached;
+}
+
+/* Mean frame interval of a finished window, else 0. */
+static uint64_t
+x11_sw_ab_window(struct x11_swapchain *chain, uint64_t now)
+{
+   if (chain->sw_ab_n++ == 0)
+      chain->sw_ab_t0 = now; /* mode settled from here on, or not yet */
+   if (!chain->sw_ab_measuring) {
+      if (chain->sw_ab_n < X11_SW_AB_SETTLE ||
+          now - chain->sw_ab_t0 < X11_SW_AB_SETTLE_NS)
+         return 0;
+      chain->sw_ab_measuring = true;
+      chain->sw_ab_n = 1;
+      chain->sw_ab_t0 = now;
+      return 0;
+   }
+   if (chain->sw_ab_n <= X11_SW_AB_WINDOW ||
+       now - chain->sw_ab_t0 < X11_SW_AB_WINDOW_NS)
+      return 0;
+   const uint64_t ns = (now - chain->sw_ab_t0) / (chain->sw_ab_n - 1);
+   chain->sw_ab_n = 0;
+   chain->sw_ab_measuring = false;
+   return ns;
+}
+
+/* Present thread, after the CPU copy of image, before it is released. */
+static void
+x11_sw_ab_frame(struct x11_swapchain *chain, struct x11_image *image)
+{
+   if (image->sw_cached != chain->sw_cached) {
+      if (wsi_image_set_cpu_readback_cached(&chain->base, &image->base,
+                                            chain->sw_cached) != VK_SUCCESS) {
+         /* Keep what each image has; stop switching. */
+         mesa_logw("wsi/x11 sw readback: moving an image failed, mode stays");
+         chain->sw_ab = false;
+         return;
+      }
+      image->sw_cached = chain->sw_cached;
+      chain->sw_ab_pending--;
+      chain->sw_ab_n = 0;
+      chain->sw_ab_measuring = false;
+      return;
+   }
+
+   const uint64_t now = os_time_get_nano();
+   if (!chain->sw_ab_start_ns)
+      chain->sw_ab_start_ns = now;
+   if (chain->sw_ab_pending || now - chain->sw_ab_start_ns < X11_SW_AB_START_NS)
+      return;
+   const uint64_t ns = x11_sw_ab_window(chain, now);
+   if (!ns)
+      return;
+   const bool cur = chain->sw_cached;
+
+   switch (chain->sw_ab_phase) {
+   case 0: /* A measured: try B. */
+      chain->sw_ab_ns[cur] = ns;
+      chain->sw_ab_phase = 1;
+      x11_sw_ab_set_mode(chain, !cur);
+      break;
+   case 1: /* B measured: A again. */
+      chain->sw_ab_ns[cur] = ns;
+      chain->sw_ab_phase = 2;
+      x11_sw_ab_set_mode(chain, !cur);
+      break;
+   case 2: {
+      /* cur is A: the mean of both of its windows against B. */
+      const uint64_t a = (chain->sw_ab_ns[cur] + ns) / 2;
+      const uint64_t b = chain->sw_ab_ns[!cur];
+      const bool best = b < a * (1.0 - X11_SW_AB_MARGIN) ? !cur : cur;
+      mesa_logi("wsi/x11 sw readback %ux%u: %s %.1f fps, %s %.1f fps -> %s",
+                chain->extent.width, chain->extent.height,
+                cur ? "cached" : "uncached", 1e9 / a,
+                cur ? "uncached" : "cached", 1e9 / b,
+                best ? "cached" : "uncached");
+      chain->sw_ab_ref_ns = best == cur ? a : b;
+      chain->sw_ab_decided_ns = now;
+      chain->sw_ab_phase = 3;
+      if (best != cur)
+         x11_sw_ab_set_mode(chain, best);
+      break;
+   }
+   default: {
+      /* Hold: measure again when the frame rate has moved; this window is
+       * the first A. */
+      const double d = (double)ns / chain->sw_ab_ref_ns;
+      if ((d > 1.0 + X11_SW_AB_DRIFT || d < 1.0 - X11_SW_AB_DRIFT) &&
+          now - chain->sw_ab_decided_ns > X11_SW_AB_REPROBE_NS) {
+         chain->sw_ab_ns[cur] = ns;
+         chain->sw_ab_phase = 1;
+         x11_sw_ab_set_mode(chain, !cur);
+      }
+      break;
+   }
+   }
+}
+
 /* Event thread, thread_state_lock held: collect the oldest outstanding
  * GetGeometry reply.  Returns false when none is outstanding. */
 static bool
@@ -2247,6 +2394,10 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index)
       image->sw_reply_serial = ++chain->sw_reply_serial;
       image->sw_reply_present_id = image->present_id;
       chain->sw_replies_pending++;
+
+      /* The server reads only the segment: the readback buffer is idle. */
+      if (chain->sw_ab)
+         x11_sw_ab_frame(chain, image);
 
       wsi_queue_push(&chain->acquire_queue, image_index);
       return VK_SUCCESS;
@@ -4049,6 +4200,12 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
 
    /* After the images: a failed segment attach drops sw_shm. */
    chain->sw_defer_reply = chain->sw_shm && wsi_device->x11.sw_defer_reply;
+   chain->sw_cached = wsi_device->sw_cached_noncoherent;
+   for (uint32_t i = 0; i < chain->base.image_count; i++)
+      chain->images[i].sw_cached = chain->sw_cached;
+   chain->sw_ab = chain->sw_defer_reply && wsi_device->sw_cached_auto &&
+                  chain->base.blit.type == WSI_SWAPCHAIN_BUFFER_BLIT &&
+                  !chain->base.image_info.alloc_shm;
 
    /* The queues have a length of base.image_count + 1 because we will
     * occasionally use UINT32_MAX to signal the other thread that an error

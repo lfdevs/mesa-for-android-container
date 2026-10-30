@@ -470,6 +470,10 @@ wsi_image_invalidate_cpu_map(const struct wsi_swapchain *chain,
                              const struct wsi_image *image);
 
 VkResult
+wsi_image_set_cpu_readback_cached(const struct wsi_swapchain *chain,
+                                  struct wsi_image *image, bool cached);
+
+VkResult
 wsi_swapchain_wait_for_present_semaphore(const struct wsi_swapchain *chain,
                                          uint64_t present_id, uint64_t timeout);
 

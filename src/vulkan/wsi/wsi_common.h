@@ -185,6 +185,11 @@ struct wsi_device {
     */
    bool sw_cached_noncoherent;
 
+   /* sw X11 MIT-SHM present only: sw_cached_noncoherent is the starting
+    * mode, and each swapchain measures its frame interval in both modes and
+    * keeps the faster (re-measured when the frame rate drifts). */
+   bool sw_cached_auto;
+
    /* Set to true if the implementation is ok with linear WSI images. */
    bool wants_linear;
 

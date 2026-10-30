@@ -3132,10 +3132,10 @@ wsi_select_host_memory_type(const struct wsi_device *wsi,
 /* Memory only this process reads, through wsi_image::cpu_map, after the
  * blit fence (no alloc_shm: no other process maps it). */
 static uint32_t
-wsi_select_cpu_readback_memory_type(const struct wsi_device *wsi,
-                                    uint32_t type_bits)
+wsi_select_cpu_readback_memory_type_mode(const struct wsi_device *wsi,
+                                         uint32_t type_bits, bool cached_mode)
 {
-   if (wsi->sw && wsi->sw_cached_noncoherent) {
+   if (wsi->sw && cached_mode) {
       /* The CPU reads every frame back: a cached type that needs an
        * invalidate beats an uncached coherent one, but a cached coherent
        * type beats both. */
@@ -3162,11 +3162,126 @@ wsi_select_cpu_readback_memory_type(const struct wsi_device *wsi,
    return wsi_select_host_memory_type(wsi, type_bits);
 }
 
+static uint32_t
+wsi_select_cpu_readback_memory_type(const struct wsi_device *wsi,
+                                    uint32_t type_bits)
+{
+   return wsi_select_cpu_readback_memory_type_mode(wsi, type_bits,
+                                                   wsi->sw_cached_noncoherent);
+}
+
 static bool
 wsi_memory_type_is_noncoherent(const struct wsi_device *wsi, uint32_t type)
 {
    return !(wsi->memory_props.memoryTypes[type].propertyFlags &
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+}
+
+static void
+wsi_image_free_blit_cmd_buffers(const struct wsi_swapchain *chain,
+                                VkCommandBuffer *cmd_buffers)
+{
+   const struct wsi_device *wsi = chain->wsi;
+
+   if (!cmd_buffers)
+      return;
+   const int cmd_buffer_count =
+      chain->blit.queue != NULL ? 1 : wsi->queue_family_count;
+   for (int i = 0; i < cmd_buffer_count; i++) {
+      if (chain->cmd_pools[i] && cmd_buffers[i])
+         wsi->FreeCommandBuffers(chain->device, chain->cmd_pools[i], 1,
+                                 &cmd_buffers[i]);
+   }
+   vk_free(&chain->alloc, cmd_buffers);
+}
+
+/* 0171: move the CPU readback buffer of a buffer-blit CPU image (no
+ * alloc_shm) to the cached (cached = true) or the uncached readback memory
+ * type: a new buffer, memory, mapping and blit command buffers, then the
+ * old ones are freed. The image must be idle (blit done, no CPU read in
+ * flight, not acquired). On failure the image keeps its old buffer. */
+VkResult
+wsi_image_set_cpu_readback_cached(const struct wsi_swapchain *chain,
+                                  struct wsi_image *image, bool cached)
+{
+   const struct wsi_device *wsi = chain->wsi;
+   const struct wsi_image_info *info = &chain->image_info;
+
+   if (chain->blit.type != WSI_SWAPCHAIN_BUFFER_BLIT || info->alloc_shm ||
+       !image->cpu_map || image->blit.buffer == VK_NULL_HANDLE ||
+       (chain->create_flags & VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR))
+      return VK_ERROR_FEATURE_NOT_PRESENT;
+
+   const VkBuffer old_buffer = image->blit.buffer;
+   const VkDeviceMemory old_memory = image->blit.memory;
+   VkCommandBuffer *const old_cmd_buffers = image->blit.cmd_buffers;
+   void *const old_map = image->cpu_map;
+   const bool old_noncoherent = image->cpu_map_noncoherent;
+
+   image->blit.buffer = VK_NULL_HANDLE;
+   image->blit.memory = VK_NULL_HANDLE;
+   image->blit.cmd_buffers = NULL;
+   image->cpu_map = NULL;
+
+   const VkBufferCreateInfo buffer_info = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = info->linear_size,
+      .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+   };
+   VkResult result = wsi->CreateBuffer(chain->device, &buffer_info,
+                                       &chain->alloc, &image->blit.buffer);
+   if (result != VK_SUCCESS)
+      goto fail;
+
+   VkMemoryRequirements reqs;
+   wsi->GetBufferMemoryRequirements(chain->device, image->blit.buffer, &reqs);
+   const VkMemoryDedicatedAllocateInfo dedicated_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
+      .buffer = image->blit.buffer,
+   };
+   const VkMemoryAllocateInfo mem_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &dedicated_info,
+      .allocationSize = reqs.size,
+      .memoryTypeIndex = wsi_select_cpu_readback_memory_type_mode(
+         wsi, reqs.memoryTypeBits, cached),
+   };
+   result = wsi->AllocateMemory(chain->device, &mem_info, &chain->alloc,
+                                &image->blit.memory);
+   if (result != VK_SUCCESS)
+      goto fail;
+   image->cpu_map_noncoherent =
+      wsi_memory_type_is_noncoherent(wsi, mem_info.memoryTypeIndex);
+
+   result = wsi->BindBufferMemory(chain->device, image->blit.buffer,
+                                  image->blit.memory, 0);
+   if (result == VK_SUCCESS)
+      result = wsi->MapMemory(chain->device, image->blit.memory, 0,
+                              VK_WHOLE_SIZE, 0, &image->cpu_map);
+   if (result == VK_SUCCESS)
+      result = wsi_finish_create_blit_context(chain, info, image);
+   if (result != VK_SUCCESS)
+      goto fail;
+
+   wsi->UnmapMemory(chain->device, old_memory);
+   wsi_image_free_blit_cmd_buffers(chain, old_cmd_buffers);
+   wsi->DestroyBuffer(chain->device, old_buffer, &chain->alloc);
+   wsi->FreeMemory(chain->device, old_memory, &chain->alloc);
+   return VK_SUCCESS;
+
+fail:
+   wsi_image_free_blit_cmd_buffers(chain, image->blit.cmd_buffers);
+   if (image->cpu_map)
+      wsi->UnmapMemory(chain->device, image->blit.memory);
+   wsi->DestroyBuffer(chain->device, image->blit.buffer, &chain->alloc);
+   wsi->FreeMemory(chain->device, image->blit.memory, &chain->alloc);
+   image->blit.buffer = old_buffer;
+   image->blit.memory = old_memory;
+   image->blit.cmd_buffers = old_cmd_buffers;
+   image->cpu_map = old_map;
+   image->cpu_map_noncoherent = old_noncoherent;
+   return result;
 }
 
 void
