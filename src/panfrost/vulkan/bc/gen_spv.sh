@@ -33,3 +33,5 @@ sed -i 's/^const uint32_t/static const uint32_t/' panvk_bc_bc7_fs_fast_spv.h
 glslangValidator -V --target-env vulkan1.1 --vn panvk_bc_scopy_spv \
    -o panvk_bc_scopy_spv.h panvk_bc_scopy.comp
 sed -i 's/^const uint32_t/static const uint32_t/' panvk_bc_scopy_spv.h
+# 0172: per-mode ETC2 transcoders.
+sh ./gen_etc2_fixed.sh

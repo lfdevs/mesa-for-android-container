@@ -64,8 +64,15 @@
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1,
        local_size_x_id = 0, local_size_y_id = 1) in;
 
+#ifdef XC_MODE_FIXED
+/* 0172: one SPIR-V per mode at the default PANVK_BC_LM_OPTS (gen_spv.sh),
+ * so the driver front end only parses that mode's code. */
+const uint XC_MODE = XC_MODE_FIXED;
+const uint XC_OPTS = XC_OPTS_FIXED;
+#else
 layout(constant_id = 2) const uint XC_MODE = 0u;      /* XC_* */
 layout(constant_id = 3) const uint XC_OPTS = 0x30000u; /* PANVK_BC_LM_OPTS */
+#endif
 /* csf-v11/218: 1 = one dispatch over several small whole levels, whose
  * addresses come from a table at registers.src (see main()). */
 layout(constant_id = 4) const uint XC_BATCH = 0u;
@@ -108,7 +115,14 @@ layout(push_constant) uniform Registers
 #define U(x) uint(x)
 #define F(x) float(x)
 #define GLOBAL
+#ifdef XC_MODE_FIXED
+/* 0172: one private array per table; a const array is copied into a
+ * function variable at every dynamic index (EAC_NEAR: 32 copies of 512
+ * words in BC2), which costs the driver front end most of a second. */
+#define CARR(type, name, n) type name[n] = type[n](
+#else
 #define CARR(type, name, n) const type name[n] = type[n](
+#endif
 #define CEND );
 #define UNROLL [[unroll]]
 #endif

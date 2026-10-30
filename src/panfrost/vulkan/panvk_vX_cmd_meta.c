@@ -1071,6 +1071,7 @@ bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
 /* BC lowmem transcoder (csf-v11/197), see bc/panvk_bc_etc2.comp. Included
  * here rather than at the top to keep the later series' hunks in place. */
 #include "bc/panvk_bc_etc2_spv.h"
+#include "bc/panvk_bc_etc2_fixed_spv.h"
 #include "bc/panvk_bc_astc_spv.h"
 #include "bc/panvk_bc_scopy_spv.h"
 #include "bc/panvk_bc_bc6_blk_spv.h"
@@ -1205,6 +1206,16 @@ bc_xcode_shader(const struct panvk_image *img)
                                 : BC_XCODE_ETC2;
 }
 
+/* 0172: PANVK_BC_XC_FIXED=0 compiles every mode from the full ETC2 shader. */
+static bool
+bc_xcode_fixed_enabled(void)
+{
+   static int on = -1;
+   if (on < 0)
+      on = debug_get_bool_option("PANVK_BC_XC_FIXED", true);
+   return on;
+}
+
 /* One pipeline per transcode mode: the mode and PANVK_BC_LM_OPTS are
  * specialization constants of panvk_bc_etc2.comp (2 and 3), next to the
  * workgroup size (0, 1). The ASTC and BC6H block shaders take the mode
@@ -1277,10 +1288,47 @@ get_bc_xcode_pipeline(struct panvk_device *dev, enum bc_xcode_shader shader,
       [BC_XCODE_ASTC] = {panvk_bc_astc_spv, sizeof(panvk_bc_astc_spv)},
       [BC_XCODE_BC6BLK] = {panvk_bc_bc6_blk_spv, sizeof(panvk_bc_bc6_blk_spv)},
    };
+   /* 0172: the ETC2 transcoder of one mode, folded by spirv-opt at the
+    * default options (bc/gen_etc2_fixed.sh). The full shader carries every
+    * mode and option: ~500 ms of front end per mode on the X6 Pro (v11)
+    * against a back end under 45 ms. The mode and options spec constants
+    * are not in it (the map entries for them are ignored). */
+   static const struct {
+      const uint32_t *code;
+      size_t size;
+   } fixed[] = {
+      {panvk_bc_etc2_m0_spv, sizeof(panvk_bc_etc2_m0_spv)},
+      {panvk_bc_etc2_m1_spv, sizeof(panvk_bc_etc2_m1_spv)},
+      {panvk_bc_etc2_m2_spv, sizeof(panvk_bc_etc2_m2_spv)},
+      {panvk_bc_etc2_m3_spv, sizeof(panvk_bc_etc2_m3_spv)},
+      {panvk_bc_etc2_m4_spv, sizeof(panvk_bc_etc2_m4_spv)},
+      {panvk_bc_etc2_m5_spv, sizeof(panvk_bc_etc2_m5_spv)},
+      {panvk_bc_etc2_m6_spv, sizeof(panvk_bc_etc2_m6_spv)},
+      {panvk_bc_etc2_m7_spv, sizeof(panvk_bc_etc2_m7_spv)},
+   };
+   static const struct {
+      const uint32_t *code;
+      size_t size;
+   } fixed_bc6[] = {
+      {panvk_bc_bc6_blk_m8_spv, sizeof(panvk_bc_bc6_blk_m8_spv)},
+      {panvk_bc_bc6_blk_m9_spv, sizeof(panvk_bc_bc6_blk_m9_spv)},
+   };
+   const uint32_t *code = spv[shader].code;
+   size_t code_size = spv[shader].size;
+   if (bc_xcode_fixed_enabled()) {
+      if (etc2 && mode < ARRAY_SIZE(fixed) && fixed[mode].code &&
+          key.opts == 0x3020000) {
+         code = fixed[mode].code;
+         code_size = fixed[mode].size;
+      } else if (shader == BC_XCODE_BC6BLK && (mode == 8 || mode == 9)) {
+         code = fixed_bc6[mode - 8].code;
+         code_size = fixed_bc6[mode - 8].size;
+      }
+   }
    const VkShaderModuleCreateInfo module_info = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = spv[shader].size,
-      .pCode = spv[shader].code,
+      .codeSize = code_size,
+      .pCode = code,
    };
    const VkComputePipelineCreateInfo info = {
       .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,

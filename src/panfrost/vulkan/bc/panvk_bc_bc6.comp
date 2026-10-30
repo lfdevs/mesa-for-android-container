@@ -16,7 +16,11 @@ layout(location = 0) out vec4 o_color;
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1,
        local_size_x_id = 0, local_size_y_id = 1) in;
 /* 8: UF16 -> B10G11R11_UFLOAT, 9: SF16 -> R16G16B16A16_SFLOAT. */
+#ifdef XC_MODE_FIXED
+const uint XC_MODE = XC_MODE_FIXED; /* 0172 */
+#else
 layout(constant_id = 2) const uint XC_MODE = 8u;
+#endif
 #else
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #endif
