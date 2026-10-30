@@ -7,6 +7,10 @@ for s in s3tc rgtc bc6 bc7; do
    fast=""; [ $s = bc7 ] && fast=-DPANVK_BC_FAST
    glslangValidator -V --target-env vulkan1.1 $fast --vn panvk_bc_${s}_spv \
       -o panvk_bc_${s}_spv.h panvk_bc_${s}.comp
+   # 0170: the per-texel compute decoder of 116, used until the block one
+   # is compiled.
+   glslangValidator -V --target-env vulkan1.1 -DPANVK_BC_TEXEL \
+      --vn panvk_bc_${s}_texel_spv -o panvk_bc_${s}_texel_spv.h panvk_bc_${s}.comp
    glslangValidator -V --target-env vulkan1.1 -S frag -DPANVK_BC_FS \
       --vn panvk_bc_${s}_fs_spv -o panvk_bc_${s}_fs_spv.h panvk_bc_${s}.comp
 done

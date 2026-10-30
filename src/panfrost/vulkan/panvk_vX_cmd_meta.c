@@ -9,6 +9,7 @@
 #include "panvk_entrypoints.h"
 #include "panvk_meta.h"
 #include "panvk_tracepoints.h"
+#include "util/os_time.h"
 #if PAN_ARCH >= 10
 #include "csf/panvk_instr.h"
 #endif
@@ -21,6 +22,10 @@
 #include "bc/panvk_bc_rgtc_spv.h"
 #include "bc/panvk_bc_s3tc_fs_spv.h"
 #include "bc/panvk_bc_s3tc_spv.h"
+#include "bc/panvk_bc_bc6_texel_spv.h"
+#include "bc/panvk_bc_bc7_texel_spv.h"
+#include "bc/panvk_bc_rgtc_texel_spv.h"
+#include "bc/panvk_bc_s3tc_texel_spv.h"
 
 #include "panvk_cmd_precomp.h"
 #include "libpan.h"
@@ -560,9 +565,12 @@ bc_decode_shader_index(VkFormat format)
    return 3;
 }
 
+/* shader: bc_decode_shader_index(); block: the one-block-per-invocation
+ * decoder (0153), else the per-texel one of 116. */
 static VkResult
-get_bc_decode_pipeline(struct panvk_device *dev, uint32_t shader,
-                       VkPipelineLayout *layout_out, VkPipeline *pipeline_out)
+create_bc_decode_pipeline(struct panvk_device *dev, uint32_t shader,
+                          bool block, VkPipelineLayout *layout_out,
+                          VkPipeline *pipeline_out)
 {
    static const struct {
       const uint32_t *code;
@@ -572,7 +580,13 @@ get_bc_decode_pipeline(struct panvk_device *dev, uint32_t shader,
       {panvk_bc_rgtc_spv, sizeof(panvk_bc_rgtc_spv)},
       {panvk_bc_bc6_spv, sizeof(panvk_bc_bc6_spv)},
       {panvk_bc_bc7_spv, sizeof(panvk_bc_bc7_spv)},
+      {panvk_bc_s3tc_texel_spv, sizeof(panvk_bc_s3tc_texel_spv)},
+      {panvk_bc_rgtc_texel_spv, sizeof(panvk_bc_rgtc_texel_spv)},
+      {panvk_bc_bc6_texel_spv, sizeof(panvk_bc_bc6_texel_spv)},
+      {panvk_bc_bc7_texel_spv, sizeof(panvk_bc_bc7_texel_spv)},
    };
+   if (!block)
+      shader += 4;
    const enum panvk_meta_object_key_type layout_key =
       PANVK_META_OBJECT_KEY_BC_DECODE_LAYOUT;
    const VkPushConstantRange push_range = {
@@ -614,6 +628,139 @@ get_bc_decode_pipeline(struct panvk_device *dev, uint32_t shader,
 
    return vk_meta_create_compute_pipeline(&dev->vk, &dev->meta, &info, &key,
                                           sizeof(key), pipeline_out);
+}
+
+/* 0170: the block decoders (0153) decode 2.7-5x faster than the per-texel
+ * ones but take ~2.5x as long to compile: a cold level load (bc_level on
+ * the TB336FU, v9) went from ~100 to ~256 ms per format. The first upload
+ * of a format now compiles the per-texel pipeline, as 116 did, and the
+ * block one on a low-priority background thread; later uploads use the
+ * block one once it exists. After a shader cache hit on the per-texel
+ * pipeline the background compile (then usually a cache hit too) starts
+ * without waiting for the quiet window. Compiling the per-texel ones on the prewarm
+ * threads from image creation was slower than on the recording thread
+ * (TB336FU: 178 ms per format). PANVK_BC_DECODE_TEXEL=0 restores the 0153
+ * behaviour (block, compiled at the first upload). */
+
+struct bc_dec_job {
+   struct panvk_device *dev;
+   uint32_t shader;
+};
+
+/* A block compile running next to the per-texel ones of a level load made
+ * them ~25 % slower (TB336FU bc_level 156 vs 130 ms per format): it starts
+ * once no per-texel decoder has been compiled for BC_DEC_QUIET_NS. */
+#define BC_DEC_QUIET_NS (100ull * 1000 * 1000)
+
+static void
+bc_dec_run(void *data, void *gdata, int thread_index)
+{
+   struct bc_dec_job *job = data;
+   VkPipelineLayout layout;
+   VkPipeline pipeline;
+
+   for (;;) {
+      const uint64_t idle =
+         os_time_get_nano() - p_atomic_read(&job->dev->bc.dec_texel_ns);
+      if (!p_atomic_read(&job->dev->bc.dec_texel_busy) &&
+          idle >= BC_DEC_QUIET_NS)
+         break;
+      os_time_sleep(idle < BC_DEC_QUIET_NS ? (BC_DEC_QUIET_NS - idle) / 1000
+                                           : BC_DEC_QUIET_NS / 1000);
+   }
+   create_bc_decode_pipeline(job->dev, job->shader, true, &layout, &pipeline);
+}
+
+static void
+bc_dec_free(void *data, void *gdata, int thread_index)
+{
+   free(data);
+}
+
+static bool
+bc_decode_texel_enabled(void)
+{
+   static int on = -1;
+   if (p_atomic_read(&on) < 0)
+      p_atomic_set(&on, debug_get_bool_option("PANVK_BC_DECODE_TEXEL", true));
+   return p_atomic_read(&on);
+}
+
+/* Queues the block decoder compile once (2 threads at minimum priority:
+ * it is only a speed-up). False if it cannot run in the background. */
+static bool
+bc_decode_start_block(struct panvk_device *dev, uint32_t shader)
+{
+   if (p_atomic_read(&dev->bc.dec_started) & BITFIELD_BIT(shader))
+      return true;
+
+   simple_mtx_lock(&dev->bc.prewarm_lock);
+   bool ok = !!(p_atomic_read(&dev->bc.dec_started) & BITFIELD_BIT(shader));
+   if (!ok && !dev->bc.dec_queue_ok) {
+      for (unsigned i = 0; i < ARRAY_SIZE(dev->bc.dec_fence); i++)
+         util_queue_fence_init(&dev->bc.dec_fence[i]);
+      dev->bc.dec_queue_ok =
+         util_queue_init(&dev->bc.dec_queue, "panvk_bcdec", 8, 2,
+                         UTIL_QUEUE_INIT_RESIZE_IF_FULL |
+                            UTIL_QUEUE_INIT_USE_MINIMUM_PRIORITY,
+                         NULL);
+   }
+   struct bc_dec_job *job = ok || !dev->bc.dec_queue_ok ? NULL
+                                                         : malloc(sizeof(*job));
+   if (job) {
+      *job = (struct bc_dec_job){dev, shader};
+      util_queue_add_job(&dev->bc.dec_queue, job, &dev->bc.dec_fence[shader],
+                         bc_dec_run, bc_dec_free, 0);
+      p_atomic_set(&dev->bc.dec_started,
+                   p_atomic_read(&dev->bc.dec_started) | BITFIELD_BIT(shader));
+      ok = true;
+   }
+   simple_mtx_unlock(&dev->bc.prewarm_lock);
+   return ok;
+}
+
+/* *block_out: the pipeline is the block decoder (one invocation per 4x4
+ * block), else the per-texel one. */
+static VkResult
+get_bc_decode_pipeline(struct panvk_device *dev, uint32_t shader,
+                       VkPipelineLayout *layout_out, VkPipeline *pipeline_out,
+                       bool *block_out)
+{
+   const struct panvk_bc_decode_key key = {
+      .type = PANVK_META_OBJECT_KEY_BC_DECODE_SHADER,
+      .shader = shader,
+   };
+   *block_out = true;
+   if (!bc_decode_texel_enabled() ||
+       vk_meta_lookup_pipeline(&dev->meta, &key, sizeof(key)))
+      return create_bc_decode_pipeline(dev, shader, true, layout_out,
+                                       pipeline_out);
+
+   /* Until the block compile is queued, this is the first per-texel create
+    * of the format (later ones are meta cache lookups). */
+   const bool first =
+      !(p_atomic_read(&dev->bc.dec_started) & BITFIELD_BIT(shader));
+   const uint32_t compiles = panvk_per_arch(thread_compile_count)();
+   if (first)
+      p_atomic_inc(&dev->bc.dec_texel_busy);
+   VkResult result =
+      create_bc_decode_pipeline(dev, shader, false, layout_out, pipeline_out);
+   if (first) {
+      /* Only a real compile holds the block one back: after a shader cache
+       * hit it may start at once. */
+      if (panvk_per_arch(thread_compile_count)() != compiles)
+         p_atomic_set(&dev->bc.dec_texel_ns, os_time_get_nano());
+      p_atomic_dec(&dev->bc.dec_texel_busy);
+   }
+   if (result != VK_SUCCESS)
+      return result;
+   *block_out = false;
+   /* Never create the block one here, even after a cache hit: it is not
+    * always in the cache (a process killed before the background compile
+    * ended), and compiling it here cost 2x a cold load (TB336FU bc_decode
+    * warm 1777 ms vs 116 219). */
+   bc_decode_start_block(dev, shader);
+   return VK_SUCCESS;
 }
 
 static bool bc_bc7_fast(void);
@@ -856,9 +1003,10 @@ bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
    VkCommandBuffer cmd = panvk_cmd_buffer_to_handle(cmdbuf);
    VkPipelineLayout layout;
    VkPipeline pipeline;
+   bool block;
 
    VkResult result = get_bc_decode_pipeline(
-      dev, bc_decode_shader_index(img->vk.format), &layout, &pipeline);
+      dev, bc_decode_shader_index(img->vk.format), &layout, &pipeline, &block);
    if (result != VK_SUCCESS) {
       vk_command_buffer_set_error(&cmdbuf->vk, result);
       return;
@@ -913,9 +1061,11 @@ bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
    disp->CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
    disp->CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                           sizeof(push), &push);
-   /* 117: the compute decoders run one invocation per 4x4 block (8x8 blocks
-    * per workgroup). */
-   disp->CmdDispatch(cmd, DIV_ROUND_UP(w, 32), DIV_ROUND_UP(h, 32), d);
+   /* 117: the block decoders run one invocation per 4x4 block (8x8 blocks
+    * per workgroup), the per-texel ones (0170) one per texel. */
+   const uint32_t wg_texels = block ? 32 : 8;
+   disp->CmdDispatch(cmd, DIV_ROUND_UP(w, wg_texels),
+                     DIV_ROUND_UP(h, wg_texels), d);
 }
 
 /* BC lowmem transcoder (csf-v11/197), see bc/panvk_bc_etc2.comp. Included
@@ -1188,7 +1338,9 @@ void
 panvk_per_arch(bc_xcode_prewarm)(struct panvk_device *dev,
                                  const struct panvk_image *img)
 {
-   if (!panvk_bc_xcoded(img) || !debug_get_bool_option("PANVK_BC_PREWARM", true))
+   if (!debug_get_bool_option("PANVK_BC_PREWARM", true))
+      return;
+   if (!panvk_bc_xcoded(img))
       return;
 
    const uint32_t mode = bc_xcode_mode(img->vk.format);
@@ -1674,6 +1826,11 @@ panvk_per_arch(device_bc_finish)(struct panvk_device *dev)
    for (unsigned k = 0; k < ARRAY_SIZE(dev->bc.eac_lut); k++) {
       panvk_priv_bo_unref(dev->bc.eac_lut[k]);
       dev->bc.eac_lut[k] = NULL;
+   }
+   if (dev->bc.dec_queue_ok) {
+      util_queue_finish(&dev->bc.dec_queue);
+      util_queue_destroy(&dev->bc.dec_queue);
+      dev->bc.dec_queue_ok = false;
    }
    if (dev->bc.prewarm_queue_ok) {
       util_queue_finish(&dev->bc.prewarm_queue);

@@ -139,6 +139,14 @@ struct panvk_device {
       bool prewarm_queue_ok;
       uint32_t prewarm_started;
       struct util_queue_fence prewarm_fence[10];
+      /* 0170: block compute BC decoders (bc_decode_shader_index())
+       * compiled in the background after the first upload of a format. */
+      struct util_queue dec_queue;
+      bool dec_queue_ok;
+      uint32_t dec_started;
+      uint64_t dec_texel_ns; /* last per-texel decoder compile end */
+      uint32_t dec_texel_busy; /* per-texel decoder compiles running */
+      struct util_queue_fence dec_fence[4];
    } bc;
 
    /* BC raw store (csf-v11/201), under the lock in panvk_image.c: the

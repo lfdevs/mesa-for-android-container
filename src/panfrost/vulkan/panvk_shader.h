@@ -811,6 +811,7 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_internal_shader, vk.base, VkShaderEXT,
 
 void panvk_per_arch(compiler_lock)(void);
 void panvk_per_arch(compiler_unlock)(void);
+uint32_t panvk_per_arch(thread_compile_count)(void);
 
 VkResult panvk_per_arch(create_internal_shader)(
    struct panvk_device *dev, nir_shader *nir,

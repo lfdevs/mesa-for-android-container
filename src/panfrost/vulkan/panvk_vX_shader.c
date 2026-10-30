@@ -5996,6 +5996,16 @@ panvk_per_arch(compiler_unlock)(void)
       simple_mtx_unlock(&compiler_mutex);
 }
 
+/* 0170: shader compiles on this thread (pipeline cache hits do not get
+ * here), see get_bc_decode_pipeline(). */
+static thread_local uint32_t compile_count;
+
+uint32_t
+panvk_per_arch(thread_compile_count)(void)
+{
+   return compile_count;
+}
+
 static VkResult
 panvk_compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
                       struct vk_shader_compile_info *infos,
@@ -6004,6 +6014,7 @@ panvk_compile_shaders(struct vk_device *vk_dev, uint32_t shader_count,
                       const VkAllocationCallbacks *pAllocator,
                       struct vk_shader **shaders_out)
 {
+   compile_count++;
    panvk_per_arch(compiler_lock)();
 
    VkResult result = compile_shaders(vk_dev, shader_count, infos, state,

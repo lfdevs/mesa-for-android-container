@@ -29,7 +29,7 @@ layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer Ou
     uint data[];
 };
 
-#if !defined(PANVK_BC_FS) && !defined(PANVK_BC_BLOCK)
+#if !defined(PANVK_BC_FS) && !defined(PANVK_BC_BLOCK) && !defined(PANVK_BC_TEXEL)
 layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer Out4 {
     uvec4 data[];
 };
@@ -841,7 +841,9 @@ DecodedInterpolation decode_bc6_mode30(uvec4 payload, int linear_pixel, int part
     return DecodedInterpolation(ep0, ep1, w);
 }
 
-#ifdef PANVK_BC_FS
+/* -DPANVK_BC_TEXEL: the per-texel compute decoder of 116 (small, quick to
+ * compile), used until the block decoder below is compiled. */
+#if defined(PANVK_BC_FS) || defined(PANVK_BC_TEXEL)
 void main()
 {
     int format = registers.format;

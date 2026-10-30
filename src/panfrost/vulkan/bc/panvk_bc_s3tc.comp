@@ -18,7 +18,7 @@ layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer Ou
     uint data[];
 };
 
-#ifndef PANVK_BC_FS
+#if !defined(PANVK_BC_FS) && !defined(PANVK_BC_TEXEL)
 layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer OutBuf4 {
     uvec4 data[];
 };
@@ -300,7 +300,9 @@ float decode_alpha_4bit(uvec2 payload, int pixel)
     return float((payload[offset >> 5] >> (offset & 31)) & 0xf) / 15.0;
 }
 
-#ifndef PANVK_BC_FS
+/* -DPANVK_BC_TEXEL: the per-texel compute decoder of 116 (small, quick to
+ * compile), used until the block decoder below is compiled. */
+#if !defined(PANVK_BC_FS) && !defined(PANVK_BC_TEXEL)
 /* 117: one invocation per 4x4 block. The endpoints and the four palette
  * colours are decoded once per block (the same functions as the per-texel
  * fragment variant, so the result is bit-identical), the 16 texels are
