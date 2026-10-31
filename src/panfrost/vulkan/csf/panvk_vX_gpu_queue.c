@@ -1120,9 +1120,10 @@ kbase_queue_wait_current(struct panvk_gpu_queue *queue,
 /* jm-v7-wip 0167: on by default only where verified (v11 X6 Pro, v13 S11
  * Ultra).  On v14 G1-Ultra the first submit hangs (subqueue 1 timeout,
  * DEVICE_LOST at vkCreateDevice); v10/v12 are untested.  PANVK_KBASE_TILER_IR
- * =1 forces it on, =0 off. */
+ * =1 forces it on, =0 off.  jm-v7-wip 0174: also on for v12 (SM-X926B
+ * workload_perf: gs_layer -45 %, msaa -8 to -14 %, no failures). */
 DEBUG_GET_ONCE_BOOL_OPTION(kbase_one_group, "PANVK_KBASE_TILER_IR",
-                           PAN_ARCH == 11 || PAN_ARCH == 13)
+                           PAN_ARCH == 11 || PAN_ARCH == 12 || PAN_ARCH == 13)
 
 static void
 kbase_destroy_group(struct panvk_gpu_queue *queue)
