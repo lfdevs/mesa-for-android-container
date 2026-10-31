@@ -2108,7 +2108,13 @@ x11_sw_t_frame(struct x11_swapchain *chain)
 #define X11_SW_AB_START_NS (1000ull * 1000 * 1000)
 #define X11_SW_AB_MARGIN 0.10
 #define X11_SW_AB_RETRY_NS (3000ull * 1000 * 1000)
-#define X11_SW_AB_TRIES 3
+#define X11_SW_AB_TRIES 2
+/* 0175: the B window ends early, and the probe with it, once its first
+ * X11_SW_AB_ABORT_FRAMES frames run below X11_SW_AB_ABORT of the A rate.
+ * Pixel 7 (v10) D3D11 cube: cached 587/574 fps, uncached 130.6 for a whole
+ * window; the probe cost of such a window is what the early end saves. */
+#define X11_SW_AB_ABORT_FRAMES 8
+#define X11_SW_AB_ABORT 0.70
 
 static void
 x11_sw_ab_set_mode(struct x11_swapchain *chain, bool cached)
@@ -2175,8 +2181,25 @@ x11_sw_ab_frame(struct x11_swapchain *chain, struct x11_image *image)
    if (chain->sw_ab_pending || now < chain->sw_ab_start_ns + X11_SW_AB_START_NS)
       return;
    const uint64_t ns = x11_sw_ab_window(chain, now);
-   if (!ns)
+   if (!ns) {
+      if (chain->sw_ab_phase == 1 && chain->sw_ab_measuring &&
+          chain->sw_ab_n > X11_SW_AB_ABORT_FRAMES) {
+         const uint64_t a = chain->sw_ab_ns[!chain->sw_cached];
+         const uint64_t b = (now - chain->sw_ab_t0) / (chain->sw_ab_n - 1);
+         if (b * X11_SW_AB_ABORT > a) {
+            mesa_logi("wsi/x11 sw readback %ux%u: %s %.1f fps, %s %.1f fps "
+                      "after %u frames -> %s (early)",
+                      chain->extent.width, chain->extent.height,
+                      chain->sw_cached ? "uncached" : "cached", 1e9 / a,
+                      chain->sw_cached ? "cached" : "uncached", 1e9 / b,
+                      chain->sw_ab_n - 1,
+                      chain->sw_cached ? "uncached" : "cached");
+            x11_sw_ab_set_mode(chain, !chain->sw_cached);
+            chain->sw_ab_phase = 3;
+         }
+      }
       return;
+   }
    const bool cur = chain->sw_cached;
 
    switch (chain->sw_ab_phase) {
