@@ -1380,8 +1380,7 @@ struct x11_swapchain {
    uint64_t                                     sw_ab_start_ns; /* first present */
    uint64_t                                     sw_ab_t0;
    uint64_t                                     sw_ab_ns[2];   /* [cached] */
-   uint64_t                                     sw_ab_ref_ns;
-   uint64_t                                     sw_ab_decided_ns;
+   uint32_t                                     sw_ab_tries;
 
    /* Some X servers reject DRI3FenceFromFD for imported pixmaps.  Fall back
     * to Present IdleNotify for implicit-sync image reuse when that happens.
@@ -2090,19 +2089,26 @@ x11_sw_t_frame(struct x11_swapchain *chain)
  * again (A, B, A cancels a linear drift), each window X11_SW_AB_WINDOW
  * frames and at least X11_SW_AB_WINDOW_NS after X11_SW_AB_SETTLE frames /
  * X11_SW_AB_SETTLE_NS in the mode, the first one X11_SW_AB_START_NS after
- * the swapchain's first present. It keeps the starting mode unless the
- * other one is X11_SW_AB_MARGIN faster, and measures again when the
- * interval drifts by X11_SW_AB_DRIFT (at most every X11_SW_AB_REPROBE_NS).
- * An image moves to the other type right after its CPU copy, while it is
- * idle. */
-#define X11_SW_AB_SETTLE 30
-#define X11_SW_AB_SETTLE_NS (250ull * 1000 * 1000)
-#define X11_SW_AB_WINDOW 120
-#define X11_SW_AB_WINDOW_NS (500ull * 1000 * 1000)
+ * the swapchain's first present. An image moves to the other type right
+ * after its CPU copy, while it is idle.
+ *
+ * 0173: the swapchain decides once (a resize makes a new swapchain, which
+ * measures again). B wins only when it is X11_SW_AB_MARGIN faster than the
+ * faster A window, and loses when it is not X11_SW_AB_MARGIN faster than the
+ * slower one; in between (noisy content, or a frame rate still ramping up)
+ * the probe runs again after X11_SW_AB_RETRY_NS, X11_SW_AB_TRIES times at
+ * most, then the starting mode stays. 0171 measured again on every 25 %
+ * frame rate drift: on v12 (SM-X920) D3D12 gears re-probed five times in
+ * one pass and flipped between the modes (1 s fps 174-593), and the D3D11
+ * cube averaged 603 fps against 745-762 cached. */
+#define X11_SW_AB_SETTLE 15
+#define X11_SW_AB_SETTLE_NS (100ull * 1000 * 1000)
+#define X11_SW_AB_WINDOW 60
+#define X11_SW_AB_WINDOW_NS (400ull * 1000 * 1000)
 #define X11_SW_AB_START_NS (1000ull * 1000 * 1000)
-#define X11_SW_AB_MARGIN 0.03
-#define X11_SW_AB_DRIFT 0.25
-#define X11_SW_AB_REPROBE_NS (10ull * 1000 * 1000 * 1000)
+#define X11_SW_AB_MARGIN 0.10
+#define X11_SW_AB_RETRY_NS (3000ull * 1000 * 1000)
+#define X11_SW_AB_TRIES 3
 
 static void
 x11_sw_ab_set_mode(struct x11_swapchain *chain, bool cached)
@@ -2158,10 +2164,15 @@ x11_sw_ab_frame(struct x11_swapchain *chain, struct x11_image *image)
       return;
    }
 
+   if (chain->sw_ab_phase == 3) {
+      if (!chain->sw_ab_pending)
+         chain->sw_ab = false; /* every image in the chosen type */
+      return;
+   }
    const uint64_t now = os_time_get_nano();
    if (!chain->sw_ab_start_ns)
       chain->sw_ab_start_ns = now;
-   if (chain->sw_ab_pending || now - chain->sw_ab_start_ns < X11_SW_AB_START_NS)
+   if (chain->sw_ab_pending || now < chain->sw_ab_start_ns + X11_SW_AB_START_NS)
       return;
    const uint64_t ns = x11_sw_ab_window(chain, now);
    if (!ns)
@@ -2179,32 +2190,32 @@ x11_sw_ab_frame(struct x11_swapchain *chain, struct x11_image *image)
       chain->sw_ab_phase = 2;
       x11_sw_ab_set_mode(chain, !cur);
       break;
-   case 2: {
-      /* cur is A: the mean of both of its windows against B. */
-      const uint64_t a = (chain->sw_ab_ns[cur] + ns) / 2;
-      const uint64_t b = chain->sw_ab_ns[!cur];
-      const bool best = b < a * (1.0 - X11_SW_AB_MARGIN) ? !cur : cur;
-      mesa_logi("wsi/x11 sw readback %ux%u: %s %.1f fps, %s %.1f fps -> %s",
-                chain->extent.width, chain->extent.height,
-                cur ? "cached" : "uncached", 1e9 / a,
-                cur ? "uncached" : "cached", 1e9 / b,
-                best ? "cached" : "uncached");
-      chain->sw_ab_ref_ns = best == cur ? a : b;
-      chain->sw_ab_decided_ns = now;
-      chain->sw_ab_phase = 3;
-      if (best != cur)
-         x11_sw_ab_set_mode(chain, best);
-      break;
-   }
    default: {
-      /* Hold: measure again when the frame rate has moved; this window is
-       * the first A. */
-      const double d = (double)ns / chain->sw_ab_ref_ns;
-      if ((d > 1.0 + X11_SW_AB_DRIFT || d < 1.0 - X11_SW_AB_DRIFT) &&
-          now - chain->sw_ab_decided_ns > X11_SW_AB_REPROBE_NS) {
-         chain->sw_ab_ns[cur] = ns;
-         chain->sw_ab_phase = 1;
+      /* cur is A again: both of its windows against B. */
+      const uint64_t a1 = chain->sw_ab_ns[cur], a2 = ns;
+      const uint64_t b = chain->sw_ab_ns[!cur];
+      /* B against the better and the worse A window: a drift between the
+       * A windows cannot make a clear winner look like a loser. */
+      const bool flip = b < MIN2(a1, a2) * (1.0 - X11_SW_AB_MARGIN);
+      const bool keep = b > MAX2(a1, a2) * (1.0 - X11_SW_AB_MARGIN);
+      const bool retry = !flip && !keep &&
+                         ++chain->sw_ab_tries < X11_SW_AB_TRIES;
+      mesa_logi("wsi/x11 sw readback %ux%u: %s %.1f/%.1f fps, %s %.1f fps "
+                "-> %s%s",
+                chain->extent.width, chain->extent.height,
+                cur ? "cached" : "uncached", 1e9 / a1, 1e9 / a2,
+                cur ? "uncached" : "cached", 1e9 / b,
+                (flip ? !cur : cur) ? "cached" : "uncached",
+                flip || keep ? "" : retry ? " (unclear, again later)"
+                                          : " (unclear, kept)");
+      if (flip)
          x11_sw_ab_set_mode(chain, !cur);
+      if (retry) {
+         /* Again later from the start, in the mode kept. */
+         chain->sw_ab_phase = 0;
+         chain->sw_ab_start_ns = now + X11_SW_AB_RETRY_NS - X11_SW_AB_START_NS;
+      } else {
+         chain->sw_ab_phase = 3; /* decided: images still to move, then idle */
       }
       break;
    }
