@@ -54,13 +54,24 @@ emit_load_state(struct tu_cs *cs, unsigned opcode, enum a6xx_state_type st,
 }
 
 static unsigned
-tu6_load_state_size(struct tu_pipeline *pipeline,
+tu6_load_state_size(struct tu_device *device,
+                    struct tu_pipeline *pipeline,
                     struct tu_pipeline_layout *layout)
 {
    const unsigned load_state_size = 4;
+   const unsigned hw_max_sets = tu_hw_max_sets(device->compiler->info->chip);
+   const bool virtual_sets =
+      tu_uses_virtual_sets(device->compiler->info->chip,
+                           device->physical_device->usable_sets);
    unsigned size = 0;
    for (unsigned i = 0; i < layout->num_sets; i++) {
       if (!(pipeline->active_desc_sets & (1u << i)))
+         continue;
+
+      /* Virtualized sets share a hardware base register and need a runtime
+       * descriptor offset, which can't be encoded in a preload packet.
+       */
+      if (virtual_sets && i >= hw_max_sets - 1)
          continue;
 
       struct tu_descriptor_set_layout *set_layout = layout->set[i].layout;
@@ -72,6 +83,13 @@ tu6_load_state_size(struct tu_pipeline *pipeline,
          unsigned stage_count = util_bitcount(stages);
 
          if (!binding->array_size)
+            continue;
+
+         /* Dynamic descriptors live in the reserved set.  When that set is
+          * virtualized as well, its descriptor index offset is only known at
+          * bind time, so no preload packet can be built here.
+          */
+         if (virtual_sets && vk_descriptor_type_is_dynamic(binding->type))
             continue;
 
          switch (binding->type) {
@@ -118,9 +136,14 @@ tu6_emit_load_state(struct tu_device *device,
                     struct tu_pipeline *pipeline,
                     struct tu_pipeline_layout *layout)
 {
-   unsigned size = tu6_load_state_size(pipeline, layout);
+   unsigned size = tu6_load_state_size(device, pipeline, layout);
    if (size == 0)
       return;
+
+   const unsigned hw_max_sets = tu_hw_max_sets(device->compiler->info->chip);
+   const bool virtual_sets =
+      tu_uses_virtual_sets(device->compiler->info->chip,
+                           device->physical_device->usable_sets);
 
    struct tu_cs cs;
    tu_cs_begin_sub_stream(&pipeline->cs, size, &cs);
@@ -143,6 +166,9 @@ tu6_emit_load_state(struct tu_device *device,
        * since these prefetches would be useless.
        */
       if (!(pipeline->active_desc_sets & (1u << i)))
+         continue;
+
+      if (virtual_sets && i >= hw_max_sets - 1)
          continue;
 
       struct tu_descriptor_set_layout *set_layout = layout->set[i].layout;
@@ -168,6 +194,11 @@ tu6_emit_load_state(struct tu_device *device,
 
          if (count == 0 || stages == 0)
             continue;
+
+         /* See the matching check in tu6_load_state_size(). */
+         if (virtual_sets && vk_descriptor_type_is_dynamic(binding->type))
+            continue;
+
          switch (binding->type) {
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
             assert(device->physical_device->reserved_set_idx >= 0);
@@ -1487,10 +1518,10 @@ tu_pipeline_allocate_cs(struct tu_device *dev,
       if (set_combined_state(builder, pipeline,
                              VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT |
                              VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT)) {
-         size += tu6_load_state_size(pipeline, layout);
+         size += tu6_load_state_size(dev, pipeline, layout);
       }
    } else {
-      size += tu6_load_state_size(pipeline, layout);
+      size += tu6_load_state_size(dev, pipeline, layout);
    }
 
    /* Allocate the space for the pipeline out of the device's RO suballocator.

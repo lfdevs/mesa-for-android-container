@@ -66,6 +66,15 @@ tu_wsi_init(struct tu_physical_device *physical_device)
    physical_device->wsi_device.supports_modifiers = true;
    physical_device->wsi_device.can_present_on_device =
       tu_wsi_can_present_on_device;
+   /* KGSL does not implement implicit sync (see kgsl_bo_cpu_prep()), and msm
+    * VM_BIND submissions carry no BO list, so the kernel cannot attach fences
+    * to the dma-bufs backing the swapchain images.  Without explicit sync or
+    * a dma-buf syncobj, the window system could scan out an image before the
+    * GPU has finished rendering it.  Wait for the present fence before
+    * handing the image to X11 in that case.
+    */
+   physical_device->wsi_device.x11.wait_for_fences =
+      tu_wsi_is_kgsl(physical_device) || physical_device->has_vm_bind;
 
    physical_device->vk.wsi_device = &physical_device->wsi_device;
 
