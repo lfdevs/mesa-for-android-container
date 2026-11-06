@@ -5113,6 +5113,13 @@ tva_bridge_vscreen_create(int fd, bool honor_dri_prime)
     int opened_fd = -1;
     if (!backend || !*backend || !strcmp(backend, "auto"))
         backend = "auto";
+    else if (strcmp(backend, "kgsl") != 0 &&
+             strcmp(backend, "sw") != 0 &&
+             strcmp(backend, "drm") != 0) {
+        fprintf(stderr, "tva: unknown TERMUX_VA_GPU_BACKEND '%s', using auto\n",
+                backend);
+        backend = "auto";
+    }
 
 #if defined(__linux__)
     /* An X11 VA display in a PRoot container does not carry a DRM fd.  Open
@@ -5202,8 +5209,7 @@ tva_bridge_vscreen_create(int fd, bool honor_dri_prime)
         return vscreen;
     }
 
-    fprintf(stderr, "tva: unknown TERMUX_VA_GPU_BACKEND '%s', using auto\n", backend);
     if (opened_fd >= 0)
         close(opened_fd);
-    return tva_bridge_vscreen_create(fd, honor_dri_prime);
+    return NULL;
 }
