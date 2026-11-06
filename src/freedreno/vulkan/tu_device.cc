@@ -87,11 +87,15 @@ tu_physical_device_compiler_options_init(struct tu_physical_device *device,
          device->compiler_options.enable_texel_buffer_emulation =
             instance->drirc.misc.enable_texel_buffer_emulation;
       }
-      if (device->info->props.max_storage_buffer_range_bytes < TU_D3D12_MAX_STORAGE_BUFFER_RANGE_BYTES) {
-         assert(fd_dev_gen(&device->dev_id) == 7);
-         device->compiler_options.enable_ssbo_emulation =
-            instance->drirc.misc.enable_ssbo_emulation;
-      }
+   }
+
+   /* SSBO emulation only needs global loads/stores and a driver UBO holding
+    * the per-set descriptor base addresses, both of which exist on a6xx, so
+    * allow the drirc option on all supported generations.
+    */
+   if (device->info->props.max_storage_buffer_range_bytes < TU_D3D12_MAX_STORAGE_BUFFER_RANGE_BYTES) {
+      device->compiler_options.enable_ssbo_emulation =
+         instance->drirc.misc.enable_ssbo_emulation;
    }
 
    device->compiler_options.allow_oob_indirect_ubo_loads =
@@ -1324,9 +1328,17 @@ tu_get_properties(struct tu_physical_device *pdevice,
    props->optimalBufferCopyRowPitchAlignment = 128;
    props->nonCoherentAtomSize = 64;
 
+   /* Vulkan 1.4 requires storageBuffer8BitAccess and
+    * maxBoundDescriptorSets >= 7.  Only a6xx gen4 and newer (and a7xx/a8xx)
+    * support 8-bit storage; a6xx gen4 parts expose 7 usable sets (plus one
+    * reserved for dynamic descriptors) by virtualizing sets 4-7 on top of the
+    * last hardware bindless base register, see tu_uses_virtual_sets().  Keep
+    * older a6xx parts, or configurations that override the set count below
+    * seven, on 1.3.
+    */
    props->apiVersion =
-      ((pdevice->info->chip >= 7) ? TU_API_VERSION :
-         VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION));
+      (pdevice->info->props.storage_8bit && pdevice->usable_sets >= 7) ?
+         TU_API_VERSION : VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION);
    props->driverVersion = vk_get_driver_version();
    props->vendorID = pdevice->instance->drirc.debug.force_vk_vendor != 0 ?
                      pdevice->instance->drirc.debug.force_vk_vendor : 0x5143;

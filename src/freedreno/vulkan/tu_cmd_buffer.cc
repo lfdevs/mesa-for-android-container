@@ -4772,6 +4772,26 @@ tu_CmdBindIndexBuffer2KHR(VkCommandBuffer commandBuffer,
 }
 TU_GENX(tu_CmdBindIndexBuffer2KHR);
 
+/* Returns the shared hardware bindless base address used by virtualized
+ * descriptor sets.  Sets at and above hw_max_sets - 1 share the last hardware
+ * base register, and are distinguished by a per-set descriptor offset.
+ */
+static uint64_t
+tu_bindless_anchor(unsigned hw_max_sets, const uint64_t *set_iova)
+{
+   uint64_t anchor = 0;
+
+   for (unsigned i = hw_max_sets - 1; i < MAX_SETS; i++) {
+      uint64_t va = set_iova[i] & ~0x3f;
+      if (!va)
+         continue;
+      if (!anchor || va < anchor)
+         anchor = va;
+   }
+
+   return anchor;
+}
+
 template <chip CHIP>
 static void
 tu6_emit_descriptor_sets(struct tu_cmd_buffer *cmd,
@@ -4782,24 +4802,56 @@ tu6_emit_descriptor_sets(struct tu_cmd_buffer *cmd,
    uint32_t sp_bindless_base_reg, hlsq_bindless_base_reg;
    struct tu_cs *cs, state_cs;
 
+   /* a6xx only has 5 bindless descriptor set base registers per stage, and
+    * a7xx has 8.  When descriptor-set virtualization lets more sets be bound
+    * than that, sets at and above hw_max_sets - 1 share the last base
+    * register: program it with the lowest set address and let shaders add a
+    * per-set descriptor offset.  On a6xx the next register after the array
+    * is SP_CS_UAV_BASE.
+    */
+   const unsigned hw_max_sets = tu_hw_max_sets(CHIP);
+   const bool virtual_sets =
+      tu_uses_virtual_sets(CHIP, cmd->device->physical_device->usable_sets);
+   const unsigned max_sets_bound =
+      virtual_sets ? hw_max_sets :
+      MIN2(descriptors_state->max_sets_bound, hw_max_sets);
+   uint64_t set_iova[MAX_SETS];
+
+   /* Dynamic descriptors normally get the reserved set's base register.  When
+    * that set is virtualized it shares the anchor register instead, so there
+    * is no separate dynamic-register packet to emit.
+    */
+   const int reserved_set_idx =
+      cmd->device->physical_device->reserved_set_idx;
+   const bool has_dynamic_regs =
+      descriptors_state->max_dynamic_offset_size &&
+      reserved_set_idx >= 0 && reserved_set_idx < static_cast<int>(hw_max_sets);
+
+   memcpy(set_iova, descriptors_state->set_iova, sizeof(set_iova));
+   if (virtual_sets) {
+      set_iova[hw_max_sets - 1] =
+         tu_bindless_anchor(hw_max_sets, descriptors_state->set_iova) |
+         BINDLESS_DESCRIPTOR_64B;
+   }
+
    if (bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS) {
       sp_bindless_base_reg = __SP_GFX_BINDLESS_BASE_DESCRIPTOR<CHIP>(0, {}).reg;
       hlsq_bindless_base_reg = REG_A6XX_HLSQ_BINDLESS_BASE(0);
 
-      unsigned bindless_pkt_size = descriptors_state->max_sets_bound ?
-         1 + 2 * descriptors_state->max_sets_bound :
+      unsigned bindless_pkt_size = max_sets_bound ?
+         1 + 2 * max_sets_bound :
          0;
 
       if (CHIP == A6XX) {
          cmd->state.desc_sets =
             tu_cs_draw_state(&cmd->sub_cs, &state_cs,
                              2 + 2 * bindless_pkt_size +
-                             (descriptors_state->max_dynamic_offset_size ? 6 : 0));
+                             (has_dynamic_regs ? 6 : 0));
       } else {
          cmd->state.desc_sets =
             tu_cs_draw_state(&cmd->sub_cs, &state_cs,
                              2 + bindless_pkt_size +
-                             (descriptors_state->max_dynamic_offset_size ? 3 : 0));
+                             (has_dynamic_regs ? 3 : 0));
       }
       cs = &state_cs;
    } else {
@@ -4811,27 +4863,28 @@ tu6_emit_descriptor_sets(struct tu_cmd_buffer *cmd,
       cs = &cmd->cs;
    }
 
-   if (descriptors_state->max_sets_bound > 0) {
-      tu_cs_emit_pkt4(cs, sp_bindless_base_reg, 2 * descriptors_state->max_sets_bound);
-      tu_cs_emit_array(cs, reinterpret_cast<const uint32_t*>(descriptors_state->set_iova),
-                       2 * descriptors_state->max_sets_bound);
+   if (max_sets_bound > 0) {
+      tu_cs_emit_pkt4(cs, sp_bindless_base_reg, 2 * max_sets_bound);
+      tu_cs_emit_array(cs, reinterpret_cast<const uint32_t *>(set_iova),
+                       2 * max_sets_bound);
       if (CHIP == A6XX) {
-         tu_cs_emit_pkt4(cs, hlsq_bindless_base_reg, 2 * descriptors_state->max_sets_bound);
-         tu_cs_emit_array(cs, reinterpret_cast<const uint32_t*>(descriptors_state->set_iova),
-                          2 * descriptors_state->max_sets_bound);
+         tu_cs_emit_pkt4(cs, hlsq_bindless_base_reg, 2 * max_sets_bound);
+         tu_cs_emit_array(cs, reinterpret_cast<const uint32_t *>(set_iova),
+                          2 * max_sets_bound);
       }
    }
 
    /* Dynamic descriptors get the reserved descriptor set. */
    if (descriptors_state->max_dynamic_offset_size) {
-      int reserved_set_idx = cmd->device->physical_device->reserved_set_idx;
       assert(reserved_set_idx >= 0); /* reserved set must be bound */
 
-      tu_cs_emit_pkt4(cs, sp_bindless_base_reg + reserved_set_idx * 2, 2);
-      tu_cs_emit_qw(cs, descriptors_state->set_iova[reserved_set_idx]);
-      if (CHIP == A6XX) {
-         tu_cs_emit_pkt4(cs, hlsq_bindless_base_reg + reserved_set_idx * 2, 2);
+      if (has_dynamic_regs) {
+         tu_cs_emit_pkt4(cs, sp_bindless_base_reg + reserved_set_idx * 2, 2);
          tu_cs_emit_qw(cs, descriptors_state->set_iova[reserved_set_idx]);
+         if (CHIP == A6XX) {
+            tu_cs_emit_pkt4(cs, hlsq_bindless_base_reg + reserved_set_idx * 2, 2);
+            tu_cs_emit_qw(cs, descriptors_state->set_iova[reserved_set_idx]);
+         }
       }
    }
 
@@ -7775,6 +7828,11 @@ tu6_user_consts_size(const struct tu_const_state *const_state,
       }
    }
 
+   if (const_state->num_virtual_set_offsets > 0 &&
+       !load_shader_consts_via_preamble) {
+      dwords += 4 + align(const_state->num_virtual_set_offsets, 4);
+   }
+
    return dwords;
 }
 
@@ -7978,28 +8036,48 @@ tu6_const_size(struct tu_cmd_buffer *cmd,
 static void
 fill_bindless_base_addresses(const struct tu_const_state *const_state,
                              struct tu_descriptor_state *descriptors,
+                             unsigned hw_max_sets,
                              uint64_t *addresses)
 {
    assert(const_state->num_bindless_base_addresses <= MAX_SETS);
 
    for (unsigned i = 0; i < const_state->num_bindless_base_addresses; i++)
       addresses[i] = descriptors->set_iova[i] & ~0x3f;
+
+   if (const_state->num_virtual_set_offsets)
+      addresses[hw_max_sets - 1] =
+         tu_bindless_anchor(hw_max_sets, descriptors->set_iova);
 }
 
+/* Upload the per-set descriptor offsets for virtualized sets, in 64-byte
+ * descriptor units relative to the shared base register.
+ */
 static void
-tu6_emit_bindless_base_addresses(struct tu_cs *cs,
-                                 const struct tu_const_state *const_state,
-                                 const struct ir3_const_state *ir_const_state,
-                                 mesa_shader_stage type,
-                                 struct tu_descriptor_state *descriptors)
+tu6_emit_virtual_set_offsets(struct tu_cs *cs,
+                             const struct tu_const_state *const_state,
+                             const struct ir3_const_state *ir_const_state,
+                             mesa_shader_stage type,
+                             struct tu_descriptor_state *descriptors)
 {
-   uint64_t addresses[MAX_SETS] = {0};
-   fill_bindless_base_addresses(const_state, descriptors, addresses);
+   if (!const_state->num_virtual_set_offsets)
+      return;
+
+   const unsigned hw_max_sets =
+      tu_hw_max_sets(cs->device->compiler->info->chip);
+   uint64_t anchor = tu_bindless_anchor(hw_max_sets, descriptors->set_iova);
+   uint32_t offsets[MAX_SETS] = {0};
+
+   for (unsigned i = hw_max_sets - 1;
+        i < const_state->num_virtual_set_offsets; i++) {
+      uint64_t va = descriptors->set_iova[i] & ~0x3f;
+      if (va)
+         offsets[i] = (va - anchor) / 64;
+   }
 
    uint32_t offset =
-      ir_const_state->allocs.consts[IR3_CONST_ALLOC_BINDLESS_BASE_ADDRS]
+      ir_const_state->allocs.consts[IR3_CONST_ALLOC_VIRTUAL_SET_OFFSETS]
          .offset_vec4;
-   unsigned num_dwords = align(const_state->num_bindless_base_addresses * 2, 4);
+   unsigned num_dwords = align(const_state->num_virtual_set_offsets, 4);
 
    tu_cs_emit_pkt7(cs, tu6_stage2opcode(type), 3 + num_dwords);
    tu_cs_emit(cs, CP_LOAD_STATE6_0_DST_OFF(offset) |
@@ -8010,12 +8088,48 @@ tu6_emit_bindless_base_addresses(struct tu_cs *cs,
    tu_cs_emit(cs, 0);
    tu_cs_emit(cs, 0);
 
-   for (unsigned i = 0; i < const_state->num_bindless_base_addresses; i++)
-      tu_cs_emit_qw(cs, addresses[i]);
+   for (unsigned i = 0; i < num_dwords; i++)
+      tu_cs_emit(cs, i < const_state->num_virtual_set_offsets ? offsets[i] : 0);
+}
 
-   for (unsigned i = const_state->num_bindless_base_addresses * 2;
-        i < num_dwords; i++)
+static void
+tu6_emit_bindless_base_addresses(struct tu_cs *cs,
+                                 const struct tu_const_state *const_state,
+                                 const struct ir3_const_state *ir_const_state,
+                                 mesa_shader_stage type,
+                                 struct tu_descriptor_state *descriptors)
+{
+   if (const_state->num_bindless_base_addresses > 0) {
+      uint64_t addresses[MAX_SETS] = {0};
+      fill_bindless_base_addresses(
+         const_state, descriptors,
+         tu_hw_max_sets(cs->device->compiler->info->chip), addresses);
+
+      uint32_t offset =
+         ir_const_state->allocs.consts[IR3_CONST_ALLOC_BINDLESS_BASE_ADDRS]
+            .offset_vec4;
+      unsigned num_dwords =
+         align(const_state->num_bindless_base_addresses * 2, 4);
+
+      tu_cs_emit_pkt7(cs, tu6_stage2opcode(type), 3 + num_dwords);
+      tu_cs_emit(cs, CP_LOAD_STATE6_0_DST_OFF(offset) |
+               CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
+               CP_LOAD_STATE6_0_STATE_SRC(SS6_DIRECT) |
+               CP_LOAD_STATE6_0_STATE_BLOCK(tu6_stage2shadersb(type)) |
+               CP_LOAD_STATE6_0_NUM_UNIT(num_dwords / 4));
       tu_cs_emit(cs, 0);
+      tu_cs_emit(cs, 0);
+
+      for (unsigned i = 0; i < const_state->num_bindless_base_addresses; i++)
+         tu_cs_emit_qw(cs, addresses[i]);
+
+      for (unsigned i = const_state->num_bindless_base_addresses * 2;
+           i < num_dwords; i++)
+         tu_cs_emit(cs, 0);
+   }
+
+   tu6_emit_virtual_set_offsets(cs, const_state, ir_const_state, type,
+                                descriptors);
 }
 
 static void
@@ -8029,7 +8143,9 @@ tu7_emit_bindless_base_addresses(struct tu_cs *cs,
    if (ubo_offset < 0)
       return;
 
-   fill_bindless_base_addresses(const_state, descriptors, addresses);
+   fill_bindless_base_addresses(
+      const_state, descriptors,
+      tu_hw_max_sets(cs->device->compiler->info->chip), addresses);
 
    /* A7XX TODO: Emit data via sub_cs instead of NOP */
    uint64_t iova = tu_cs_emit_data_nop(
@@ -8055,7 +8171,8 @@ tu_emit_bindless_base_addresses(struct tu_cs *cs,
                                 mesa_shader_stage type,
                                 struct tu_descriptor_state *descriptors)
 {
-   if (!const_state->num_bindless_base_addresses)
+   if (!const_state->num_bindless_base_addresses &&
+       !const_state->num_virtual_set_offsets)
       return;
 
    if (cs->device->physical_device->info->props.load_shader_consts_via_preamble) {

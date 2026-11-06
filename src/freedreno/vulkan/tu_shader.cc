@@ -425,9 +425,32 @@ lower_load_vulkan_descriptor(nir_builder *b, nir_intrinsic_instr *intrin)
 }
 
 static nir_def *
-bindless_resource_ir3(nir_builder *b, unsigned base, nir_def *desc_offset,
+bindless_resource_ir3(nir_builder *b, struct tu_device *dev,
+                      const struct ir3_const_allocations *const_allocs,
+                      unsigned base, nir_def *desc_offset,
                       bool can_speculate_descriptor)
 {
+   const unsigned hw_max_sets = tu_hw_max_sets(dev->compiler->info->chip);
+
+   /* When more descriptor sets are exposed than the hardware has base
+    * registers, sets from hw_max_sets - 1 upwards share the last register.
+    * Add the set's offset (in 64-byte descriptor units) to the descriptor
+    * index, and point the access at the shared base register.
+    */
+   if (tu_uses_virtual_sets(dev->compiler->info->chip,
+                            dev->physical_device->usable_sets) &&
+       const_allocs->consts[IR3_CONST_ALLOC_VIRTUAL_SET_OFFSETS].size_vec4 > 0 &&
+       base >= hw_max_sets - 1) {
+      unsigned offset_dword =
+         const_allocs->consts[IR3_CONST_ALLOC_VIRTUAL_SET_OFFSETS]
+            .offset_vec4 * 4 + base;
+      nir_def *set_offset =
+         nir_load_const_ir3(b, 1, 32, nir_imm_int(b, 0),
+                            .base = offset_dword);
+      desc_offset = nir_iadd(b, desc_offset, set_offset);
+      base = hw_max_sets - 1;
+   }
+
    return nir_bindless_resource_ir3(b, 32, desc_offset,
                                     .desc_set = base,
                                     .access = can_speculate_descriptor ?
@@ -437,7 +460,8 @@ bindless_resource_ir3(nir_builder *b, unsigned base, nir_def *desc_offset,
 
 static bool
 lower_ssbo_ubo_intrinsic(struct tu_device *dev,
-                         nir_builder *b, nir_intrinsic_instr *intrin)
+                         nir_builder *b, nir_intrinsic_instr *intrin,
+                         const struct ir3_const_allocations *const_allocs)
 {
    const nir_intrinsic_info *info = &nir_intrinsic_infos[intrin->intrinsic];
 
@@ -475,7 +499,8 @@ lower_ssbo_ubo_intrinsic(struct tu_device *dev,
    if (nir_scalar_is_const(scalar_idx)) {
       bool can_speculate_descriptor = intrin->instr.pass_flags;
       nir_def *bindless =
-         bindless_resource_ir3(b, nir_scalar_as_uint(scalar_idx),
+         bindless_resource_ir3(b, dev, const_allocs,
+                               nir_scalar_as_uint(scalar_idx),
                                descriptor_idx, can_speculate_descriptor);
       nir_src_rewrite(&intrin->src[buffer_src], bindless);
       return true;
@@ -486,7 +511,8 @@ lower_ssbo_ubo_intrinsic(struct tu_device *dev,
       /* if (base_idx == i) { ... */
       nir_if *nif = nir_push_if(b, nir_ieq_imm(b, base_idx, i));
 
-      nir_def *bindless = bindless_resource_ir3(b, i, descriptor_idx, false);
+      nir_def *bindless =
+         bindless_resource_ir3(b, dev, const_allocs, i, descriptor_idx, false);
 
       nir_intrinsic_instr *copy =
          nir_intrinsic_instr_create(b->shader, intrin->intrinsic);
@@ -559,6 +585,7 @@ build_bindless(struct tu_device *dev, nir_builder *b,
                nir_deref_instr *deref, unsigned combined_descriptor_offset,
                struct tu_shader *shader,
                const struct tu_pipeline_layout *layout,
+               const struct ir3_const_allocations *const_allocs,
                uint32_t read_only_input_attachments,
                bool dynamic_renderpass,
                bool *descriptor_valid)
@@ -603,7 +630,8 @@ build_bindless(struct tu_device *dev, nir_builder *b,
    *descriptor_valid = !bind_layout->partially_bound &&
       can_speculate_descriptor;
 
-   return bindless_resource_ir3(b, set, desc_offset, can_speculate_descriptor);
+   return bindless_resource_ir3(b, dev, const_allocs, set, desc_offset,
+                                can_speculate_descriptor);
 }
 
 static nir_def *
@@ -683,11 +711,13 @@ lower_texel_buffers_to_image(nir_builder *b,
 static void
 lower_image_deref(struct tu_device *dev, nir_builder *b,
                   nir_intrinsic_instr *instr, struct tu_shader *shader,
-                  const struct tu_pipeline_layout *layout)
+                  const struct tu_pipeline_layout *layout,
+                  const struct ir3_const_allocations *const_allocs)
 {
    bool descriptor_valid = true;
    nir_deref_instr *deref = nir_src_as_deref(instr->src[0]);
-   nir_def *bindless = build_bindless(dev, b, deref, 0, shader, layout, 0, false,
+   nir_def *bindless = build_bindless(dev, b, deref, 0, shader, layout,
+                                      const_allocs, 0, false,
                                       &descriptor_valid);
    if ((instr->intrinsic == nir_intrinsic_image_deref_load ||
         instr->intrinsic == nir_intrinsic_image_deref_sparse_load ||
@@ -740,7 +770,7 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *instr,
    case nir_intrinsic_ssbo_atomic:
    case nir_intrinsic_ssbo_atomic_swap:
    case nir_intrinsic_get_ssbo_size:
-      return lower_ssbo_ubo_intrinsic(dev, b, instr);
+      return lower_ssbo_ubo_intrinsic(dev, b, instr, const_allocs);
 
    case nir_intrinsic_image_deref_load:
    case nir_intrinsic_image_deref_sparse_load:
@@ -749,7 +779,7 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *instr,
    case nir_intrinsic_image_deref_atomic_swap:
    case nir_intrinsic_image_deref_size:
    case nir_intrinsic_image_deref_samples:
-      lower_image_deref(dev, b, instr, shader, layout);
+      lower_image_deref(dev, b, instr, shader, layout, const_allocs);
       return true;
 
    case nir_intrinsic_load_frag_size_ir3:
@@ -815,6 +845,7 @@ lower_tex_subsampled(const struct tu_sampler *sampler,
                      struct tu_device *dev,
                      struct tu_shader *shader,
                      const struct tu_pipeline_layout *layout,
+                     const struct ir3_const_allocations *const_allocs,
                      nir_builder *b,
                      nir_tex_instr *tex)
 {
@@ -831,6 +862,7 @@ lower_tex_subsampled(const struct tu_sampler *sampler,
    assert(tex_src_idx >= 0);
    nir_deref_instr *deref = nir_src_as_deref(tex->src[tex_src_idx].src);
    nir_def *bindless = build_bindless(dev, b, deref, 2, shader, layout,
+                                      const_allocs,
                                       0, /* read_only_input_attachments (not used) */
                                       false, /* dynamic_renderpass (not used)*/
                                       &descriptor_valid);
@@ -928,6 +960,7 @@ static void
 lower_tex_immutable(struct tu_device *dev,
                     struct tu_shader *shader,
                     const struct tu_pipeline_layout *layout,
+                    const struct ir3_const_allocations *const_allocs,
                     nir_builder *builder,
                     nir_tex_instr *tex)
 {
@@ -968,7 +1001,8 @@ lower_tex_immutable(struct tu_device *dev,
    if (samplers) {
       const struct tu_sampler *sampler = samplers + array_index;
       if (sampler->vk.flags & VK_SAMPLER_CREATE_SUBSAMPLED_BIT_EXT)
-         lower_tex_subsampled(sampler, dev, shader, layout, builder, tex);
+         lower_tex_subsampled(sampler, dev, shader, layout, const_allocs,
+                              builder, tex);
    }
 }
 
@@ -1000,6 +1034,7 @@ lower_tex_texel_buffer_to_image(nir_builder *b,
 static bool
 lower_tex_impl(nir_builder *b, nir_tex_instr *tex, struct tu_device *dev,
           struct tu_shader *shader, const struct tu_pipeline_layout *layout,
+          const struct ir3_const_allocations *const_allocs,
           uint32_t read_only_input_attachments, bool dynamic_renderpass,
           bool ref)
 {
@@ -1008,6 +1043,7 @@ lower_tex_impl(nir_builder *b, nir_tex_instr *tex, struct tu_device *dev,
    if (sampler_src_idx >= 0) {
       nir_deref_instr *deref = nir_src_as_deref(tex->src[sampler_src_idx].src);
       nir_def *bindless = build_bindless(dev, b, deref, 1, shader, layout,
+                                         const_allocs,
                                          read_only_input_attachments,
                                          dynamic_renderpass,
                                          &descriptor_valid);
@@ -1019,6 +1055,7 @@ lower_tex_impl(nir_builder *b, nir_tex_instr *tex, struct tu_device *dev,
    if (tex_src_idx >= 0) {
       nir_deref_instr *deref = nir_src_as_deref(tex->src[tex_src_idx].src);
       nir_def *bindless = build_bindless(dev, b, deref, 0, shader, layout,
+                                         const_allocs,
                                          read_only_input_attachments,
                                          dynamic_renderpass,
                                          &descriptor_valid);
@@ -1128,6 +1165,7 @@ lower_input_attachment(nir_builder *b, nir_tex_instr *tex,
 static bool
 lower_tex(nir_builder *b, nir_tex_instr *tex, struct tu_device *dev,
           struct tu_shader *shader, const struct tu_pipeline_layout *layout,
+          const struct ir3_const_allocations *const_allocs,
           uint32_t read_only_input_attachments, bool dynamic_renderpass)
 {
    tex->can_speculate = true;
@@ -1143,11 +1181,14 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, struct tu_device *dev,
    if (tex->op == nir_texop_block_match_sad_qcom ||
        tex->op == nir_texop_block_match_ssd_qcom ||
        tex->op == nir_texop_sample_weighted_qcom) {
-      lower_tex_impl(b, tex, dev, shader, layout, read_only_input_attachments, dynamic_renderpass, false);
-      lower_tex_impl(b, tex, dev, shader, layout, read_only_input_attachments, dynamic_renderpass, true);
+      lower_tex_impl(b, tex, dev, shader, layout, const_allocs,
+                     read_only_input_attachments, dynamic_renderpass, false);
+      lower_tex_impl(b, tex, dev, shader, layout, const_allocs,
+                     read_only_input_attachments, dynamic_renderpass, true);
    } else {
-      lower_tex_immutable(dev, shader, layout, b, tex);
-      lower_tex_impl(b, tex, dev, shader, layout, read_only_input_attachments, dynamic_renderpass, false);
+      lower_tex_immutable(dev, shader, layout, const_allocs, b, tex);
+      lower_tex_impl(b, tex, dev, shader, layout, const_allocs,
+                     read_only_input_attachments, dynamic_renderpass, false);
    }
 
    return true;
@@ -1170,6 +1211,7 @@ lower_instr(nir_builder *b, nir_instr *instr, void *cb_data)
    switch (instr->type) {
    case nir_instr_type_tex:
       return lower_tex(b, nir_instr_as_tex(instr), params->dev, params->shader, params->layout,
+                       params->const_allocs,
                        params->read_only_input_attachments,
                        params->dynamic_renderpass);
    case nir_instr_type_intrinsic:
@@ -1606,19 +1648,39 @@ tu_lower_io(nir_shader *shader, struct tu_device *dev,
 
    ir3_const_alloc(const_allocs, IR3_CONST_ALLOC_INLINE_UNIFORM_ADDRS, ldgk_consts, 1);
 
-   if (dev->physical_device->compiler_options.enable_ssbo_emulation) {
-      const_state->num_bindless_base_addresses = layout->num_sets;
-      const_state->bindless_base_const_offset_vec4 = const_allocs->max_const_offset_vec4;
+   const unsigned hw_max_sets = tu_hw_max_sets(dev->compiler->info->chip);
+   const bool virtual_sets =
+      tu_uses_virtual_sets(dev->compiler->info->chip,
+                           dev->physical_device->usable_sets);
 
+   if (dev->physical_device->compiler_options.enable_ssbo_emulation ||
+       virtual_sets) {
+      unsigned num_sets = layout->num_sets;
       if (dev->physical_device->reserved_set_idx >= 0) {
-         const_state->num_bindless_base_addresses =
-            MAX2(layout->num_sets,
+         num_sets =
+            MAX2(num_sets,
                  static_cast<unsigned>(dev->physical_device->reserved_set_idx) + 1);
       }
 
-      if (!dev->compiler->info->props.load_shader_consts_via_preamble) {
-         ir3_const_alloc(const_allocs, IR3_CONST_ALLOC_BINDLESS_BASE_ADDRS,
-                         DIV_ROUND_UP(const_state->num_bindless_base_addresses * 2, 4), 1);
+      if (dev->physical_device->compiler_options.enable_ssbo_emulation) {
+         const_state->num_bindless_base_addresses = num_sets;
+         const_state->bindless_base_const_offset_vec4 =
+            const_allocs->max_const_offset_vec4;
+
+         if (!dev->compiler->info->props.load_shader_consts_via_preamble) {
+            ir3_const_alloc(const_allocs, IR3_CONST_ALLOC_BINDLESS_BASE_ADDRS,
+                            DIV_ROUND_UP(num_sets * 2, 4), 1);
+         }
+      }
+
+      /* Sets at and above hw_max_sets - 1 share the last hardware base
+       * register and are distinguished by a per-set descriptor-index offset.
+       */
+      if (virtual_sets && num_sets > hw_max_sets - 1 &&
+          !dev->compiler->info->props.load_shader_consts_via_preamble) {
+         ir3_const_alloc(const_allocs, IR3_CONST_ALLOC_VIRTUAL_SET_OFFSETS,
+                         DIV_ROUND_UP(num_sets, 4), 1);
+         const_state->num_virtual_set_offsets = num_sets;
       }
    }
 
@@ -1877,11 +1939,12 @@ get_ssbo_bindless(nir_intrinsic_instr *intr)
 }
 
 static nir_def *
-build_ssbo_global_addr(nir_builder *b,
-                       nir_intrinsic_instr *bindless,
-                       struct tu_shader *shader,
-                       bool load_shader_consts_via_preamble,
-                       const struct ir3_const_allocations *const_allocs)
+load_ssbo_descriptor(nir_builder *b,
+                     nir_intrinsic_instr *bindless,
+                     struct tu_shader *shader,
+                     bool load_shader_consts_via_preamble,
+                     const struct ir3_const_allocations *const_allocs,
+                     unsigned first_dword, unsigned num_components)
 {
    nir_def *set_base;
 
@@ -1901,20 +1964,38 @@ build_ssbo_global_addr(nir_builder *b,
 
    nir_def *descriptor_offset = nir_iadd_imm(
       b, nir_imul_imm(b, bindless->src[0].ssa, FDL6_TEX_CONST_DWORDS * 4),
-      11 * 4);
-   nir_def *descriptor_words = nir_load_global_offset(
-      b, 2, 32, nir_pack_64_2x32(b, set_base), descriptor_offset,
+      first_dword * 4);
+   return nir_load_global_offset(
+      b, num_components, 32, nir_pack_64_2x32(b, set_base), descriptor_offset,
       .access = static_cast<enum gl_access_qualifier>(
          ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER | ACCESS_CAN_SPECULATE),
       .align_mul = 4, .align_offset = 0);
+}
+
+static nir_def *
+build_ssbo_global_addr(nir_builder *b,
+                       nir_intrinsic_instr *bindless,
+                       struct tu_shader *shader,
+                       bool load_shader_consts_via_preamble,
+                       const struct ir3_const_allocations *const_allocs)
+{
+   nir_def *descriptor_words =
+      load_ssbo_descriptor(b, bindless, shader, load_shader_consts_via_preamble,
+                           const_allocs, 11, 2);
 
    return nir_pack_64_2x32(b, descriptor_words);
 }
+
+/* On a6xx there is no RESBASE instruction, but the descriptor's width/height
+ * fields already encode the buffer size, so RESINFO works.  Only a7xx+ needs
+ * the explicit RESBASE lowering.
+ */
 
 struct lower_ssbo_address_size_state {
    struct tu_shader *shader;
    const struct ir3_const_allocations *const_allocs;
    bool load_shader_consts_via_preamble;
+   unsigned gen;
 };
 
 static bool
@@ -1936,41 +2017,49 @@ lower_ssbo_address_size(nir_builder *b, nir_intrinsic_instr *intr, void *data)
          b, get_ssbo_bindless(intr), state->shader,
          state->load_shader_consts_via_preamble, state->const_allocs);
       nir_def *offset = intr->src[1].ssa;
+      nir_def *addr = nir_iadd(b, base, nir_u2u64(b, offset));
 
+      /* Rewrite the users in place rather than replacing the load and
+       * deleting the old instruction: the old load is often the instruction
+       * immediately following this one, so removing it would invalidate the
+       * caller's safe-iterator state.
+       */
       nir_foreach_use_safe (use, &intr->def) {
          nir_instr *use_instr = nir_src_use_instr(use);
-         b->cursor = nir_before_instr(use_instr);
 
          nir_intrinsic_instr *use_intr = nir_instr_as_intrinsic(use_instr);
 
          switch (use_intr->intrinsic) {
          case nir_intrinsic_global_atomic:
-         case nir_intrinsic_global_atomic_swap: {
-            nir_def *addr = nir_iadd(b, base, nir_u2u64(b, offset));
-            nir_src_rewrite(nir_get_io_offset_src(use_intr), addr);
+         case nir_intrinsic_global_atomic_swap:
+         case nir_intrinsic_load_global:
+            nir_src_rewrite(&use_intr->src[0], addr);
             break;
-         }
-         case nir_intrinsic_load_global: {
-            nir_def *load = nir_load_global_offset(
-               b, use_intr->def.num_components, use_intr->def.bit_size, base,
-               offset, .access = nir_intrinsic_access(use_intr));
-            nir_def_replace(&use_intr->def, load);
+         case nir_intrinsic_store_global:
+            nir_src_rewrite(&use_intr->src[1], addr);
             break;
-         }
-         case nir_intrinsic_store_global: {
-            nir_store_global_offset(b, nir_get_io_data_src(use_intr)->ssa, base, offset,
-                                    .access = nir_intrinsic_access(use_intr));
-            nir_instr_remove(use_instr);
-            break;
-         }
          default:
             UNREACHABLE("unexpected use of @load_ssbo_address");
          }
       }
+
+      nir_instr_remove(&intr->instr);
    } else {
-      nir_def *ssbo_size =
-         build_ssbo_size_from_resbase(b, nir_get_io_index_src(intr)->ssa);
-      nir_def_replace(&intr->def, ssbo_size);
+      nir_intrinsic_instr *bindless = get_ssbo_bindless(intr);
+
+      if (state->gen >= 7) {
+         /* RESBASE only exists on a7xx+. */
+         nir_def *ssbo_size =
+            build_ssbo_size_from_resbase(b, &bindless->def);
+         nir_def_replace(&intr->def, ssbo_size);
+      } else {
+         /* RESINFO, which derives the size from the descriptor's
+          * width/height fields, works for all a6xx sets, including
+          * virtualized ones (their descriptor index carries the shared
+          * register's per-set offset).
+          */
+         return false;
+      }
    }
 
    return true;
@@ -3718,6 +3807,7 @@ tu_shader_create(struct tu_device *dev,
          .const_allocs = &const_allocs,
          .load_shader_consts_via_preamble =
             dev->compiler->info->props.load_shader_consts_via_preamble,
+         .gen = dev->compiler->info->chip,
       };
       NIR_PASS(_, nir, tu_nir_lower_ssbo_address_size, &lower_ssbo_state);
    }

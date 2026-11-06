@@ -124,6 +124,26 @@
 #define MAX_INLINE_UBO_RANGE 256
 #define MAX_INLINE_UBOS 4
 
+/* Number of hardware bindless descriptor-set base registers per stage.
+ * a6xx has five, while a7xx and later have eight.
+ */
+static inline unsigned
+tu_hw_max_sets(unsigned chip)
+{
+   return chip == 6 ? 5 : 8;
+}
+
+/* Whether we need to virtualize descriptor sets because more sets are exposed
+ * to applications than there are hardware bindless base registers.  Sets at
+ * and above tu_hw_max_sets() - 1 then share the last hardware base register,
+ * with a per-set descriptor-index offset.
+ */
+static inline bool
+tu_uses_virtual_sets(unsigned chip, unsigned usable_sets)
+{
+   return usable_sets >= tu_hw_max_sets(chip);
+}
+
 #define A6XX_TEX_SAMP_DWORDS 4
 
 /* We sample the fragment density map on the CPU, so technically the

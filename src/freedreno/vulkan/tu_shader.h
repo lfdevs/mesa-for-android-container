@@ -52,6 +52,10 @@ struct tu_const_state
    struct tu_inline_ubo ubos[MAX_INLINE_UBOS];
    uint32_t num_bindless_base_addresses;
    uint32_t bindless_base_const_offset_vec4;
+   /* Number of u32 entries in the virtual-set offset table, or 0 if sets
+    * aren't virtualized.
+    */
+   uint32_t num_virtual_set_offsets;
 
    struct ir3_driver_ubo fdm_ubo;
    struct ir3_driver_ubo dynamic_offsets_ubo;

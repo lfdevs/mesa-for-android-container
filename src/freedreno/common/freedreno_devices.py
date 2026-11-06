@@ -246,6 +246,12 @@ a6xx_gen4 = GPUProps(
         has_z24uint_s8uint = True,
         tess_use_shared = True,
         storage_16bit = True,
+        # Requires storage_16bit + has_isam_v (asserted in tu_descriptor_set.cc).
+        storage_8bit = True,
+        # 7 usable sets + 1 reserved for dynamic descriptors.  a6xx only has
+        # five hardware bindless base registers, so sets 4-7 are virtualized
+        # on top of the last register.
+        max_sets = 8,
         has_tex_filter_cubic = True,
         has_separate_chroma_filter = True,
         has_sample_locations = True,
