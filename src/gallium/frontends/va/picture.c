@@ -54,8 +54,9 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   fprintf(stderr, "tva-va: begin picture context=%u target=%u\n",
-           context_id, render_target);
+   if (vl_va_log_enabled())
+      fprintf(stderr, "tva-va: begin picture context=%u target=%u\n",
+              context_id, render_target);
 
    mtx_lock(&drv->mutex);
    context = handle_table_get(drv->htab, context_id);
@@ -143,8 +144,9 @@ vlVaRenderPicture(VADriverContextP ctx, VAContextID context_id, VABufferID *buff
    if (!drv)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   fprintf(stderr, "tva-va: render picture context=%u buffers=%d\n",
-           context_id, num_buffers);
+   if (vl_va_log_enabled())
+      fprintf(stderr, "tva-va: render picture context=%u buffers=%d\n",
+              context_id, num_buffers);
 
    mtx_lock(&drv->mutex);
    context = handle_table_get(drv->htab, context_id);
@@ -338,7 +340,7 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       surf->coded_buf = coded_buf;
    } else if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM) {
       context->desc.base.out_fence = &surf->fence;
-      if (getenv("DMD_VA_LOG"))
+      if (vl_va_log_enabled())
          fprintf(stderr, "tva-picture end target=%#x surf=%p before_fence=%p out_ptr=%p entry=%d\n",
                  output_id, (void *)surf, (void *)surf->fence,
                  (void *)context->desc.base.out_fence,
@@ -368,7 +370,7 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       return VA_STATUS_ERROR_OPERATION_FAILED;
    }
 
-   if (getenv("DMD_VA_LOG"))
+   if (vl_va_log_enabled())
       fprintf(stderr, "tva-picture end target=%#x surf=%p after_fence=%p out_ptr=%p\n",
               output_id, (void *)surf, (void *)surf->fence,
               (void *)context->desc.base.out_fence);

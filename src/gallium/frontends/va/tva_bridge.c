@@ -1408,7 +1408,7 @@ tva_create_contiguous_video_buffer(struct pipe_context *context,
       goto fail;
    result->contiguous_planes = true;
    close(dmabuf);
-   if (getenv("DMD_VA_LOG"))
+   if (tva_dbg())
       fprintf(stderr, "tva: contiguous NV12 dmabuf=%d size=%zu y=%ux%u "
               "stride=%u uv_offset=%zu\n", dmabuf, total_size,
               bridge_templ.width, bridge_templ.height, y_stride, uv_offset);
@@ -1446,7 +1446,7 @@ tva_dmabuf_write_begin(struct pipe_context *pipe, struct pipe_resource *res)
    if (ioctl(whandle.handle, DMA_BUF_IOCTL_SYNC, &sync) < 0) {
       int err = errno;
       if (err != ENOTTY && err != EOPNOTSUPP && err != ENOSYS &&
-          getenv("DMD_VA_LOG"))
+          tva_dbg())
          fprintf(stderr, "tva: dma-buf write sync start failed fd=%d errno=%d\n",
                  whandle.handle, err);
       close(whandle.handle);
@@ -1464,7 +1464,7 @@ tva_dmabuf_write_end(int fd)
    struct dma_buf_sync sync = {
       .flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE,
    };
-   if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) < 0 && getenv("DMD_VA_LOG"))
+   if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) < 0 && tva_dbg())
       fprintf(stderr, "tva: dma-buf write sync end failed fd=%d errno=%d\n",
               fd, errno);
    close(fd);
@@ -1545,7 +1545,7 @@ tva_direct_copy_plane(struct pipe_screen *screen, struct pipe_resource *res,
    if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) == 0) {
       synced = true;
    } else if (errno != ENOTTY && errno != EOPNOTSUPP && errno != ENOSYS &&
-              getenv("DMD_VA_LOG")) {
+              tva_dbg()) {
       fprintf(stderr, "tva: direct dma-buf sync start failed fd=%d errno=%d\n",
               fd, errno);
    }
@@ -1561,7 +1561,7 @@ tva_direct_copy_plane(struct pipe_screen *screen, struct pipe_resource *res,
 
    if (synced) {
       sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE;
-      if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) < 0 && getenv("DMD_VA_LOG"))
+      if (ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync) < 0 && tva_dbg())
          fprintf(stderr, "tva: direct dma-buf sync end failed fd=%d errno=%d\n",
                  fd, errno);
    }
@@ -4844,21 +4844,23 @@ static struct pipe_video_buffer *
 tva_pipe_create_video_buffer(struct pipe_context *context,
                              const struct pipe_video_buffer *templat)
 {
-    fprintf(stderr, "tva: create video buffer format=%d size=%ux%u bind=%#x\n",
-            templat ? templat->buffer_format : -1,
-            templat ? templat->width : 0, templat ? templat->height : 0,
-            templat ? templat->bind : 0);
+    if (tva_dbg())
+        fprintf(stderr, "tva: create video buffer format=%d size=%ux%u bind=%#x\n",
+                templat ? templat->buffer_format : -1,
+                templat ? templat->width : 0, templat ? templat->height : 0,
+                templat ? templat->bind : 0);
 #if defined(__linux__)
     if (tva_contiguous_dmabuf_enabled()) {
         struct pipe_video_buffer *buffer =
             tva_create_contiguous_video_buffer(context, templat);
         if (buffer)
         {
-            fprintf(stderr, "tva: contiguous video buffer ready\n");
+            if (tva_dbg())
+                fprintf(stderr, "tva: contiguous video buffer ready\n");
             return buffer;
         }
         fprintf(stderr, "tva: contiguous video buffer failed\n");
-        if (getenv("DMD_VA_LOG"))
+        if (tva_dbg())
             fprintf(stderr, "tva: contiguous NV12 allocation failed; "
                     "falling back to separate plane resources\n");
     }
@@ -4876,7 +4878,12 @@ tva_pipe_create_video_buffer(struct pipe_context *context,
         bridge_templ.bind |= PIPE_BIND_SHARED | PIPE_BIND_LINEAR;
     struct pipe_video_buffer *buffer =
         vl_video_buffer_create(context, &bridge_templ);
-    fprintf(stderr, "tva: separate video buffer %s\n", buffer ? "ready" : "failed");
+    if (buffer) {
+        if (tva_dbg())
+            fprintf(stderr, "tva: separate video buffer ready\n");
+    } else {
+        fprintf(stderr, "tva: separate video buffer failed\n");
+    }
     return buffer;
 }
 
@@ -4895,10 +4902,11 @@ static struct pipe_video_codec *
 tva_pipe_create_video_codec(struct pipe_context *context,
                             const struct pipe_video_codec *templat)
 {
-    fprintf(stderr, "tva: create codec profile=%d entrypoint=%d size=%ux%u\n",
-            templat ? templat->profile : -1,
-            templat ? templat->entrypoint : -1,
-            templat ? templat->width : 0, templat ? templat->height : 0);
+    if (tva_dbg())
+        fprintf(stderr, "tva: create codec profile=%d entrypoint=%d size=%ux%u\n",
+                templat ? templat->profile : -1,
+                templat ? templat->entrypoint : -1,
+                templat ? templat->width : 0, templat ? templat->height : 0);
     if (templat->entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING)
         return vl_compositor_create_proc(context, false);
 
@@ -5102,7 +5110,8 @@ tva_vscreen_sw(void)
         pipe_loader_release(&dev, 1);
         return NULL;
     }
-    fprintf(stderr, "tva: using the llvmpipe software backend\n");
+    if (tva_dbg())
+        fprintf(stderr, "tva: using the llvmpipe software backend\n");
     return tva_vscreen_from_pscreen(pscreen, dev);
 }
 
@@ -5135,7 +5144,7 @@ tva_bridge_vscreen_create(int fd, bool honor_dri_prime)
     }
 #endif
 
-    if (getenv("DMD_VA_LOG"))
+    if (tva_dbg())
         fprintf(stderr, "tva: creating the bridge vscreen, backend='%s'\n", backend);
 
     if (!strcmp(backend, "auto") || !strcmp(backend, "kgsl")) {
