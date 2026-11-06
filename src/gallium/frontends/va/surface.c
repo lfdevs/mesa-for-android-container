@@ -66,7 +66,7 @@ static bool
 vl_va_bridge_skip_clear(void)
 {
    const char *e = getenv("TERMUX_VA_BRIDGE");
-   return e && (e[0] == '1' || e[0] == 'y' || e[0] == 'Y');
+   return e && (!strcmp(e, "1") || !strcmp(e, "true"));
 }
 
 static bool
