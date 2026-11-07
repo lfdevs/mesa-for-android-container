@@ -174,8 +174,9 @@ emit_intrinsic_store_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    array_insert(ctx->block, ctx->block->keeps, stib);
 }
 
+#define emit_atomic(...) MESA_CALL_WITH_LTR_ARGS(_emit_atomic, __VA_ARGS__)
 static struct ir3_instruction *
-emit_atomic(struct ir3_builder *b, nir_atomic_op op,
+_emit_atomic(struct ir3_builder *b, nir_atomic_op op,
             struct ir3_instruction *ibo, struct ir3_instruction *src0,
             struct ir3_instruction *src1)
 {

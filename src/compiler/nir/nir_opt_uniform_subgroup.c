@@ -151,8 +151,9 @@ count_active_invocations(nir_builder *b, nir_def *cond, bool inclusive,
    }
 }
 
+#define conditional_add_xor_reduce(...) MESA_CALL_WITH_LTR_ARGS(_conditional_add_xor_reduce, __VA_ARGS__)
 static nir_def *
-conditional_add_xor_reduce(nir_builder *b, nir_intrinsic_instr *intrin, nir_def *cond, nir_def *src,
+_conditional_add_xor_reduce(nir_builder *b, nir_intrinsic_instr *intrin, nir_def *cond, nir_def *src,
                            const nir_lower_subgroups_options *options)
 {
    const nir_op reduction_op = (nir_op)nir_intrinsic_reduction_op(intrin);

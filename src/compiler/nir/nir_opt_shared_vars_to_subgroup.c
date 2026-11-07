@@ -215,8 +215,9 @@ reduce_data(nir_builder *b, nir_op op, nir_def *data,
    }
 }
 
+#define read_invocation_cond(...) MESA_CALL_WITH_LTR_ARGS(_read_invocation_cond, __VA_ARGS__)
 static nir_def *
-read_invocation_cond(nir_builder *b,
+_read_invocation_cond(nir_builder *b,
                      nir_def *val,
                      nir_def *cond,
                      unsigned num_ballot_components,

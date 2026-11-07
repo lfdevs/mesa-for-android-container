@@ -5771,7 +5771,9 @@ bool nir_link_opt_varyings(nir_shader *producer, nir_shader *consumer);
 void nir_link_varying_precision(nir_shader *producer, nir_shader *consumer);
 nir_variable *nir_clone_uniform_variable(nir_shader *nir,
                                          nir_variable *uniform, bool spirv);
-nir_deref_instr *nir_clone_deref_instr(nir_builder *b,
+
+#define nir_clone_deref_instr(...) MESA_CALL_WITH_LTR_ARGS(_nir_clone_deref_instr, __VA_ARGS__)
+nir_deref_instr *_nir_clone_deref_instr(nir_builder *b,
                                        nir_variable *var,
                                        nir_deref_instr *deref);
 
@@ -5949,7 +5951,8 @@ nir_address_format_to_glsl_type(nir_address_format addr_format)
 
 const nir_const_value *nir_address_format_null_value(nir_address_format addr_format);
 
-nir_def *nir_build_addr_iadd(nir_builder *b, nir_def *addr,
+#define nir_build_addr_iadd(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_addr_iadd, __VA_ARGS__)
+nir_def *_nir_build_addr_iadd(nir_builder *b, nir_def *addr,
                              nir_address_format addr_format,
                              nir_variable_mode modes,
                              nir_def *offset);
@@ -5959,13 +5962,16 @@ nir_def *nir_build_addr_iadd_imm(nir_builder *b, nir_def *addr,
                                  nir_variable_mode modes,
                                  int64_t offset);
 
-nir_def *nir_build_addr_ieq(nir_builder *b, nir_def *addr0, nir_def *addr1,
+#define nir_build_addr_ieq(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_addr_ieq, __VA_ARGS__)
+nir_def *_nir_build_addr_ieq(nir_builder *b, nir_def *addr0, nir_def *addr1,
                             nir_address_format addr_format);
 
-nir_def *nir_build_addr_isub(nir_builder *b, nir_def *addr0, nir_def *addr1,
+#define nir_build_addr_isub(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_addr_isub, __VA_ARGS__)
+nir_def *_nir_build_addr_isub(nir_builder *b, nir_def *addr0, nir_def *addr1,
                              nir_address_format addr_format);
 
-nir_def *nir_explicit_io_address_from_deref(nir_builder *b,
+#define nir_explicit_io_address_from_deref(...) MESA_CALL_WITH_LTR_ARGS(_nir_explicit_io_address_from_deref, __VA_ARGS__)
+nir_def *_nir_explicit_io_address_from_deref(nir_builder *b,
                                             nir_deref_instr *deref,
                                             nir_def *base_addr,
                                             nir_address_format addr_format);
@@ -6980,8 +6986,9 @@ void nir_divergence_analysis(nir_shader *shader);
 void nir_custom_divergence_analysis(nir_shader *shader, nir_divergence_options options);
 bool nir_has_divergent_loop(nir_shader *shader);
 
+#define nir_rewrite_uses_to_load_reg(...) MESA_CALL_WITH_LTR_ARGS(_nir_rewrite_uses_to_load_reg, __VA_ARGS__)
 void
-nir_rewrite_uses_to_load_reg(nir_builder *b, nir_def *old,
+_nir_rewrite_uses_to_load_reg(nir_builder *b, nir_def *old,
                              nir_def *reg);
 
 /* If phi_webs_only is true, only convert SSA values involved in phi nodes to
@@ -7700,7 +7707,9 @@ struct nir_calc_tensor_info {
 
 void nir_calc_tensor_derefs_init(nir_builder *b, struct nir_calc_tensor_info *info,
                                  nir_cmat_call_instr *call);
-nir_def *nir_calc_tensor_derefs(nir_builder *b, struct nir_calc_tensor_info *info,
+
+#define nir_calc_tensor_derefs(...) MESA_CALL_WITH_LTR_ARGS(_nir_calc_tensor_derefs, __VA_ARGS__)
+nir_def *_nir_calc_tensor_derefs(nir_builder *b, struct nir_calc_tensor_info *info,
                                 nir_def *row, nir_def *col,
                                 nir_deref_instr **iter_deref_p);
 

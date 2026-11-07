@@ -578,6 +578,10 @@ struct tu_cmd_state
    tu_gmem_layout gmem_layout;
    uint32_t gmem_layout_divisor;
 
+   /* Override the current subpass'es srgb_cntl. */
+   bool override_srgb_cntl;
+   uint32_t srgb_cntl;
+
    const struct tu_render_pass *pass;
    const struct tu_subpass *subpass;
    struct tu_framebuffer *framebuffer;

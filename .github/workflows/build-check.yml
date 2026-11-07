@@ -21,7 +21,7 @@ jobs:
           sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/debian.sources
           apt update
           apt build-dep -y mesa
-          apt install -y git ccache libxfixes-dev libarchive-dev
+          apt install -y git ccache libxfixes-dev libarchive-dev libdbus-1-dev
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -127,7 +127,7 @@ jobs:
           sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/debian.sources
           apt update
           apt build-dep -y mesa
-          apt install -y git ccache libxfixes-dev libarchive-dev
+          apt install -y git ccache libxfixes-dev libarchive-dev libdbus-1-dev
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -230,7 +230,7 @@ jobs:
           sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt update
           sudo apt build-dep -y mesa
-          sudo apt install -y git ccache libxfixes-dev libarchive-dev
+          sudo apt install -y git ccache libxfixes-dev libarchive-dev libdbus-1-dev
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -339,7 +339,7 @@ jobs:
           sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
           apt update
           apt build-dep -y mesa
-          apt install -y git ccache libxfixes-dev libarchive-dev
+          apt install -y git ccache libxfixes-dev libarchive-dev libdbus-1-dev
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -446,7 +446,7 @@ jobs:
           sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
           apt update
           apt build-dep -y mesa
-          apt install -y git ccache libxfixes-dev libarchive-dev
+          apt install -y git ccache libxfixes-dev libarchive-dev libdbus-1-dev
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -553,7 +553,7 @@ jobs:
           sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
           apt update
           apt build-dep -y mesa
-          apt install -y git ccache libxfixes-dev libarchive-dev
+          apt install -y git ccache libxfixes-dev libarchive-dev libdbus-1-dev
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -679,7 +679,7 @@ jobs:
           }
           
           retry 5 30 pacman -Syyu --noconfirm
-          retry 5 30 pacman -S --noconfirm base-devel git ccache clang directx-headers expat glibc libdisplay-info libdrm libelf libgcc libglvnd libpng libstdc++ libva libx11 libxcb libxext libxml2 libxrandr libxshmfence libxxf86vm llvm llvm-libs lm_sensors rust spirv-llvm-translator spirv-tools systemd-libs vulkan-icd-loader wayland xcb-util-keysyms zlib zstd cbindgen clang cmake elfutils glslang libclc meson python-mako python-packaging python-ply python-pycparser python-yaml rust-bindgen wayland-protocols xorgproto libsysprof-capture valgrind python-sphinx python-sphinx-hawkmoth byacc flex wayland wayland-protocols
+          retry 5 30 pacman -S --noconfirm base-devel git ccache clang dbus directx-headers expat glibc libdisplay-info libdrm libelf libgcc libglvnd libpng libstdc++ libva libx11 libxcb libxext libxml2 libxrandr libxshmfence libxxf86vm llvm llvm-libs lm_sensors rust spirv-llvm-translator spirv-tools systemd-libs vulkan-icd-loader wayland xcb-util-keysyms zlib zstd cbindgen clang cmake elfutils glslang libclc meson python-mako python-packaging python-ply python-pycparser python-yaml rust-bindgen wayland-protocols xorgproto libsysprof-capture valgrind python-sphinx python-sphinx-hawkmoth byacc flex wayland wayland-protocols
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -783,7 +783,7 @@ jobs:
       - name: Install dependencies
         run: |
           echo "assumeyes=True" >> /etc/dnf/dnf.conf
-          dnf install -y dnf-plugins-core git ccache libarchive-devel
+          dnf install -y dnf-plugins-core git ccache libarchive-devel dbus-devel
           dnf config-manager setopt fedora-source.enabled=1 updates-source.enabled=1
           dnf makecache
           dnf builddep -y mesa
@@ -890,7 +890,7 @@ jobs:
       - name: Install dependencies
         run: |
           echo "assumeyes=True" >> /etc/dnf/dnf.conf
-          dnf install -y dnf-plugins-core git ccache libarchive-devel
+          dnf install -y dnf-plugins-core git ccache libarchive-devel dbus-devel
           dnf config-manager setopt fedora-source.enabled=1 updates-source.enabled=1
           dnf makecache
           dnf builddep -y mesa
@@ -997,7 +997,7 @@ jobs:
       - name: Install dependencies
         run: |
           echo "assumeyes=True" >> /etc/dnf/dnf.conf
-          dnf install -y dnf-plugins-core git ccache libarchive-devel
+          dnf install -y dnf-plugins-core git ccache libarchive-devel dbus-devel
           dnf config-manager setopt fedora-source.enabled=1 updates-source.enabled=1
           dnf makecache
           dnf builddep -y mesa
@@ -1115,7 +1115,7 @@ jobs:
             elfutils-devel \
             llvm18-devel clang18 \
             libxml2-devel \
-            libarchive-devel \
+            libarchive-devel dbus-devel \
             python3-Mako python3-packaging python3-yaml python3-ply \
             libffi-devel \
             libzstd-devel \
@@ -1254,7 +1254,7 @@ jobs:
               apk update && \
               apk add --no-cache \
                 bash build-base git ccache ninja pkgconfig \
-                libxcb-dev libxext-dev libarchive-dev libffi-dev tar \
+                libxcb-dev libxext-dev libarchive-dev dbus-dev libffi-dev tar \
                 libdrm-dev libxdamage-dev libxshmfence-dev binutils bison cbindgen \
                 elfutils-dev eudev-dev expat-dev findutils flex gettext glslang-dev \
                 libdisplay-info-dev libtool libva-dev libx11-dev libxfixes-dev \
@@ -1328,7 +1328,7 @@ jobs:
         run: |
           zypper modifyrepo -e repo-source
           zypper --non-interactive refresh
-          zypper --non-interactive install --auto-agree-with-licenses gcc gcc-c++ git ccache llvm-devel libarchive-devel python3 tar gzip findutils
+          zypper --non-interactive install --auto-agree-with-licenses gcc gcc-c++ git ccache llvm-devel libarchive-devel dbus-1-devel python3 tar gzip findutils
           PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor}")')
           zypper --non-interactive install "python${PYTHON_VERSION}-packaging"
           zypper --non-interactive source-install --build-deps-only Mesa
@@ -1439,7 +1439,7 @@ jobs:
             > /etc/apt/sources.list.d/deepin-src.list
           apt update
           apt build-dep -y mesa
-          apt install -y git ccache libxfixes-dev libarchive-dev
+          apt install -y git ccache libxfixes-dev libarchive-dev libdbus-1-dev
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -1544,7 +1544,7 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive CI=true
           sudo oma refresh
-          sudo oma install -y x11-lib libdrm expat systemd elfutils nettle libva wayland lm-sensors libglvnd llvm-runtime libcl libclc spirv-llvm-translator libdisplay-info xcb-util-keysyms libconfig x11-proto mako valgrind llvm libunwind glslang spirv-tools ply rustc rust-bindgen pycparser cbindgen pyyaml directx-headers ccache
+          sudo oma install -y x11-lib libdrm expat systemd elfutils nettle libva wayland lm-sensors libglvnd llvm-runtime libcl libclc spirv-llvm-translator libdisplay-info xcb-util-keysyms libconfig x11-proto mako valgrind llvm libunwind glslang spirv-tools ply rustc rust-bindgen pycparser cbindgen pyyaml directx-headers ccache dbus
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -1685,6 +1685,11 @@ jobs:
 
           recipe = mesa / "default.nix"
           text = recipe.read_text()
+          # RTKit support requires the D-Bus development package on Linux/aarch64.
+          if "  dbus," not in text:
+              text = replace(text, r'  directx-headers,', '  dbus,\n  directx-headers,')
+          if "    dbus\n" not in text:
+              text = replace(text, r'  buildInputs = \[\n', '  buildInputs = [\n    dbus\n')
           text = replace(text, r'  patches = \[.*?\n  \];', '  patches = [];')
           # The separate nixpkgs header package tracks a different Mesa release.
           text = replace(text, r"  postPatch = ''.*?\n  '';", "  postPatch = ''patchShebangs .'';")
@@ -1890,7 +1895,7 @@ jobs:
           }
           
           retry 5 30 pacman -Syyu --noconfirm
-          retry 5 30 pacman -S --noconfirm base-devel git ccache clang directx-headers expat glibc libdisplay-info libdrm libelf libgcc libglvnd libpng libstdc++ libva libx11 libxcb libxext libxml2 libxrandr libxshmfence libxxf86vm llvm llvm-libs lm_sensors rust spirv-llvm-translator spirv-tools systemd-libs vulkan-icd-loader wayland xcb-util-keysyms zlib zstd cbindgen clang cmake elfutils glslang libclc meson python-mako python-packaging python-ply python-pycparser python-yaml rust-bindgen wayland-protocols xorgproto libsysprof-capture valgrind python-sphinx python-sphinx-hawkmoth byacc flex wayland wayland-protocols
+          retry 5 30 pacman -S --noconfirm base-devel git ccache clang dbus directx-headers expat glibc libdisplay-info libdrm libelf libgcc libglvnd libpng libstdc++ libva libx11 libxcb libxext libxml2 libxrandr libxshmfence libxxf86vm llvm llvm-libs lm_sensors rust spirv-llvm-translator spirv-tools systemd-libs vulkan-icd-loader wayland xcb-util-keysyms zlib zstd cbindgen clang cmake elfutils glslang libclc meson python-mako python-packaging python-ply python-pycparser python-yaml rust-bindgen wayland-protocols xorgproto libsysprof-capture valgrind python-sphinx python-sphinx-hawkmoth byacc flex wayland wayland-protocols
 
       - name: Cache ccache
         uses: actions/cache@v5

@@ -380,8 +380,9 @@ nir_lower_system_values(nir_shader *shader)
    return progress;
 }
 
+#define id_to_index_no_umod_slow(...) MESA_CALL_WITH_LTR_ARGS(_id_to_index_no_umod_slow, __VA_ARGS__)
 static nir_def *
-id_to_index_no_umod_slow(nir_builder *b, nir_def *index,
+_id_to_index_no_umod_slow(nir_builder *b, nir_def *index,
                          nir_def *size_x, nir_def *size_y,
                          unsigned bit_size)
 {
@@ -406,8 +407,9 @@ id_to_index_no_umod_slow(nir_builder *b, nir_def *index,
    return nir_u2uN(b, nir_vec3(b, id_x, id_y, id_z), bit_size);
 }
 
+#define lower_id_to_index_no_umod(...) MESA_CALL_WITH_LTR_ARGS(_lower_id_to_index_no_umod, __VA_ARGS__)
 static nir_def *
-lower_id_to_index_no_umod(nir_builder *b, nir_def *index,
+_lower_id_to_index_no_umod(nir_builder *b, nir_def *index,
                           nir_def *size, unsigned bit_size,
                           const uint32_t *size_imm,
                           bool shortcut_1d)
@@ -453,8 +455,9 @@ lower_id_to_index_no_umod(nir_builder *b, nir_def *index,
    }
 }
 
+#define lower_id_to_index(...) MESA_CALL_WITH_LTR_ARGS(_lower_id_to_index, __VA_ARGS__)
 static nir_def *
-lower_id_to_index(nir_builder *b, nir_def *index, nir_def *size,
+_lower_id_to_index(nir_builder *b, nir_def *index, nir_def *size,
                   unsigned bit_size)
 {
    /* We lower gl_LocalInvocationID to gl_LocalInvocationIndex based
@@ -772,7 +775,7 @@ lower_compute_system_value_instr(nir_builder *b,
                                           nir_u2uN(b, num_workgroups, bit_size),
                                           bit_size,
                                           options->num_workgroups,
-                                          options->shortcut_1d_workgroup_id);
+                                          (bool) options->shortcut_1d_workgroup_id);
       }
 
       return NULL;

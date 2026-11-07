@@ -355,8 +355,9 @@ instr_can_rewrite(nir_instr *instr)
    return false;
 }
 
+#define rewrite_uses(...) MESA_CALL_WITH_LTR_ARGS(_rewrite_uses, __VA_ARGS__)
 static void
-rewrite_uses(nir_builder *b, struct set *instr_set, nir_def *def1,
+_rewrite_uses(nir_builder *b, struct set *instr_set, nir_def *def1,
              nir_def *def2, nir_def *new_def)
 {
    /* update all ALU uses */

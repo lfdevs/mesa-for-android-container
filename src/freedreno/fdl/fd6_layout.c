@@ -50,6 +50,13 @@ fdl6_get_ubwc_blockwidth(const struct fdl_layout *layout,
       return;
    }
 
+   if (layout->format == PIPE_FORMAT_X6R10_UNORM) {
+      // *blockwidth = 32;
+      *blockwidth = 48; // 48 for TP10
+      *blockheight = 4;
+      return;
+   }
+
    /* special case for 1bpp/2bpp + MSAA (note layout->cpp is already
     * pre-multiplied by nr_samples):
     */
@@ -284,7 +291,7 @@ fdl6_layout_image(struct fdl_layout *layout, const struct fd_dev_info *info,
        * The pitch is already sufficiently aligned, but height
        * may not be. note this only matters if last level is linear
        */
-      if (level == params->mip_levels - 1)
+      if (level == params->mip_levels - 1 && !explicit_layout)
          nblocksy = align(nblocksy, 4);
 
       slice->offset = offset + layout->size;

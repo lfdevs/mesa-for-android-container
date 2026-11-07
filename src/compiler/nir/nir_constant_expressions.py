@@ -73,6 +73,35 @@ template = """\
 #include "nir_constant_expressions.h"
 #include "nir.h"
 
+#if defined(__clang__) && !defined(_MSC_VER)
+
+#pragma STDC FENV_ACCESS ON
+#pragma STDC FP_CONTRACT OFF
+#pragma clang fp reassociate(off)
+#pragma clang fp contract(off)
+// #pragma clang fp reciprocal(off)
+#pragma clang fp exceptions(strict)
+// #pragma clang fp eval_method(source)
+
+#elif defined(_MSC_VER)
+
+#pragma float_control(precise, on)
+#pragma fenv_access(on)
+#pragma float_control(except, on)
+#pragma fp_contract(off)
+
+#elif defined(__GNUC__)
+
+#pragma STDC FP_CONTRACT OFF
+#pragma GCC optimize ("no-fast-math")
+#pragma GCC optimize ("no-associative-math")
+#pragma GCC optimize ("no-reciprocal-math")
+#pragma GCC optimize ("no-unsafe-math-optimizations")
+#pragma GCC optimize ("fp-contract=off")
+#pragma GCC optimize ("excess-precision=standard")
+
+#endif
+
 /**
  * Checks if the provided value is a denorm and flushes it to zero.
  */
@@ -92,6 +121,47 @@ constant_denorm_flush_to_zero(nir_const_value *value, unsigned bit_size)
         if (0 == (value->u16 & 0x7c00))
             value->u16 &= 0x8000;
     }
+}
+
+static void
+constant_canonicalize_nan(nir_const_value *value, unsigned bit_size)
+{
+    switch(bit_size) {
+    case 64:
+        if (util_is_double_nan(uid(value->u64)))
+            value->u64 = 0x7ff8000000000000;
+        break;
+    case 32:
+        if (util_is_nan(uif(value->u32)))
+            value->u32 = 0x7fc00000;
+        break;
+    case 16:
+        if (util_is_half_nan(value->u16))
+            value->u16 = 0x7e00;
+        break;
+    }
+}
+
+static int32_t
+constant_f2i32_rtne(float value)
+{
+    float rounded = _mesa_roundevenf(value);
+
+    if (util_is_nan(rounded) || rounded < -0x1p31f || rounded >= 0x1p31f)
+        return 0;
+
+    return (int32_t)rounded;
+}
+
+static uint32_t
+constant_f2u32_rtne(float value)
+{
+    float rounded = _mesa_roundevenf(value);
+
+    if (util_is_nan(rounded) || rounded < 0.0f || rounded >= 0x1p32f)
+        return 0;
+
+    return (uint32_t)rounded;
 }
 
 static double
@@ -564,10 +634,12 @@ struct ${type}${width}_vec {
                if (nir_is_denorm_flush_to_zero(execution_mode, ${type_size(output_type)})) {
                   constant_denorm_flush_to_zero(&_dst_val[_i], ${type_size(output_type)});
                }
+               constant_canonicalize_nan(&_dst_val[_i], ${type_size(output_type)});
             % else:
                if (nir_is_denorm_flush_to_zero(execution_mode, ${bit_size})) {
                   constant_denorm_flush_to_zero(&_dst_val[i], bit_size);
                }
+               constant_canonicalize_nan(&_dst_val[_i], ${bit_size});
             %endif
          % endif
 
@@ -614,10 +686,12 @@ struct ${type}${width}_vec {
                if (nir_is_denorm_flush_to_zero(execution_mode, ${type_size(output_type)})) {
                   constant_denorm_flush_to_zero(&_dst_val[${k}], ${type_size(output_type)});
                }
+               constant_canonicalize_nan(&_dst_val[${k}], ${type_size(output_type)});
             % else:
                if (nir_is_denorm_flush_to_zero(execution_mode, ${bit_size})) {
                   constant_denorm_flush_to_zero(&_dst_val[${k}], bit_size);
                }
+               constant_canonicalize_nan(&_dst_val[${k}], ${bit_size});
             % endif
          % endif
       % endfor

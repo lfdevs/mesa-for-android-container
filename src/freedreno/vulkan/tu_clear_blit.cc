@@ -2913,6 +2913,17 @@ copy_compressed(VkFormat format,
       *height = DIV_ROUND_UP(*height, block_height);
 }
 
+/* It seems we can't use the 2d path to blit to YUV-related formats.
+ */
+static bool
+is_3d_only_format(enum pipe_format format)
+{
+   /* note: could use "R8_UNORM" when no UBWC */
+   return format == PIPE_FORMAT_Y8_UNORM ||
+          format == PIPE_FORMAT_X6R10_UNORM ||
+          format == PIPE_FORMAT_X6R10X6G10_UNORM;
+}
+
 template <chip CHIP>
 static void
 tu_copy_buffer_to_image(struct tu_cmd_buffer *cmd,
@@ -2936,10 +2947,9 @@ tu_copy_buffer_to_image(struct tu_cmd_buffer *cmd,
       src_format = PIPE_FORMAT_S8_UINT;
    }
 
-   /* note: could use "R8_UNORM" when no UBWC */
    bool has_unaligned = CHIP >= A7XX; /* If unaligned buffer copies are supported. */
    unsigned blit_param = 0;
-   if (src_format == PIPE_FORMAT_Y8_UNORM) {
+   if (is_3d_only_format(src_format)) {
       ops = &r3d_ops<CHIP>;
       blit_param = R3D_COPY;
       has_unaligned = false;
@@ -3196,9 +3206,8 @@ tu_copy_image_to_buffer(struct tu_cmd_buffer *cmd,
       dst_format = PIPE_FORMAT_S8_UINT;
    }
 
-   /* note: could use "R8_UNORM" when no UBWC */
    unsigned blit_param = 0;
-   if (dst_format == PIPE_FORMAT_Y8_UNORM ||
+   if (is_3d_only_format(dst_format) ||
        (getenv("TU_KGSL_FORCE_R3D_COPY") &&
         (dst_format == PIPE_FORMAT_R8_UNORM ||
          dst_format == PIPE_FORMAT_R8G8_UNORM))) {
@@ -3210,6 +3219,9 @@ tu_copy_image_to_buffer(struct tu_cmd_buffer *cmd,
    VkExtent3D extent = info->imageExtent;
    uint32_t dst_width = info->bufferRowLength ?: extent.width;
    uint32_t dst_height = info->bufferImageHeight ?: extent.height;
+
+   if (extent.width == 0 || extent.height == 0 || extent.depth == 0)
+      return;
 
    copy_compressed(src_image->vk.format, &offset, &extent, &dst_width, &dst_height);
 
@@ -3500,10 +3512,9 @@ tu_copy_image_to_image(struct tu_cmd_buffer *cmd,
    enum pipe_format dst_format = copy_format(dst_image->vk.format, info->dstSubresource.aspectMask);
    enum pipe_format src_format = copy_format(src_image->vk.format, info->srcSubresource.aspectMask);
 
-   /* note: could use "R8_UNORM" when no UBWC */
    unsigned blit_param = 0;
-   if (dst_format == PIPE_FORMAT_Y8_UNORM ||
-       src_format == PIPE_FORMAT_Y8_UNORM ||
+   if (is_3d_only_format(dst_format) ||
+       is_3d_only_format(src_format) ||
        (is_msaa && (util_format_is_float16(src_format) ||
                     util_format_is_float16(dst_format)))) {
       ops = &r3d_ops<CHIP>;

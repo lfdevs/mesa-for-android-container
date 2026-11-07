@@ -1038,7 +1038,7 @@ ir3_instr_clone(struct ir3_instruction *instr)
 
 /* Add a false dependency to instruction, to ensure it is scheduled first: */
 void
-ir3_instr_add_dep(struct ir3_instruction *instr, struct ir3_instruction *dep)
+_ir3_instr_add_dep(struct ir3_instruction *instr, struct ir3_instruction *dep)
 {
    for (unsigned i = 0; i < instr->deps_count; i++) {
       if (instr->deps[i] == dep)
@@ -1189,7 +1189,7 @@ ir3_reg_set_last_array(struct ir3_instruction *instr, struct ir3_register *reg,
 }
 
 void
-ir3_instr_set_address(struct ir3_instruction *instr,
+_ir3_instr_set_address(struct ir3_instruction *instr,
                       struct ir3_instruction *addr)
 {
    if (!instr->address) {

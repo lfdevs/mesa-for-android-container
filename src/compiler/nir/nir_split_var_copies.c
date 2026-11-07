@@ -58,8 +58,9 @@
  * possibly a few wildcard array dereferences.
  */
 
+#define split_deref_copy_instr(...) MESA_CALL_WITH_LTR_ARGS(_split_deref_copy_instr, __VA_ARGS__)
 static void
-split_deref_copy_instr(nir_builder *b,
+_split_deref_copy_instr(nir_builder *b,
                        nir_deref_instr *dst, nir_deref_instr *src,
                        enum gl_access_qualifier dst_access,
                        enum gl_access_qualifier src_access)

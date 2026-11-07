@@ -109,8 +109,9 @@ emit_intrinsic_store_ssbo(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    array_insert(ctx->block, ctx->block->keeps, stgb);
 }
 
+#define emit_atomic(...) MESA_CALL_WITH_LTR_ARGS(_emit_atomic, __VA_ARGS__)
 static struct ir3_instruction *
-emit_atomic(struct ir3_builder *b, nir_atomic_op op, struct ir3_instruction *bo,
+_emit_atomic(struct ir3_builder *b, nir_atomic_op op, struct ir3_instruction *bo,
             struct ir3_instruction *data, struct ir3_instruction *offset,
             struct ir3_instruction *byte_offset)
 {
@@ -384,8 +385,10 @@ emit_intrinsic_atomic_image(struct ir3_context *ctx, nir_intrinsic_instr *intr)
  * the src2 field an immediate byte offset.  The UAV register itself is not
  * read, so point it at the address to avoid tying up another.
  */
+
+#define emit_atomic_global(...) MESA_CALL_WITH_LTR_ARGS(_emit_atomic_global, __VA_ARGS__)
 static struct ir3_instruction *
-emit_atomic_global(struct ir3_builder *b, nir_atomic_op op,
+_emit_atomic_global(struct ir3_builder *b, nir_atomic_op op,
                    struct ir3_instruction *addr, struct ir3_instruction *data,
                    struct ir3_instruction *off)
 {

@@ -105,6 +105,10 @@ tu_cmd_buffer_status_gpu_write(struct tu_cmd_buffer *cmd_buffer,
    tu_cs_emit(cs, static_cast<uint32_t>(status));
 }
 
+#if defined(HAVE_GPUVIS)
+#include "util/perf/gpuvis_trace_utils.h"
+#endif
+
 static void
 tu_wait_for_rb_done(struct tu_cs *cs, uint32_t onchip_addr, uint32_t seqno)
 {
@@ -970,8 +974,13 @@ tu6_emit_mrt(struct tu_cmd_buffer *cmd,
       crb.add(SP_DITHER_CNTL(CHIP, .dword = dither_cntl));
    }
 
-   crb.add(A6XX_RB_SRGB_CNTL(.dword = subpass->srgb_cntl));
-   crb.add(A6XX_SP_SRGB_CNTL(.dword = subpass->srgb_cntl));
+   uint32_t srgb_cntl = subpass->srgb_cntl;
+   if (cmd->state.override_srgb_cntl)
+      srgb_cntl = cmd->state.srgb_cntl;
+
+   crb.add(A6XX_RB_SRGB_CNTL(.dword = srgb_cntl));
+   crb.add(A6XX_SP_SRGB_CNTL(.dword = srgb_cntl));
+
    unsigned layers = MAX2(fb->layers, util_logbase2(subpass->multiview_mask) + 1);
    crb.add(GRAS_CL_ARRAY_SIZE(CHIP, layers - 1));
 }
@@ -3783,7 +3792,16 @@ tu6_tile_render_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
    if (use_cb)
       tu_trace_start_render_pass(cmd);
 
-   cmd->device->autotune->begin_renderpass(cmd, cs, rp_ctx);
+   tu_autotune::rp_debug_layout debug_layout;
+   debug_layout.grid_w = vsc->tile_count.width;
+   debug_layout.grid_h = vsc->tile_count.height;
+   debug_layout.fb_w = cmd->state.framebuffer->width;
+   debug_layout.fb_h = cmd->state.framebuffer->height;
+   debug_layout.tile0_w = cmd->state.tiling->tile0.width;
+   debug_layout.tile0_h = cmd->state.tiling->tile0.height;
+   debug_layout.layers = MAX2(cmd->state.framebuffer->layers, cmd->state.pass->num_views);
+   debug_layout.divisor = cmd->state.gmem_layout_divisor;
+   cmd->device->autotune->begin_renderpass(cmd, cs, rp_ctx, debug_layout);
 
    tu_cs_sanity_check(cs);
 }
@@ -3839,8 +3857,12 @@ tu6_render_tile(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
 
    tu_cs_emit_call(cs, &cmd->tile_store_cs);
 
-   tu_clone_trace_range<CHIP>(cmd, cs, &cmd->trace, cmd->trace_renderpass_start, u_trace_end_iterator(&cmd->rp_trace));
    tu_cs_emit_wfi(cs);
+
+   /* Clone after the WFI, so the copies are not themselves part of the tile
+    * being timed.
+    */
+   tu_clone_trace_range<CHIP>(cmd, cs, &cmd->trace, cmd->trace_renderpass_start, u_trace_end_iterator(&cmd->rp_trace));
 
    tu_set_render_mode<CHIP>(cs, {RM6_BIN_RENDER_END});
 
@@ -4200,9 +4222,19 @@ tu_cmd_render(struct tu_cmd_buffer *cmd_buffer,
 
    tu_autotune::rp_ctx_t rp_ctx = NULL;
    if (use_sysmem_rendering(cmd_buffer, &rp_ctx, rp_key))
+   {
+#if defined(HAVE_GPUVIS)
+      GPUVIS_TRACE_BLOCK("[MESA] tu_cmd_render SYSMEM");
+#endif
       tu_cmd_render_sysmem<CHIP>(cmd_buffer, rp_ctx);
+   }
    else
+   {
+#if defined(HAVE_GPUVIS)
+      GPUVIS_TRACE_BLOCK("[MESA] tu_cmd_render GMEM");
+#endif
       tu_cmd_render_tiles<CHIP>(cmd_buffer, rp_ctx, fdm_offsets);
+   }
 }
 
 static void tu_reset_render_pass(struct tu_cmd_buffer *cmd_buffer)
@@ -4214,6 +4246,7 @@ static void tu_reset_render_pass(struct tu_cmd_buffer *cmd_buffer)
    tu_cs_discard_entries(&cmd_buffer->draw_epilogue_cs);
    tu_cs_begin(&cmd_buffer->draw_epilogue_cs);
 
+   cmd_buffer->state.override_srgb_cntl = false;
    cmd_buffer->state.pass = NULL;
    cmd_buffer->state.subpass = NULL;
    cmd_buffer->state.framebuffer = NULL;
@@ -7167,6 +7200,18 @@ tu_feedback_invalidate(struct tu_cmd_buffer *cmd)
                             TU_STAGE_BR, TU_STAGE_BR, true);
 }
 
+// vksubpass_begin_info_valve extension to allow overriding srgb_cntl for a
+// subpass
+#define VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO_VALVE                           \
+   (VkStructureType) 1000109099
+#define VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO_VALVE_cast                      \
+   struct vksubpass_begin_info_valve
+struct vksubpass_begin_info_valve {
+   VkStructureType sType;
+   const void *pNext;
+   uint32_t srgb_cntl;
+};
+
 template <chip CHIP>
 VKAPI_ATTR void VKAPI_CALL
 tu_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
@@ -7187,6 +7232,16 @@ tu_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
    const struct VkRenderPassAttachmentBeginInfo *pAttachmentInfo =
       vk_find_struct_const(pRenderPassBegin->pNext,
                            RENDER_PASS_ATTACHMENT_BEGIN_INFO);
+   const struct vksubpass_begin_info_valve *begin_info_valve =
+      vk_find_struct_const(pSubpassBeginInfo->pNext,
+                           SUBPASS_BEGIN_INFO_VALVE);
+
+   if (begin_info_valve) {
+      cmd->state.override_srgb_cntl = true;
+      cmd->state.srgb_cntl = begin_info_valve->srgb_cntl;
+   } else {
+      cmd->state.override_srgb_cntl = false;
+   }
 
    cmd->state.pass = pass;
    cmd->state.subpass = pass->subpasses;
@@ -7517,6 +7572,8 @@ tu_CmdBeginRendering(VkCommandBuffer commandBuffer,
       cmd->patchpoints_ctx = ralloc_context(NULL);
 
    if (!resuming) {
+      // gabe: no subpassinfo avail here?
+      // TODO: How should srgb_cntl overriding be handled?
       tu_emit_subpass_begin<CHIP>(cmd);
    } else {
       /* Even resuming vkCmdBeginRendering resets RT and input attachment locations, so we have to re-emit them. */
@@ -7701,6 +7758,16 @@ tu_CmdNextSubpass2(VkCommandBuffer commandBuffer,
       vk_common_CmdNextSubpass2(commandBuffer, pSubpassBeginInfo,
                                 pSubpassEndInfo);
       return;
+   }
+
+   const struct vksubpass_begin_info_valve *begin_info_valve =
+      vk_find_struct_const(pSubpassBeginInfo->pNext,
+                           SUBPASS_BEGIN_INFO_VALVE);
+   if (begin_info_valve) {
+      cmd->state.override_srgb_cntl = true;
+      cmd->state.srgb_cntl = begin_info_valve->srgb_cntl;
+   } else {
+      cmd->state.override_srgb_cntl = false;
    }
 
    const struct tu_subpass *subpass = cmd->state.subpass++;
@@ -8685,6 +8752,20 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
 
    if (cmd->state.dirty & TU_CMD_DIRTY_FS)
       tu_flush_dynamic_input_attachments<CHIP>(cmd);
+
+   if ((cmd->state.dirty & TU_CMD_DIRTY_RAST_ORDER) && cmd->state.raster_order_attachment_access) {
+      /* Going from no-rast-order to rast-order doesn't automatically synchronize access to attachments
+       * but Vulkan spec requires implicit synchronization with previous draw calls.
+       */
+      const struct tu_subpass_barrier barrier = {
+         .src_stage_mask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT |
+                           VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+         .dst_stage_mask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+         .src_access_mask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+         .dst_access_mask = VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT,
+      };
+      tu_subpass_barrier<CHIP>(cmd, &barrier, false);
+   }
 
    tu_emit_cache_flush_renderpass<CHIP>(cmd);
 

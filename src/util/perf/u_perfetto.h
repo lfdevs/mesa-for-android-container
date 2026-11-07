@@ -74,7 +74,7 @@ extern "C" {
 extern int util_perfetto_tracing_state;
 
 void util_perfetto_thread_flush(void);
-void util_perfetto_init(void);
+bool util_perfetto_init(void);
 
 static inline bool
 util_perfetto_is_tracing_enabled(void)
@@ -107,9 +107,10 @@ util_perfetto_thread_flush(void)
 {
 }
 
-static inline void
+static inline bool
 util_perfetto_init(void)
 {
+   return false;
 }
 
 static inline bool

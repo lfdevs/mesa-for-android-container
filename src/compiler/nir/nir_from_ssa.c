@@ -456,7 +456,7 @@ set_reg_divergent(nir_def *reg, bool divergent)
 }
 
 void
-nir_rewrite_uses_to_load_reg(nir_builder *b, nir_def *old,
+_nir_rewrite_uses_to_load_reg(nir_builder *b, nir_def *old,
                              nir_def *reg)
 {
    nir_foreach_use_including_if_safe(use, old) {
@@ -995,8 +995,9 @@ nir_convert_from_ssa(nir_shader *shader,
    return progress;
 }
 
+#define place_phi_read(...) MESA_CALL_WITH_LTR_ARGS(_place_phi_read, __VA_ARGS__)
 static void
-place_phi_read(nir_builder *b, nir_def *reg,
+_place_phi_read(nir_builder *b, nir_def *reg,
                nir_def *def, nir_block *block, struct set *visited_blocks)
 {
    /* Search already visited blocks to avoid back edges in tree */

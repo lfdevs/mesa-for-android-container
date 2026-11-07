@@ -41,8 +41,9 @@ unwrap_matrix(struct vtn_ssa_value *val)
    return val->elems[0];
 }
 
+#define matrix_multiply(...) MESA_CALL_WITH_LTR_ARGS(_matrix_multiply, __VA_ARGS__)
 static struct vtn_ssa_value *
-matrix_multiply(struct vtn_builder *b,
+_matrix_multiply(struct vtn_builder *b,
                 struct vtn_ssa_value *_src0, struct vtn_ssa_value *_src1)
 {
 
@@ -97,8 +98,9 @@ matrix_multiply(struct vtn_builder *b,
    return dest;
 }
 
+#define mat_times_scalar(...) MESA_CALL_WITH_LTR_ARGS(_mat_times_scalar, __VA_ARGS__)
 static struct vtn_ssa_value *
-mat_times_scalar(struct vtn_builder *b,
+_mat_times_scalar(struct vtn_builder *b,
                  struct vtn_ssa_value *mat,
                  nir_def *scalar)
 {
@@ -179,8 +181,9 @@ vtn_mediump_downconvert_value(struct vtn_builder *b, struct vtn_ssa_value *src)
    }
 }
 
+#define vtn_handle_matrix_alu(...) MESA_CALL_WITH_LTR_ARGS(_vtn_handle_matrix_alu, __VA_ARGS__)
 static struct vtn_ssa_value *
-vtn_handle_matrix_alu(struct vtn_builder *b, SpvOp opcode,
+_vtn_handle_matrix_alu(struct vtn_builder *b, SpvOp opcode,
                       struct vtn_ssa_value *src0, struct vtn_ssa_value *src1)
 {
    switch (opcode) {

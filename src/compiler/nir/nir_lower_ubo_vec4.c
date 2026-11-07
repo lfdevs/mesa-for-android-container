@@ -72,8 +72,9 @@ nir_lower_ubo_vec4_filter(const nir_instr *instr, const void *data)
    return nir_instr_as_intrinsic(instr)->intrinsic == nir_intrinsic_load_ubo;
 }
 
+#define create_load(...) MESA_CALL_WITH_LTR_ARGS(_create_load, __VA_ARGS__)
 static nir_intrinsic_instr *
-create_load(nir_builder *b, nir_def *block, nir_def *offset,
+_create_load(nir_builder *b, nir_def *block, nir_def *offset,
             unsigned bit_size, unsigned num_components)
 {
    nir_def *def = nir_load_ubo_vec4(b, num_components, bit_size, block, offset);

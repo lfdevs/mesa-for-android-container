@@ -367,8 +367,10 @@ nir_get_clamp_limits(nir_builder *b,
  * src/src_type: The variables used for comparison
  * dest_type: The type which determines the range used for comparison
  */
+
+#define nir_clamp_to_type_range(...) MESA_CALL_WITH_LTR_ARGS(_nir_clamp_to_type_range, __VA_ARGS__)
 static inline nir_def *
-nir_clamp_to_type_range(nir_builder *b,
+_nir_clamp_to_type_range(nir_builder *b,
                         nir_def *val, nir_alu_type val_type,
                         nir_def *src, nir_alu_type src_type,
                         nir_alu_type dest_type)

@@ -80,8 +80,9 @@ lower_u2u64(nir_builder *b, nir_def *x)
    return nir_pack_64_2x32_split(b, x32, nir_imm_int(b, 0));
 }
 
+#define lower_bcsel64(...) MESA_CALL_WITH_LTR_ARGS(_lower_bcsel64, __VA_ARGS__)
 static nir_def *
-lower_bcsel64(nir_builder *b, nir_def *cond, nir_def *x, nir_def *y)
+_lower_bcsel64(nir_builder *b, nir_def *cond, nir_def *x, nir_def *y)
 {
    nir_def *x_lo = nir_unpack_64_2x32_split_x(b, x);
    nir_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
@@ -92,8 +93,9 @@ lower_bcsel64(nir_builder *b, nir_def *cond, nir_def *x, nir_def *y)
                                  nir_bcsel(b, cond, x_hi, y_hi));
 }
 
+#define lower_bitfield_select64(...) MESA_CALL_WITH_LTR_ARGS(_lower_bitfield_select64, __VA_ARGS__)
 static nir_def *
-lower_bitfield_select64(nir_builder *b, nir_def *cond, nir_def *x, nir_def *y)
+_lower_bitfield_select64(nir_builder *b, nir_def *cond, nir_def *x, nir_def *y)
 {
    nir_def *cond_lo = nir_unpack_64_2x32_split_x(b, cond);
    nir_def *cond_hi = nir_unpack_64_2x32_split_y(b, cond);
@@ -115,8 +117,9 @@ lower_inot64(nir_builder *b, nir_def *x)
    return nir_pack_64_2x32_split(b, nir_inot(b, x_lo), nir_inot(b, x_hi));
 }
 
+#define lower_iand64(...) MESA_CALL_WITH_LTR_ARGS(_lower_iand64, __VA_ARGS__)
 static nir_def *
-lower_iand64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_iand64(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *x_lo = nir_unpack_64_2x32_split_x(b, x);
    nir_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
@@ -127,8 +130,9 @@ lower_iand64(nir_builder *b, nir_def *x, nir_def *y)
                                  nir_iand(b, x_hi, y_hi));
 }
 
+#define lower_ior64(...) MESA_CALL_WITH_LTR_ARGS(_lower_ior64, __VA_ARGS__)
 static nir_def *
-lower_ior64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_ior64(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *x_lo = nir_unpack_64_2x32_split_x(b, x);
    nir_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
@@ -139,8 +143,9 @@ lower_ior64(nir_builder *b, nir_def *x, nir_def *y)
                                  nir_ior(b, x_hi, y_hi));
 }
 
+#define lower_ixor64(...) MESA_CALL_WITH_LTR_ARGS(_lower_ixor64, __VA_ARGS__)
 static nir_def *
-lower_ixor64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_ixor64(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *x_lo = nir_unpack_64_2x32_split_x(b, x);
    nir_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
@@ -151,8 +156,9 @@ lower_ixor64(nir_builder *b, nir_def *x, nir_def *y)
                                  nir_ixor(b, x_hi, y_hi));
 }
 
+#define lower_ishl64(...) MESA_CALL_WITH_LTR_ARGS(_lower_ishl64, __VA_ARGS__)
 static nir_def *
-lower_ishl64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_ishl64(nir_builder *b, nir_def *x, nir_def *y)
 {
    /* Implemented as
     *
@@ -196,8 +202,9 @@ lower_ishl64(nir_builder *b, nir_def *x, nir_def *y)
                               res_if_ge_32, res_if_lt_32));
 }
 
+#define lower_ishr64(...) MESA_CALL_WITH_LTR_ARGS(_lower_ishr64, __VA_ARGS__)
 static nir_def *
-lower_ishr64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_ishr64(nir_builder *b, nir_def *x, nir_def *y)
 {
    /* Implemented as
     *
@@ -243,8 +250,9 @@ lower_ishr64(nir_builder *b, nir_def *x, nir_def *y)
                               res_if_ge_32, res_if_lt_32));
 }
 
+#define lower_ushr64(...) MESA_CALL_WITH_LTR_ARGS(_lower_ushr64, __VA_ARGS__)
 static nir_def *
-lower_ushr64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_ushr64(nir_builder *b, nir_def *x, nir_def *y)
 {
    /* Implemented as
     *
@@ -289,8 +297,9 @@ lower_ushr64(nir_builder *b, nir_def *x, nir_def *y)
                               res_if_ge_32, res_if_lt_32));
 }
 
+#define lower_iadd64(...) MESA_CALL_WITH_LTR_ARGS(_lower_iadd64, __VA_ARGS__)
 static nir_def *
-lower_iadd64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_iadd64(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *x_lo = nir_unpack_64_2x32_split_x(b, x);
    nir_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
@@ -304,8 +313,9 @@ lower_iadd64(nir_builder *b, nir_def *x, nir_def *y)
    return nir_pack_64_2x32_split(b, res_lo, res_hi);
 }
 
+#define lower_isub64(...) MESA_CALL_WITH_LTR_ARGS(_lower_isub64, __VA_ARGS__)
 static nir_def *
-lower_isub64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_isub64(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *x_lo = nir_unpack_64_2x32_split_x(b, x);
    nir_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
@@ -337,8 +347,9 @@ lower_iabs64(nir_builder *b, nir_def *x)
    return nir_bcsel(b, x_is_neg, nir_ineg(b, x), x);
 }
 
+#define lower_int64_compare(...) MESA_CALL_WITH_LTR_ARGS(_lower_int64_compare, __VA_ARGS__)
 static nir_def *
-lower_int64_compare(nir_builder *b, nir_op op, nir_def *x, nir_def *y)
+_lower_int64_compare(nir_builder *b, nir_op op, nir_def *x, nir_def *y)
 {
    nir_def *x_lo = nir_unpack_64_2x32_split_x(b, x);
    nir_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
@@ -370,32 +381,37 @@ lower_int64_compare(nir_builder *b, nir_op op, nir_def *x, nir_def *y)
    }
 }
 
+#define lower_umax64(...) MESA_CALL_WITH_LTR_ARGS(_lower_umax64, __VA_ARGS__)
 static nir_def *
-lower_umax64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_umax64(nir_builder *b, nir_def *x, nir_def *y)
 {
    return nir_bcsel(b, COND_LOWER_CMP(b, ult, x, y), y, x);
 }
 
+#define lower_imax64(...) MESA_CALL_WITH_LTR_ARGS(_lower_imax64, __VA_ARGS__)
 static nir_def *
-lower_imax64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_imax64(nir_builder *b, nir_def *x, nir_def *y)
 {
    return nir_bcsel(b, COND_LOWER_CMP(b, ilt, x, y), y, x);
 }
 
+#define lower_umin64(...) MESA_CALL_WITH_LTR_ARGS(_lower_umin64, __VA_ARGS__)
 static nir_def *
-lower_umin64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_umin64(nir_builder *b, nir_def *x, nir_def *y)
 {
    return nir_bcsel(b, COND_LOWER_CMP(b, ult, x, y), x, y);
 }
 
+#define lower_imin64(...) MESA_CALL_WITH_LTR_ARGS(_lower_imin64, __VA_ARGS__)
 static nir_def *
-lower_imin64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_imin64(nir_builder *b, nir_def *x, nir_def *y)
 {
    return nir_bcsel(b, COND_LOWER_CMP(b, ilt, x, y), x, y);
 }
 
+#define lower_mul_2x32_64(...) MESA_CALL_WITH_LTR_ARGS(_lower_mul_2x32_64, __VA_ARGS__)
 static nir_def *
-lower_mul_2x32_64(nir_builder *b, nir_def *x, nir_def *y,
+_lower_mul_2x32_64(nir_builder *b, nir_def *x, nir_def *y,
                   bool sign_extend)
 {
    nir_def *res_hi = sign_extend ? nir_imul_high(b, x, y)
@@ -404,8 +420,9 @@ lower_mul_2x32_64(nir_builder *b, nir_def *x, nir_def *y,
    return nir_pack_64_2x32_split(b, nir_imul(b, x, y), res_hi);
 }
 
+#define lower_imul64(...) MESA_CALL_WITH_LTR_ARGS(_lower_imul64, __VA_ARGS__)
 static nir_def *
-lower_imul64(nir_builder *b, nir_def *x, nir_def *y)
+_lower_imul64(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *x_lo = nir_unpack_64_2x32_split_x(b, x);
    nir_def *x_hi = nir_unpack_64_2x32_split_y(b, x);
@@ -421,8 +438,9 @@ lower_imul64(nir_builder *b, nir_def *x, nir_def *y)
                                  res_hi);
 }
 
+#define lower_mul_high64(...) MESA_CALL_WITH_LTR_ARGS(_lower_mul_high64, __VA_ARGS__)
 static nir_def *
-lower_mul_high64(nir_builder *b, nir_def *x, nir_def *y,
+_lower_mul_high64(nir_builder *b, nir_def *x, nir_def *y,
                  bool sign_extend)
 {
    nir_def *x32[4], *y32[4];
@@ -493,8 +511,9 @@ lower_isign64(nir_builder *b, nir_def *x)
    return nir_pack_64_2x32_split(b, res_lo, res_hi);
 }
 
+#define lower_udiv64_mod64(...) MESA_CALL_WITH_LTR_ARGS(_lower_udiv64_mod64, __VA_ARGS__)
 static void
-lower_udiv64_mod64(nir_builder *b, nir_def *n, nir_def *d,
+_lower_udiv64_mod64(nir_builder *b, nir_def *n, nir_def *d,
                    nir_def **q, nir_def **r)
 {
    /* TODO: We should specially handle the case where the denominator is a
@@ -584,16 +603,18 @@ lower_udiv64_mod64(nir_builder *b, nir_def *n, nir_def *d,
    *r = n;
 }
 
+#define lower_udiv64(...) MESA_CALL_WITH_LTR_ARGS(_lower_udiv64, __VA_ARGS__)
 static nir_def *
-lower_udiv64(nir_builder *b, nir_def *n, nir_def *d)
+_lower_udiv64(nir_builder *b, nir_def *n, nir_def *d)
 {
    nir_def *q, *r;
    lower_udiv64_mod64(b, n, d, &q, &r);
    return q;
 }
 
+#define lower_idiv64(...) MESA_CALL_WITH_LTR_ARGS(_lower_idiv64, __VA_ARGS__)
 static nir_def *
-lower_idiv64(nir_builder *b, nir_def *n, nir_def *d)
+_lower_idiv64(nir_builder *b, nir_def *n, nir_def *d)
 {
    nir_def *n_hi = nir_unpack_64_2x32_split_y(b, n);
    nir_def *d_hi = nir_unpack_64_2x32_split_y(b, d);
@@ -605,16 +626,18 @@ lower_idiv64(nir_builder *b, nir_def *n, nir_def *d)
    return nir_bcsel(b, negate, nir_ineg(b, q), q);
 }
 
+#define lower_umod64(...) MESA_CALL_WITH_LTR_ARGS(_lower_umod64, __VA_ARGS__)
 static nir_def *
-lower_umod64(nir_builder *b, nir_def *n, nir_def *d)
+_lower_umod64(nir_builder *b, nir_def *n, nir_def *d)
 {
    nir_def *q, *r;
    lower_udiv64_mod64(b, n, d, &q, &r);
    return r;
 }
 
+#define lower_imod64(...) MESA_CALL_WITH_LTR_ARGS(_lower_imod64, __VA_ARGS__)
 static nir_def *
-lower_imod64(nir_builder *b, nir_def *n, nir_def *d)
+_lower_imod64(nir_builder *b, nir_def *n, nir_def *d)
 {
    nir_def *n_hi = nir_unpack_64_2x32_split_y(b, n);
    nir_def *d_hi = nir_unpack_64_2x32_split_y(b, d);
@@ -631,8 +654,9 @@ lower_imod64(nir_builder *b, nir_def *n, nir_def *d)
                               nir_iadd(b, rem, d)));
 }
 
+#define lower_irem64(...) MESA_CALL_WITH_LTR_ARGS(_lower_irem64, __VA_ARGS__)
 static nir_def *
-lower_irem64(nir_builder *b, nir_def *n, nir_def *d)
+_lower_irem64(nir_builder *b, nir_def *n, nir_def *d)
 {
    nir_def *n_hi = nir_unpack_64_2x32_split_y(b, n);
    nir_def *n_is_neg = nir_ilt_imm(b, n_hi, 0);
@@ -642,8 +666,9 @@ lower_irem64(nir_builder *b, nir_def *n, nir_def *d)
    return nir_bcsel(b, n_is_neg, nir_ineg(b, r), r);
 }
 
+#define lower_extract(...) MESA_CALL_WITH_LTR_ARGS(_lower_extract, __VA_ARGS__)
 static nir_def *
-lower_extract(nir_builder *b, nir_op op, nir_def *x, nir_def *c)
+_lower_extract(nir_builder *b, nir_op op, nir_def *x, nir_def *c)
 {
    assert(op == nir_op_extract_u8 || op == nir_op_extract_i8 ||
           op == nir_op_extract_u16 || op == nir_op_extract_i16);
@@ -872,8 +897,9 @@ lower_bitfield_reverse64(nir_builder *b, nir_def *x)
    return nir_pack_64_2x32_split(b, hi_rev, lo_rev);
 }
 
+#define lower_bitfield_extract64(...) MESA_CALL_WITH_LTR_ARGS(_lower_bitfield_extract64, __VA_ARGS__)
 static nir_def *
-lower_bitfield_extract64(nir_builder *b, nir_def *base, nir_def *offset, nir_def *bits, bool is_signed)
+_lower_bitfield_extract64(nir_builder *b, nir_def *base, nir_def *offset, nir_def *bits, bool is_signed)
 {
    nir_def *tmp0 = nir_isub_imm(b, 64, bits);
    nir_def *tmp1 = nir_isub(b, tmp0, offset);

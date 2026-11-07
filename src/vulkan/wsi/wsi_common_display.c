@@ -51,9 +51,12 @@
 
 #include "util/u_atomic.h"
 #include "util/macros.h"
+#include <pthread.h>
+#include <sched.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <vulkan/vulkan_core.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
@@ -71,12 +74,14 @@
 #include <xcb/randr.h>
 #include <X11/Xlib-xcb.h>
 #endif
+#include "util/bitscan.h"
 #include "util/cnd_monotonic.h"
 #include "util/hash_table.h"
 #include "util/list.h"
 #include "util/os_time.h"
 #include "util/u_overflow.h"
 #include "util/timespec.h"
+#include "util/perf/cpu_trace.h"
 
 #include "vk_device.h"
 #include "vk_fence.h"
@@ -94,6 +99,16 @@
 #include "libdisplay-info/info.h"
 #include "libdisplay-info/edid.h"
 #include "libdisplay-info/cta.h"
+#endif
+
+#include "util/detect_arch.h"
+#include "util/detect_os.h"
+#if DETECT_OS_LINUX && !DETECT_OS_ANDROID && DETECT_ARCH_AARCH64
+#define HAVE_RTKIT_PRIO
+#endif
+
+#if defined(HAVE_RTKIT_PRIO)
+#include "rtkit.h"
 #endif
 
 #if 0
@@ -129,6 +144,7 @@ enum connector_property {
 
 enum crtc_property {
    MODE_ID,
+   CAC_BLOB,
    ACTIVE,
    GAMMA_LUT,
    DEGAMMA_LUT,
@@ -147,6 +163,8 @@ enum plane_property {
    SRC_W,
    SRC_H,
    FB_ID,
+   IN_FENCE_FD,
+   rotation,
    PLANE_PROPERTY_MAX,
 };
 
@@ -318,6 +336,14 @@ wsi_display_parse_edid(struct wsi_display_connector *connector, drmModePropertyB
 #endif
 }
 
+bool b_cac_enabled = false;
+
+static bool
+cac_enabled()
+{
+   return b_cac_enabled;
+}
+
 /**
  * Creates the mapping from our property enums to the KMS property ID for that
  * property associated with the object.
@@ -350,6 +376,7 @@ find_properties(struct wsi_display_connector *connector, uint32_t count_props, u
     * verification at the bottom.
     */
    if (type == DRM_MODE_OBJECT_CRTC) {
+      prop_id[CAC_BLOB] = -1;
       prop_id[GAMMA_LUT] = -1;
       prop_id[DEGAMMA_LUT] = -1;
       prop_id[CTM] = -1;
@@ -366,6 +393,10 @@ find_properties(struct wsi_display_connector *connector, uint32_t count_props, u
       if (!prop)
          continue;
 
+      if(!b_cac_enabled && !strcmp(prop->name, "CAC_BLOB")) {
+         b_cac_enabled = true; //if we ever see CAC_BLOB then latch b_cac_enabled = true
+      }
+
 #define PROPERTY(x) if (!strcmp(prop->name, #x)) prop_id[x] = props[p]
       switch (type) {
       case DRM_MODE_OBJECT_CONNECTOR:
@@ -377,12 +408,14 @@ find_properties(struct wsi_display_connector *connector, uint32_t count_props, u
          break;
       case DRM_MODE_OBJECT_CRTC:
          PROPERTY(MODE_ID);
+         PROPERTY(CAC_BLOB);
          PROPERTY(ACTIVE);
          PROPERTY(GAMMA_LUT);
          PROPERTY(DEGAMMA_LUT);
          PROPERTY(CTM);
          break;
       case DRM_MODE_OBJECT_PLANE:
+         PROPERTY(IN_FENCE_FD);
          PROPERTY(FB_ID);
          PROPERTY(CRTC_ID);
          PROPERTY(CRTC_X);
@@ -393,6 +426,7 @@ find_properties(struct wsi_display_connector *connector, uint32_t count_props, u
          PROPERTY(SRC_Y);
          PROPERTY(SRC_W);
          PROPERTY(SRC_H);
+         PROPERTY(rotation);
          break;
       }
 #undef PROPERTY
@@ -502,6 +536,17 @@ struct wsi_display_image {
    uint64_t                        minimum_ns;
 };
 
+struct wsi_valve_vblank_timestamp {
+   uint64_t  sequence;
+   uint32_t  tv_sec;
+   uint32_t  tv_usec;
+};
+
+struct wsi_valve_vblank_timestamp_2 {
+   uint64_t  sequence;
+   uint64_t  ts_ns;
+};
+
 struct wsi_display_swapchain {
    struct wsi_swapchain            base;
    struct wsi_display              *wsi;
@@ -518,11 +563,13 @@ struct wsi_display_swapchain {
    uint64_t                        color_outcome_serial;
    VkHdrMetadataEXT                hdr_metadata;
 
+   mtx_t                             vblank_timestamp_mutex;
+   struct wsi_valve_vblank_timestamp last_vblank_timestamp;
    struct wsi_image_timing_request timing_request;
    uint64_t                        last_presented_vblank;
    uint64_t                        last_presented_nsec;
 
-   struct wsi_display_image        images[0];
+   struct wsi_display_image     images[0];
 };
 
 struct wsi_display_fence {
@@ -1256,13 +1303,19 @@ wsi_CreateDisplayPlaneSurfaceKHR(VkInstance _instance,
 {
    VK_FROM_HANDLE(vk_instance, instance, _instance);
    VkIcdSurfaceDisplay *surface;
+   VkIcdSurfaceDisplay2 *surface2;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_INFO_KHR);
 
-   surface = vk_zalloc2(&instance->alloc, pAllocator, sizeof(*surface), 8,
+   const struct display_surface_create_cac_info_valve *cac_info =
+      vk_find_struct_const( pCreateInfo->pNext, DISPLAY_SURFACE_CREATE_CAC_INFO_VALVE);
+
+   surface2 = vk_zalloc2(&instance->alloc, pAllocator, sizeof(*surface2), 8,
                         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (surface == NULL)
+   if (surface2 == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   surface = &surface2->base;
 
    surface->base.platform = VK_ICD_WSI_PLATFORM_DISPLAY;
 
@@ -1273,6 +1326,15 @@ wsi_CreateDisplayPlaneSurfaceKHR(VkInstance _instance,
    surface->globalAlpha = pCreateInfo->globalAlpha;
    surface->alphaMode = pCreateInfo->alphaMode;
    surface->imageExtent = pCreateInfo->imageExtent;
+
+   if (cac_info) {
+      surface2->cac_dirty = 1;
+      for(int i=0; i < VALVESURFACEPLANESMAX; i++) 
+      {
+         surface2->src_rgb[i] = cac_info->src_rgb[i];
+         surface2->dst_rgb[i] = cac_info->dst_rgb[i];
+      }
+   }
 
    *pSurface = VkIcdSurfaceBase_to_handle(&surface->base);
 
@@ -1473,6 +1535,20 @@ static const struct wsi_display_surface_format
          .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
       },
       .drm_format = DRM_FORMAT_XRGB8888
+   },
+   {
+      .surface_format = {
+         .format = VK_FORMAT_R8G8B8A8_SRGB,
+         .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+      },
+      .drm_format = DRM_FORMAT_XBGR8888
+   },
+   {
+      .surface_format = {
+         .format = VK_FORMAT_R8G8B8A8_UNORM,
+         .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+      },
+      .drm_format = DRM_FORMAT_XBGR8888
    },
    {
       .surface_format = {
@@ -1919,6 +1995,8 @@ wsi_display_swapchain_destroy(struct wsi_swapchain *drv_chain,
    mtx_destroy(&chain->present_id_mutex);
    u_cnd_monotonic_destroy(&chain->present_id_cond);
 
+   mtx_destroy(&chain->vblank_timestamp_mutex);
+
    wsi_display_mode *display_mode =
       wsi_display_mode_from_handle(chain->surface->displayMode);
    if (p_atomic_dec_zero(&display_mode->connector->refcount))
@@ -2079,10 +2157,20 @@ wsi_display_page_flip_handler2(int fd,
             nsec, &image->base);
    }
 
+   MESA_TRACE_FUNC();
+
    wsi_display_debug("image %ld displayed at %d\n",
                      image - &(image->chain->images[0]), frame);
    image->state = WSI_IMAGE_DISPLAYING;
    wsi_display_present_complete(chain, image);
+
+   mtx_lock(&chain->vblank_timestamp_mutex);
+   chain->last_vblank_timestamp.sequence = frame;
+   chain->last_vblank_timestamp.tv_sec = sec;
+   chain->last_vblank_timestamp.tv_usec = usec;
+   mtx_unlock(&chain->vblank_timestamp_mutex);
+
+   MESA_TRACE_SCOPE("frame=%" PRId32 " t=[%" PRId32 ",%" PRId32 "]",frame,sec,usec);
 
    wsi_display_idle_old_displaying(image);
 
@@ -2121,6 +2209,19 @@ static drmEventContext event_context = {
 static void *
 wsi_display_wait_thread(void *data)
 {
+#if defined(HAVE_RTKIT_PRIO)
+   struct sched_param p;
+   memset(&p, 0, sizeof(p));
+   p.sched_priority = 80;
+   if (sched_setscheduler(0, SCHED_RR|SCHED_RESET_ON_FORK, &p) < 0 && errno == EPERM) {
+      DBusError err;
+      dbus_error_init(&err);
+      DBusConnection *system_bus = dbus_bus_get(DBUS_BUS_SYSTEM, &err);
+      assert(system_bus);
+      rtkit_make_realtime(system_bus, 0, p.sched_priority);
+   }
+#endif
+
    struct wsi_display *wsi = data;
    struct pollfd pollfd = {
       .fd = wsi->fd,
@@ -2140,16 +2241,61 @@ wsi_display_wait_thread(void *data)
    return NULL;
 }
 
+#define THREAD_AFFINITY (0xF0)
+
 static int
 wsi_display_start_wait_thread(struct wsi_display *wsi)
 {
-   if (!wsi->wait_thread) {
-      int ret = pthread_create(&wsi->wait_thread, NULL,
-                               wsi_display_wait_thread, wsi);
-      if (ret)
-         return ret;
+   cpu_set_t cpuset;
+   int ret;
+
+   if (wsi->wait_thread)
+      return 0;
+
+   CPU_ZERO(&cpuset);
+   u_foreach_bit(cpu, THREAD_AFFINITY)
+      CPU_SET(cpu, &cpuset);
+
+#if defined(__GLIBC__)
+   pthread_attr_t attr;
+
+   ret = pthread_attr_init(&attr);
+   if (ret)
+      return ret;
+
+   ret = pthread_attr_setaffinity_np(&attr, sizeof(cpuset), &cpuset);
+   if (ret)
+      goto out;
+
+   ret = pthread_create(&wsi->wait_thread, &attr,
+                        wsi_display_wait_thread, wsi);
+#else
+   ret = pthread_create(&wsi->wait_thread, NULL,
+                        wsi_display_wait_thread, wsi);
+   if (ret)
+      return ret;
+
+   ret = pthread_setaffinity_np(wsi->wait_thread, sizeof(cpuset), &cpuset);
+#endif
+   if (ret)
+      goto out;
+
+   ret = pthread_setname_np(wsi->wait_thread, "MESA_wsi_displa");
+   if (ret)
+      goto out;
+
+out:
+#if defined(__GLIBC__)
+   pthread_attr_destroy(&attr);
+#else
+   if (ret) {
+      pthread_cancel(wsi->wait_thread);
+      pthread_join(wsi->wait_thread, NULL);
+      wsi->wait_thread = 0;
    }
-   return 0;
+#endif
+
+   return ret;
 }
 
 static void
@@ -2920,8 +3066,60 @@ _wsi_display_convert_hdr_metadata(VkHdrMetadataEXT *pMetadata, uint8_t hdmi_eotf
    }
 }
 
+struct CAC_BLOB {
+      struct CAC_RECT {
+               uint16_t x, y, w, h;
+      } dst_r, dst_g, dst_b, src_r, src_g, src_b, src_unpack;
+      uint32_t phase_step_r_h;
+      uint32_t phase_step_r_v;
+      uint32_t phase_step_b_h;
+      uint32_t phase_step_b_v;
+      uint32_t phase_init_r_h;
+      uint32_t phase_init_r_v;
+      uint32_t phase_init_b_h;
+      uint32_t phase_init_b_v;
+};
+
+#define mult_frac(x, n, d) ((uint64_t)(x) * (n) / (d))
+
+static inline void
+split_rect2(VkRect2D dst, VkRect2D src, uint32_t mid_x,
+            struct CAC_RECT *dst_l, struct CAC_RECT *dst_r,
+            struct CAC_RECT *src_l, struct CAC_RECT *src_r,
+            uint32_t *phase_step_h, uint32_t *phase_init_r_h)
+{
+   dst_l->x = dst.offset.x;
+   dst_l->y = dst.offset.y;
+   dst_l->w = mid_x - dst_l->x;
+   dst_l->h = dst.extent.height;
+
+   src_l->x = src.offset.x;
+   src_l->y = src.offset.y;
+   src_l->w = DIV_ROUND_UP((uint64_t) src.extent.width * dst_l->w, dst.extent.width);
+   src_l->h = src.extent.height;
+
+   /* right rects are just the remaining half */
+   src_r->x = src_l->x + src_l->w;
+   src_r->y = src.offset.y;
+   src_r->w = src.extent.width - src_l->w;
+   src_r->h = src.extent.height;
+   dst_r->x = dst_l->x + dst_l->w;
+   dst_r->y = dst.offset.y;
+   dst_r->w = dst.extent.width - dst_l->w;
+   dst_r->h = dst.extent.height;
+
+   *phase_step_h = mult_frac(1u<<31, src.extent.width, dst.extent.width);
+   // deal with rounding on src_l->w
+   // note: phase_init should only be non-zero when the src_l->w calculation needed rounding
+   *phase_init_r_h = ((uint64_t) *phase_step_h * dst_l->w + 512) >> 10 & 0x1fffff;
+   if (*phase_init_r_h) { // include the partially covered column
+      src_r->x -= 1;
+      src_r->w += 1;
+   }
+}
+
 static int
-drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *image, bool test_only)
+drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *image, bool test_only, int fence_fd, VkIcdSurfaceDisplay2 *surface)
 {
    const drmModeModeInfo *mode = &connector->current_drm_mode;
    int fd = connector->wsi->fd;
@@ -2929,7 +3127,8 @@ drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *im
    uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_ATOMIC_NONBLOCK;
    uint32_t crtc_id = connector->crtc_id;
    uint32_t plane_id = connector->plane_id;
-   uint32_t blob_id;
+   uint32_t mode_id = -1, cac_blob = -1;
+   unsigned rotation_value = DRM_MODE_ROTATE_0;
    int ret;
 
    req = drmModeAtomicAlloc();
@@ -2941,11 +3140,11 @@ drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *im
        * it, or after a mode change was requested.
        */
 
-      if (drmModeCreatePropertyBlob(fd, mode, sizeof(*mode), &blob_id) != 0)
-         return -1;
+      if (drmModeCreatePropertyBlob(fd, mode, sizeof(*mode), &mode_id) != 0)
+         return -1; // XXX cleanup
 
       drmModeAtomicAddProperty(req, connector->id, connector->property[CRTC_ID], crtc_id);
-      drmModeAtomicAddProperty(req, crtc_id, connector->crtc_property[MODE_ID], blob_id);
+      drmModeAtomicAddProperty(req, crtc_id, connector->crtc_property[MODE_ID], mode_id);
       drmModeAtomicAddProperty(req, crtc_id, connector->crtc_property[ACTIVE], 1);
 
       /* Disable any color transforms that may have been previously set on the
@@ -2966,7 +3165,7 @@ drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *im
          const uint8_t hdmi_eotf =
             _wsi_hdmi_metadata_eotf_from_vk_colorspace(image->chain->base.image_info.color_space);
 
-         blob_id = 0;
+         uint32_t blob_id = 0;
 
          /* Only bother making a blob if we are HDR, otherwise set it to 0 (empty). */
          if (hdmi_eotf != HDMI_EOTF_SDR) {
@@ -2996,7 +3195,147 @@ drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *im
       connector->color_outcome_serial = image->chain->color_outcome_serial;
    }
 
+   if ((int)surface->src_rgb[0].extent.width < 0)
+         rotation_value |= DRM_MODE_REFLECT_X;
+
+   if (surface->cac_dirty && !cac_enabled() ) surface->cac_dirty = 0;
+
+   if (surface->cac_dirty) {
+      struct CAC_BLOB cac[4]; // 4 possible CAC regions, 2 per eye
+
+      // all channels need to have the same reflection for each eye
+      // due to uapi limitation, both eyes need to have the same reflection
+      // TODO: add logic for y reflect if needed
+      if ((int)surface->src_rgb[0].extent.width < 0) {
+         assert((int)surface->src_rgb[1].extent.width < 0);
+         assert((int)surface->src_rgb[2].extent.width < 0);
+         assert((int)surface->src_rgb[3].extent.width < 0);
+         assert((int)surface->src_rgb[4].extent.width < 0);
+         assert((int)surface->src_rgb[5].extent.width < 0);
+      } else {
+         assert((int)surface->src_rgb[1].extent.width > 0);
+         assert((int)surface->src_rgb[2].extent.width > 0);
+         assert((int)surface->src_rgb[3].extent.width > 0);
+         assert((int)surface->src_rgb[4].extent.width > 0);
+         assert((int)surface->src_rgb[5].extent.width > 0);
+      }
+
+      uint16_t hdisplay = mode->hdisplay / 2;
+
+      for (int i = 0; i < 2; i++) { // for each eye
+         VkRect2D dst_r = surface->dst_rgb[RED_L + i];
+         VkRect2D dst_g = surface->dst_rgb[GREEN_L + i];
+         VkRect2D dst_b = surface->dst_rgb[BLUE_L + i];
+         if (i & 1) {
+            // per screen coordinates for dst
+            dst_r.offset.x -= hdisplay;
+            dst_g.offset.x -= hdisplay;
+            dst_b.offset.x -= hdisplay;
+         }
+
+         VkRect2D src_r = surface->src_rgb[RED_L + i];
+         VkRect2D src_g = surface->src_rgb[GREEN_L + i];
+         VkRect2D src_b = surface->src_rgb[BLUE_L + i];
+         if ((int)src_r.extent.width < 0) {
+            src_r.extent.width = -src_r.extent.width;
+            src_g.extent.width = -src_g.extent.width;
+            src_b.extent.width = -src_b.extent.width;
+         }
+
+         // need to use 2 cac regions per eye to support a higher pixel clock
+         // the logic to split each eye into 2 regions needs to deal with limitations
+         // note: if all rects are centered then each rect is simply split in half horizontally
+         // 1. dst_b must be contained within dst_r, so both dst_b/dst_r need to be split on the same x coordinate
+         // 2. src_unpack.w must be equal for both halves (green plane fetches both but has single SRC_IMG_SIZE register?)
+         // 3. fractional src coords may be needed, which requires overlapping src regions and calculating phase_init
+
+         // because of 2, the goal should be to split src_unpack into equal halves to minimize double fetching
+         // this just splits across the left/right mixers (as if the combined mixer feature wasn't used)
+
+         uint32_t mid_x = hdisplay/2;
+
+         uint32_t phase_step_r, phase_init_r;
+         uint32_t phase_step_g, phase_init_g;
+         uint32_t phase_step_b, phase_init_b;
+
+         split_rect2(dst_r, src_r, mid_x,
+                     &cac[i].dst_r, &cac[i+2].dst_r, &cac[i].src_r, &cac[i+2].src_r,
+                     &phase_step_r, &phase_init_r);
+         split_rect2(dst_g, src_g, mid_x,
+                     &cac[i].dst_g, &cac[i+2].dst_g, &cac[i].src_g, &cac[i+2].src_g,
+                     &phase_step_g, &phase_init_g);
+         split_rect2(dst_b, src_b, mid_x,
+                     &cac[i].dst_b, &cac[i+2].dst_b, &cac[i].src_b, &cac[i+2].src_b,
+                     &phase_step_b, &phase_init_b);
+
+         // calculate src_unpack rect
+         for (int j = i; j < 4; j += 2) {
+            cac[j].src_unpack.x = MIN3(cac[j].src_r.x, cac[j].src_g.x, cac[j].src_b.x);
+            cac[j].src_unpack.y = MIN3(cac[j].src_r.y, cac[j].src_g.y, cac[j].src_b.y);
+            cac[j].src_unpack.w = MAX3(cac[j].src_r.x + cac[j].src_r.w,
+                                       cac[j].src_g.x + cac[j].src_g.w,
+                                       cac[j].src_b.x + cac[j].src_b.w) - cac[j].src_unpack.x;
+            cac[j].src_unpack.h = MAX3(cac[j].src_r.y + cac[j].src_r.h,
+                                       cac[j].src_g.y + cac[j].src_g.h,
+                                       cac[j].src_b.y + cac[j].src_b.h) - cac[j].src_unpack.y;
+         }
+
+         if (cac[i].src_unpack.w < cac[i+2].src_unpack.w) {
+            cac[i].src_unpack.w = cac[i+2].src_unpack.w;
+         } else if (cac[i].src_unpack.w > cac[i+2].src_unpack.w) {
+            int x1 = cac[i+2].src_unpack.x + cac[i+2].src_unpack.w;
+            cac[i+2].src_unpack.w = cac[i].src_unpack.w;
+            cac[i+2].src_unpack.x = x1 - cac[i+2].src_unpack.w;
+         }
+
+         // per-channel rects are relative to src_unpack
+         for (int j = i; j < 4; j += 2) {
+            cac[j].src_r.x -= cac[j].src_unpack.x;
+            cac[j].src_r.y -= cac[j].src_unpack.y;
+            cac[j].src_g.x -= cac[j].src_unpack.x;
+            cac[j].src_g.y -= cac[j].src_unpack.y;
+            cac[j].src_b.x -= cac[j].src_unpack.x;
+            cac[j].src_b.y -= cac[j].src_unpack.y;
+         }
+
+         if (rotation_value & DRM_MODE_REFLECT_X) {
+            unsigned k = i ? hdisplay*3 : hdisplay;
+            cac[i].src_unpack.x = k - (cac[i].src_unpack.x + cac[i].src_unpack.w);
+            cac[i+2].src_unpack.x = k - (cac[i+2].src_unpack.x + cac[i+2].src_unpack.w);
+         }
+
+         cac[i].phase_step_r_h = cac[i+2].phase_step_r_h = phase_step_r;
+         cac[i].phase_step_r_v = cac[i+2].phase_step_r_v =
+            mult_frac(1u<<31, src_r.extent.height, dst_r.extent.height);
+         cac[i].phase_step_b_h = cac[i+2].phase_step_b_h = phase_step_b;
+         cac[i].phase_step_b_v = cac[i+2].phase_step_b_v =
+            mult_frac(1u<<31, src_b.extent.height, dst_b.extent.height);
+
+         cac[i].phase_init_r_h = 0;
+         cac[i].phase_init_r_v = 0;
+         cac[i].phase_init_b_h = 0;
+         cac[i].phase_init_b_v = 0;
+         cac[i+2].phase_init_r_h = phase_init_r;
+         cac[i+2].phase_init_r_v = 0;
+         cac[i+2].phase_init_b_h = phase_init_b;
+         cac[i+2].phase_init_b_v = 0;
+      }
+
+      if (drmModeCreatePropertyBlob(fd, cac, sizeof(cac), &cac_blob) != 0)
+         return -1; // XXX cleanup
+
+      drmModeAtomicAddProperty(req, crtc_id, connector->crtc_property[CAC_BLOB], cac_blob);
+      surface->cac_dirty = 0;
+   }
+
    const uint32_t *prop = connector->plane_property;
+
+   /* If explicit fencing is being used, pass it in as the IN_FENCE_FD.
+    * Otherwise DRM will do implicit sync on the image's object.
+    */
+   if (fence_fd != -1)
+      drmModeAtomicAddProperty(req, plane_id, prop[IN_FENCE_FD], fence_fd);
+
    drmModeAtomicAddProperty(req, plane_id, prop[FB_ID], image->fb_id);
    drmModeAtomicAddProperty(req, plane_id, prop[CRTC_ID], crtc_id);
    drmModeAtomicAddProperty(req, plane_id, prop[SRC_X], 0);
@@ -3008,6 +3347,8 @@ drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *im
    drmModeAtomicAddProperty(req, plane_id, prop[CRTC_W], mode->hdisplay);
    drmModeAtomicAddProperty(req, plane_id, prop[CRTC_H], mode->vdisplay);
 
+   if ( cac_enabled()) drmModeAtomicAddProperty(req, plane_id, prop[rotation], rotation_value);
+
    if (test_only) {
       flags |= DRM_MODE_ATOMIC_TEST_ONLY;
       flags &= ~DRM_MODE_PAGE_FLIP_EVENT;
@@ -3016,6 +3357,9 @@ drm_atomic_commit(wsi_display_connector *connector, struct wsi_display_image *im
    ret = drmModeAtomicCommit(fd, req, flags, image);
    if (ret)
       goto out;
+
+   if (mode_id != -1) drmModeDestroyPropertyBlob(fd, mode_id);
+   if ( cac_enabled() && cac_blob != -1) drmModeDestroyPropertyBlob(fd, cac_blob);
 
 out:
    drmModeAtomicFree(req);
@@ -3043,7 +3387,7 @@ _wsi_display_cleanup_state(struct wsi_display_swapchain *chain)
    if (chain->color_outcome_serial) {
       chain->color_outcome_serial = 0;
       chain->base.image_info.color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-      drm_atomic_commit(connector, &chain->images[0], false);
+      drm_atomic_commit(connector, &chain->images[0], false, -1, (VkIcdSurfaceDisplay2*) surface);
    }
 }
 
@@ -3067,8 +3411,12 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
       return VK_ERROR_SURFACE_LOST_KHR;
    }
 
-   if (display_mode != connector->current_mode)
+   if (display_mode != connector->current_mode) {
       connector->active = false;
+      VkResult result = wsi_display_setup_connector(connector, display_mode);
+      if (result != VK_SUCCESS)
+         return result;
+   }
 
    for (;;) {
 
@@ -3077,6 +3425,7 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
 
       struct wsi_display_image *image = NULL;
 
+      uint32_t image_index = 0;
       for (uint32_t i = 0; i < chain->base.image_count; i++) {
          struct wsi_display_image *tmp_image = &chain->images[i];
 
@@ -3088,8 +3437,10 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
          case WSI_IMAGE_QUEUED:
          case WSI_IMAGE_QUEUED_AFTER_WAIT:
             /* find the oldest queued */
-            if (!image || tmp_image->flip_sequence < image->flip_sequence)
+            if (!image || tmp_image->flip_sequence < image->flip_sequence) {
                image = tmp_image;
+               image_index = i;
+            }
             break;
          default:
             break;
@@ -3219,6 +3570,23 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
          }
       }
 
+      int fence_fd = -1;
+
+      if (chain->base.image_info.explicit_sync_image_fence_in) {
+         VkResult result = chain->base.wsi->GetFenceFdKHR(chain->base.device, &(VkFenceGetFdInfoKHR) {
+            .sType = VK_STRUCTURE_TYPE_FENCE_GET_FD_INFO_KHR,
+            .fence = chain->base.fences[image_index],
+            .handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT,
+         }, &fence_fd);
+         if (result != VK_SUCCESS) {
+            mesa_loge("Failed to get fd for IN_FENCE_FD.");
+            connector->active = false;
+            image->state = WSI_IMAGE_IDLE;
+            wsi_display_surface_error(chain, VK_ERROR_SURFACE_LOST_KHR);
+            return VK_ERROR_SURFACE_LOST_KHR;
+         }
+      }
+
       image->state = WSI_IMAGE_QUEUED;
 
       /* Some kms drivers (e.g., amdgpu) send too early pageflip events with all-zero completion
@@ -3232,7 +3600,11 @@ _wsi_display_queue_next(struct wsi_swapchain *drv_chain)
       if (!connector->active && !image->minimum_ns)
          image->minimum_ns = os_time_get_nano();
 
-      int ret = drm_atomic_commit(connector, image, false);
+      int ret = drm_atomic_commit(connector, image, false, fence_fd, (VkIcdSurfaceDisplay2*) surface);
+
+      /* We can close the fd now, it gets latched at drmModeAtomicCommit(). */
+      close(fence_fd);
+
       if (ret == 0) {
          image->state = WSI_IMAGE_FLIPPING;
          connector->active = true;
@@ -3300,6 +3672,45 @@ wsi_display_poll_refresh_duration(struct wsi_swapchain *drv_chain, uint64_t *int
 }
 
 static VkResult
+wsi_display_cac_plane_adjust(struct wsi_swapchain *drv_chain,
+                                 uint32_t image_index,
+                                 uint32_t plane_index,
+                                 uint32_t src_x,
+                                 uint32_t src_y,
+                                 uint32_t src_width,
+                                 uint32_t src_height,
+                                 uint32_t dst_x,
+                                 uint32_t dst_y,
+                                 uint32_t dst_width,
+                                 uint32_t dst_height)
+{
+   struct wsi_display_swapchain *chain =
+      (struct wsi_display_swapchain *) drv_chain;
+   VkIcdSurfaceDisplay2 *surface2 = (VkIcdSurfaceDisplay2 *) chain->surface;
+   //printf("wid=%d\n",surface2->dst_rgb[RED_L].extent.width);
+   surface2->src_rgb[plane_index].offset.x = src_x;
+   surface2->src_rgb[plane_index].offset.y = src_y;
+   surface2->src_rgb[plane_index].extent.height = src_height;
+   surface2->src_rgb[plane_index].extent.width = src_width;
+   surface2->dst_rgb[plane_index].offset.x = dst_x;
+   surface2->dst_rgb[plane_index].offset.y = dst_y;
+   surface2->dst_rgb[plane_index].extent.height = dst_height;
+   surface2->dst_rgb[plane_index].extent.width = dst_width;
+   surface2->cac_dirty = 1;
+   return VK_SUCCESS;
+}
+
+static void
+wsi_display_set_display_mode(struct wsi_swapchain *drv_chain, VkDisplayModeKHR display_mode)
+{
+   struct wsi_display_swapchain *chain =
+      (struct wsi_display_swapchain *) drv_chain;
+   VkIcdSurfaceDisplay *surface = chain->surface;
+
+   surface->displayMode = display_mode;
+}
+
+static VkResult
 wsi_display_queue_present(struct wsi_swapchain *drv_chain,
                           uint32_t image_index,
                           uint64_t present_id,
@@ -3352,6 +3763,8 @@ wsi_display_wait_for_present(struct wsi_swapchain *wsi_chain,
    struct wsi_display_swapchain *chain = (struct wsi_display_swapchain *)wsi_chain;
    struct timespec abs_timespec;
    uint64_t abs_timeout = 0;
+   
+   MESA_TRACE_FUNC();
 
    if (timeout != 0)
       abs_timeout = os_time_get_absolute_timeout(timeout);
@@ -3439,6 +3852,25 @@ wsi_display_surface_create_swapchain(
 
    struct wsi_drm_image_params image_params = {
       .base.image_type = WSI_IMAGE_TYPE_DRM,
+
+      /* Tell the core that we will handle explicit synchronization using the
+       * image's fence.
+       *
+       * Unlike X11 and Wayland, our explicit fence for KMS is a binary
+       * semaphore syncobj, not a timeline.  So we just take the image's fence
+       * (set by the wsi common present code) and pass that as the plane's
+       * fence.
+       *
+       * Note that OUT_FENCE_PTR sounds on the surface like a release fence we
+       * might need to use, but it's not. That's a release fence for the
+       * previous atomic commit, after this one completes.  We don't need to pay
+       * attention to it, because we don't return the image through
+       * AcquireNextImage until the next present has occurred to flip away from
+       * it.
+       */
+      .explicit_sync_image_fence_in = (wsi_device->semaphore_export_handle_types &
+         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT),
+
       .same_gpu = true,
    };
 
@@ -3452,6 +3884,14 @@ wsi_display_surface_create_swapchain(
    if (ret != thrd_success) {
       result = VK_ERROR_OUT_OF_HOST_MEMORY;
       goto fail_mtx_destroy;
+   }
+
+   ret = mtx_init(&chain->vblank_timestamp_mutex, mtx_plain);
+   if (ret != thrd_success) {
+      u_cnd_monotonic_destroy(&chain->present_id_cond);
+      mtx_destroy(&chain->present_id_mutex);
+      vk_free(allocator, chain);
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
    result =
@@ -3493,6 +3933,8 @@ wsi_display_surface_create_swapchain(
    chain->base.get_wsi_image = wsi_display_get_wsi_image;
    chain->base.acquire_next_image = wsi_display_acquire_next_image;
    chain->base.release_images = wsi_display_release_images;
+   chain->base.cac_plane_adjust = wsi_display_cac_plane_adjust;
+   chain->base.set_display_mode = wsi_display_set_display_mode;
    chain->base.queue_present = wsi_display_queue_present;
    chain->base.set_timing_request = wsi_display_set_timing_request;
    chain->base.poll_early_refresh = wsi_display_poll_refresh_duration;
@@ -3532,7 +3974,7 @@ wsi_display_surface_create_swapchain(
        * what the CTS expects to find for unsupported swapchains.
        */
       if (result == VK_SUCCESS) {
-         ret = drm_atomic_commit(display_mode->connector, &chain->images[image], true);
+         ret = drm_atomic_commit(display_mode->connector, &chain->images[image], true, -1, (VkIcdSurfaceDisplay2*) surface);
          if (ret != 0) {
             wsi_display_debug("Atomic commit check for %dx%d %s, failed: %s\n",
                create_info->imageExtent.width,
@@ -3574,6 +4016,7 @@ fail_swapchain_fini:
 fail_drop_master:
    if (wsi->fd == wsi->device_fd)
       wsi_display_drop_master(wsi);
+   mtx_destroy(&chain->vblank_timestamp_mutex);
 fail_cond_destroy:
    u_cnd_monotonic_destroy(&chain->present_id_cond);
 fail_mtx_destroy:
@@ -4578,8 +5021,22 @@ wsi_GetSwapchainCounterEXT(VkDevice _device,
 
    /* Note: Resist the urge to use query results to update connector->last_nsec/last_frame,
     * it will lead to races with page_flip_handler2 and potentially wrong present timestamps! */
-   int ret = drmCrtcGetSequence(wsi->fd, connector->crtc_id,
-                                pCounterValue, NULL);
+   int ret;
+   if (counter == VK_SURFACE_COUNTER_VBLANK_TIMESTAMP_VALVE) {
+      struct wsi_valve_vblank_timestamp_2 *timestamp_value = (struct wsi_valve_vblank_timestamp_2 *)pCounterValue;
+      ret = drmCrtcGetSequence(wsi->fd, connector->crtc_id,
+                               &timestamp_value->sequence,
+                               &timestamp_value->ts_ns);
+
+      MESA_TRACE_SCOPE("wsi_GetSwapchainCounterEXT [TIMESTAMP_VALVE] seq=%" PRIu64 " t=[%" PRIu64 "]", timestamp_value->sequence, timestamp_value->ts_ns);
+   } else if (counter == VK_SURFACE_COUNTER_VBLANK_EXT) {
+      ret = drmCrtcGetSequence(wsi->fd, connector->crtc_id,
+                                        pCounterValue, NULL);
+      MESA_TRACE_SCOPE("wsi_GetSwapchainCounterEXT [NORMAL] pCounterValue=%" PRIu64 "", *pCounterValue);
+   } else {
+      return VK_ERROR_FEATURE_NOT_PRESENT;
+   }
+
    if (ret)
       *pCounterValue = 0;
 

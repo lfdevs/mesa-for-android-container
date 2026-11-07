@@ -20,7 +20,7 @@ include:
 
 variables:
   DEBIAN_BUILD_BASE_TAG: "20260805-spirv-llvm"
-  DEBIAN_BUILD_TAG: "20260923-rust-cross"
+  DEBIAN_BUILD_TAG: "20260813-cocci-py"
 
   DEBIAN_TEST_BASE_TAG: "20260805-spirv-llvm"
   DEBIAN_TEST_ANDROID_TAG: "20260908-angle-bd"

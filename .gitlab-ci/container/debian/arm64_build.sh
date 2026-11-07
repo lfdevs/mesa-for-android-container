@@ -33,6 +33,7 @@ DEPS=(
     bison
     ccache
     cmake
+    coccinelle
     curl
     "clang-${LLVM_VERSION}"
     dpkg-dev
@@ -50,6 +51,7 @@ DEPS=(
     libdrm-dev
     libelf-dev
     libexpat1-dev
+    libpython3.13
     "libllvm${LLVM_VERSION}"
     "libllvmspirvlib-${LLVM_VERSION}-dev"
     libpng-dev

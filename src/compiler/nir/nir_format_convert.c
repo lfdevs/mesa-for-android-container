@@ -117,7 +117,7 @@ nir_format_pack_uint_unmasked(nir_builder *b, nir_def *color,
 }
 
 nir_def *
-nir_format_pack_uint_unmasked_ssa(nir_builder *b, nir_def *color,
+_nir_format_pack_uint_unmasked_ssa(nir_builder *b, nir_def *color,
                                   nir_def *bits)
 {
    nir_def *packed = nir_imm_int(b, 0);

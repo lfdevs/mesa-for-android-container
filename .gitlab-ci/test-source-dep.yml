@@ -251,6 +251,41 @@
     - when: manual
       allow_failure: true
 
+# Rules for checking deterministic IR builder argument evaluation order
+.ir-builder-arg-evaluation-order-rules:
+  rules:
+    - !reference [.never-post-merge-rules, rules]
+    - !reference [.no_scheduled_pipelines-rules, rules]
+    # pre-merge: must succeed if changing a scanned source tree or the check
+    - if: *is-merge-attempt
+      changes: &ir_builder_arg_evaluation_order_files
+        - .gitlab-ci.yml
+        - .gitlab-ci/**/*
+        - bin/ir-builder-arg-order.py
+        - src/compiler/nir/**/*
+        - src/compiler/spirv/**/*
+        - src/freedreno/ir3/**/*
+        - src/freedreno/vulkan/**/*
+      when: on_success
+      allow_failure: false
+    - if: *is-merge-attempt
+      when: never
+    - if: *is-merge-request
+      changes:
+        *ir_builder_arg_evaluation_order_files
+      when: manual
+      allow_failure: false
+    - if: *is-merge-request
+      when: never
+    # non-pre-merge: run but only advisory
+    - if: $CI_PROJECT_NAMESPACE == "mesa"
+      changes: *ir_builder_arg_evaluation_order_files
+      allow_failure: true
+    - if: $CI_PROJECT_NAMESPACE == "mesa"
+      when: never
+    - when: manual
+      allow_failure: true
+
 # Rules for .mr-label-maker.yml
 .mr-label-maker-rules:
   rules:

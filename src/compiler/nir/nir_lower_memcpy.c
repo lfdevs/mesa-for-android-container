@@ -49,8 +49,9 @@ copy_type_for_byte_size(unsigned size)
    }
 }
 
+#define memcpy_load_deref_elem(...) MESA_CALL_WITH_LTR_ARGS(_memcpy_load_deref_elem, __VA_ARGS__)
 static nir_def *
-memcpy_load_deref_elem(nir_builder *b, nir_deref_instr *parent,
+_memcpy_load_deref_elem(nir_builder *b, nir_deref_instr *parent,
                        nir_def *index)
 {
    nir_deref_instr *deref;
@@ -70,8 +71,9 @@ memcpy_load_deref_elem_imm(nir_builder *b, nir_deref_instr *parent,
    return memcpy_load_deref_elem(b, parent, idx);
 }
 
+#define memcpy_store_deref_elem(...) MESA_CALL_WITH_LTR_ARGS(_memcpy_store_deref_elem, __VA_ARGS__)
 static void
-memcpy_store_deref_elem(nir_builder *b, nir_deref_instr *parent,
+_memcpy_store_deref_elem(nir_builder *b, nir_deref_instr *parent,
                         nir_def *index, nir_def *value)
 {
    nir_deref_instr *deref;
@@ -82,8 +84,9 @@ memcpy_store_deref_elem(nir_builder *b, nir_deref_instr *parent,
    nir_store_deref(b, deref, value, ~0);
 }
 
+#define memcpy_store_deref_elem_imm(...) MESA_CALL_WITH_LTR_ARGS(_memcpy_store_deref_elem_imm, __VA_ARGS__)
 static void
-memcpy_store_deref_elem_imm(nir_builder *b, nir_deref_instr *parent,
+_memcpy_store_deref_elem_imm(nir_builder *b, nir_deref_instr *parent,
                             uint64_t index, nir_def *value)
 {
    nir_def *idx = nir_imm_intN_t(b, index, parent->def.bit_size);
