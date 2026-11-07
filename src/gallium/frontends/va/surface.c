@@ -59,14 +59,14 @@ static bool
 vl_va_export_debug_enabled(void)
 {
    const char *e = getenv("DMD_VA_LOG");
-   return e && e[0] == '1';
+   return e && strcmp(e, "1") == 0;
 }
 
 static bool
 vl_va_bridge_skip_clear(void)
 {
    const char *e = getenv("TERMUX_VA_BRIDGE");
-   return e && (e[0] == '1' || e[0] == 'y' || e[0] == 'Y');
+   return e && (!strcmp(e, "1") || !strcmp(e, "true"));
 }
 
 static bool
@@ -411,8 +411,9 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
    struct pipe_screen *pscreen;
    int i;
 
-   fprintf(stderr, "tva-va: query surface attrs config=%u list=%p count=%u\n",
-           config_id, (void *)attrib_list, num_attribs ? *num_attribs : 0);
+   if (vl_va_log_enabled())
+      fprintf(stderr, "tva-va: query surface attrs config=%u list=%p count=%u\n",
+              config_id, (void *)attrib_list, num_attribs ? *num_attribs : 0);
 
    if (config_id == VA_INVALID_ID)
       return VA_STATUS_ERROR_INVALID_CONFIG;
@@ -422,7 +423,8 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
 
    if (!attrib_list) {
       *num_attribs = VL_VA_MAX_IMAGE_FORMATS + VASurfaceAttribCount;
-      fprintf(stderr, "tva-va: query surface attrs count=%u\n", *num_attribs);
+      if (vl_va_log_enabled())
+         fprintf(stderr, "tva-va: query surface attrs count=%u\n", *num_attribs);
       return VA_STATUS_SUCCESS;
    }
 
@@ -605,7 +607,8 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
    if (i > *num_attribs) {
       *num_attribs = i;
       FREE(attribs);
-      fprintf(stderr, "tva-va: query surface attrs too small need=%d\n", i);
+      if (vl_va_log_enabled())
+         fprintf(stderr, "tva-va: query surface attrs too small need=%d\n", i);
       return VA_STATUS_ERROR_MAX_NUM_EXCEEDED;
    }
 
@@ -613,7 +616,8 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
    memcpy(attrib_list, attribs, i * sizeof(VASurfaceAttrib));
    FREE(attribs);
 
-   fprintf(stderr, "tva-va: query surface attrs success count=%d\n", i);
+   if (vl_va_log_enabled())
+      fprintf(stderr, "tva-va: query surface attrs success count=%d\n", i);
 
    return VA_STATUS_SUCCESS;
 }
@@ -1005,12 +1009,13 @@ vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface,
    struct pipe_surface *surfaces;
    unsigned i;
 
-   fprintf(stderr, "tva-va: allocate surface=%p format=%d size=%ux%u modifiers=%u\n",
-           (void *)surface,
-           surface ? surface->templat.buffer_format : -1,
-           surface ? surface->templat.width : 0,
-           surface ? surface->templat.height : 0,
-           modifiers_count);
+   if (vl_va_log_enabled())
+      fprintf(stderr, "tva-va: allocate surface=%p format=%d size=%ux%u modifiers=%u\n",
+              (void *)surface,
+              surface ? surface->templat.buffer_format : -1,
+              surface ? surface->templat.width : 0,
+              surface ? surface->templat.height : 0,
+              modifiers_count);
 
    if (modifiers_count > 0) {
       if (!drv->pipe->create_video_buffer_with_modifiers)
@@ -1028,8 +1033,9 @@ vlVaHandleSurfaceAllocate(vlVaDriver *drv, vlVaSurface *surface,
       return VA_STATUS_ERROR_ALLOCATION_FAILED;
    }
 
-   fprintf(stderr, "tva-va: surface allocation ready buffer=%p\n",
-           (void *)surface->buffer);
+   if (vl_va_log_enabled())
+      fprintf(stderr, "tva-va: surface allocation ready buffer=%p\n",
+              (void *)surface->buffer);
 
    /* The termux-va bridge fills every plane before exporting a decoded
     * surface.  Avoid submitting the generic Gallium clear for these linear
@@ -1076,7 +1082,8 @@ vlVaGetSurfaceBuffer(vlVaDriver *drv, vlVaSurface *surface)
    if (surface->buffer)
       return surface->buffer;
    vlVaHandleSurfaceAllocate(drv, surface, NULL, 0);
-   fprintf(stderr, "tva-va: get surface buffer=%p\n", (void *)surface->buffer);
+   if (vl_va_log_enabled())
+      fprintf(stderr, "tva-va: get surface buffer=%p\n", (void *)surface->buffer);
    return surface->buffer;
 }
 
@@ -1172,8 +1179,9 @@ vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format,
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   fprintf(stderr, "tva-va: create surfaces format=%#x size=%ux%u count=%u attrs=%u\n",
-           format, width, height, num_surfaces, num_attribs);
+   if (vl_va_log_enabled())
+      fprintf(stderr, "tva-va: create surfaces format=%#x size=%ux%u count=%u attrs=%u\n",
+              format, width, height, num_surfaces, num_attribs);
 
    if (!(width && height))
       return VA_STATUS_ERROR_INVALID_IMAGE_FORMAT;

@@ -744,9 +744,9 @@ struct tva_session *tva_session_create(const struct tva_session_config *cfg,
     char defep[300];
     const char *path = cfg->sock_path ? cfg->sock_path
                                       : tva_default_endpoint(defep, sizeof(defep));
-    fprintf(stderr, "tva-client: opening %s codec=%d %dx%d shm=%d\n",
-            path ? path : "(null)", cfg->codec, cfg->width, cfg->height,
-            cfg->want_shm);
+    tva_c_log(s, "opening %s codec=%d %dx%d shm=%d",
+              path ? path : "(null)", cfg->codec, cfg->width, cfg->height,
+              cfg->want_shm);
     if (unix_connect(s, path, cto, err) < 0) {
         fprintf(stderr, "tva-client: connect failed code=%d msg=%s\n",
                 err ? err->code : 0, err && err->msg[0] ? err->msg : "(none)");

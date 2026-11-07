@@ -200,6 +200,13 @@ is_kgsl(struct tu_instance *instance)
    return strcmp(instance->knl->name, "kgsl") == 0;
 }
 
+static bool
+termux_va_bridge_active(void)
+{
+   const char *force = os_get_option("TERMUX_VA_BRIDGE");
+   return force && (strcmp(force, "1") == 0 || strcmp(force, "true") == 0);
+}
+
 static uint32_t
 tu_subgroup_size(const struct tu_physical_device *device)
 {
@@ -249,8 +256,9 @@ get_device_extensions(const struct tu_physical_device *device,
       /* KGSL exposes binary SYNC_FD fences only.  OPAQUE_FD timeline
        * semaphores are unsupported, yet FFmpeg treats this extension as
        * evidence that they are available and cannot import dma-heap frames.
+       * Hide the extension only for Termux VA bridge clients.
        */
-      .KHR_external_semaphore_fd = !is_kgsl(device->instance),
+      .KHR_external_semaphore_fd = !termux_va_bridge_active(),
       .KHR_format_feature_flags2 = true,
       .KHR_fragment_shading_rate = device->info->props.has_attachment_shading_rate,
       .KHR_get_memory_requirements2 = true,
