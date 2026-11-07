@@ -140,6 +140,12 @@ struct wsi_device {
       /* Select and read Present events on a separate connection to the X
        * server, so the WSI never reads from the application's connection. */
       bool dedicated_event_connection;
+
+      /* The driver cannot provide reliable implicit sync for WSI buffers
+       * (e.g. KGSL, or when every submission uses VM_BIND and bare dma-buf
+       * fences are not available), so wait for rendering to finish before
+       * presenting. */
+      bool wait_for_fences;
    } x11;
 
    struct {

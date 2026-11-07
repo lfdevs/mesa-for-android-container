@@ -1243,7 +1243,17 @@ dri2_initialize_x11(_EGLDisplay *disp)
     * We're going to enable Zink anyway.
     */
    if (!force_zink) {
-      bool status = dri3_x11_connect(dri2_dpy, disp->Options.ForceSoftware);
+      /* Zink+kopper does not use the DRI3 device: kopper presents through
+       * Vulkan WSI, which imports dma-bufs without DRI3Open.  Some X servers
+       * (for example Termux:X11) only implement the dma-buf import half of
+       * DRI3, so don't warn about the missing render device when kopper will
+       * be used anyway.
+       */
+      const bool zink_kopper =
+         disp->Options.Zink && !disp->Options.ForceSoftware &&
+         !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false);
+      bool status = dri3_x11_connect(dri2_dpy,
+                                     disp->Options.ForceSoftware || zink_kopper);
       /* the status here is ignored for zink-with-kopper and swrast,
        * otherwise return whatever error/fallback status as failure
        */

@@ -1080,6 +1080,8 @@ ir3_const_alloc_type_to_string(enum ir3_const_alloc_type type)
       return "inline_uniform_addresses";
    case IR3_CONST_ALLOC_BINDLESS_BASE_ADDRS:
       return "bindless_base_addresses";
+   case IR3_CONST_ALLOC_VIRTUAL_SET_OFFSETS:
+      return "virtual_set_offsets";
    case IR3_CONST_ALLOC_DRIVER_PARAMS:
       return "driver_params";
    case IR3_CONST_ALLOC_UBO_RANGES:

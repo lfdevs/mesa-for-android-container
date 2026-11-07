@@ -2595,9 +2595,12 @@ x11_manage_present_queue(void *state)
 
       VkPresentModeKHR present_mode = chain->images[image_index].present_mode;
 
-      /* Not necessary to block when we have explicit sync */
+      /* Not necessary to block when we have explicit sync or when the
+       * kernel can wait on a syncobj attached to the dma-buf itself. */
       bool need_fence_wait =
-            x11_needs_wait_for_fences(chain->base.wsi, wsi_conn, present_mode) &&
+            (x11_needs_wait_for_fences(chain->base.wsi, wsi_conn, present_mode) ||
+             (chain->base.wsi->x11.wait_for_fences &&
+              chain->base.dma_buf_semaphore == VK_NULL_HANDLE)) &&
             !chain->base.image_info.explicit_sync;
 
       bool need_timing_fence_wait = x11_swapchain_present_timing_is_out_of_order_completion(
