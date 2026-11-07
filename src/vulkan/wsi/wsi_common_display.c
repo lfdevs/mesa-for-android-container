@@ -51,7 +51,6 @@
 
 #include "util/u_atomic.h"
 #include "util/macros.h"
-#include <bits/pthreadtypes.h>
 #include <pthread.h>
 #include <sched.h>
 #include <stdlib.h>
@@ -2247,20 +2246,22 @@ wsi_display_wait_thread(void *data)
 static int
 wsi_display_start_wait_thread(struct wsi_display *wsi)
 {
-   pthread_attr_t attr;
    cpu_set_t cpuset;
    int ret;
 
    if (wsi->wait_thread)
       return 0;
 
-   ret = pthread_attr_init(&attr);
-   if (ret)
-      return ret;
-
    CPU_ZERO(&cpuset);
    u_foreach_bit(cpu, THREAD_AFFINITY)
       CPU_SET(cpu, &cpuset);
+
+#if defined(__GLIBC__)
+   pthread_attr_t attr;
+
+   ret = pthread_attr_init(&attr);
+   if (ret)
+      return ret;
 
    ret = pthread_attr_setaffinity_np(&attr, sizeof(cpuset), &cpuset);
    if (ret)
@@ -2268,6 +2269,14 @@ wsi_display_start_wait_thread(struct wsi_display *wsi)
 
    ret = pthread_create(&wsi->wait_thread, &attr,
                         wsi_display_wait_thread, wsi);
+#else
+   ret = pthread_create(&wsi->wait_thread, NULL,
+                        wsi_display_wait_thread, wsi);
+   if (ret)
+      return ret;
+
+   ret = pthread_setaffinity_np(wsi->wait_thread, sizeof(cpuset), &cpuset);
+#endif
    if (ret)
       goto out;
 
@@ -2276,7 +2285,15 @@ wsi_display_start_wait_thread(struct wsi_display *wsi)
       goto out;
 
 out:
+#if defined(__GLIBC__)
    pthread_attr_destroy(&attr);
+#else
+   if (ret) {
+      pthread_cancel(wsi->wait_thread);
+      pthread_join(wsi->wait_thread, NULL);
+      wsi->wait_thread = 0;
+   }
+#endif
 
    return ret;
 }
