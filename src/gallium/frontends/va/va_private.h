@@ -30,6 +30,9 @@
 #define VA_PRIVATE_H
 
 #include <assert.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <va/va.h>
 #include <va/va_backend.h>
@@ -63,6 +66,13 @@
 
 #define UINT_TO_PTR(x) ((void*)(uintptr_t)(x))
 #define PTR_TO_UINT(x) ((unsigned)((intptr_t)(x)))
+
+static inline bool
+vl_va_log_enabled(void)
+{
+   const char *env = getenv("DMD_VA_LOG");
+   return env && strcmp(env, "1") == 0;
+}
 
 #define SOI 2
 #define DQT (4 + 4 * 65)
