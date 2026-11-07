@@ -1544,7 +1544,6 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive CI=true
           sudo oma refresh
-          sudo oma upgrade -y
           sudo oma install -y x11-lib libdrm expat systemd elfutils nettle libva wayland lm-sensors libglvnd llvm-runtime libcl libclc spirv-llvm-translator libdisplay-info xcb-util-keysyms libconfig x11-proto mako valgrind llvm libunwind glslang spirv-tools ply rustc rust-bindgen pycparser cbindgen pyyaml directx-headers ccache
 
       - name: Cache ccache
