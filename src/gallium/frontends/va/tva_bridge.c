@@ -431,7 +431,7 @@ struct tva_pending {
     bool failed;                  /* session error: fence must not hang */
     bool copied;                  /* staging already written into the target */
     bool resource_notified;       /* external write notification delivered */
-    bool drop_on_fence_destroy;   /* target was reused before this output */
+    bool drop_on_fence_destroy;   /* protect target reuse from late output */
     unsigned waiters;              /* fence_wait callers holding this entry */
     struct pipe_resource *resources[2]; /* owned until the entry is reaped */
     uint8_t *staging;
@@ -910,6 +910,11 @@ tva_pend_reserve_locked(struct tva_codec *c, uint32_t unit_seq,
     memset(p, 0, sizeof(*p));
     p->in_use = true;
     p->unit_seq = unit_seq;
+    /* Chromium destroys a VA surface fence immediately before recycling the
+     * surface.  Protect every decode output from a late MediaCodec result,
+     * not only AV1 hidden-reference outputs: AVC/HEVC reordering can also
+     * return a frame after the client has moved on to a newer picture. */
+    p->drop_on_fence_destroy = fence != NULL;
     if (target) {
         struct pipe_resource *res[4] = {0};
         target->get_resources(target, res);
@@ -1474,8 +1479,12 @@ static bool
 tva_reader_copy_enabled(void)
 {
    const char *e = getenv("DMD_VA_READER_COPY");
+   /* Direct writes race the compositor when Chromium reuses a VA surface
+    * while an imported texture is still in flight.  Keep the cache-safe
+    * application-thread staging path as the default; direct writes remain
+    * available for explicitly validated consumers with DMD_VA_READER_COPY=1. */
    if (!e || !*e)
-      return true;
+      return false;
    return !(!strcmp(e, "0") || !strcmp(e, "false") ||
             !strcmp(e, "off"));
 }
@@ -1960,6 +1969,11 @@ tva_reader_thread(void *param)
             tva_copy_frame_direct(c, p, f.data, f.size)) {
             p->copied = true;
             p->ready = true;
+            /* Direct copies happen on the reader thread before Chromium
+             * necessarily waits on the VA fence.  Publish the external write
+             * immediately so Freedreno invalidates its imported-resource
+             * cache before the compositor samples this surface. */
+            tva_notify_frame_resources(c, p);
             c->frames_done++;
             TVA_TRACE("reader direct copy unit=%u result=1", p->unit_seq);
             u_cnd_monotonic_broadcast(&c->pend_cond);
