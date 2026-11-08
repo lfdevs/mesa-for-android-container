@@ -41,7 +41,7 @@ Forked From [Mesa - The 3D Graphics Library](https://gitlab.freedesktop.org/mesa
 |    Debian 13     |            [25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-adreno)            |            [turnip-25.0.7-2+deb13u1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/debian%2F25.0.7-2-turnip)            |
 | Ubuntu 24.04 LTS | [25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-adreno) | [turnip-25.0.7-0ubuntu0.24.04.2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/import%2F25.0.7-0ubuntu0.24.04.2-turnip) |
 |    Fedora 43     |             [25.2.7-4.fc43](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-25.2.7-4.fc43-adreno)             |               [turnip-25.2.7-4.fc43](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-25.2.7-4.fc43)                |
-|    Arch Linux    |               [27.0.0-91](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025-r1)               |              [turnip-27.0.0-90](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025)              |
+|    Arch Linux    |               [27.0.0-92](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025-r2)               |              [turnip-27.0.0-90](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025)              |
 
 Termux native 版本在另一个仓库的 Releases 里：<https://github.com/lfdevs/termux-packages/releases/latest>
 
@@ -52,23 +52,31 @@ Termux native 版本在另一个仓库的 Releases 里：<https://github.com/lfd
 
 目前“直接解压”方式支持以下 Linux 发行版：
 
-|    Linux 发行版     |        安装包文件名后缀        |
-| :--------------: | :--------------------: |
-|    Debian 13     | `debian_trixie_arm64`  |
-| Ubuntu 24.04 LTS |  `ubuntu_noble_arm64`  |
-|   Ubuntu 25.10   | `ubuntu_questing_arm64` |
-| Ubuntu 26.04 LTS | `ubuntu_resolute_arm64` |
-|    Fedora 43     |   `fedora_43_arm64`    |
-|    Fedora 44     |   `fedora_44_arm64`    |
-|    Arch Linux    |   `archlinux_arm64`    |
-|    Void Linux    |      `void_arm64`      |
-|    Alpine 3.24   |   `alpine_3.24_arm64`  |
+| Linux 发行版 | 安装包文件名后缀 | 备注 |
+| - | - | - |
+| Debian 13 | `debian_trixie_arm64` | |
+| Debian testing | `debian_testing_arm64` | 目前为 Debian 14 |
+| Ubuntu 24.04 LTS | `ubuntu_noble_arm64` | |
+| Ubuntu 25.10 | `ubuntu_questing_arm64` | |
+| Ubuntu 26.04 LTS | `ubuntu_resolute_arm64` | |
+| Ubuntu rolling | `ubuntu_rolling_arm64` | 目前为 Ubuntu 26.10 |
+| Fedora 43 | `fedora_43_arm64` | |
+| Fedora 44 | `fedora_44_arm64` | |
+| Fedora 45 | `fedora_45_arm64` | |
+| Arch Linux | `archlinux_arm64` | |
+| Void Linux | `void_arm64` | |
+| Alpine 3.24 | `alpine_3.24_arm64` | |
+| openSUSE Tumbleweed | `opensuse_tumbleweed_arm64` | |
+| deepin 25 | `deepin_crimson_arm64` | |
+| AOSC OS | `aosc_arm64` | |
+| NixOS | `nixos_arm64` | 目前为 NixOS 26.05 |
+| SteamOS | `steamos_arm64` | 构建时使用软件源的 [`main` 分支](https://holo-packages.steamos.cloud/archlinux-deckard/archlinux/main/) |
 
 1. 前往 [Releases](https://github.com/lfdevs/mesa-for-android-container/releases) 下载`.tar.gz`格式的安装包。请注意文件名中的 Linux 发行版后缀，如`debian_trixie_arm64`，只能安装发行版匹配的安装包。
 
 | 标准安装包 | 未打补丁的 Turnip 安装包（通常不需要） |
 | :-: | :-: |
-| [27.0.0-devel-20261025-r1](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025-r1) | [turnip-27.0.0-devel-20261025](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025) |
+| [27.0.0-devel-20261025-r2](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-27.0.0-devel-20261025-r2) | [turnip-27.0.0-devel-20261025](https://github.com/lfdevs/mesa-for-android-container/releases/tag/turnip-27.0.0-devel-20261025) |
 
 > [!NOTE]
 > 对于 Adreno 7XX & 8XX，现在应该不再需要安装未打补丁的 Turnip 驱动了。标准安装包中打了补丁的 Turnip 驱动应该能正常运行。
