@@ -17,6 +17,8 @@
 
 #include <string.h>
 
+#include "util/u_debug.h"
+
 static bool
 tu_wsi_is_kgsl(const struct tu_physical_device *pdevice)
 {
@@ -66,6 +68,15 @@ tu_wsi_init(struct tu_physical_device *physical_device)
    physical_device->wsi_device.supports_modifiers = true;
    physical_device->wsi_device.can_present_on_device =
       tu_wsi_can_present_on_device;
+
+   /* kgsl puts no fence on a dma-buf, so the X server cannot wait for the
+    * GPU before it reads a presented image. Have the X11 WSI wait in every
+    * present mode, as it already does for mailbox.
+    * TU_KGSL_PRESENT_WAIT=0 turns this off.
+    */
+   physical_device->wsi_device.x11.wait_for_fences =
+      tu_wsi_is_kgsl(physical_device) &&
+      debug_get_bool_option("TU_KGSL_PRESENT_WAIT", true);
 
    physical_device->vk.wsi_device = &physical_device->wsi_device;
 
