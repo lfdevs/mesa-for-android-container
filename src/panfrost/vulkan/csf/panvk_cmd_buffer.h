@@ -58,6 +58,34 @@ struct panvk_cs_sync64 {
    uint32_t pad;
 };
 
+enum panvk_kbase_progress_marker {
+   PANVK_KBASE_PROGRESS_CMDBUF_START = 0x001,
+
+   PANVK_KBASE_PROGRESS_VT_BEFORE_RUN_IDVS = 0b10,
+   PANVK_KBASE_PROGRESS_VT_AFTER_RUN_IDVS = 0b100,
+   PANVK_KBASE_PROGRESS_VT_BEFORE_FINISH_TILING = 0b1000,
+   PANVK_KBASE_PROGRESS_VT_AFTER_FINISH_TILING = 0b10000,
+   PANVK_KBASE_PROGRESS_VT_AFTER_VT_END = 0b100000,
+   PANVK_KBASE_PROGRESS_VT_AFTER_SYNC_SIGNAL = 0b1000000,
+
+   PANVK_KBASE_PROGRESS_FRAG_ENTER = 1<<1,
+   PANVK_KBASE_PROGRESS_FRAG_BEFORE_TILING_WAIT = 1<<2,
+   PANVK_KBASE_PROGRESS_FRAG_AFTER_TILING_WAIT = 1<<3,
+   PANVK_KBASE_PROGRESS_FRAG_BEFORE_RUN = 1<<4,
+   PANVK_KBASE_PROGRESS_FRAG_AFTER_RUN = 1<<5,
+   PANVK_KBASE_PROGRESS_FRAG_AFTER_FINISH = 1<<6,
+
+   PANVK_KBASE_PROGRESS_COMPUTE_ENTER = 1<<1,
+   PANVK_KBASE_PROGRESS_COMPUTE_BEFORE_ITER = 1<<2,
+   PANVK_KBASE_PROGRESS_COMPUTE_BEFORE_RUN = 1<<3,
+   PANVK_KBASE_PROGRESS_COMPUTE_AFTER_RUN = 1<<4,
+   PANVK_KBASE_PROGRESS_COMPUTE_AFTER_SIGNAL = 1<<5,
+
+   PANVK_KBASE_PROGRESS_FINISH_BEFORE_WAIT = 1<<28,
+   PANVK_KBASE_PROGRESS_FINISH_AFTER_WAIT = 1<<29,
+   PANVK_KBASE_PROGRESS_CMDBUF_DONE = 1<<30,
+};
+
 struct panvk_cs_desc_ringbuf {
    uint64_t syncobj;
    uint64_t ptr;
@@ -197,6 +225,7 @@ struct panvk_cs_subqueue_context {
       struct {
          uint64_t cs;
       } tracebuf;
+   uint64_t kbase_progress_addr;
    } debug;
    /* Non-zero when draws should execute, zero when they should be
     * skipped. Written by the primary before cs_call, read by inherited
@@ -567,6 +596,9 @@ struct panvk_cmd_buffer {
       struct panvk_tls_state tls;
       bool contains_timestamp_queries;
       bool uses_poly_heap;
+      /* CPU-side estimate used by the kbase queue to choose a conservative
+       * tiler-heap renewal cadence. */
+      uint64_t tiler_work_estimate;
 
       struct panvk_cond_render_state cond_render;
    } state;
@@ -1003,6 +1035,9 @@ void panvk_per_arch(emit_barrier)(struct panvk_cmd_buffer *cmdbuf,
                                   struct panvk_cs_deps deps);
 
 VkResult panvk_per_arch(cmd_init_poly_heap)(struct panvk_cmd_buffer *cmdbuf);
+void panvk_per_arch(kbase_mark_progress)(
+   struct panvk_cmd_buffer *cmdbuf, enum panvk_subqueue_id subqueue,
+   enum panvk_kbase_progress_marker marker);
 
 #if PAN_ARCH >= 14
 static inline void

@@ -304,7 +304,10 @@ panvk_per_arch(get_physical_device_features)(
    const struct panvk_physical_device *device, struct vk_features *features)
 {
    const bool has_gralloc = vk_android_get_ugralloc() != NULL;
-   bool has_sparse = PAN_ARCH >= 10;
+   /* The kbase backend does not have a sparse bind queue implementation yet.
+    * Do not advertise sparse support there, otherwise CTS will exercise sparse
+    * binding paths that can only fail at submit time. */
+   bool has_sparse = PAN_ARCH >= 10 && !device->kbase_node_path[0];
 
    *features = (struct vk_features){
       /* Vulkan 1.0 */

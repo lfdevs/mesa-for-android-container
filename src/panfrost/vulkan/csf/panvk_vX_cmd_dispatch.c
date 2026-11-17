@@ -216,6 +216,9 @@ panvk_per_arch(cmd_dispatch_shader)(
 
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
 
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+      PANVK_KBASE_PROGRESS_COMPUTE_ENTER);
    cs_update_compute_ctx(b) {
       if (compute_state_dirty(cmdbuf, CS) ||
           compute_state_dirty(cmdbuf, DESC_STATE))
@@ -300,8 +303,15 @@ panvk_per_arch(cmd_dispatch_shader)(
       }
    }
 
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+      PANVK_KBASE_PROGRESS_COMPUTE_BEFORE_ITER);
    cs_next_iter_sb(cmdbuf, PANVK_SUBQUEUE_COMPUTE,
                    cs_scratch_reg_tuple(b, 0, 2));
+
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+      PANVK_KBASE_PROGRESS_COMPUTE_BEFORE_RUN);
 
    panvk_cond_render(cmdbuf, b)
    {
@@ -329,7 +339,14 @@ panvk_per_arch(cmd_dispatch_shader)(
       }
    }
 
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+      PANVK_KBASE_PROGRESS_COMPUTE_AFTER_RUN);
    panvk_per_arch(cmd_signal_barrier)(cmdbuf, info->barrier);
+
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+      PANVK_KBASE_PROGRESS_COMPUTE_AFTER_SIGNAL);
 
    clear_dirty_after_dispatch(cmdbuf);
 }
