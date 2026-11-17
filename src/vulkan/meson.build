@@ -9,8 +9,10 @@ vulkan_icd_link_depends = []
 if with_platform_android
   vulkan_icd_symbols = files('vulkan-icd-android-symbols.txt')
   if with_ld_version_script
-    vulkan_icd_link_args += ['-Wl,--version-script', join_paths(meson.current_source_dir(), 'vulkan-android.sym')]
-    vulkan_icd_link_depends += files('vulkan-android.sym')
+    # panvk-kbase-android: application-loadable ICD (HMI + ICD symbols).
+    # New file; see patches/app-loader/files/src/vulkan/.
+    vulkan_icd_link_args += ['-Wl,--version-script', join_paths(meson.current_source_dir(), 'vulkan-app-loader.sym')]
+    vulkan_icd_link_depends += files('vulkan-app-loader.sym')
   endif
 else
   vulkan_icd_symbols = files('vulkan-icd-symbols.txt')
