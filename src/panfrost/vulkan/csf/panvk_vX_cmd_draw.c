@@ -2448,7 +2448,7 @@ struct panvk_dcd_flags {
 
 static void
 build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
-                const struct panvk_shader_variant *fs,
+                const struct panvk_shader_variant *fs, enum mesa_prim prim,
                 struct panvk_dcd_flags *out)
 {
    memset(out, 0, sizeof(*out));
@@ -2456,8 +2456,6 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
       &cmdbuf->vk.dynamic_graphics_state;
    const struct vk_rasterization_state *rs =
       &cmdbuf->vk.dynamic_graphics_state.rs;
-   const struct vk_input_assembly_state *ia =
-      &cmdbuf->vk.dynamic_graphics_state.ia;
 
    bool alpha_to_coverage = dyns->ms.alpha_to_coverage_enable;
    bool writes_z = writes_depth(cmdbuf);
@@ -2474,7 +2472,6 @@ build_dcd_flags(struct panvk_cmd_buffer *cmdbuf,
    }
 
    bool msaa = dyns->ms.rasterization_samples > 1;
-   enum mesa_prim prim = vk_topology_to_mesa(ia->primitive_topology);
    enum mesa_prim reduced_prim = u_reduced_prim(prim);
    if (reduced_prim == MESA_PRIM_LINES &&
        rs->line.mode == VK_LINE_RASTERIZATION_MODE_BRESENHAM) {
@@ -2723,7 +2720,7 @@ prepare_dcd(struct panvk_cmd_buffer *cmdbuf,
       return;
 
    struct panvk_dcd_flags dcd_flags;
-   build_dcd_flags(cmdbuf, fs, &dcd_flags);
+   build_dcd_flags(cmdbuf, fs, cmdbuf->state.gfx.idvs.prim, &dcd_flags);
    *earlyzs = dcd_flags.earlyzs;
 
    if (dcd0_dirty) {
@@ -3569,6 +3566,10 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
    uint64_t records = arena + PANVK_GPU_PRERAST_RECORD_OFFSET;
    uint64_t indices = arena + PANVK_GPU_PRERAST_INDEX_OFFSET;
    uint64_t generated_draw = arena + PANVK_GPU_PRERAST_DRAW_OFFSET;
+   uint64_t poly_indices = arena + PANVK_GPU_PRERAST_POLY_INDEX_OFFSET;
+   uint64_t poly_draw = arena + PANVK_GPU_PRERAST_POLY_DRAW_OFFSET;
+   const enum panvk_gpu_prerast_poly_mode poly_mode =
+      panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, source);
    struct cs_builder *compute =
       panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
    struct cs_index addr = cs_scratch_reg64(compute, 0);
@@ -3700,6 +3701,21 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
                  source->index.index_size == 1 ? UINT8_MAX :
                  source->index.index_size == 2 ? UINT16_MAX : UINT32_MAX);
    STORE_PARAM32(primitive_restart, source->index.restart_enable);
+   STORE_PARAM32(record_capacity,
+                 panvk_gpu_prerast_record_capacity(
+                    shader->gpu_prerast.io.record_stride));
+   if (poly_mode != PANVK_GPU_PRERAST_POLY_NONE) {
+      const struct vk_dynamic_graphics_state *dyns =
+         &cmdbuf->vk.dynamic_graphics_state;
+      STORE_PARAM64(poly.indices, poly_indices);
+      STORE_PARAM64(poly.draw, poly_draw);
+      STORE_PARAM32(poly.mode, poly_mode);
+      STORE_PARAM32(poly.prim, source->prim);
+      STORE_PARAM32(poly.cull, dyns->rs.cull_mode);
+      STORE_PARAM32(poly.front_ccw,
+                    dyns->rs.front_face == VK_FRONT_FACE_COUNTER_CLOCKWISE);
+      STORE_PARAM32(poly.flip_y, dyns->vp.viewports[0].height < 0.0f);
+   }
    cs_flush_stores(compute);
 #undef STORE_PARAM32
 #undef STORE_PARAM64
@@ -3721,6 +3737,24 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
    if (source->indirect.buffer_dev_addr)
       dispatch.indirect.buffer_dev_addr = dispatch_params;
    gpu_prerast_launch_cs(cmdbuf, lowered, push.gpu, tsd, &dispatch);
+
+   if (poly_mode != PANVK_GPU_PRERAST_POLY_NONE) {
+      const struct panvk_shader_variant *polygon =
+         panvk_shader_gpu_prerast_variant(shader, PANVK_VS_VARIANT_GPU_POLYGON);
+      struct pan_ptr poly_push;
+      if (panvk_per_arch(cmd_prepare_gfx_push_uniforms)(cmdbuf, polygon,
+                                                        &poly_push, 1) !=
+          VK_SUCCESS)
+         return true;
+      if (shader_uses_sysval(polygon, graphics, gpu_prerast_params)) {
+         uint32_t off = shader_remapped_sysval_offset(
+            polygon, sysval_offset(graphics, gpu_prerast_params));
+         *(uint64_t *)((uint8_t *)poly_push.cpu + off) = params;
+      }
+      cs_wait_slots(compute, dev->csf.sb.all_iters_mask);
+      gpu_prerast_launch_cs(cmdbuf, polygon, poly_push.gpu, tsd, &dispatch);
+   }
+
    gpu_prerast_wait_compute(cmdbuf);
 
    struct panvk_draw_info generated = *source;
@@ -3738,6 +3772,19 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
    generated.indirect.count_buffer_dev_addr = 0;
    generated.indirect.draw_count = 1;
    generated.indirect.stride = sizeof(struct poly_indirect_draw);
+   if (poly_mode != PANVK_GPU_PRERAST_POLY_NONE) {
+      generated.prim = poly_mode == PANVK_GPU_PRERAST_POLY_POINT
+                          ? MESA_PRIM_POINTS
+                          : MESA_PRIM_LINES;
+      generated.index.buffer_dev_addr = poly_indices;
+      generated.index.buffer_size = PANVK_GPU_PRERAST_MAX_INVOCATIONS *
+                                    PANVK_GPU_PRERAST_POLY_INDICES_PER_PRIM *
+                                    sizeof(uint32_t);
+      generated.index.restart_enable = true;
+      generated.instance.base = 0;
+      generated.instance.count = 1;
+      generated.indirect.buffer_dev_addr = poly_draw;
+   }
     generated.gpu_prerast_generated = true;
 
     gfx_state_set_dirty(cmdbuf, VS);
@@ -5273,7 +5320,11 @@ panvk_per_arch(cmd_draw_fullscreen)(struct vk_command_buffer *cmd,
 
    prepare_fs(cmdbuf, fs);
 
-   build_dcd_flags(cmdbuf, fs, &dcd_flags);
+   build_dcd_flags(
+      cmdbuf, fs,
+      vk_topology_to_mesa(
+         cmdbuf->vk.dynamic_graphics_state.ia.primitive_topology),
+      &dcd_flags);
 
    if (fixed_func_depth_write) {
       rs.depth_clamp_enable = true;

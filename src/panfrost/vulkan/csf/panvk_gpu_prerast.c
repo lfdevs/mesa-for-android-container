@@ -48,13 +48,35 @@ panvk_per_arch(gpu_prerast_validate_execution)(
    return VK_SUCCESS;
 }
 
+enum panvk_gpu_prerast_poly_mode
+panvk_per_arch(gpu_prerast_poly_mode)(const struct panvk_cmd_buffer *cmdbuf,
+                                      const struct panvk_draw_info *draw)
+{
+   if (draw->prim != MESA_PRIM_TRIANGLES &&
+       draw->prim != MESA_PRIM_TRIANGLE_STRIP &&
+       draw->prim != MESA_PRIM_TRIANGLE_FAN)
+      return PANVK_GPU_PRERAST_POLY_NONE;
+
+   switch (cmdbuf->vk.dynamic_graphics_state.rs.polygon_mode) {
+   case VK_POLYGON_MODE_LINE:
+      return PANVK_GPU_PRERAST_POLY_LINE;
+   case VK_POLYGON_MODE_POINT:
+      return PANVK_GPU_PRERAST_POLY_POINT;
+   default:
+      return PANVK_GPU_PRERAST_POLY_NONE;
+   }
+}
+
 bool
 panvk_per_arch(gpu_prerast_can_lower)(
    const struct panvk_cmd_buffer *cmdbuf, const struct panvk_draw_info *draw,
    const struct panvk_gpu_prerast_shader *shader)
 {
-    if (!PANVK_DEBUG(GPU_PRERAST) || shader->has_side_effects ||
+    const bool poly = panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, draw) !=
+                      PANVK_GPU_PRERAST_POLY_NONE;
+    if (!(PANVK_DEBUG(GPU_PRERAST) || poly) || shader->has_side_effects ||
         !shader->lowered_vs_compiled || !shader->passthrough_vs_compiled ||
+        (poly && !shader->polygon_compiled) ||
         (draw->indirect.buffer_dev_addr && draw->indirect.draw_count > 1) ||
         draw->indirect.count_buffer_dev_addr)
        return false;
@@ -63,7 +85,7 @@ panvk_per_arch(gpu_prerast_can_lower)(
        if (!draw->vertex.count || !draw->instance.count)
           return true;
        if ((uint64_t)draw->vertex.count * draw->instance.count >
-           PANVK_GPU_PRERAST_MAX_INVOCATIONS)
+           panvk_gpu_prerast_record_capacity(shader->io.record_stride))
           return false;
     }
 

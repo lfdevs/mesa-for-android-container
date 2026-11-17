@@ -880,9 +880,16 @@ panvk_gpu_prerast_lower_vs_before_gs_intr(nir_builder *b,
               : base == nir_type_int ? nir_i2i32(b, value)
                                      : nir_u2u32(b, value);
    }
+   nir_def *cap = nir_load_global(
+      b, 1, 32,
+      nir_iadd_imm(b, p, offsetof(struct panvk_gpu_prerast_params,
+                                  record_capacity)),
+      .align_mul = 4);
+   nir_push_if(b, nir_ult(b, linear, cap));
    nir_store_global(b, value, addr,
                     .write_mask = nir_intrinsic_write_mask(intr),
                     .align_mul = 4);
+   nir_pop_if(b, NULL);
    return true;
 }
 
@@ -1014,7 +1021,9 @@ panvk_gpu_prerast_emit_generated_records(nir_shader *nir)
       nir_iadd_imm(&b, params,
                    offsetof(struct panvk_gpu_prerast_params, generated_indices)),
       .align_mul = 8);
-   nir_push_if(&b, nir_ieq_imm(&b, instance, 0));
+   nir_push_if(&b, nir_iand(&b, nir_ieq_imm(&b, instance, 0),
+                            nir_ult_imm(&b, vertex,
+                                        PANVK_GPU_PRERAST_MAX_INVOCATIONS)));
    nir_store_global(&b, nir_bcsel(&b, is_restart, nir_imm_int(&b, -1), vertex),
                     nir_iadd(&b, generated_indices,
                              nir_u2u64(&b, nir_imul_imm(&b, vertex, 4))),
@@ -1022,6 +1031,200 @@ panvk_gpu_prerast_emit_generated_records(nir_shader *nir)
    nir_pop_if(&b, NULL);
    nir_progress(true, impl, nir_metadata_none);
 }
+
+#define PRERAST_PARAM(b, p, bits, field)                                       \
+   nir_load_global((b), 1, (bits),                                             \
+                   nir_iadd_imm((b), (p),                                      \
+                                offsetof(struct panvk_gpu_prerast_params,      \
+                                         field)),                              \
+                   .align_mul = (bits) / 8)
+
+static nir_def *
+panvk_gpu_prerast_is_restart(nir_builder *b, nir_def *restart_en,
+                             nir_def *gen_indices, nir_def *pos)
+{
+   nir_def *idx = nir_load_global(
+      b, 1, 32, nir_iadd(b, gen_indices, nir_u2u64(b, nir_imul_imm(b, pos, 4))),
+      .align_mul = 4);
+   return nir_iand(b, restart_en, nir_ieq_imm(b, idx, 0xffffffff));
+}
+
+static nir_shader *
+panvk_gpu_prerast_polygon_nir(const nir_shader_compiler_options *options,
+                              uint32_t record_stride, uint32_t pos_offset)
+{
+   nir_builder b = nir_builder_init_simple_shader(
+      MESA_SHADER_COMPUTE, options, "panvk_gpu_prerast_polygon");
+   nir_function_impl *impl = b.impl;
+   b.shader->info.workgroup_size[0] = 1;
+   b.shader->info.workgroup_size[1] = 1;
+   b.shader->info.workgroup_size[2] = 1;
+
+   nir_def *gid = nir_load_global_invocation_id(&b, 32);
+   nir_def *j = nir_channel(&b, gid, 0);
+   nir_def *inst = nir_channel(&b, gid, 1);
+   nir_def *p = load_sysval(&b, graphics, 64, gpu_prerast_params);
+
+   nir_def *n = PRERAST_PARAM(&b, p, 32, vertex_count);
+   nir_def *ninst = PRERAST_PARAM(&b, p, 32, instance_count);
+   nir_def *restart_en =
+      nir_ine_imm(&b, PRERAST_PARAM(&b, p, 32, primitive_restart), 0);
+   nir_def *gen = PRERAST_PARAM(&b, p, 64, generated_indices);
+   nir_def *recs = PRERAST_PARAM(&b, p, 64, vertex.output_buffer);
+   nir_def *cap = PRERAST_PARAM(&b, p, 32, record_capacity);
+   nir_def *out = PRERAST_PARAM(&b, p, 64, poly.indices);
+   nir_def *mode = PRERAST_PARAM(&b, p, 32, poly.mode);
+   nir_def *prim = PRERAST_PARAM(&b, p, 32, poly.prim);
+   nir_def *cull = PRERAST_PARAM(&b, p, 32, poly.cull);
+   nir_def *ccw = nir_ine_imm(&b, PRERAST_PARAM(&b, p, 32, poly.front_ccw), 0);
+   nir_def *flip = nir_ine_imm(&b, PRERAST_PARAM(&b, p, 32, poly.flip_y), 0);
+
+   const unsigned per = PANVK_GPU_PRERAST_POLY_INDICES_PER_PRIM;
+   nir_def *base = nir_imul(&b, inst, n);
+   nir_def *lin = nir_iadd(&b, base, j);
+   nir_def *in_cap = nir_ult(&b, lin, cap);
+
+   nir_push_if(&b, nir_ieq_imm(&b, lin, 0));
+   {
+      nir_def *total = nir_umin(&b, nir_imul(&b, n, ninst), cap);
+      nir_def *draw = PRERAST_PARAM(&b, p, 64, poly.draw);
+      nir_store_global(&b,
+                       nir_vec4(&b, nir_imul_imm(&b, total, per),
+                                nir_imm_int(&b, 1), nir_imm_int(&b, 0),
+                                nir_imm_int(&b, 0)),
+                       draw, .write_mask = 0xf, .align_mul = 4);
+      nir_store_global(&b, nir_imm_int(&b, 0), nir_iadd_imm(&b, draw, 16),
+                       .write_mask = 1, .align_mul = 4);
+   }
+   nir_pop_if(&b, NULL);
+
+   nir_push_if(&b, in_cap);
+   {
+      nir_def *slot =
+         nir_iadd(&b, out, nir_u2u64(&b, nir_imul_imm(&b, lin, per * 4)));
+      nir_def *rst = nir_imm_int(&b, 0xffffffff);
+      nir_store_global(&b, nir_vec4(&b, rst, rst, rst, rst), slot,
+                       .write_mask = 0xf, .align_mul = 4);
+      nir_store_global(&b, nir_vec2(&b, rst, rst), nir_iadd_imm(&b, slot, 16),
+                       .write_mask = 0x3, .align_mul = 4);
+
+      nir_push_if(&b, nir_inot(&b, panvk_gpu_prerast_is_restart(
+                                       &b, restart_en, gen, j)));
+      {
+         nir_variable *seg_var =
+            nir_local_variable_create(impl, glsl_uint_type(), "seg");
+         nir_store_var(&b, seg_var, nir_bcsel(&b, restart_en, j, nir_imm_int(&b, 0)),
+                       1);
+         nir_push_if(&b, restart_en);
+         nir_push_loop(&b);
+         {
+            nir_def *s = nir_load_var(&b, seg_var);
+            nir_break_if(&b, nir_ieq_imm(&b, s, 0));
+            nir_def *sm1 = nir_iadd_imm(&b, s, -1);
+            nir_break_if(&b,
+                         panvk_gpu_prerast_is_restart(&b, restart_en, gen, sm1));
+            nir_store_var(&b, seg_var, sm1, 1);
+         }
+         nir_pop_loop(&b, NULL);
+         nir_pop_if(&b, NULL);
+         nir_def *seg = nir_load_var(&b, seg_var);
+         nir_def *k = nir_isub(&b, j, seg);
+
+         nir_def *is_list = nir_ieq_imm(&b, prim, MESA_PRIM_TRIANGLES);
+         nir_def *is_strip = nir_ieq_imm(&b, prim, MESA_PRIM_TRIANGLE_STRIP);
+         nir_def *valid =
+            nir_bcsel(&b, is_list, nir_ieq_imm(&b, nir_umod_imm(&b, k, 3), 2),
+                      nir_uge_imm(&b, k, 2));
+         nir_def *odd =
+            nir_ine_imm(&b, nir_iand_imm(&b, nir_iadd_imm(&b, k, -2), 1), 0);
+         nir_def *jm1 = nir_iadd_imm(&b, j, -1);
+         nir_def *jm2 = nir_iadd_imm(&b, j, -2);
+         nir_def *va =
+            nir_bcsel(&b, is_list, jm2,
+                      nir_bcsel(&b, is_strip, nir_bcsel(&b, odd, jm1, jm2), jm1));
+         nir_def *vb =
+            nir_bcsel(&b, is_list, jm1,
+                      nir_bcsel(&b, is_strip, nir_bcsel(&b, odd, jm2, jm1), j));
+         nir_def *vc = nir_bcsel(&b, nir_ior(&b, is_list, is_strip), j, seg);
+
+         nir_push_if(&b, valid);
+         {
+            nir_def *ids[3] = {nir_iadd(&b, base, va), nir_iadd(&b, base, vb),
+                               nir_iadd(&b, base, vc)};
+            nir_def *pos[3];
+            for (unsigned i = 0; i < 3; i++) {
+               nir_def *addr = nir_iadd(
+                  &b, recs,
+                  nir_u2u64(&b, nir_iadd_imm(&b,
+                                             nir_imul_imm(&b, ids[i],
+                                                          record_stride),
+                                             pos_offset)));
+               pos[i] = nir_load_global(&b, 4, 32, addr, .align_mul = 16);
+            }
+            nir_def *x0 = nir_channel(&b, pos[0], 0);
+            nir_def *y0 = nir_channel(&b, pos[0], 1);
+            nir_def *w0 = nir_channel(&b, pos[0], 3);
+            nir_def *x1 = nir_channel(&b, pos[1], 0);
+            nir_def *y1 = nir_channel(&b, pos[1], 1);
+            nir_def *w1 = nir_channel(&b, pos[1], 3);
+            nir_def *x2 = nir_channel(&b, pos[2], 0);
+            nir_def *y2 = nir_channel(&b, pos[2], 1);
+            nir_def *w2 = nir_channel(&b, pos[2], 3);
+            nir_def *det = nir_fadd(
+               &b,
+               nir_fsub(&b,
+                        nir_fmul(&b, x0,
+                                 nir_fsub(&b, nir_fmul(&b, y1, w2),
+                                          nir_fmul(&b, y2, w1))),
+                        nir_fmul(&b, y0,
+                                 nir_fsub(&b, nir_fmul(&b, x1, w2),
+                                          nir_fmul(&b, x2, w1)))),
+               nir_fmul(&b, w0,
+                        nir_fsub(&b, nir_fmul(&b, x1, y2),
+                                 nir_fmul(&b, x2, y1))));
+            nir_def *s = nir_bcsel(&b, flip, nir_fneg(&b, det), det);
+            nir_def *neg = nir_flt_imm(&b, s, 0.0);
+            nir_def *pos_area = nir_fgt_imm(&b, s, 0.0);
+            nir_def *front = nir_bcsel(&b, ccw, neg, pos_area);
+            nir_def *back = nir_bcsel(&b, ccw, pos_area, neg);
+            nir_def *culled = nir_ior(
+               &b, nir_ieq_imm(&b, cull, 3),
+               nir_ior(&b,
+                       nir_iand(&b, nir_ine_imm(&b, nir_iand_imm(&b, cull, 1), 0),
+                                front),
+                       nir_iand(&b, nir_ine_imm(&b, nir_iand_imm(&b, cull, 2), 0),
+                                back)));
+
+            nir_push_if(&b, nir_inot(&b, culled));
+            {
+               nir_push_if(&b, nir_ieq_imm(&b, mode,
+                                           PANVK_GPU_PRERAST_POLY_POINT));
+               {
+                  nir_store_global(&b, nir_vec3(&b, ids[0], ids[1], ids[2]),
+                                   slot, .write_mask = 0x7, .align_mul = 4);
+               }
+               nir_push_else(&b, NULL);
+               {
+                  nir_store_global(&b,
+                                   nir_vec4(&b, ids[0], ids[1], ids[1], ids[2]),
+                                   slot, .write_mask = 0xf, .align_mul = 4);
+                  nir_store_global(&b, nir_vec2(&b, ids[2], ids[0]),
+                                   nir_iadd_imm(&b, slot, 16),
+                                   .write_mask = 0x3, .align_mul = 4);
+               }
+               nir_pop_if(&b, NULL);
+            }
+            nir_pop_if(&b, NULL);
+         }
+         nir_pop_if(&b, NULL);
+      }
+      nir_pop_if(&b, NULL);
+   }
+   nir_pop_if(&b, NULL);
+
+   return b.shader;
+}
+#undef PRERAST_PARAM
 #endif
 
 static void
@@ -1053,6 +1256,12 @@ panvk_hash_state(struct vk_physical_device *device,
 
       if (state->ial)
          _mesa_blake3_update(&blake3_ctx, state->ial, sizeof(*state->ial));
+
+#if PAN_ARCH >= 10
+      bool non_solid = (stages & VK_SHADER_STAGE_VERTEX_BIT) && state->rs &&
+                       state->rs->polygon_mode != VK_POLYGON_MODE_FILL;
+      _mesa_blake3_update(&blake3_ctx, &non_solid, sizeof(non_solid));
+#endif
    }
 
    _mesa_blake3_final(&blake3_ctx, blake3_out);
@@ -1968,9 +2177,12 @@ panvk_compile_shader(struct panvk_device *dev,
    case MESA_SHADER_VERTEX: {
 #if PAN_ARCH >= 10
       /* Lowered/passthrough variants only exist on the gpu_prerast path. */
+      const bool want_prerast =
+         PANVK_DEBUG(GPU_PRERAST) ||
+         (state && state->rs &&
+          state->rs->polygon_mode != VK_POLYGON_MODE_FILL);
       const enum panvk_vs_variant last_variant =
-         PANVK_DEBUG(GPU_PRERAST) ? PANVK_VS_VARIANT_GPU_PASSTHROUGH
-                                  : PANVK_VS_VARIANT_HW;
+         want_prerast ? PANVK_VS_VARIANT_GPU_PASSTHROUGH : PANVK_VS_VARIANT_HW;
       struct panvk_gpu_prerast_out_types out_types = {0};
 #else
       const enum panvk_vs_variant last_variant = PANVK_VS_VARIANT_HW;
@@ -2126,6 +2338,29 @@ panvk_compile_shader(struct panvk_device *dev,
             return result;
          }
       }
+#if PAN_ARCH >= 10
+      if (want_prerast && shader->gpu_prerast.lowered_vs_compiled &&
+          shader->gpu_prerast.passthrough_vs_compiled &&
+          (shader->gpu_prerast.io.outputs_written & VARYING_BIT_POS)) {
+         struct panvk_shader_variant *variant =
+            &shader->variants[PANVK_VS_VARIANT_GPU_POLYGON];
+         nir_shader *nir = panvk_gpu_prerast_polygon_nir(
+            info->nir->options, shader->gpu_prerast.io.record_stride,
+            util_bitcount64(shader->gpu_prerast.io.outputs_written &
+                            BITFIELD64_MASK(VARYING_SLOT_POS)) * 16);
+         struct pan_compile_inputs poly_inputs = inputs;
+         poly_inputs.varying_layout = NULL;
+         variant->own_bin = true;
+         result = panvk_compile_nir(dev, nir, info->flags, &poly_inputs, state,
+                                    NULL, &shader->desc_info, variant);
+         ralloc_free(nir);
+         if (result != VK_SUCCESS) {
+            panvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
+            return result;
+         }
+         shader->gpu_prerast.polygon_compiled = true;
+      }
+#endif
       break;
    }
 

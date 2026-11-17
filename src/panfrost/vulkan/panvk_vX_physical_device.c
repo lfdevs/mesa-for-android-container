@@ -324,7 +324,7 @@ panvk_per_arch(get_physical_device_features)(
       .drawIndirectFirstInstance = true,
       .depthClamp = true,
       .depthBiasClamp = true,
-      .fillModeNonSolid = false,
+      .fillModeNonSolid = PAN_ARCH >= 10,
       .depthBounds = false,
       .wideLines = true,
       .largePoints = true,

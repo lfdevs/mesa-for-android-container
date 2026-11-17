@@ -12,17 +12,29 @@
 #include "util/macros.h"
 #include "vulkan/vulkan_core.h"
 
-#define PANVK_GPU_PRERAST_ABI_VERSION 1
+#define PANVK_GPU_PRERAST_ABI_VERSION 2
 #define PANVK_GPU_PRERAST_MAX_EXECUTION_BYTES (256ull * 1024 * 1024)
-#define PANVK_GPU_PRERAST_ARENA_SIZE (256ull * 1024)
-#define PANVK_GPU_PRERAST_MAX_INVOCATIONS (4096u)
+#define PANVK_GPU_PRERAST_ARENA_SIZE (32ull * 1024 * 1024)
+#define PANVK_GPU_PRERAST_MAX_INVOCATIONS (65536u)
+#define PANVK_GPU_PRERAST_POLY_INDICES_PER_PRIM 6
 #define PANVK_GPU_PRERAST_PARAMS_OFFSET 64
 #define PANVK_GPU_PRERAST_DISPATCH_OFFSET 256
 #define PANVK_GPU_PRERAST_DRAW_OFFSET 320
+#define PANVK_GPU_PRERAST_POLY_DRAW_OFFSET 384
 #define PANVK_GPU_PRERAST_INDEX_OFFSET 4096
-#define PANVK_GPU_PRERAST_RECORD_OFFSET \
+#define PANVK_GPU_PRERAST_POLY_INDEX_OFFSET \
    (PANVK_GPU_PRERAST_INDEX_OFFSET + \
     PANVK_GPU_PRERAST_MAX_INVOCATIONS * sizeof(uint32_t))
+#define PANVK_GPU_PRERAST_RECORD_OFFSET \
+   (PANVK_GPU_PRERAST_POLY_INDEX_OFFSET + \
+    PANVK_GPU_PRERAST_MAX_INVOCATIONS * \
+       PANVK_GPU_PRERAST_POLY_INDICES_PER_PRIM * sizeof(uint32_t))
+
+enum panvk_gpu_prerast_poly_mode {
+   PANVK_GPU_PRERAST_POLY_NONE = 0,
+   PANVK_GPU_PRERAST_POLY_LINE = 1,
+   PANVK_GPU_PRERAST_POLY_POINT = 2,
+};
 
 struct panvk_cmd_buffer;
 struct panvk_draw_info;
@@ -89,6 +101,7 @@ struct panvk_gpu_prerast_shader {
    uint32_t requirements;
    bool lowered_vs_compiled;
    bool passthrough_vs_compiled;
+   bool polygon_compiled;
    bool has_side_effects;
 };
 
@@ -126,8 +139,34 @@ struct panvk_gpu_prerast_params {
    uint32_t restart_index;
    uint32_t primitive_restart;
    uint32_t index_offset;
-   uint32_t _pad[2];
+   uint32_t record_capacity;
+   uint32_t _pad;
+   struct {
+      uint64_t indices;
+      uint64_t draw;
+      uint32_t mode;
+      uint32_t prim;
+      uint32_t cull;
+      uint32_t front_ccw;
+      uint32_t flip_y;
+      uint32_t _pad;
+   } poly;
 };
+
+static_assert(PANVK_GPU_PRERAST_PARAMS_OFFSET +
+                    sizeof(struct panvk_gpu_prerast_params) <=
+                 PANVK_GPU_PRERAST_DISPATCH_OFFSET,
+              "gpu_prerast params overlap the dispatch words");
+
+static inline uint32_t
+panvk_gpu_prerast_record_capacity(uint32_t record_stride)
+{
+   uint64_t cap = record_stride
+      ? (PANVK_GPU_PRERAST_ARENA_SIZE - PANVK_GPU_PRERAST_RECORD_OFFSET) /
+           record_stride
+      : 0;
+   return MIN2(cap, PANVK_GPU_PRERAST_MAX_INVOCATIONS);
+}
 
 struct panvk_gpu_prerast_arena {
    uint32_t available;
@@ -185,6 +224,9 @@ panvk_gpu_prerast_checked_size(uint64_t count, uint64_t stride,
 VkResult panvk_per_arch(gpu_prerast_validate_execution)(
    const struct panvk_cmd_buffer *cmdbuf,
    const struct panvk_gpu_prerast_execution *exec);
+
+enum panvk_gpu_prerast_poly_mode panvk_per_arch(gpu_prerast_poly_mode)(
+   const struct panvk_cmd_buffer *cmdbuf, const struct panvk_draw_info *draw);
 
 bool panvk_per_arch(gpu_prerast_can_lower)(
    const struct panvk_cmd_buffer *cmdbuf, const struct panvk_draw_info *draw,

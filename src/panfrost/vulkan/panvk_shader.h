@@ -452,6 +452,7 @@ enum panvk_vs_variant {
 #if PAN_ARCH >= 10
    PANVK_VS_VARIANT_GPU_LOWERED,
    PANVK_VS_VARIANT_GPU_PASSTHROUGH,
+   PANVK_VS_VARIANT_GPU_POLYGON,
 #endif
 
    PANVK_VS_VARIANTS,
@@ -483,6 +484,7 @@ static const char *panvk_vs_shader_variant_name[] = {
 #if PAN_ARCH >= 10
    [PANVK_VS_VARIANT_GPU_LOWERED] = "GPU_LOWERED",
    [PANVK_VS_VARIANT_GPU_PASSTHROUGH] = "GPU_PASSTHROUGH",
+   [PANVK_VS_VARIANT_GPU_POLYGON] = "GPU_POLYGON",
 #endif
 };
 
