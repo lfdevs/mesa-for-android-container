@@ -1142,6 +1142,14 @@ panvk_copy_pstats_query_results(struct panvk_cmd_buffer *cmd,
 
    panlib_copy_pstats_query_result_struct(&precomp_ctx, panlib_1d(query_count),
                                           PANLIB_BARRIER_CSF_SYNC, push);
+
+   struct panvk_device *dev = to_panvk_device(cmd->vk.base.device);
+   struct panvk_cs_deps post = {0};
+   post.src[PANVK_SUBQUEUE_COMPUTE].wait_sb_mask =
+      dev->csf.sb.all_iters_mask | SB_MASK(LS);
+   post.dst[PANVK_SUBQUEUE_FRAGMENT].wait_subqueue_mask =
+      BITFIELD_BIT(PANVK_SUBQUEUE_COMPUTE);
+   panvk_per_arch(emit_barrier)(cmd, post);
 }
 
 VKAPI_ATTR void VKAPI_CALL
