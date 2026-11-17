@@ -680,7 +680,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
 #if PAN_ARCH >= 10
    if (PANVK_DEBUG(GPU_PRERAST) || device->vk.enabled_features.fillModeNonSolid ||
        device->vk.enabled_features.geometryShader ||
-       device->vk.enabled_features.transformFeedback) {
+       device->vk.enabled_features.transformFeedback ||
+       device->vk.enabled_features.vertexPipelineStoresAndAtomics) {
       device->gpu_prerast_arena = panvk_pool_alloc_mem(
          &device->mempools.rw,
          (struct panvk_pool_alloc_info){
