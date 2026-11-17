@@ -3152,6 +3152,13 @@ launch_draw(struct panvk_cmd_buffer *cmdbuf,
 
    panvk_cond_render(cmdbuf, b)
    {
+      struct cs_index draw_id = cs_undef();
+
+      if (draw->indirect.draw_index) {
+         draw_id = cs_scratch_reg32(b, 5);
+         cs_move32_to(b, draw_id, draw->indirect.draw_index);
+      }
+
       if (idvs_count > 1 || dynamic_idvs_count) {
          struct cs_index counter_reg = cs_scratch_reg32(b, 4);
          struct cs_index tiler_ctx_addr = cs_sr_reg64(b, IDVS, TILER_CTX);
@@ -3173,13 +3180,13 @@ launch_draw(struct panvk_cmd_buffer *cmdbuf,
          cs_while(b, MALI_CS_CONDITION_GREATER, counter_reg) {
 #if PAN_ARCH >= 12
             cs_trace_run_idvs2(b, tracing_ctx, tracing_scratch_regs,
-                               flags_override.opaque[0], true, cs_undef(),
+                               flags_override.opaque[0], true, draw_id,
                                MALI_IDVS_SHADING_MODE_EARLY);
 #else
             cs_trace_run_idvs(b, tracing_ctx, tracing_scratch_regs,
                               flags_override.opaque[0], true,
                               cs_shader_res_sel(0, 0, 1, 0),
-                              cs_shader_res_sel(2, 2, 2, 0), cs_undef());
+                              cs_shader_res_sel(2, 2, 2, 0), draw_id);
 #endif
 
             cs_add_imm32(b, counter_reg, counter_reg, -1);
@@ -3199,13 +3206,13 @@ launch_draw(struct panvk_cmd_buffer *cmdbuf,
       } else {
 #if PAN_ARCH >= 12
          cs_trace_run_idvs2(b, tracing_ctx, tracing_scratch_regs,
-                            flags_override.opaque[0], true, cs_undef(),
+                            flags_override.opaque[0], true, draw_id,
                             MALI_IDVS_SHADING_MODE_EARLY);
 #else
          cs_trace_run_idvs(b, tracing_ctx, tracing_scratch_regs,
                            flags_override.opaque[0], true,
                            cs_shader_res_sel(0, 0, 1, 0),
-                           cs_shader_res_sel(2, 2, 2, 0), cs_undef());
+                           cs_shader_res_sel(2, 2, 2, 0), draw_id);
 #endif
       }
    }
@@ -4533,7 +4540,7 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
       gpu_prerast_acquire_arena(cmdbuf, prerast_arena);
    panlib_tess_setup(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, td.gpu, src,
                      draw->indirect.count_buffer_dev_addr,
-                     draw->indirect.draw_index);
+                     draw->indirect.buffer_dev_addr ? draw->indirect.draw_index : 0);
    cs_wait_slots(b, dev->csf.sb.all_iters_mask);
 
    /* No C-level exit from a cs_while body, it would leave the block open.
@@ -4943,6 +4950,86 @@ panvk_per_arch(CmdDrawIndexed)(VkCommandBuffer commandBuffer,
    };
 
    panvk_cmd_draw(cmdbuf, draw);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdDrawMultiEXT)(VkCommandBuffer commandBuffer,
+                                uint32_t drawCount,
+                                const VkMultiDrawInfoEXT *pVertexInfo,
+                                uint32_t instanceCount,
+                                uint32_t firstInstance,
+                                uint32_t stride)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   if (instanceCount == 0 || drawCount == 0)
+      return;
+
+   assert(firstInstance < INT32_MAX);
+
+   const uint8_t *cursor = (const uint8_t *)pVertexInfo;
+   for (uint32_t i = 0; i < drawCount; i++) {
+      const VkMultiDrawInfoEXT *info = (const VkMultiDrawInfoEXT *)cursor;
+
+      if (info->vertexCount != 0) {
+         assert(info->firstVertex < INT32_MAX);
+
+         struct panvk_draw_info draw = {
+            .vertex.base = info->firstVertex,
+            .vertex.count = info->vertexCount,
+            .instance.base = firstInstance,
+            .instance.count = instanceCount,
+            .indirect.draw_index = i,
+            .prim = panvk_get_client_prim(cmdbuf),
+         };
+
+         panvk_cmd_draw(cmdbuf, draw);
+      }
+
+      cursor += stride;
+   }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdDrawMultiIndexedEXT)(VkCommandBuffer commandBuffer,
+                                       uint32_t drawCount,
+                                       const VkMultiDrawIndexedInfoEXT *pIndexInfo,
+                                       uint32_t instanceCount,
+                                       uint32_t firstInstance,
+                                       uint32_t stride,
+                                       const int32_t *pVertexOffset)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   if (instanceCount == 0 || drawCount == 0)
+      return;
+
+   assert(firstInstance < INT32_MAX);
+
+   const uint8_t *cursor = (const uint8_t *)pIndexInfo;
+   for (uint32_t i = 0; i < drawCount; i++) {
+      const VkMultiDrawIndexedInfoEXT *info =
+         (const VkMultiDrawIndexedInfoEXT *)cursor;
+
+      if (info->indexCount != 0) {
+         int32_t vertex_offset =
+            pVertexOffset != NULL ? *pVertexOffset : info->vertexOffset;
+
+         struct panvk_draw_info draw = {
+            .index = panvk_draw_info_index(cmdbuf, info->firstIndex),
+            .vertex.base = vertex_offset,
+            .vertex.count = info->indexCount,
+            .instance.count = instanceCount,
+            .instance.base = firstInstance,
+            .indirect.draw_index = i,
+            .prim = panvk_get_client_prim(cmdbuf),
+         };
+
+         panvk_cmd_draw(cmdbuf, draw);
+      }
+
+      cursor += stride;
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
