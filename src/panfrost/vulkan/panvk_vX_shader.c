@@ -431,6 +431,194 @@ panvk_get_spirv_options(UNUSED struct vk_physical_device *vk_pdev,
    };
 }
 
+#define PANVK_CULL_ALL_NEGATIVE_MIN (1.0f - 1.0f / 65536.0f)
+
+struct panvk_dist_elem {
+   nir_variable *var;
+   unsigned idx;
+};
+
+static unsigned
+panvk_collect_dist_vars(nir_shader *nir, nir_variable_mode mode,
+                        struct panvk_dist_elem clip[8],
+                        struct panvk_dist_elem cull[8])
+{
+   const unsigned nclip = nir->info.clip_distance_array_size;
+   unsigned found = 0;
+
+   memset(clip, 0, 8 * sizeof(*clip));
+   memset(cull, 0, 8 * sizeof(*cull));
+   nir_foreach_variable_with_modes(var, nir, mode) {
+      const gl_varying_slot loc = var->data.location;
+      if (!var->data.compact)
+         continue;
+
+      bool is_clip_slot =
+         loc == VARYING_SLOT_CLIP_DIST0 || loc == VARYING_SLOT_CLIP_DIST1;
+      bool is_cull_slot =
+         loc == VARYING_SLOT_CULL_DIST0 || loc == VARYING_SLOT_CULL_DIST1;
+      if (!is_clip_slot && !is_cull_slot)
+         continue;
+
+      unsigned base = (loc - (is_clip_slot ? VARYING_SLOT_CLIP_DIST0
+                                           : VARYING_SLOT_CULL_DIST0)) * 4 +
+                      var->data.location_frac;
+      for (unsigned i = 0; i < glsl_get_length(var->type); i++) {
+         unsigned d = base + i;
+         struct panvk_dist_elem e = {var, i};
+         if (is_cull_slot) {
+            if (d < 8)
+               cull[d] = e;
+         } else if (d < nclip) {
+            clip[d] = e;
+         } else if (d - nclip < 8) {
+            cull[d - nclip] = e;
+         }
+      }
+      found++;
+   }
+
+   return found;
+}
+
+static void
+panvk_dist_vars_to_temp(nir_shader *nir, struct panvk_dist_elem clip[8],
+                        struct panvk_dist_elem cull[8])
+{
+   for (unsigned i = 0; i < 16; i++) {
+      nir_variable *var = i < 8 ? clip[i].var : cull[i - 8].var;
+      if (var && var->data.mode != nir_var_shader_temp) {
+         var->data.mode = nir_var_shader_temp;
+         var->data.compact = false;
+         var->data.location = 0;
+         var->data.location_frac = 0;
+      }
+   }
+   nir_fixup_deref_modes(nir);
+}
+
+static nir_variable *
+panvk_create_dist_var(nir_shader *nir, nir_variable_mode mode,
+                      gl_varying_slot loc, const char *name)
+{
+   nir_variable *var =
+      nir_variable_create(nir, mode, glsl_vec4_type(), name);
+   var->data.location = loc;
+   var->data.interpolation = INTERP_MODE_SMOOTH;
+   return var;
+}
+
+static bool
+panvk_lower_clip_cull_vs(nir_shader *nir)
+{
+   struct panvk_dist_elem clip[8], cull[8];
+   if (!panvk_collect_dist_vars(nir, nir_var_shader_out, clip, cull))
+      return false;
+
+   const unsigned nclip = nir->info.clip_distance_array_size;
+   const unsigned ncull = nir->info.cull_distance_array_size;
+   assert(nclip <= 8 && ncull <= 8);
+
+   nir_builder b =
+      nir_builder_at(nir_after_impl(nir_shader_get_entrypoint(nir)));
+   nir_def *clip_v[8], *cull_v[8];
+   for (unsigned i = 0; i < 8; i++) {
+      clip_v[i] = i < nclip && clip[i].var
+                     ? nir_load_array_var_imm(&b, clip[i].var, clip[i].idx)
+                     : nir_imm_float(&b, 1.0f);
+      cull_v[i] =
+         i < ncull && cull[i].var
+            ? nir_b2f32(&b, nir_flt_imm(&b,
+                                        nir_load_array_var_imm(
+                                           &b, cull[i].var, cull[i].idx),
+                                        0.0))
+            : nir_imm_float(&b, 0.0f);
+   }
+
+   panvk_dist_vars_to_temp(nir, clip, cull);
+
+   if (nclip) {
+      nir_store_var(&b,
+                    panvk_create_dist_var(nir, nir_var_shader_out,
+                                          VARYING_SLOT_CLIP_DIST0, "clip0"),
+                    nir_vec(&b, &clip_v[0], 4), 0xf);
+   }
+   if (nclip > 4) {
+      nir_store_var(&b,
+                    panvk_create_dist_var(nir, nir_var_shader_out,
+                                          VARYING_SLOT_CLIP_DIST1, "clip1"),
+                    nir_vec(&b, &clip_v[4], 4), 0xf);
+   }
+   if (ncull) {
+      nir_store_var(&b,
+                    panvk_create_dist_var(nir, nir_var_shader_out,
+                                          VARYING_SLOT_CULL_DIST0, "cull0"),
+                    nir_vec(&b, &cull_v[0], 4), 0xf);
+   }
+   if (ncull > 4) {
+      nir_store_var(&b,
+                    panvk_create_dist_var(nir, nir_var_shader_out,
+                                          VARYING_SLOT_CULL_DIST1, "cull1"),
+                    nir_vec(&b, &cull_v[4], 4), 0xf);
+   }
+
+   return nir_progress(true, nir_shader_get_entrypoint(nir),
+                       nir_metadata_none);
+}
+
+static bool
+panvk_lower_clip_cull_fs(nir_shader *nir, uint64_t prev_outputs)
+{
+   static const gl_varying_slot locs[4] = {
+      VARYING_SLOT_CLIP_DIST0, VARYING_SLOT_CLIP_DIST1,
+      VARYING_SLOT_CULL_DIST0, VARYING_SLOT_CULL_DIST1,
+   };
+   static const char *names[4] = {"clip0", "clip1", "cull0", "cull1"};
+
+   if (!(prev_outputs & (VARYING_BIT_CLIP_DIST0 | VARYING_BIT_CLIP_DIST1 |
+                         VARYING_BIT_CULL_DIST0 | VARYING_BIT_CULL_DIST1)))
+      return false;
+
+   struct panvk_dist_elem old_clip[8], old_cull[8];
+   if (panvk_collect_dist_vars(nir, nir_var_shader_in, old_clip, old_cull))
+      panvk_dist_vars_to_temp(nir, old_clip, old_cull);
+
+   nir_builder b =
+      nir_builder_at(nir_before_impl(nir_shader_get_entrypoint(nir)));
+   nir_def *vals[4] = {NULL};
+   nir_def *kill = nir_imm_false(&b);
+   for (unsigned i = 0; i < 4; i++) {
+      if (!(prev_outputs & BITFIELD64_BIT(locs[i])))
+         continue;
+
+      nir_variable *var =
+         panvk_create_dist_var(nir, nir_var_shader_in, locs[i], names[i]);
+      vals[i] = nir_load_var(&b, var);
+      nir_def *c = i < 2
+                      ? nir_flt_imm(&b, vals[i], 0.0)
+                      : nir_fge_imm(&b, vals[i], PANVK_CULL_ALL_NEGATIVE_MIN);
+      kill = nir_ior(&b, kill, nir_bany(&b, c));
+   }
+
+   for (unsigned i = 0; i < 8; i++) {
+      if (old_clip[i].var) {
+         nir_def *v = vals[i / 4] ? nir_channel(&b, vals[i / 4], i % 4)
+                                  : nir_imm_float(&b, 0.0f);
+         nir_store_array_var_imm(&b, old_clip[i].var, old_clip[i].idx, v, 1);
+      }
+      if (old_cull[i].var) {
+         nir_store_array_var_imm(&b, old_cull[i].var, old_cull[i].idx,
+                                 nir_imm_float(&b, 0.0f), 1);
+      }
+   }
+
+   nir_discard_if(&b, kill);
+   nir->info.fs.uses_discard = true;
+
+   return nir_progress(true, nir_shader_get_entrypoint(nir),
+                       nir_metadata_none);
+}
+
 static void
 panvk_preprocess_nir(struct vk_physical_device *vk_pdev,
                      nir_shader *nir,
@@ -455,6 +643,9 @@ panvk_preprocess_nir(struct vk_physical_device *vk_pdev,
 
    NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries,
             nir_shader_get_entrypoint(nir), nir_var_shader_out);
+
+   if (nir->info.stage == MESA_SHADER_VERTEX)
+      NIR_PASS(_, nir, panvk_lower_clip_cull_vs);
 
 #if PAN_ARCH < 9
    /* This needs to be done just after the io_to_temporaries pass, because we
@@ -1947,6 +2138,20 @@ panvk_compile_shader(struct panvk_device *dev,
       if (state && state->ms && state->ms->sample_shading_enable)
          nir->info.fs.uses_sample_shading = true;
 
+      uint64_t prev_dist_outputs =
+         VARYING_BIT_CLIP_DIST0 | VARYING_BIT_CLIP_DIST1 |
+         VARYING_BIT_CULL_DIST0 | VARYING_BIT_CULL_DIST1;
+      if (vs_varying_layout) {
+         prev_dist_outputs = 0;
+         for (unsigned i = 0; i < vs_varying_layout->count; i++) {
+            const struct pan_varying_slot *slot =
+               pan_varying_layout_slot_at(vs_varying_layout, i);
+            if (slot)
+               prev_dist_outputs |= BITFIELD64_BIT(slot->location);
+         }
+      }
+      NIR_PASS(_, nir, panvk_lower_clip_cull_fs, prev_dist_outputs);
+
       /* We need to lower input attachments before we lower descriptors */
       NIR_PASS(_, nir, panvk_per_arch(nir_lower_input_attachment_loads),
                state, &variant->fs.input_attachment_read);
@@ -2806,7 +3011,7 @@ emit_varying_attrs(struct panvk_pool *desc_pool,
             gl_varying_slot loc = slot->location;
 
             enum pipe_format pfmt = PIPE_FORMAT_NONE;
-            bool is_hw = loc < VARYING_SLOT_VAR0;
+            bool is_hw = slot->section != PAN_VARYING_SECTION_GENERIC;
             bool is_present = is_hw || bit_sizes[loc] != 0;
 
             if (is_present && !is_hw) {
@@ -2883,7 +3088,7 @@ panvk_per_arch(link_shaders)(struct panvk_pool *desc_pool,
 
       const gl_varying_slot pos = fs_var->location;
       /* Skip special varyings. */
-      if (pos < VARYING_SLOT_VAR0)
+      if (fs_var->section != PAN_VARYING_SECTION_GENERIC)
          continue;
 
       /* Special buffers are handled explicitly before this loop, everything
