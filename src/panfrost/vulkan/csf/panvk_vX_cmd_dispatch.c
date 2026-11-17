@@ -423,6 +423,8 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
       cs_flush_stores(b);
    }
 
+   panvk_per_arch(cmd_pstats_dispatch)(cmdbuf, cs, info);
+
    panvk_per_arch(cmd_dispatch_shader)(cmdbuf, cs, cs_desc_state,
                                        cmdbuf->state.compute.push_uniforms,
                                        tsd, info);

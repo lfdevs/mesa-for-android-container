@@ -91,6 +91,35 @@ panlib_copy_ts_query_result(uint64_t pool_addr, global uint32_t *available_addr,
       vk_write_query(dst, 1, flags, available);
 }
 
+/* Each report holds stat_count command stream counters followed by
+ * stat_count shader/hardware counters; the result is their sum. The
+ * availability objects are panvk_cs_sync32, two dwords each. */
+KERNEL(1)
+panlib_copy_pstats_query_result(uint64_t pool_addr,
+                                global uint32_t *available_addr,
+                                uint32_t query_stride, uint32_t query_count,
+                                uint64_t dst_addr, uint64_t dst_stride,
+                                uint32_t flags, uint32_t stat_count)
+{
+   uint32_t i = cl_global_id.x;
+
+   if (i >= query_count)
+      return;
+
+   uintptr_t dst = dst_addr + ((uint64_t)i * dst_stride);
+   global uint64_t *report =
+      (global uint64_t *)(pool_addr + ((uint64_t)i * query_stride));
+   bool available = available_addr[i * 2] != 0;
+
+   if (available || (flags & VK_QUERY_RESULT_PARTIAL_BIT)) {
+      for (uint32_t s = 0; s < stat_count; s++)
+         vk_write_query(dst, s, flags, report[s] + report[stat_count + s]);
+   }
+
+   if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+      vk_write_query(dst, stat_count, flags, available);
+}
+
 #else
 
 static inline void

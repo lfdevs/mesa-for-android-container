@@ -4165,6 +4165,12 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
    if (!panvk_priv_mem_check_alloc(vs->spd))
       return;
 
+   /* Count once per API draw, before gpu_prerast splits or lowers it. */
+   if (!draw.gpu_prerast_generated && !draw.pstats_counted) {
+      panvk_per_arch(cmd_pstats_draw)(cmdbuf, &draw);
+      draw.pstats_counted = true;
+   }
+
    if (gpu_prerast_needed(cmdbuf, &draw) && gpu_prerast_split(cmdbuf, &draw))
       return;
 
@@ -5569,6 +5575,11 @@ panvk_per_arch(CmdEndRendering2KHR)(
       if (result != VK_SUCCESS)
          return;
    }
+
+   /* ponytail: a suspended render pass has not issued its fragment jobs yet,
+    * so queries ended in it can miss those FS invocations.
+    */
+   panvk_per_arch(cmd_pstats_flush_pending)(cmdbuf);
 
    memset(&cmdbuf->state.gfx.render.fbds, 0,
           sizeof(cmdbuf->state.gfx.render.fbds));

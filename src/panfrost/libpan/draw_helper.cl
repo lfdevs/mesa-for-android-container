@@ -71,6 +71,84 @@ panlib_update_prims_generated_query_indirect(
    }
 }
 
+/* 64-bit atomic add built from 32-bit atomics: the carry is added to the
+ * high word exactly once per add, so concurrent adds stay exact. */
+static inline void
+pstats_add(global uint32_t *counter, uint64_t value)
+{
+   uint32_t lo = value, hi = value >> 32;
+
+   if (!value)
+      return;
+
+   uint32_t old = atomic_fetch_add((global atomic_uint *)counter, lo);
+   hi += (uint32_t)(old + lo) < old;
+   if (hi)
+      atomic_fetch_add((global atomic_uint *)(counter + 1), hi);
+}
+
+/* slots packs a 4-bit u64 slot index per counter, 0xf when not counted, in
+ * the order IA vertices, IA primitives, VS invocations, clipping invocations
+ * and clipping primitives. */
+static inline void
+pstats_add_slot(global uint32_t *stats, uint32_t slots, uint32_t counter,
+                uint64_t value)
+{
+   uint32_t slot = (slots >> (counter * 4)) & 0xf;
+
+   if (slot != 0xf)
+      pstats_add(stats + slot * 2, value);
+}
+
+KERNEL(SUBGROUP_SIZE * SUBGROUP_SIZE)
+panlib_update_pstats_draw(global uint32_t *stats, uint32_t slots,
+                          constant uint32_t *cmd, uint32_t cmd_stride,
+                          global uint32_t *count_buffer, uint32_t draw_index,
+                          uint64_t index_buffer, uint32_t index_buffer_size_el,
+                          uint32_t index_size_B, uint32_t restart,
+                          uint32_t prim, uint32_t view_count)
+{
+   assert(get_sub_group_size() == SUBGROUP_SIZE);
+
+   POLY_DECL_UNROLL_RESTART_SCRATCH(scratch, SUBGROUP_SIZE * SUBGROUP_SIZE);
+   uint32_t draw_id = cl_group_id.x;
+
+   if (count_buffer && draw_index + draw_id >= *count_buffer)
+      return;
+
+   cmd = (constant uint32_t *)((uintptr_t)cmd + cmd_stride * draw_id);
+
+   uint32_t prims;
+   if (restart) {
+      uint32_t restart_index =
+         index_size_B == 4 ? UINT32_MAX : (1u << (index_size_B * 8)) - 1;
+      prims = poly_count_restart_prims(cmd, index_buffer, index_buffer_size_el,
+                                       index_size_B, restart_index, prim,
+                                       scratch);
+   } else {
+      prims = u_decomposed_prims_for_vertices(prim, cmd[0]);
+   }
+
+   if (cl_local_id.x != 0)
+      return;
+
+   uint64_t instances = (uint64_t)cmd[1] * view_count;
+   uint64_t verts = cmd[0] * instances;
+
+   pstats_add_slot(stats, slots, 0, verts);
+   pstats_add_slot(stats, slots, 1, prims * instances);
+   pstats_add_slot(stats, slots, 2, verts);
+   pstats_add_slot(stats, slots, 3, prims * instances);
+   pstats_add_slot(stats, slots, 4, prims * instances);
+}
+
+KERNEL(1)
+panlib_update_pstats_dispatch(global uint32_t *counter,
+                              constant uint32_t *cmd, uint32_t local_size)
+{
+   pstats_add(counter, (uint64_t)cmd[0] * cmd[1] * cmd[2] * local_size);
+}
+
 #elif PAN_ARCH < 9
 
 struct panlib_draw_info {

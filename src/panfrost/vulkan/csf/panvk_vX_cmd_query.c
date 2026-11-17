@@ -17,6 +17,8 @@
 #include "panvk_buffer.h"
 #include "panvk_cmd_alloc.h"
 #include "panvk_cmd_buffer.h"
+#include "panvk_cmd_dispatch.h"
+#include "panvk_cmd_draw.h"
 #include "panvk_cmd_meta.h"
 #include "panvk_cmd_precomp.h"
 #include "panvk_cmd_ts.h"
@@ -25,6 +27,7 @@
 #include "panvk_macros.h"
 #include "panvk_query_pool.h"
 #include "panvk_queue.h"
+#include "panvk_shader.h"
 
 static enum panvk_subqueue_id
 panvk_subqueue_for_query_type(VkQueryType type)
@@ -36,6 +39,10 @@ panvk_subqueue_for_query_type(VkQueryType type)
       return PANVK_SUBQUEUE_FRAGMENT;
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
       return PANVK_SUBQUEUE_COMPUTE;
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS:
+      /* Availability is signalled from the fragment subqueue, after the
+       * compute subqueue and the fragment jobs are done. */
+      return PANVK_SUBQUEUE_FRAGMENT;
    default:
       UNREACHABLE("Unsupported query type");
    }
@@ -134,8 +141,13 @@ panvk_cmd_reset_queries(struct panvk_cmd_buffer *cmd,
    cs_move64_to(b, addr, panvk_query_available_dev_addr(pool, first_query));
    reset_queries_batch(b, addr, zero_regs, query_count);
 
-   cs_move64_to(b, addr, panvk_query_report_dev_addr(pool, first_query));
-   reset_queries_batch(b, addr, zero_regs, query_count);
+   /* Pipeline statistics reports are written from several subqueues and
+    * zeroed by Begin on the subqueue that owns each counter, zeroing them
+    * here could race with a following Begin. */
+   if (pool->vk.query_type != VK_QUERY_TYPE_PIPELINE_STATISTICS) {
+      cs_move64_to(b, addr, panvk_query_report_dev_addr(pool, first_query));
+      reset_queries_batch(b, addr, zero_regs, query_count);
+   }
 
    /* reset_queries_batch() only does the stores, we need to flush those explicitly
     * here. */
@@ -305,6 +317,7 @@ panvk_cmd_end_occlusion_query(struct panvk_cmd_buffer *cmd,
    cmd->state.gfx.occlusion_query.syncobj = 0;
    cmd->state.gfx.occlusion_query.mode = MALI_OCCLUSION_MODE_DISABLED;
    gfx_state_set_dirty(cmd, OQ);
+   panvk_per_arch(cmd_pstats_restore_oq)(cmd);
 
    /* If the render pass is active, we let EndRendering take care of the
     * occlusion query end when the fragment job is issued. */
@@ -717,6 +730,420 @@ panvk_cmd_end_prims_generated_query(
                  cs_defer(SB_MASK(DEFERRED_FLUSH), SB_ID(DEFERRED_SYNC)));
 }
 
+#define PSTAT(name) VK_QUERY_PIPELINE_STATISTIC_##name##_BIT
+
+/* The largest per-draw or per-dispatch increment added with CS immediates,
+ * bigger ones go through the GPU kernels. */
+#define PSTATS_CS_MAX_ADD (8ull * INT32_MAX)
+
+static void
+pstats_cs_add(struct cs_builder *b, uint64_t addr, uint64_t value)
+{
+   if (!addr || !value)
+      return;
+
+   struct cs_index a = cs_scratch_reg64(b, 0);
+   struct cs_index v = cs_scratch_reg64(b, 2);
+
+   cs_move64_to(b, a, addr);
+   cs_load64_to(b, v, a, 0);
+   for (; value > INT32_MAX; value -= INT32_MAX)
+      cs_add_imm64(b, v, v, INT32_MAX);
+   cs_add_imm64(b, v, v, value);
+   cs_store64(b, v, a, 0);
+   cs_flush_stores(b);
+}
+
+static uint64_t
+pstats_kernel_half(const struct panvk_pstats_query_state *q)
+{
+   return q->report + util_bitcount(q->mask) * sizeof(uint64_t);
+}
+
+/* Packs a 4-bit slot per counter for panlib_update_pstats_draw. */
+static uint32_t
+pstats_draw_slots(const struct panvk_pstats_query_state *q, uint32_t counted)
+{
+   static const uint32_t order[] = {
+      PSTAT(INPUT_ASSEMBLY_VERTICES), PSTAT(INPUT_ASSEMBLY_PRIMITIVES),
+      PSTAT(VERTEX_SHADER_INVOCATIONS), PSTAT(CLIPPING_INVOCATIONS),
+      PSTAT(CLIPPING_PRIMITIVES),
+   };
+   uint32_t slots = 0;
+
+   for (uint32_t i = 0; i < ARRAY_SIZE(order); i++) {
+      uint32_t slot = (counted & order[i])
+                         ? util_bitcount(q->mask & (order[i] - 1))
+                         : 0xf;
+      slots |= slot << (i * 4);
+   }
+
+   return slots;
+}
+
+void
+panvk_per_arch(cmd_pstats_draw)(struct panvk_cmd_buffer *cmdbuf,
+                                const struct panvk_draw_info *draw)
+{
+   const struct panvk_pstats_query_state *q = &cmdbuf->state.gfx.pstats_query;
+
+   if (!q->report)
+      return;
+
+   /* ponytail: VS invocations are counted as IA vertices, without vertex
+    * reuse, and clipping primitives as clipping invocations, since nothing
+    * reports the clipper output. Both are implementation-defined. With a
+    * geometry shader, the GS kernel counts clipping from its output.
+    */
+   uint32_t counted = q->mask & (PSTAT(INPUT_ASSEMBLY_VERTICES) |
+                                 PSTAT(INPUT_ASSEMBLY_PRIMITIVES) |
+                                 PSTAT(VERTEX_SHADER_INVOCATIONS));
+   if (!cmdbuf->state.gfx.gs.shader) {
+      counted |= q->mask & (PSTAT(CLIPPING_INVOCATIONS) |
+                            PSTAT(CLIPPING_PRIMITIVES));
+   }
+   if (!counted)
+      return;
+
+   const uint32_t view_mask = cmdbuf->state.gfx.render.view_mask;
+   const uint32_t view_count = view_mask ? util_bitcount(view_mask) : 1;
+   const bool restart = draw->index.index_size && draw->index.restart_enable;
+   const uint64_t instances = (uint64_t)draw->instance.count * view_count;
+   const uint64_t verts = draw->vertex.count * instances;
+
+   if (!draw->indirect.buffer_dev_addr && !restart &&
+       verts <= PSTATS_CS_MAX_ADD) {
+      struct cs_builder *b =
+         panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
+      uint64_t prims =
+         u_decomposed_prims_for_vertices(draw->prim, draw->vertex.count) *
+         instances;
+
+      pstats_cs_add(b, panvk_pstats_counter_addr(
+                          q, counted & PSTAT(INPUT_ASSEMBLY_VERTICES), false),
+                    verts);
+      pstats_cs_add(b, panvk_pstats_counter_addr(
+                          q, counted & PSTAT(INPUT_ASSEMBLY_PRIMITIVES), false),
+                    prims);
+      pstats_cs_add(b, panvk_pstats_counter_addr(
+                          q, counted & PSTAT(VERTEX_SHADER_INVOCATIONS), false),
+                    verts);
+      pstats_cs_add(b, panvk_pstats_counter_addr(
+                          q, counted & PSTAT(CLIPPING_INVOCATIONS), false),
+                    prims);
+      pstats_cs_add(b, panvk_pstats_counter_addr(
+                          q, counted & PSTAT(CLIPPING_PRIMITIVES), false),
+                    prims);
+      return;
+   }
+
+   /* Indirect, primitive restart or huge draws: count on the GPU, one
+    * workgroup per draw, atomically into the shader half of the report. */
+   uint64_t cmd = draw->indirect.buffer_dev_addr;
+   uint32_t cmd_stride = draw->indirect.stride;
+   uint32_t draw_count = draw->indirect.draw_count;
+
+   if (!cmd) {
+      struct pan_ptr ptr = panvk_cmd_alloc_dev_mem(
+         cmdbuf, desc, sizeof(VkDrawIndexedIndirectCommand), 16);
+      if (!ptr.gpu)
+         return;
+
+      *(VkDrawIndexedIndirectCommand *)ptr.cpu = (VkDrawIndexedIndirectCommand){
+         .indexCount = draw->vertex.count,
+         .instanceCount = draw->instance.count,
+         .firstIndex = draw->index.offset,
+         .vertexOffset = draw->vertex.base,
+         .firstInstance = draw->instance.base,
+      };
+      cmd = ptr.gpu;
+      cmd_stride = 0;
+      draw_count = 1;
+   }
+
+   const uint32_t index_size = draw->index.index_size;
+   struct panlib_update_pstats_draw_args args = {
+      .stats = pstats_kernel_half(q),
+      .slots = pstats_draw_slots(q, counted),
+      .cmd = cmd,
+      .cmd_stride = cmd_stride,
+      .count_buffer = draw->indirect.count_buffer_dev_addr,
+      .draw_index = draw->indirect.draw_index,
+      .index_buffer = cmdbuf->state.gfx.ib.dev_addr,
+      .index_buffer_size_el =
+         index_size ? cmdbuf->state.gfx.ib.size / index_size : 0,
+      .index_size_B = index_size,
+      .restart = restart,
+      .prim = draw->prim,
+      .view_count = view_count,
+   };
+   struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+   panlib_update_pstats_draw_struct(&precomp_ctx, panlib_1d(draw_count),
+                                    PANLIB_BARRIER_NONE, args);
+}
+
+void
+panvk_per_arch(cmd_pstats_dispatch)(struct panvk_cmd_buffer *cmdbuf,
+                                    const struct panvk_shader_variant *cs,
+                                    const struct panvk_dispatch_info *info)
+{
+   const struct panvk_pstats_query_state *q = &cmdbuf->state.gfx.pstats_query;
+
+   if (!panvk_pstats_counter_addr(q, PSTAT(COMPUTE_SHADER_INVOCATIONS), false))
+      return;
+
+   /* ponytail: vk_meta compute dispatches go through here too and are
+    * counted, filter them if an app notices.
+    */
+   const uint32_t local_size =
+      cs->cs.local_size.x * cs->cs.local_size.y * cs->cs.local_size.z;
+   const uint64_t invocations = (uint64_t)info->direct.wg_count.x *
+                                info->direct.wg_count.y *
+                                info->direct.wg_count.z * local_size;
+   uint64_t cmd = info->indirect.buffer_dev_addr;
+
+   if (!cmd && invocations <= PSTATS_CS_MAX_ADD) {
+      pstats_cs_add(panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE),
+                    panvk_pstats_counter_addr(
+                       q, PSTAT(COMPUTE_SHADER_INVOCATIONS), false),
+                    invocations);
+      return;
+   }
+
+   if (!cmd) {
+      struct pan_ptr ptr = panvk_cmd_alloc_dev_mem(
+         cmdbuf, desc, sizeof(VkDispatchIndirectCommand), 16);
+      if (!ptr.gpu)
+         return;
+
+      *(VkDispatchIndirectCommand *)ptr.cpu = (VkDispatchIndirectCommand){
+         .x = info->direct.wg_count.x,
+         .y = info->direct.wg_count.y,
+         .z = info->direct.wg_count.z,
+      };
+      cmd = ptr.gpu;
+   }
+
+   struct panlib_update_pstats_dispatch_args args = {
+      .counter =
+         panvk_pstats_counter_addr(q, PSTAT(COMPUTE_SHADER_INVOCATIONS), true),
+      .cmd = cmd,
+      .local_size = local_size,
+   };
+   struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+   panlib_update_pstats_dispatch_struct(&precomp_ctx, panlib_1d(1),
+                                        PANLIB_BARRIER_NONE, args);
+}
+
+/* ponytail: the fragment shader invocation count is the sample count of the
+ * hardware occlusion counter, pointed at the report while no occlusion query
+ * owns it. It misses fragments killed by late depth/stencil tests and counts
+ * samples rather than invocations with MSAA, and draws made while an
+ * occlusion query is active are not counted. Counting in the fragment shader
+ * would need a shader variant.
+ */
+static void
+pstats_take_oq(struct panvk_cmd_buffer *cmd)
+{
+   struct panvk_pstats_query_state *q = &cmd->state.gfx.pstats_query;
+   uint64_t fs = panvk_pstats_counter_addr(
+      q, PSTAT(FRAGMENT_SHADER_INVOCATIONS), true);
+
+   if (!fs || !q->oq_sync ||
+       cmd->state.gfx.occlusion_query.mode != MALI_OCCLUSION_MODE_DISABLED)
+      return;
+
+   cmd->state.gfx.occlusion_query.ptr = fs;
+   cmd->state.gfx.occlusion_query.syncobj = q->oq_sync;
+   cmd->state.gfx.occlusion_query.mode = MALI_OCCLUSION_MODE_COUNTER;
+   gfx_state_set_dirty(cmd, OQ);
+}
+
+void
+panvk_per_arch(cmd_pstats_restore_oq)(struct panvk_cmd_buffer *cmd)
+{
+   pstats_take_oq(cmd);
+}
+
+static void
+pstats_signal(struct panvk_cmd_buffer *cmd, uint64_t avail,
+              uint32_t view_count)
+{
+   struct panvk_device *dev = to_panvk_device(cmd->vk.base.device);
+   struct cs_builder *b = panvk_get_cs_builder(cmd, PANVK_SUBQUEUE_FRAGMENT);
+   struct cs_index syncobj = cs_scratch_reg64(b, 0);
+   struct cs_index val = cs_scratch_reg32(b, 2);
+
+   /* Wait for the fragment jobs feeding the occlusion counter and make all
+    * counters visible before flagging the query available. */
+   cs_move32_to(b, val, 0);
+   cs_flush_caches(b, MALI_CS_FLUSH_MODE_CLEAN, MALI_CS_FLUSH_MODE_CLEAN,
+                   MALI_CS_OTHER_FLUSH_MODE_NONE, val,
+                   cs_defer(dev->csf.sb.all_iters_mask, SB_ID(DEFERRED_FLUSH)));
+
+   cs_move32_to(b, val, 1);
+   for (uint32_t v = 0; v < view_count; v++) {
+      cs_move64_to(b, syncobj,
+                   avail + v * sizeof(struct panvk_query_available_obj));
+      cs_sync32_set(b, true, MALI_CS_SYNC_SCOPE_CSG, val, syncobj,
+                    cs_defer(SB_MASK(DEFERRED_FLUSH), SB_ID(DEFERRED_SYNC)));
+   }
+}
+
+void
+panvk_per_arch(cmd_pstats_flush_pending)(struct panvk_cmd_buffer *cmd)
+{
+   for (uint32_t i = 0; i < cmd->state.gfx.render.pstats_pending_count; i++) {
+      pstats_signal(cmd, cmd->state.gfx.render.pstats_pending[i].avail,
+                    cmd->state.gfx.render.pstats_pending[i].view_count);
+   }
+
+   cmd->state.gfx.render.pstats_pending_count = 0;
+}
+
+static void
+panvk_cmd_begin_pstats_query(struct panvk_cmd_buffer *cmd,
+                             struct panvk_query_pool *pool, uint32_t query)
+{
+   struct panvk_pstats_query_state *q = &cmd->state.gfx.pstats_query;
+   const uint32_t n = util_bitcount(pool->vk.pipeline_statistics);
+   const uint64_t report = panvk_query_report_dev_addr(pool, query);
+
+   *q = (struct panvk_pstats_query_state){
+      .report = report,
+      .mask = pool->vk.pipeline_statistics,
+   };
+
+   /* Counters start at zero. Zero each one from the subqueue that writes it
+    * so the stores are ordered with the updates: everything on compute but
+    * the FS invocation counter, which the fragment jobs accumulate into. */
+   uint64_t fs =
+      panvk_pstats_counter_addr(q, PSTAT(FRAGMENT_SHADER_INVOCATIONS), true);
+   const uint32_t fs_offset = fs ? fs - report : UINT32_MAX;
+   /* With multiview, the other views' queries are all zero. */
+   const uint32_t view_mask = cmd->state.gfx.render.view_mask;
+   const uint32_t view_count = view_mask ? util_bitcount(view_mask) : 1;
+
+   for (uint32_t sq = 0; sq < 2; sq++) {
+      struct cs_builder *b = panvk_get_cs_builder(
+         cmd, sq ? PANVK_SUBQUEUE_FRAGMENT : PANVK_SUBQUEUE_COMPUTE);
+      struct cs_index addr = cs_scratch_reg64(b, 0);
+      struct cs_index zero = cs_scratch_reg64(b, 2);
+
+      if (sq && !fs)
+         break;
+
+      cs_move64_to(b, zero, 0);
+      for (uint32_t v = 0; v < view_count; v++) {
+         cs_move64_to(b, addr, panvk_query_report_dev_addr(pool, query + v));
+         for (uint32_t off = 0; off < 2 * n * sizeof(uint64_t);
+              off += sizeof(uint64_t)) {
+            if ((off == fs_offset) == (sq == 1))
+               cs_store64(b, zero, addr, off);
+         }
+         cs_flush_stores(b);
+      }
+   }
+
+   if (!fs)
+      return;
+
+   /* wrap_prev_oq() signals one syncobj per view when the occlusion counter
+    * changes owner, give it harmless ones. */
+   const size_t oq_sync_size = 32 * sizeof(struct panvk_query_available_obj);
+   struct pan_ptr oq_sync = panvk_cmd_alloc_dev_mem(cmd, desc, oq_sync_size, 64);
+   if (!oq_sync.gpu)
+      return;
+
+   memset(oq_sync.cpu, 0, oq_sync_size);
+   q->oq_sync = oq_sync.gpu;
+   pstats_take_oq(cmd);
+}
+
+static void
+panvk_cmd_end_pstats_query(struct panvk_cmd_buffer *cmd,
+                           struct panvk_query_pool *pool, uint32_t query)
+{
+   struct panvk_device *dev = to_panvk_device(cmd->vk.base.device);
+   struct panvk_pstats_query_state *q = &cmd->state.gfx.pstats_query;
+
+   if (q->oq_sync && cmd->state.gfx.occlusion_query.syncobj == q->oq_sync) {
+      cmd->state.gfx.occlusion_query.ptr = 0;
+      cmd->state.gfx.occlusion_query.syncobj = 0;
+      cmd->state.gfx.occlusion_query.mode = MALI_OCCLUSION_MODE_DISABLED;
+      gfx_state_set_dirty(cmd, OQ);
+   }
+   *q = (struct panvk_pstats_query_state){0};
+
+   /* The fragment subqueue signals availability, once the compute subqueue
+    * is done with the command stream updates and the shader atomics. This
+    * is one wait per query, not per draw. */
+   struct panvk_cs_deps deps = {0};
+   deps.src[PANVK_SUBQUEUE_COMPUTE].wait_sb_mask =
+      dev->csf.sb.all_iters_mask | SB_MASK(LS);
+   deps.src[PANVK_SUBQUEUE_COMPUTE].cache_flush = (struct panvk_cache_flush_info){
+      .l2 = MALI_CS_FLUSH_MODE_CLEAN,
+      .lsc = MALI_CS_FLUSH_MODE_CLEAN,
+      .others = MALI_CS_OTHER_FLUSH_MODE_NONE,
+   };
+   deps.dst[PANVK_SUBQUEUE_FRAGMENT].wait_subqueue_mask =
+      BITFIELD_BIT(PANVK_SUBQUEUE_COMPUTE);
+   panvk_per_arch(emit_barrier)(cmd, deps);
+
+   const uint32_t view_mask = cmd->state.gfx.render.view_mask;
+   const uint32_t view_count = view_mask ? util_bitcount(view_mask) : 1;
+   const uint64_t avail = panvk_query_available_dev_addr(pool, query);
+
+   /* Inside a render pass, the fragment jobs that feed the FS invocation
+    * counter are only issued by EndRendering, so defer the signal there. A
+    * secondary hands its list to the primary in CmdExecuteCommands.
+    * ponytail: a full pending list signals now and can miss that pass's FS
+    * invocations.
+    */
+   if ((cmd->state.gfx.render.tiler || inherits_render_ctx(cmd)) &&
+       cmd->state.gfx.render.pstats_pending_count < PANVK_PSTATS_MAX_PENDING) {
+      cmd->state.gfx.render.pstats_pending[cmd->state.gfx.render.pstats_pending_count++] =
+         (struct panvk_pstats_pending){avail, view_count};
+      return;
+   }
+
+   pstats_signal(cmd, avail, view_count);
+}
+
+static void
+panvk_copy_pstats_query_results(struct panvk_cmd_buffer *cmd,
+                                struct panvk_query_pool *pool,
+                                uint32_t first_query, uint32_t query_count,
+                                uint64_t dst_buffer_addr, VkDeviceSize stride,
+                                VkQueryResultFlags flags)
+{
+   /* Order the copy after the availability writes and resets, which happen
+    * on the fragment subqueue. */
+   struct panvk_cs_deps deps = {0};
+   deps.src[PANVK_SUBQUEUE_FRAGMENT].wait_sb_mask =
+      SB_MASK(DEFERRED_FLUSH) | SB_MASK(DEFERRED_SYNC) | SB_MASK(LS);
+   deps.dst[PANVK_SUBQUEUE_COMPUTE].wait_subqueue_mask =
+      BITFIELD_BIT(PANVK_SUBQUEUE_FRAGMENT);
+   panvk_per_arch(emit_barrier)(cmd, deps);
+
+   const struct panlib_copy_pstats_query_result_args push = {
+      .pool_addr = panvk_query_report_dev_addr(pool, first_query),
+      .available_addr = panvk_query_available_dev_addr(pool, first_query),
+      .query_stride = pool->query_stride,
+      .query_count = query_count,
+      .dst_addr = dst_buffer_addr,
+      .dst_stride = stride,
+      .flags = flags,
+      .stat_count = util_bitcount(pool->vk.pipeline_statistics),
+   };
+   struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmd);
+
+   panlib_copy_pstats_query_result_struct(&precomp_ctx, panlib_1d(query_count),
+                                          PANLIB_BARRIER_CSF_SYNC, push);
+}
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdResetQueryPool)(VkCommandBuffer commandBuffer,
                                   VkQueryPool queryPool, uint32_t firstQuery,
@@ -730,7 +1157,8 @@ panvk_per_arch(CmdResetQueryPool)(VkCommandBuffer commandBuffer,
 
    switch (pool->vk.query_type) {
    case VK_QUERY_TYPE_OCCLUSION:
-   case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
+   case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
       panvk_cmd_reset_queries(cmd, pool, firstQuery, queryCount);
       break;
    }
@@ -764,6 +1192,10 @@ panvk_per_arch(CmdBeginQueryIndexedEXT)(VkCommandBuffer commandBuffer,
       panvk_cmd_begin_prims_generated_query(cmd, pool, query, flags);
       break;
    }
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+      panvk_cmd_begin_pstats_query(cmd, pool, query);
+      break;
+   }
    default:
       UNREACHABLE("Unsupported query type");
    }
@@ -787,6 +1219,10 @@ panvk_per_arch(CmdEndQueryIndexedEXT)(VkCommandBuffer commandBuffer,
    }
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
       panvk_cmd_end_prims_generated_query(cmd, pool, query);
+      break;
+   }
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+      panvk_cmd_end_pstats_query(cmd, pool, query);
       break;
    }
    default:
@@ -822,6 +1258,11 @@ panvk_per_arch(CmdCopyQueryPoolResults)(
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
       panvk_copy_query_results(cmd, pool, firstQuery, queryCount,
                                dst_buffer_addr, stride, flags);
+      break;
+   }
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+      panvk_copy_pstats_query_results(cmd, pool, firstQuery, queryCount,
+                                      dst_buffer_addr, stride, flags);
       break;
    }
 #if PAN_ARCH >= 10

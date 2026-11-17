@@ -1039,6 +1039,18 @@ void panvk_per_arch(kbase_mark_progress)(
    struct panvk_cmd_buffer *cmdbuf, enum panvk_subqueue_id subqueue,
    enum panvk_kbase_progress_marker marker);
 
+struct panvk_draw_info;
+struct panvk_dispatch_info;
+struct panvk_shader_variant;
+
+void panvk_per_arch(cmd_pstats_draw)(struct panvk_cmd_buffer *cmdbuf,
+                                     const struct panvk_draw_info *draw);
+void panvk_per_arch(cmd_pstats_dispatch)(
+   struct panvk_cmd_buffer *cmdbuf, const struct panvk_shader_variant *cs,
+   const struct panvk_dispatch_info *info);
+void panvk_per_arch(cmd_pstats_flush_pending)(struct panvk_cmd_buffer *cmdbuf);
+void panvk_per_arch(cmd_pstats_restore_oq)(struct panvk_cmd_buffer *cmdbuf);
+
 #if PAN_ARCH >= 14
 static inline void
 cs_emit_layer_fragment_state(struct cs_builder *b, struct cs_index fbd_ptr)

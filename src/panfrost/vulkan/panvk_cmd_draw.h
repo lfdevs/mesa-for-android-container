@@ -128,6 +128,11 @@ struct panvk_rendering_state {
       uint64_t last;
    } oq;
 
+   /* Pipeline statistics queries that ended inside this render pass and
+    * are signalled once its fragment jobs are issued. */
+   struct panvk_pstats_pending pstats_pending[PANVK_PSTATS_MAX_PENDING];
+   uint32_t pstats_pending_count;
+
    struct {
       uint64_t fbds[3];
    } ir;
@@ -159,6 +164,7 @@ struct panvk_cmd_graphics_state {
    struct panvk_occlusion_query_state occlusion_query;
 #if PAN_ARCH >= 10
    struct panvk_prims_generated_query_state prims_generated_query;
+   struct panvk_pstats_query_state pstats_query;
 #endif
    struct panvk_graphics_sysvals sysvals;
 
@@ -452,6 +458,8 @@ struct panvk_draw_info {
 
    enum mesa_prim prim;
    bool gpu_prerast_generated;
+   /* Already counted by a pipeline statistics query (split chunks). */
+   bool pstats_counted;
    uint32_t gpu_prerast_prim_base;
 
 #if PAN_ARCH < 9

@@ -71,6 +71,12 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       reports_per_query = 1;
       break;
    }
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+      /* See panvk_pstats_query_state. */
+      reports_per_query =
+         MAX2(2 * util_bitcount(pCreateInfo->pipelineStatistics), 1);
+      break;
+   }
 #endif
    default:
       UNREACHABLE("Unsupported query type");
@@ -262,6 +268,10 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
       return VK_ERROR_DEVICE_LOST;
 
    VkResult status = VK_SUCCESS;
+   const uint32_t result_count =
+      pool->vk.query_type == VK_QUERY_TYPE_PIPELINE_STATISTICS
+         ? util_bitcount(pool->vk.pipeline_statistics)
+         : 1;
    for (uint32_t i = 0; i < queryCount; i++) {
       const uint32_t query = firstQuery + i;
 
@@ -301,6 +311,14 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
                cpu_write_query_result(dst, 0, flags, src[0].value);
             break;
          }
+         case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+            for (uint32_t s = 0; write_results && s < result_count; s++) {
+               cpu_write_query_result(dst, s, flags,
+                                      src[s].value +
+                                         src[result_count + s].value);
+            }
+            break;
+         }
 #endif
          default:
             UNREACHABLE("Unsupported query type");
@@ -311,7 +329,7 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
          status = VK_NOT_READY;
 
       if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
-         cpu_write_query_result(dst, 1, flags, available);
+         cpu_write_query_result(dst, result_count, flags, available);
    }
 
    return status;

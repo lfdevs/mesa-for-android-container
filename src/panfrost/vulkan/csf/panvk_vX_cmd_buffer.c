@@ -1228,6 +1228,18 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
        * correctly detect that an oq has ended in EndRendering. */
       primary->state.gfx.render.oq = secondary->state.gfx.render.oq;
 
+      /* Same for pipeline statistics queries ended in the secondary. */
+      for (uint32_t p = 0; p < secondary->state.gfx.render.pstats_pending_count;
+           p++) {
+         if (primary->state.gfx.render.pstats_pending_count ==
+             PANVK_PSTATS_MAX_PENDING)
+            panvk_per_arch(cmd_pstats_flush_pending)(primary);
+
+         primary->state.gfx.render.pstats_pending
+            [primary->state.gfx.render.pstats_pending_count++] =
+            secondary->state.gfx.render.pstats_pending[p];
+      }
+
       /* If the render context we passed to the secondary command buffer got
        * invalidated, reset the FB/tiler descs and treat things as if we
        * suspended the render pass, since those descriptors have been
