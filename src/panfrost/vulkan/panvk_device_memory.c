@@ -258,11 +258,13 @@ panvk_FreeMemory(VkDevice _device, VkDeviceMemory _mem,
                             pan_kmod_bo_size(mem->bo));
 
       if (mem->debug.host_mapping)
-         os_munmap(mem->debug.host_mapping, pan_kmod_bo_size(mem->bo));
+         pan_kmod_bo_munmap(mem->bo, mem->debug.host_mapping,
+                            pan_kmod_bo_size(mem->bo));
    }
 
    if (mem->addr.host) {
-      ASSERTED int ret = os_munmap(mem->addr.host, pan_kmod_bo_size(mem->bo));
+      ASSERTED int ret = pan_kmod_bo_munmap(mem->bo, mem->addr.host,
+                                            pan_kmod_bo_size(mem->bo));
       assert(!ret);
    }
 
@@ -372,7 +374,8 @@ panvk_UnmapMemory2KHR(VkDevice _device,
          return panvk_errorf(device, VK_ERROR_MEMORY_MAP_FAILED,
                              "Failed to reserve VA on unmap.");
    } else {
-      ASSERTED int ret = os_munmap(mem->addr.host, pan_kmod_bo_size(mem->bo));
+      ASSERTED int ret = pan_kmod_bo_munmap(mem->bo, mem->addr.host,
+                                            pan_kmod_bo_size(mem->bo));
       assert(!ret);
    }
 

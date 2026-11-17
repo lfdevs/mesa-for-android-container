@@ -69,7 +69,7 @@ finish_render_desc_ringbuf(struct panvk_gpu_queue *queue)
 
    if (ringbuf->addr.host) {
       ASSERTED int ret =
-         os_munmap(ringbuf->addr.host, ringbuf->size);
+         pan_kmod_bo_munmap(ringbuf->bo, ringbuf->addr.host, ringbuf->size);
       assert(!ret);
    }
 
@@ -222,7 +222,8 @@ finish_subqueue_tracing(struct panvk_gpu_queue *queue,
 
    if (subq->tracebuf.addr.host) {
       ASSERTED int ret =
-         os_munmap(subq->tracebuf.addr.host, subq->tracebuf.size);
+         pan_kmod_bo_munmap(subq->tracebuf.bo, subq->tracebuf.addr.host,
+                            subq->tracebuf.size);
       assert(!ret);
    }
 

@@ -261,7 +261,8 @@ munmap_planes(struct panvk_image *img,
       /* No need to call pan_kmod_flush_bo_map_syncs() even if we've written to
        * the image. This will be done just before the next submit. */
       ASSERTED int ret =
-         os_munmap(plane_ptrs[i], pan_kmod_bo_size(img->planes[i].mem->bo));
+         pan_kmod_bo_munmap(img->planes[i].mem->bo, plane_ptrs[i],
+                            pan_kmod_bo_size(img->planes[i].mem->bo));
       assert(!ret);
 
       /* Make sure we reset all mapping entries pointing to the same virtual
