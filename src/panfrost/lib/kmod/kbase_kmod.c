@@ -1685,6 +1685,20 @@ kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
    kbase_bo->gpu_mapping = cpu_ptr;
    kbase_bo->gpu_va = kbase_bo->same_va ? (uintptr_t)cpu_ptr : alloc_gpu_va;
 
+   if (commit_pages) {
+      memset(cpu_ptr, 0, commit_pages * page_size);
+      if ((alloc_flags & BASE_MEM_CACHED_CPU) && !kbase_bo->cpu_gpu_coherent) {
+         struct kbase_ioctl_mem_sync sync_req = {
+            .handle = kbase_bo->gpu_va,
+            .user_addr = (uintptr_t)cpu_ptr,
+            .size = commit_pages * page_size,
+            .type = BASE_SYNCSET_OP_MSYNC,
+         };
+         if (pan_kmod_ioctl(dev->fd, KBASE_IOCTL_MEM_SYNC, &sync_req))
+            mesa_loge("kbase: KBASE_IOCTL_MEM_SYNC failed: %s",
+                      strerror(errno));
+      }
+   }
 
    /* Allocate a unique u32 handle for the pan_kmod handle_to_bo table. */
    uint32_t handle = p_atomic_inc_return(&kbase_dev->next_handle);
