@@ -2129,7 +2129,7 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
                               list->pDrmFormatModifierProperties,
                               &list->drmFormatModifierCount);
 
-      if (tex) {
+      if (tex && !optimal_only) {
          for (uint32_t mi = 0; mi < ARRAY_SIZE(supported); mi++) {
             uint64_t mod = supported[mi];
             uint32_t caps =
@@ -2163,7 +2163,7 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
                               list2->pDrmFormatModifierProperties,
                               &list2->drmFormatModifierCount);
 
-      if (tex) {
+      if (tex && !optimal_only) {
          for (uint32_t mi = 0; mi < ARRAY_SIZE(supported); mi++) {
             uint64_t mod = supported[mi];
             uint32_t caps =
@@ -2356,6 +2356,7 @@ get_image_format_properties(struct panvk_physical_device *physical_device,
        * enumerants [...] */
       goto unsupported;
    }
+
    if (panvk_format_is_bc(info->format) &&
        (info->tiling != VK_IMAGE_TILING_OPTIMAL ||
         info->type == VK_IMAGE_TYPE_1D ||
