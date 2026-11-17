@@ -3834,6 +3834,15 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
       cs_store32(compute, value, draw_params, 16);
    }
 
+   /* The polygon kernel fills this in, but it is not run for draws past the
+    * indirect count. */
+   if (poly_mode != PANVK_GPU_PRERAST_POLY_NONE) {
+      cs_move64_to(compute, draw_params, poly_draw);
+      cs_move32_to(compute, value, 0);
+      for (unsigned i = 0; i < 5; i++)
+         cs_store32(compute, value, draw_params, i * 4);
+   }
+
    struct pan_ptr push;
    const struct panvk_shader_variant *lowered = panvk_shader_gpu_prerast_variant(
       shader, PANVK_VS_VARIANT_GPU_LOWERED);
@@ -4032,7 +4041,10 @@ static bool
 gpu_prerast_needed(const struct panvk_cmd_buffer *cmdbuf,
                    const struct panvk_draw_info *draw)
 {
-   return !draw->gpu_prerast_generated && cmdbuf->state.gfx.gs.shader;
+   return !draw->gpu_prerast_generated &&
+          (cmdbuf->state.gfx.gs.shader ||
+           panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, draw) !=
+              PANVK_GPU_PRERAST_POLY_NONE);
 }
 
 /* Returns true if the draw was split into draws that fit the arena. */

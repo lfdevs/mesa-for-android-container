@@ -2738,11 +2738,15 @@ panvk_compile_shader(struct panvk_device *dev,
    case MESA_SHADER_VERTEX: {
 #if PAN_ARCH >= 10
       /* Lowered/passthrough variants only exist on the gpu_prerast path. */
+      const bool dyn_polygon_mode =
+         !state || !state->rs ||
+         BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE);
       const bool want_prerast =
          PANVK_DEBUG(GPU_PRERAST) ||
          (info->next_stage_mask & VK_SHADER_STAGE_GEOMETRY_BIT) ||
-         (state && state->rs &&
-          state->rs->polygon_mode != VK_POLYGON_MODE_FILL);
+         (dev->vk.enabled_features.fillModeNonSolid &&
+          (dyn_polygon_mode ||
+           state->rs->polygon_mode != VK_POLYGON_MODE_FILL));
       const enum panvk_vs_variant last_variant =
          want_prerast ? PANVK_VS_VARIANT_GPU_PASSTHROUGH : PANVK_VS_VARIANT_HW;
       struct panvk_gpu_prerast_out_types out_types = {0};

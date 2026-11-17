@@ -77,7 +77,7 @@ panvk_per_arch(gpu_prerast_can_lower)(
                       panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, draw) !=
                          PANVK_GPU_PRERAST_POLY_NONE;
     if (!(PANVK_DEBUG(GPU_PRERAST) || poly || gs) ||
-        (!gs && shader->has_side_effects) ||
+        (!gs && !poly && shader->has_side_effects) ||
         !shader->lowered_vs_compiled || !shader->passthrough_vs_compiled ||
         (poly && !shader->polygon_compiled) ||
         (gs && (!gs->gpu_prerast.gs.kernel_compiled ||
