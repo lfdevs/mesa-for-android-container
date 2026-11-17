@@ -469,6 +469,9 @@ struct pan_kmod_perf_session {
  * optional.
  */
 struct pan_kmod_ops {
+   /* The backend uses synchronization outside the syncobj provider API. */
+   bool no_syncobj;
+
    /* Create a pan_kmod_dev object.
     * Return NULL if the creation fails for any reason.
     */
@@ -1190,7 +1193,7 @@ pan_kmod_sync_clone(const struct pan_kmod_dev *dev)
 {
    struct util_sync_provider *sync_ops = dev->sync_ops;
 
-   return sync_ops->clone(sync_ops);
+   return sync_ops ? sync_ops->clone(sync_ops) : NULL;
 }
 
 #if defined(__cplusplus)

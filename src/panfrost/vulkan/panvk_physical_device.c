@@ -1427,7 +1427,9 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
       return result;
 
    device->model = pan_get_model(device->kmod.dev->props.gpu_id,
-                                 device->kmod.dev->props.gpu_variant);
+                                 device->kmod.dev->props.gpu_variant,
+                                 pan_query_core_count(&device->kmod.dev->props),
+                                 device->kmod.dev->props.gpu_features);
 
    unsigned arch = pan_arch(device->kmod.dev->props.gpu_id);
 

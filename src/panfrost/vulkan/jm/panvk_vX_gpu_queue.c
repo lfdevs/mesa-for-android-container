@@ -237,7 +237,7 @@ panvk_queue_submit_batch(struct panvk_gpu_queue *queue,
       if (PANVK_DEBUG(SYNC))
          pandecode_abort_on_fault(dev->debug.decode_ctx, batch->vtc_jc.first_job,
                                   phys_dev->kmod.dev->props.gpu_id);
-   
+
          } /* end !warmed_up else */
       }
 
