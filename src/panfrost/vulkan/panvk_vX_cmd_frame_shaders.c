@@ -16,6 +16,8 @@
 #include "pan_shader.h"
 #include "pan_nir.h"
 
+#include "util/u_debug.h"
+
 PRAGMA_DIAGNOSTIC_PUSH
 PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 struct panvk_frame_shader_key {
@@ -791,6 +793,10 @@ always_load(const struct pan_fb_load *load,
           (pan_fb_shader_key_target_written(&key->key.s) && load->s.always);
 }
 
+#if PAN_ARCH == 11
+DEBUG_GET_ONCE_BOOL_OPTION(zs_preload_always, "PANVK_ZS_PRELOAD_ALWAYS", false)
+#endif
+
 static VkResult
 cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
                            const struct pan_fb_layout *fb,
@@ -826,6 +832,11 @@ cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
     */
 #if PAN_ARCH >= 13
    fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_PREPASS_ALWAYS;
+#elif PAN_ARCH == 11
+   fs->modes[dcd_idx] = (always_load(load, &key) ||
+                         debug_get_option_zs_preload_always())
+                        ? MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS
+                        : MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
 #elif PAN_ARCH >= 9
    fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
 #else
