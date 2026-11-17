@@ -596,10 +596,15 @@ panvk_per_arch(add_cs_deps)(struct panvk_cmd_buffer *cmdbuf,
 
    for (uint32_t i = 0; i < in->bufferMemoryBarrierCount; i++) {
       const VkBufferMemoryBarrier2 *barrier = &in->pBufferMemoryBarriers[i];
+      VK_FROM_HANDLE(panvk_buffer, buffer, barrier->buffer);
       struct panvk_sync_scope src = {barrier->srcStageMask, barrier->srcAccessMask};
       struct panvk_sync_scope dst = {barrier->dstStageMask, barrier->dstAccessMask};
       normalize_dependency(&src, &dst, barrier->srcQueueFamilyIndex,
                            barrier->dstQueueFamilyIndex);
+
+      if (!(buffer->vk.usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT))
+         dst.access &= ~(VK_ACCESS_2_SHADER_READ_BIT |
+                         VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 
       collect_cs_deps(cmdbuf, in, src, dst, out);
    }
