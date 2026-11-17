@@ -52,6 +52,9 @@ panvk_storage_pview(const struct panvk_image_view *view,
 {
    struct pan_image_view spview = *pview;
 
+   if (spview.dim == MALI_TEXTURE_DIMENSION_CUBE)
+      spview.dim = MALI_TEXTURE_DIMENSION_2D;
+
    /* A storage view only sees its Z-slice range. The range defaults to the
     * full view depth, so non-sliced views are left unchanged
     * (VK_EXT_image_sliced_view_of_3d).
