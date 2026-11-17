@@ -128,6 +128,9 @@ typedef VkResult (*panvk_kbase_sync_wait_func)(
 void panvk_kbase_sync_set_pending(
    struct vk_sync *sync, void *data, panvk_kbase_sync_wait_func wait,
    const uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT]);
+
+bool panvk_kbase_sync_peek(struct vk_sync *sync, void **data,
+                           uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT]);
 #endif
 
 void panvk_physical_device_finish(struct panvk_physical_device *device);

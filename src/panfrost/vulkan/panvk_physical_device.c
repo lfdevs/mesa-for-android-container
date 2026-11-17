@@ -788,6 +788,37 @@ panvk_kbase_sync_set_pending(
    mtx_unlock(&ks->mutex);
 }
 
+bool
+panvk_kbase_sync_peek(struct vk_sync *sync, void **data,
+                      uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT])
+{
+   if (sync->type->wait_many != kbase_cpu_sync_wait_many)
+      return false;
+
+   struct kbase_cpu_sync *ks = container_of(sync, struct kbase_cpu_sync, sync);
+   bool known = true;
+
+   mtx_lock(&ks->mutex);
+   switch (ks->state) {
+   case KBASE_CPU_SYNC_SIGNALED:
+      *data = NULL;
+      memset(targets, 0, sizeof(uint64_t) * PANVK_KBASE_SYNC_TARGET_COUNT);
+      break;
+   case KBASE_CPU_SYNC_PENDING:
+   case KBASE_CPU_SYNC_WAITING:
+      *data = ks->pending_data;
+      memcpy(targets, ks->targets,
+             sizeof(uint64_t) * PANVK_KBASE_SYNC_TARGET_COUNT);
+      known = ks->pending_data != NULL;
+      break;
+   default:
+      known = false;
+      break;
+   }
+   mtx_unlock(&ks->mutex);
+   return known;
+}
+
 static VkResult
 kbase_cpu_sync_wait_one(struct vk_device *device, struct kbase_cpu_sync *ks,
                         enum vk_sync_wait_flags wait_flags,
