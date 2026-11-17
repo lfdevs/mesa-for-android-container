@@ -426,7 +426,7 @@ panvk_get_spirv_options(UNUSED struct vk_physical_device *vk_pdev,
       .phys_ssbo_addr_format = nir_address_format_64bit_global,
       .shared_addr_format = nir_address_format_32bit_offset,
       .min_ubo_alignment = 16,
-      .min_ssbo_alignment = 16,
+      .min_ssbo_alignment = PAN_ARCH >= 9 ? 4 : 16,
       .debug_info = pan_want_debug_info(PAN_ARCH),
    };
 }

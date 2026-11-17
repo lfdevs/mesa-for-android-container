@@ -1001,8 +1001,7 @@ panvk_per_arch(get_physical_device_properties)(
       .minTexelBufferOffsetAlignment = 16,
       /* Always aligned on a uniform slot (vec4). */
       .minUniformBufferOffsetAlignment = 16,
-      /* LOAD.i128 and LD_PKA.i128 which require 16B alignment */
-      .minStorageBufferOffsetAlignment = 16,
+      .minStorageBufferOffsetAlignment = PAN_ARCH >= 9 ? 4 : 16,
       /* Signed 4-bit value. */
       .minTexelOffset = -8,
       .maxTexelOffset = 7,
