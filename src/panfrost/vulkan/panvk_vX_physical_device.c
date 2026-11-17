@@ -315,7 +315,7 @@ panvk_per_arch(get_physical_device_features)(
       .fullDrawIndexUint32 = true,
       .imageCubeArray = true,
       .independentBlend = true,
-      .geometryShader = PAN_ARCH >= 10 && PANVK_DEBUG(GS),
+      .geometryShader = PAN_ARCH >= 10 && !PANVK_DEBUG(NO_GS),
       .tessellationShader = false,
       .sampleRateShading = true,
       .dualSrcBlend = true,
