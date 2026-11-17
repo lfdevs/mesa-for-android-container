@@ -72,11 +72,11 @@ tu_wsi_init(struct tu_physical_device *physical_device)
    /* kgsl puts no fence on a dma-buf, so the X server cannot wait for the
     * GPU before it reads a presented image. Have the X11 WSI wait in every
     * present mode, as it already does for mailbox.
-    * TU_KGSL_PRESENT_WAIT=0 turns this off.
+    * MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE=1 turns this off.
     */
    physical_device->wsi_device.x11.wait_for_fences =
       tu_wsi_is_kgsl(physical_device) &&
-      debug_get_bool_option("TU_KGSL_PRESENT_WAIT", true);
+      !debug_get_bool_option("MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE", false);
 
    physical_device->vk.wsi_device = &physical_device->wsi_device;
 
