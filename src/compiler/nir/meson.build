@@ -282,6 +282,7 @@ else
   'nir_opt_licm.c',
   'nir_opt_load_skip_helpers.c',
   'nir_opt_load_store_vectorize.c',
+  'nir_opt_vectorize_robust_ssbo_loads.c',
   'nir_opt_loop.c',
   'nir_opt_loop_unroll.c',
   'nir_opt_memcpy.c',

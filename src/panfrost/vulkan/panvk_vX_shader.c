@@ -1843,6 +1843,10 @@ panvk_hash_state(struct vk_physical_device *device,
    const uint32_t gpu_prerast_abi = PANVK_GPU_PRERAST_ABI_VERSION;
    _mesa_blake3_update(&blake3_ctx, &gpu_prerast_abi, sizeof(gpu_prerast_abi));
 #endif
+#if PAN_ARCH >= 9
+   const bool robust_ssbo_vec = PANVK_DEBUG(ROBUST_SSBO_VEC);
+   _mesa_blake3_update(&blake3_ctx, &robust_ssbo_vec, sizeof(robust_ssbo_vec));
+#endif
 
    if (state != NULL) {
       /* This doesn't impact the shader compile but it does go in the
@@ -2223,6 +2227,16 @@ panvk_lower_nir(struct panvk_device *dev, nir_shader *nir,
       NIR_PASS(_, nir, nir_opt_constant_folding);
       NIR_PASS(_, nir, nir_opt_dce);
    }
+
+#if PAN_ARCH >= 9
+   if (PANVK_DEBUG(ROBUST_SSBO_VEC) && stage == MESA_SHADER_FRAGMENT &&
+       rs->storage_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT) {
+      NIR_PASS(_, nir, nir_opt_copy_prop);
+      NIR_PASS(_, nir, nir_opt_constant_folding);
+      NIR_PASS(_, nir, nir_opt_cse);
+      NIR_PASS(_, nir, nir_opt_vectorize_robust_ssbo_loads);
+   }
+#endif
 
 #if PAN_ARCH >= 10
    if (allow_merging_workgroups) {
