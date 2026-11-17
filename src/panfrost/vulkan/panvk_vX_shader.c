@@ -4807,7 +4807,7 @@ panvk_compile_shader(struct panvk_device *dev,
     */
    if (info->stage == MESA_SHADER_VERTEX && !vs_clip_space) {
       const int idvs_env = panvk_v7_knob_idvs();
-      const uint32_t prod = (inputs.gpu_id >> 16) & 0xff0f;
+      const uint32_t prod = (phys_dev->kmod.dev->props.gpu_id >> 16) & 0xff0f;
       /* jm-v7 092: every v6 part (G71 0x6000 too, same generation as G72,
        * never measured), plus G76.
        */
@@ -4989,7 +4989,8 @@ panvk_compile_shader(struct panvk_device *dev,
                nir_shader_intrinsics_pass(nir,
                                           panvk_gpu_prerast_collect_out_type,
                                           nir_metadata_all, &out_types);
-               NIR_PASS(_, nir, pan_nir_lower_vs_inputs_poly, inputs.gpu_id);
+               NIR_PASS(_, nir, pan_nir_lower_vs_inputs_poly,
+                        phys_dev->kmod.dev->props.gpu_id);
 #if PAN_ARCH == 9
                NIR_PASS(_, nir, nir_shader_intrinsics_pass,
                         panvk_v9_prerast_sw_divisor_intr,
@@ -5030,8 +5031,8 @@ panvk_compile_shader(struct panvk_device *dev,
 #if PAN_ARCH >= 9
          if (vp_loc) {
             shader->gpu_prerast.vp_scissor_loc = vp_loc;
-            pan_varying_collect_formats(&vp_layout, nir, inputs.gpu_id);
-            pan_build_varying_layout_compact(&vp_layout, nir, inputs.gpu_id);
+            pan_varying_collect_formats(&vp_layout, nir, PAN_ARCH);
+            pan_build_varying_layout_compact(&vp_layout, nir, PAN_ARCH);
             inputs.varying_layout = &vp_layout;
             inputs.skip_viewport_transform = true;
          } else if (v == PANVK_VS_VARIANT_GPU_PASSTHROUGH) {
@@ -5160,8 +5161,8 @@ panvk_compile_shader(struct panvk_device *dev,
                       info->robustness, state, &pt_desc_info, false);
       NIR_PASS(_, pt_nir, nir_opt_constant_folding);
       struct pan_varying_layout pt_layout;
-      pan_varying_collect_formats(&pt_layout, pt_nir, inputs.gpu_id);
-      pan_build_varying_layout_compact(&pt_layout, pt_nir, inputs.gpu_id);
+      pan_varying_collect_formats(&pt_layout, pt_nir, PAN_ARCH);
+      pan_build_varying_layout_compact(&pt_layout, pt_nir, PAN_ARCH);
       struct pan_compile_inputs pt_inputs = inputs;
       pt_inputs.varying_layout = &pt_layout;
       pt_inputs.skip_viewport_transform = gs->scissor_clip_loc != 0;
