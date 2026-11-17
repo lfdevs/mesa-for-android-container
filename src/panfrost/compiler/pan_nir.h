@@ -243,6 +243,7 @@ bool pan_nir_lower_var_special_pan(nir_shader *shader);
 bool pan_nir_lower_noperspective_vs(nir_shader *shader);
 
 bool pan_nir_lower_vs_inputs(nir_shader *shader);
+bool pan_nir_lower_vs_inputs_poly(nir_shader *shader, uint64_t gpu_id);
 
 bool pan_nir_lower_vs_outputs(nir_shader *shader, unsigned arch,
                               const struct pan_varying_layout *varying_layout,

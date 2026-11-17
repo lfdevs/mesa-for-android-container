@@ -102,6 +102,7 @@ jm_files = [
 csf_archs = [10, 11, 12, 13, 14]
 csf_inc_dir = ['csf']
 csf_files = [
+  'csf/panvk_gpu_prerast.c',
   'csf/panvk_vX_cmd_buffer.c',
   'csf/panvk_vX_cmd_cond_render.c',
   'csf/panvk_vX_cmd_dispatch.c',

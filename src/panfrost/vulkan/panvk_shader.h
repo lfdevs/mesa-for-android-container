@@ -19,6 +19,9 @@
 #include "panvk_descriptor_set.h"
 #include "panvk_macros.h"
 #include "panvk_mempool.h"
+#if PAN_ARCH >= 10
+#include "panvk_gpu_prerast.h"
+#endif
 
 #include "vk_pipeline_layout.h"
 
@@ -157,7 +160,12 @@ struct panvk_graphics_sysvals {
       int32_t first_vertex;
       int32_t base_instance;
       uint32_t noperspective_varyings;
-   } vs;
+    } vs;
+
+#if PAN_ARCH >= 10
+   aligned_u64 gpu_prerast_params;
+   aligned_u64 gpu_prerast_records;
+#endif
 
    struct {
       aligned_u64 blend_descs[MAX_RTS];
@@ -441,6 +449,11 @@ enum panvk_vs_variant {
    /* Hardware vertex shader, when next stage is fragment */
    PANVK_VS_VARIANT_HW,
 
+#if PAN_ARCH >= 10
+   PANVK_VS_VARIANT_GPU_LOWERED,
+   PANVK_VS_VARIANT_GPU_PASSTHROUGH,
+#endif
+
    PANVK_VS_VARIANTS,
 };
 
@@ -448,6 +461,10 @@ struct panvk_shader {
    struct vk_shader vk;
 
    struct panvk_shader_desc_info desc_info;
+
+#if PAN_ARCH >= 10
+   struct panvk_gpu_prerast_shader gpu_prerast;
+#endif
 
    struct panvk_shader_variant variants[];
 };
@@ -463,6 +480,10 @@ panvk_shader_num_variants(mesa_shader_stage stage)
 
 static const char *panvk_vs_shader_variant_name[] = {
    [PANVK_VS_VARIANT_HW] = NULL,
+#if PAN_ARCH >= 10
+   [PANVK_VS_VARIANT_GPU_LOWERED] = "GPU_LOWERED",
+   [PANVK_VS_VARIANT_GPU_PASSTHROUGH] = "GPU_PASSTHROUGH",
+#endif
 };
 
 static const char *
@@ -499,6 +520,14 @@ panvk_shader_hw_variant(const struct panvk_shader *shader)
       return NULL;
 
    return &shader->variants[0];
+}
+
+static inline const struct panvk_shader_variant *
+panvk_shader_gpu_prerast_variant(const struct panvk_shader *shader,
+                                 enum panvk_vs_variant variant)
+{
+   assert(shader && variant < PANVK_VS_VARIANTS);
+   return &shader->variants[variant];
 }
 
 static inline uint64_t

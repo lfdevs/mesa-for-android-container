@@ -112,6 +112,7 @@ struct panvk_device {
    } utrace;
 
    struct panvk_device_draw_context* draw_ctx;
+   struct panvk_priv_mem gpu_prerast_arena;
 
    struct {
       bool initialized;

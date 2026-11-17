@@ -443,6 +443,7 @@ struct panvk_draw_info {
    } indirect;
 
    enum mesa_prim prim;
+   bool gpu_prerast_generated;
 
 #if PAN_ARCH < 9
    uint32_t layer_id;

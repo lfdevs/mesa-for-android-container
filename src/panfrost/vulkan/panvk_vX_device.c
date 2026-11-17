@@ -20,6 +20,9 @@
 #include "panvk_cmd_alloc.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_device.h"
+#if PAN_ARCH >= 10
+#include "panvk_gpu_prerast.h"
+#endif
 #include "panvk_cmd_draw.h"
 #include "panvk_entrypoints.h"
 #include "panvk_instance.h"
@@ -675,6 +678,26 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    panvk_device_init_mempools(device);
 
 #if PAN_ARCH >= 10
+   if (PANVK_DEBUG(GPU_PRERAST)) {
+      device->gpu_prerast_arena = panvk_pool_alloc_mem(
+         &device->mempools.rw,
+         (struct panvk_pool_alloc_info){
+            .size = PANVK_GPU_PRERAST_ARENA_SIZE,
+            .alignment = 4096,
+         });
+      if (!panvk_priv_mem_check_alloc(device->gpu_prerast_arena)) {
+         result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         goto err_free_priv_bos;
+      }
+      panvk_priv_mem_write(device->gpu_prerast_arena, 0,
+                           struct panvk_gpu_prerast_arena, arena) {
+         memset(arena, 0, sizeof(*arena));
+         arena->available = 1;
+      }
+   }
+#endif
+
+#if PAN_ARCH >= 10
    /* The only reason this is a heap allocation is that PANVK_SUBQUEUE_COUNT
     * isn't available in the header */
    device->dump_region_size =
@@ -799,6 +822,7 @@ err_free_mem_cache:
 err_free_precomp:
    panvk_precomp_cleanup(device);
 err_free_priv_bos:
+   panvk_pool_free_mem(&device->gpu_prerast_arena);
    if (device->printf.bo)
       u_printf_destroy(&device->printf.ctx);
    panvk_priv_bo_unref(device->printf.bo);
@@ -859,6 +883,8 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
 #endif
    panvk_priv_bo_unref(device->tiler_heap);
    panvk_priv_bo_unref(device->sample_positions);
+   panvk_priv_bo_unref(device->indirect_varying_buffer);
+   panvk_pool_free_mem(&device->gpu_prerast_arena);
    panvk_device_cleanup_mempools(device);
    vk_free(&device->vk.alloc, device->dump_region_size);
    pan_kmod_vm_destroy(device->kmod.vm);

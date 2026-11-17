@@ -13,7 +13,8 @@ lower_vs_input_intr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       return false;
 
    b->cursor = nir_before_instr(&intr->instr);
-   nir_def *vtx_id = nir_load_raw_vertex_id(b);
+   bool poly = *(bool *)data;
+   nir_def *vtx_id = poly ? nir_load_vertex_id(b) : nir_load_raw_vertex_id(b);
    nir_def *ins_id = nir_load_instance_id(b);
    nir_def *offset = intr->src[0].ssa;
 
@@ -51,7 +52,17 @@ lower_vs_input_intr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 bool
 pan_nir_lower_vs_inputs(nir_shader *shader)
 {
+   bool poly = false;
    return nir_shader_intrinsics_pass(shader, lower_vs_input_intr,
                                      nir_metadata_control_flow,
-                                     NULL);
+                                     &poly);
+}
+
+bool
+pan_nir_lower_vs_inputs_poly(nir_shader *shader, uint64_t gpu_id)
+{
+   bool poly = true;
+   return nir_shader_intrinsics_pass(shader, lower_vs_input_intr,
+                                     nir_metadata_control_flow,
+                                     &poly);
 }

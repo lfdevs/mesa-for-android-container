@@ -61,6 +61,7 @@ static const struct debug_control panvk_debug_options[] = {
    {"hsr_prepass", PANVK_DEBUG_HSR_PREPASS},
    {"no_crc", PANVK_DEBUG_NO_CRC},
    {"kbase_diag", PANVK_DEBUG_KBASE_DIAG},
+   {"gpu_prerast", PANVK_DEBUG_GPU_PRERAST},
    {NULL, 0},
 };
 
