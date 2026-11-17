@@ -25,6 +25,7 @@
 
 #include "util/disk_cache.h"
 #include "util/os_misc.h"
+#include "util/os_time.h"
 #include "util/u_atomic.h"
 #include "git_sha1.h"
 
@@ -1674,6 +1675,24 @@ panvk_GetPhysicalDeviceCooperativeMatrixPropertiesKHR(
    return vk_outarray_status(&out);
 }
 
+static uint64_t
+panvk_available_system_memory(struct panvk_physical_device *physical_device)
+{
+   uint64_t now = os_time_get_nano();
+   uint64_t last = p_atomic_read(&physical_device->memory.available_ns);
+
+   if (last && now - last < 100000000ull)
+      return p_atomic_read(&physical_device->memory.available);
+
+   uint64_t available;
+   if (!os_get_available_system_memory(&available))
+      return 0;
+
+   p_atomic_set(&physical_device->memory.available, available);
+   p_atomic_set(&physical_device->memory.available_ns, now);
+   return available;
+}
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_GetPhysicalDeviceMemoryProperties2(
    VkPhysicalDevice physicalDevice,
@@ -1713,8 +1732,9 @@ panvk_GetPhysicalDeviceMemoryProperties2(
          p->heapUsage[0] = used;
 
          /* Set the budget at 90% of available to avoid thrashing */
-         p->heapBudget[0] = vk_physical_device_heap_budget_from_system(
-            &physical_device->vk, 0.9f, heap_size, used);
+         p->heapBudget[0] = vk_physical_device_heap_budget(
+            panvk_available_system_memory(physical_device), 0.9f, heap_size,
+            used);
 
          /* From the Vulkan 1.3.278 spec:
           *
