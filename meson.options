@@ -228,6 +228,15 @@ option(
 )
 
 option(
+  'panfrost-kmds',
+  type : 'array',
+  value : ['panfrost', 'panthor'],
+  choices : ['panfrost', 'panthor', 'kbase'],
+  description : 'List of kernel-mode drivers to enable for panfrost ' +
+                'gallium and vulkan driver',
+)
+
+option(
   'amdgpu-virtio',
   type : 'boolean',
   value : false,

@@ -338,6 +338,21 @@ if freedreno_kmds.length() != 0 and freedreno_kmds != [ 'msm' ] and with_freedre
   endif
 endif
 
+panfrost_kmds = get_option('panfrost-kmds')
+if (with_gallium_panfrost or with_panfrost_vk) and panfrost_kmds.length() == 0
+  error('At least one Panfrost KMD must be enabled when building Panfrost.')
+endif
+
+if panfrost_kmds.contains('panfrost')
+  pre_args += '-DHAVE_PAN_KMOD_PANFROST'
+endif
+if panfrost_kmds.contains('panthor')
+  pre_args += '-DHAVE_PAN_KMOD_PANTHOR'
+endif
+if panfrost_kmds.contains('kbase')
+  pre_args += '-DHAVE_PAN_KMOD_KBASE'
+endif
+
 # This has to be below the freedreno_kmds check since that can change system_has_kms_drm
 with_gallium_kmsro = with_gallium_drm or (system_has_kms_drm and with_gallium_zink)
 
