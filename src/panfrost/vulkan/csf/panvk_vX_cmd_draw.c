@@ -1223,6 +1223,15 @@ prepare_layer_count_inherited_ctx(struct panvk_cmd_buffer *cmdbuf)
 #endif
 }
 
+static void
+account_tiler_work(struct panvk_cmd_buffer *cmdbuf, uint64_t work)
+{
+   if (UINT64_MAX - cmdbuf->state.tiler_work_estimate < work)
+      cmdbuf->state.tiler_work_estimate = UINT64_MAX;
+   else
+      cmdbuf->state.tiler_work_estimate += work;
+}
+
 static VkResult
 get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
 {
@@ -1251,6 +1260,8 @@ get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
       if (!tiler_desc.gpu)
          return VK_ERROR_OUT_OF_DEVICE_MEMORY;
    }
+
+   account_tiler_work(cmdbuf, td_count);
 
    const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
 
@@ -4012,6 +4023,12 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
       }
       return;
    }
+
+   if (draw.indirect.buffer_dev_addr)
+      account_tiler_work(cmdbuf, (uint64_t)draw.indirect.draw_count * 256);
+   else
+      account_tiler_work(cmdbuf,
+                         (uint64_t)draw.vertex.count * draw.instance.count);
 
    /* Needs to be done before get_fs() is called because it depends on
     * fs.required being initialized. */

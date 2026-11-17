@@ -1129,6 +1129,12 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
             break;
          }
       }
+      if (UINT64_MAX - primary->state.tiler_work_estimate <
+          secondary->state.tiler_work_estimate)
+         primary->state.tiler_work_estimate = UINT64_MAX;
+      else
+         primary->state.tiler_work_estimate +=
+            secondary->state.tiler_work_estimate;
 
       /* make sure the CS context is setup properly
        * to inherit the primary command buffer state
