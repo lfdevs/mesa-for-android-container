@@ -58,6 +58,12 @@ struct panvk_physical_device {
       dev_t render_rdev;
    } drm;
 
+   /* Device node path for kbase (non-DRM) devices, e.g. "/dev/mali0";
+    * empty for DRM devices.  Logical devices must open() a fresh fd from
+    * this path: dup()ing the physical device fd would share the kbase
+    * context, whose version handshake can only be performed once. */
+   char kbase_node_path[32];
+
    struct {
       const struct pan_blendable_format *blendable;
       const struct pan_format *all;
@@ -103,6 +109,23 @@ float panvk_get_gpu_system_timestamp_period(
 VkResult panvk_physical_device_init(struct panvk_physical_device *device,
                                     struct panvk_instance *instance,
                                     drmDevicePtr drm_device);
+
+#if defined(HAVE_PAN_KMOD_KBASE)
+VkResult panvk_physical_device_init_kbase(struct panvk_physical_device *device,
+                                          struct panvk_instance *instance,
+                                          const char *path);
+
+#define PANVK_KBASE_SYNC_TARGET_COUNT 3
+
+typedef VkResult (*panvk_kbase_sync_wait_func)(
+   void *data,
+   const uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT],
+   uint64_t abs_timeout_ns);
+
+void panvk_kbase_sync_set_pending(
+   struct vk_sync *sync, void *data, panvk_kbase_sync_wait_func wait,
+   const uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT]);
+#endif
 
 void panvk_physical_device_finish(struct panvk_physical_device *device);
 
