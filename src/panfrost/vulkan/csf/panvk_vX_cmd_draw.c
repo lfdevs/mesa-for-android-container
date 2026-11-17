@@ -2895,7 +2895,8 @@ static void
 set_tiler_idvs_flags(struct cs_builder *b, struct panvk_cmd_buffer *cmdbuf,
                      const struct panvk_draw_info *draw)
 {
-   const struct panvk_shader_variant *vs = raster_vs_variant(cmdbuf, false);
+   const struct panvk_shader_variant *vs =
+      raster_vs_variant(cmdbuf, draw->gpu_prerast_generated);
    const struct panvk_shader_variant *fs =
       panvk_shader_only_variant(get_fs(cmdbuf));
    const struct vk_dynamic_graphics_state *dyns =
