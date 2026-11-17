@@ -189,6 +189,8 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_map_memory_placed = true,
       .EXT_nested_command_buffer = PAN_ARCH >= 10,
       .EXT_memory_budget = true,
+      .EXT_memory_priority = PAN_ARCH >= 10,
+      .EXT_pageable_device_local_memory = PAN_ARCH >= 10,
       .EXT_non_seamless_cube_map = true,
       .EXT_mutable_descriptor_type = PAN_ARCH >= 9,
       .EXT_multisampled_render_to_single_sampled = true,
@@ -736,6 +738,8 @@ panvk_per_arch(get_physical_device_features)(
       .memoryMapPlaced = true,
       .memoryMapRangePlaced = false,
       .memoryUnmapReserve = true,
+      .memoryPriority = PAN_ARCH >= 10,
+      .pageableDeviceLocalMemory = PAN_ARCH >= 10,
 
       /* VK_EXT_non_seamless_cube_map */
       .nonSeamlessCubeMap = true,

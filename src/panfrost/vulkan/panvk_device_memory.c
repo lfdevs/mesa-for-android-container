@@ -544,3 +544,9 @@ panvk_GetDeviceMemoryOpaqueCaptureAddress(
 
    return memory->addr.dev;
 }
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_SetDeviceMemoryPriorityEXT(VkDevice device, VkDeviceMemory memory,
+                                 float priority)
+{
+}
