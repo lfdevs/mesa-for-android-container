@@ -2157,9 +2157,8 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
       goto err_unmap_tracking;
    }
 
-   /* Report the kernel uAPI version from the handshake (the caller can't
-    * use drmGetVersion() on a kbase fd, so drv_info is either NULL or a
-    * zeroed fallback). */
+   /* Report the kernel uAPI version from the handshake: the caller cannot
+    * use drmGetVersion() on a kbase fd. */
    struct pan_kmod_driver kbase_drv = {
       .version = { .major = ver.major, .minor = ver.minor },
    };
@@ -3182,7 +3181,23 @@ kbase_kmod_bo_import(struct pan_kmod_dev *dev, int fd)
    if (size < 0)
       return NULL;
 
-   return kbase_kmod_import_dmabuf(dev, NULL, fd, size, 0, true);
+   struct pan_kmod_bo *bo =
+      kbase_kmod_import_dmabuf(dev, NULL, fd, size, 0, true);
+   if (!bo)
+      return NULL;
+
+   /* pan_kmod_bo_import() holds handle_to_bo.lock. Kbase assigns a fresh
+    * handle to each import, so no existing BO can occupy this slot. */
+   struct pan_kmod_bo **slot =
+      util_sparse_array_get(&dev->handle_to_bo.array, bo->handle);
+   if (!slot) {
+      dev->ops->bo_free(bo);
+      return NULL;
+   }
+
+   assert(*slot == NULL);
+   *slot = bo;
+   return bo;
 }
 
 static int

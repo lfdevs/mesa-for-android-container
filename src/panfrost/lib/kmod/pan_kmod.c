@@ -103,16 +103,6 @@ pan_kmod_dev_create_with_driver(int fd, uint32_t flags,
       return NULL;
    }
 
-   const struct pan_kmod_driver fallback_driver = {
-      .version = {
-         .major = 0,
-         .minor = 0,
-      },
-   };
-
-   if (!driver)
-      driver = &fallback_driver;
-
    for (unsigned i = 0; i < ARRAY_SIZE(backends); i++) {
       if (!strcmp(backends[i].name, driver_name)) {
          struct pan_kmod_dev *dev =
