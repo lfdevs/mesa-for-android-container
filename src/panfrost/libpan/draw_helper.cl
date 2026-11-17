@@ -9,8 +9,10 @@
 #include "genxml/gen_macros.h"
 #include "lib/pan_encoder.h"
 #include "poly/cl/restart.h"
+#include "poly/cl/tessellator.h"
 #include "draw_helper.h"
 #include "poly/geometry.h"
+#include "tess_draw.h"
 
 #if PAN_ARCH >= 10
 
@@ -106,7 +108,8 @@ panlib_update_pstats_draw(global uint32_t *stats, uint32_t slots,
                           global uint32_t *count_buffer, uint32_t draw_index,
                           uint64_t index_buffer, uint32_t index_buffer_size_el,
                           uint32_t index_size_B, uint32_t restart,
-                          uint32_t prim, uint32_t view_count)
+                          uint32_t prim, uint32_t view_count,
+                          uint32_t patch_size)
 {
    assert(get_sub_group_size() == SUBGROUP_SIZE);
 
@@ -125,6 +128,8 @@ panlib_update_pstats_draw(global uint32_t *stats, uint32_t slots,
       prims = poly_count_restart_prims(cmd, index_buffer, index_buffer_size_el,
                                        index_size_B, restart_index, prim,
                                        scratch);
+   } else if (prim == MESA_PRIM_PATCHES) {
+      prims = cmd[0] / max(patch_size, 1u);
    } else {
       prims = u_decomposed_prims_for_vertices(prim, cmd[0]);
    }
@@ -147,6 +152,171 @@ panlib_update_pstats_dispatch(global uint32_t *counter,
                               constant uint32_t *cmd, uint32_t local_size)
 {
    pstats_add(counter, (uint64_t)cmd[0] * cmd[1] * cmd[2] * local_size);
+}
+
+/* Tessellation for gpu_prerast, see struct panlib_tess_draw. src_draw is the
+ * Vk[Indexed]DrawIndirectCommand of the API draw.
+ */
+KERNEL(1)
+panlib_tess_setup(global struct panlib_tess_draw *t, constant uint32_t *src_draw,
+                  constant uint32_t *count_buffer, uint32_t draw_index)
+{
+   uint32_t ps = max(t->input_patch_size, 1u);
+   bool live = !count_buffer || draw_index < count_buffer[0];
+
+   /* VkDrawIndirectCommand is 4 words. */
+   for (uint32_t i = 0; i < 5; i++)
+      t->in_draw[i] = live && (i < 4 || t->indexed) ? src_draw[i] : 0;
+
+   t->patches_per_instance = t->in_draw[0] / ps;
+   t->instances = t->in_draw[1];
+   t->total_patches = (uint64_t)t->patches_per_instance * t->instances;
+   t->next_patch = 0;
+   t->idx_total = 0;
+   t->idx_cursor = 0;
+   t->prims_done = 0;
+   t->new_chunk = 0;
+   t->more = 0;
+}
+
+/* Starts the next chunk of patches once the current one is fully drawn. A
+ * chunk is whole instances when an instance fits, else a patch range of one
+ * instance.
+ */
+KERNEL(1)
+panlib_tess_step(global struct panlib_tess_draw *t, global uint32_t *tcs_stat)
+{
+   global struct poly_tess_params *p = &t->p;
+
+   t->new_chunk = t->idx_cursor >= t->idx_total && t->next_patch < t->total_patches;
+   if (!t->new_chunk) {
+      t->vs_draw[0] = 0;
+      t->vs_draw[1] = 0;
+      t->tcs_grid[0] = 0;
+      t->tcs_grid[1] = 0;
+      t->tcs_grid[2] = 0;
+      p->nr_patches = 0;
+      return;
+   }
+
+   uint32_t ps = max(t->input_patch_size, 1u);
+   uint32_t ppi = t->patches_per_instance;
+   uint32_t inst = t->next_patch / ppi;
+   uint32_t first = t->next_patch % ppi;
+   uint32_t per_inst, k;
+
+   if (first == 0 && ppi <= t->max_patches) {
+      per_inst = ppi;
+      k = min(t->max_patches / ppi, t->instances - inst);
+   } else {
+      per_inst = min(t->max_patches, ppi - first);
+      k = 1;
+   }
+
+   uint32_t n = per_inst * k;
+   p->patches_per_instance = per_inst;
+   p->nr_patches = n;
+   p->heap->bottom = 0;
+   t->chunk_patches = n;
+   t->prim_base = first;
+   t->next_patch += n;
+
+   /* Base vertex/instance stay the API ones, the chunk start is added to the
+    * VS invocation IDs.
+    */
+   t->vs_draw[0] = per_inst * ps;
+   t->vs_draw[1] = k;
+   for (uint32_t i = 2; i < 5; i++)
+      t->vs_draw[i] = t->in_draw[i];
+   t->chunk_vertex = first * ps;
+   t->chunk_instance = inst;
+
+   t->tcs_grid[0] = per_inst;
+   t->tcs_grid[1] = k;
+   t->tcs_grid[2] = 1;
+
+   if (tcs_stat)
+      pstats_add(tcs_stat, n);
+}
+
+/* domain: 0 triangles, 1 quads, 2 isolines. */
+KERNEL(64)
+panlib_tessellate(constant struct poly_tess_params *p, uint32_t domain__3,
+                  uint32_t mode__2)
+{
+   uint32_t patch = cl_global_id.x;
+   enum poly_tess_mode mode = mode__2;
+
+   if (patch >= p->nr_patches)
+      return;
+
+   if (domain__3 == 0)
+      poly_tess_tri_process(p, patch, mode);
+   else if (domain__3 == 1)
+      poly_tess_quad_process(p, patch, mode);
+   else
+      poly_tess_isoline_process(p, patch, mode);
+
+   /* The tessellator emits clockwise triangles, swap two vertices of each
+    * one for the other winding.
+    */
+   if (mode == POLY_TESS_MODE_WITH_COUNTS && p->ccw && domain__3 != 2 &&
+       !p->points_mode) {
+      global uint32_t *idx = p->index_buffer;
+      uint32_t end = p->counts[patch];
+
+      for (uint32_t i = patch ? p->counts[patch - 1] : 0; i + 2 < end;
+           i += 3) {
+         uint32_t t = idx[i + 1];
+         idx[i + 1] = idx[i + 2];
+         idx[i + 2] = t;
+      }
+   }
+}
+
+/* Prefix sums the per-patch index counts of a new chunk, then writes the
+ * indexed draw for the next range of the chunk's indices.
+ */
+KERNEL(1)
+panlib_tess_draw(global struct panlib_tess_draw *t, global uint32_t *c_invs,
+                 global uint32_t *c_prims, global uint32_t *prims_generated)
+{
+   global struct poly_tess_params *p = &t->p;
+   uint32_t vpp = max(t->verts_per_prim, 1u);
+
+   if (t->new_chunk) {
+      uint32_t sum = 0;
+
+      /* ponytail: serial prefix sum, a chunk holds a few hundred patches. */
+      for (uint32_t i = 0; i < t->chunk_patches; i++) {
+         sum += p->counts[i];
+         p->counts[i] = sum;
+      }
+
+      t->idx_total = sum;
+      t->idx_cursor = 0;
+      if (c_invs)
+         pstats_add(c_invs, sum / vpp);
+      if (c_prims)
+         pstats_add(c_prims, sum / vpp);
+   }
+
+   uint32_t left = t->idx_total - t->idx_cursor;
+   uint32_t count = t->range ? min(t->range, left) : left;
+
+   t->draw[0] = count;
+   t->draw[1] = 1;
+   t->draw[2] = t->idx_cursor;
+   t->draw[3] = 0;
+   t->draw[4] = 0;
+
+   t->idx_cursor += count;
+   t->gs_prim_base = t->prims_done;
+   t->prims_done += count / vpp;
+   t->more = t->idx_cursor < t->idx_total || t->next_patch < t->total_patches;
+
+   if (prims_generated)
+      atomic_fetch_add((global atomic_uint *)prims_generated, count / vpp);
 }
 
 #elif PAN_ARCH < 9

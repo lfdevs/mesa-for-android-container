@@ -181,7 +181,11 @@ meta_gfx_start(struct panvk_cmd_buffer *cmdbuf,
    save_ctx->vb0 = cmdbuf->state.gfx.vb.bufs[0];
 #if PAN_ARCH >= 10
    save_ctx->gs = cmdbuf->state.gfx.gs.shader;
+   save_ctx->tcs = cmdbuf->state.gfx.tcs.shader;
+   save_ctx->tes = cmdbuf->state.gfx.tes.shader;
    cmdbuf->state.gfx.gs.shader = NULL;
+   cmdbuf->state.gfx.tcs.shader = NULL;
+   cmdbuf->state.gfx.tes.shader = NULL;
 #endif
 
    save_ctx->dyn_state.all = cmdbuf->vk.dynamic_graphics_state;
@@ -251,6 +255,8 @@ meta_gfx_end(struct panvk_cmd_buffer *cmdbuf,
    cmdbuf->state.gfx.vb.bufs[0] = save_ctx->vb0;
 #if PAN_ARCH >= 10
    cmdbuf->state.gfx.gs.shader = save_ctx->gs;
+   cmdbuf->state.gfx.tcs.shader = save_ctx->tcs;
+   cmdbuf->state.gfx.tes.shader = save_ctx->tes;
 #endif
 
 #if PAN_ARCH < 9

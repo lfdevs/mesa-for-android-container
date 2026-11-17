@@ -63,7 +63,7 @@ struct panvk_cmd_meta_graphics_save_ctx {
    } vs;
 
 #if PAN_ARCH >= 10
-   const struct panvk_shader *gs;
+   const struct panvk_shader *gs, *tcs, *tes;
 #endif
 
    struct panvk_occlusion_query_state occlusion_query;

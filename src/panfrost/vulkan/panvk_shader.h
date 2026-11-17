@@ -165,6 +165,7 @@ struct panvk_graphics_sysvals {
 #if PAN_ARCH >= 10
    aligned_u64 gpu_prerast_params;
    aligned_u64 gpu_prerast_records;
+   aligned_u64 gpu_prerast_tess;
 #endif
 
    struct {
@@ -486,6 +487,8 @@ panvk_shader_num_variants(mesa_shader_stage stage)
 #if PAN_ARCH >= 10
    if (stage == MESA_SHADER_GEOMETRY)
       return PANVK_GS_VARIANTS;
+   if (stage == MESA_SHADER_TESS_EVAL)
+      return PANVK_VS_VARIANTS;
 #endif
 
    return 1;
@@ -507,7 +510,8 @@ panvk_shader_variant_name(const struct panvk_shader *shader,
    unsigned i = variant - shader->variants;
    assert(i < panvk_shader_num_variants(shader->vk.stage));
 
-   if (shader->vk.stage == MESA_SHADER_VERTEX) {
+   if (shader->vk.stage == MESA_SHADER_VERTEX ||
+       shader->vk.stage == MESA_SHADER_TESS_EVAL) {
       assert(i < ARRAY_SIZE(panvk_vs_shader_variant_name));
       return panvk_vs_shader_variant_name[i];
    }

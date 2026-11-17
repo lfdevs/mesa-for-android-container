@@ -113,6 +113,7 @@ struct panvk_device {
 
    struct panvk_device_draw_context* draw_ctx;
    struct panvk_priv_mem gpu_prerast_arena;
+   struct panvk_priv_mem gpu_prerast_tess_arena;
 
    struct {
       bool initialized;

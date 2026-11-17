@@ -168,12 +168,13 @@ foreach arch : [6, 7, 10, 11, 12, 13, 14]
 
   panvk_per_arch_libs += static_library(
     'panvk_v@0@'.format(arch),
-    per_arch_files,
+    [per_arch_files, libpoly_shaders[1]],
     include_directories : [
       inc_include,
       inc_src,
       inc_panfrost,
       inc_panvk_per_arch,
+      include_directories('../../poly/cl'),
     ],
     dependencies : [
       idep_nir_headers,
@@ -218,6 +219,7 @@ libvulkan_panfrost = shared_library(
     libpanfrost_decode,
     libpanfrost_lib,
     libpanfrost_compiler,
+    libpoly_nir,
   ],
   dependencies : [
     dep_dl,

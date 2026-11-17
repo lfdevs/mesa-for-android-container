@@ -1229,6 +1229,7 @@ create_copy_table(nir_shader *nir, struct lower_desc_ctx *ctx)
       break;
    case MESA_SHADER_COMPUTE:
    case MESA_SHADER_GEOMETRY:
+   case MESA_SHADER_TESS_CTRL:
       dummy_sampler_idx = 0;
       break;
    default:

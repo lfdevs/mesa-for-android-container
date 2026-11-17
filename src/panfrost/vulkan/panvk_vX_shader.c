@@ -22,6 +22,8 @@
 #include "panvk_shader.h"
 #if PAN_ARCH >= 10
 #include "panvk_gpu_prerast.h"
+#include "poly/nir/poly_nir.h"
+#include "libpoly.h"
 #endif
 
 #include "spirv/nir_spirv.h"
@@ -641,10 +643,12 @@ panvk_preprocess_nir(struct vk_physical_device *vk_pdev,
    if (nir->info.stage == MESA_SHADER_FRAGMENT)
       NIR_PASS(_, nir, nir_opt_vectorize_io_vars, nir_var_shader_out);
 
-   NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries,
-            nir_shader_get_entrypoint(nir), nir_var_shader_out);
+   if (nir->info.stage != MESA_SHADER_TESS_CTRL)
+      NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries,
+               nir_shader_get_entrypoint(nir), nir_var_shader_out);
 
-   if (nir->info.stage == MESA_SHADER_VERTEX)
+   if (nir->info.stage == MESA_SHADER_VERTEX ||
+       nir->info.stage == MESA_SHADER_TESS_EVAL)
       NIR_PASS(_, nir, panvk_lower_clip_cull_vs);
 
 #if PAN_ARCH < 9
@@ -722,7 +726,7 @@ panvk_lower_gpu_prerast_sysval(nir_builder *b, nir_intrinsic_instr *intr,
 }
 
 static nir_def *
-poly_nir_load_raw_vertex_id(nir_builder *b, nir_def *id)
+panvk_poly_load_raw_vertex_id(nir_builder *b, nir_def *id)
 {
    nir_def *p = nir_load_vertex_param_buffer_poly(b);
    nir_def *index_size = nir_load_global(
@@ -774,9 +778,9 @@ poly_nir_load_raw_vertex_id(nir_builder *b, nir_def *id)
 }
 
 static nir_def *
-poly_nir_load_vertex_id(nir_builder *b, nir_def *id)
+panvk_poly_load_vertex_id(nir_builder *b, nir_def *id)
 {
-   return nir_iadd(b, poly_nir_load_raw_vertex_id(b, id),
+   return nir_iadd(b, panvk_poly_load_raw_vertex_id(b, id),
                    nir_load_first_vertex(b));
 }
 
@@ -802,7 +806,7 @@ panvk_gpu_prerast_lower_sysval_intr(nir_builder *b, nir_intrinsic_instr *intr,
 }
 
 static bool
-poly_nir_lower_sysvals(nir_shader *s)
+panvk_poly_lower_sysvals(nir_shader *s)
 {
    return nir_shader_intrinsics_pass(s, panvk_gpu_prerast_lower_sysval_intr,
                                      nir_metadata_control_flow, NULL);
@@ -813,35 +817,146 @@ panvk_gpu_prerast_lower_sw_vs_intr(nir_builder *b, nir_intrinsic_instr *intr,
                                    UNUSED void *data)
 {
    b->cursor = nir_before_instr(&intr->instr);
-   if (intr->intrinsic == nir_intrinsic_load_vertex_id) {
-      nir_def *id = nir_channel(b, nir_load_global_invocation_id(b, 32), 0);
-      nir_def *first_index = nir_load_global(
-         b, 1, 32,
-         nir_iadd_imm(b, nir_load_vertex_param_buffer_poly(b),
-                      offsetof(struct panvk_gpu_prerast_params, index_offset)),
-         .align_mul = 4);
-      nir_def_replace(&intr->def,
-                      poly_nir_load_vertex_id(b, nir_iadd(b, id, first_index)));
-      return true;
-   }
-   if (intr->intrinsic == nir_intrinsic_load_vertex_id_zero_base) {
-      nir_def_replace(
-         &intr->def, nir_channel(b, nir_load_global_invocation_id(b, 32), 0));
+#define LOAD_PARAM(field)                                                      \
+   nir_load_global(                                                            \
+      b, 1, 32,                                                                \
+      nir_iadd_imm(b, nir_load_vertex_param_buffer_poly(b),                    \
+                   offsetof(struct panvk_gpu_prerast_params, field)),          \
+      .align_mul = 4)
+   if (intr->intrinsic == nir_intrinsic_load_vertex_id ||
+       intr->intrinsic == nir_intrinsic_load_vertex_id_zero_base) {
+      nir_def *id =
+         nir_iadd(b, nir_channel(b, nir_load_global_invocation_id(b, 32), 0),
+                  LOAD_PARAM(chunk_vertex));
+      if (intr->intrinsic == nir_intrinsic_load_vertex_id)
+         id = panvk_poly_load_vertex_id(b,
+                                        nir_iadd(b, id, LOAD_PARAM(index_offset)));
+      nir_def_replace(&intr->def, id);
       return true;
    }
    if (intr->intrinsic == nir_intrinsic_load_instance_id) {
       nir_def_replace(
-         &intr->def, nir_channel(b, nir_load_global_invocation_id(b, 32), 1));
+         &intr->def,
+         nir_iadd(b, nir_channel(b, nir_load_global_invocation_id(b, 32), 1),
+                  LOAD_PARAM(chunk_instance)));
       return true;
    }
+   if (intr->intrinsic == nir_intrinsic_load_draw_id) {
+      nir_def_replace(&intr->def, LOAD_PARAM(draw_id));
+      return true;
+   }
+#undef LOAD_PARAM
    return false;
 }
 
 static bool
-poly_nir_lower_sw_vs(nir_shader *s)
+panvk_poly_lower_sw_vs(nir_shader *s)
 {
    return nir_shader_intrinsics_pass(s, panvk_gpu_prerast_lower_sw_vs_intr,
                                      nir_metadata_control_flow, NULL);
+}
+
+static bool
+panvk_tess_lower_intr(nir_builder *b, nir_intrinsic_instr *intr,
+                      UNUSED void *data)
+{
+   b->cursor = nir_before_instr(&intr->instr);
+
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_tess_param_buffer_poly:
+      nir_def_replace(&intr->def, load_sysval(b, graphics, 64,
+                                              gpu_prerast_tess));
+      return true;
+
+   case nir_intrinsic_load_primitive_id: {
+      nir_def *p = nir_load_tess_param_buffer_poly(b);
+      nir_def *base = nir_load_global(
+         b, 1, 32,
+         nir_iadd_imm(b, p,
+                      offsetof(struct panlib_tess_draw, prim_base)),
+         .align_mul = 4);
+      nir_def *id =
+         b->shader->info.stage == MESA_SHADER_TESS_CTRL
+            ? nir_channel(b, nir_load_workgroup_id(b), 0)
+            : poly_tes_patch_id(b, p, nir_load_vertex_id(b));
+      nir_def_replace(&intr->def, nir_iadd(b, id, base));
+      return true;
+   }
+
+   case nir_intrinsic_barrier:
+      /* poly narrows output barriers to a subgroup, but a patch can span
+       * several subgroups here. */
+      if (b->shader->info.tess.tcs_vertices_out <=
+          pan_subgroup_size(PAN_ARCH))
+         return false;
+      if (nir_intrinsic_execution_scope(intr) == SCOPE_SUBGROUP)
+         nir_intrinsic_set_execution_scope(intr, SCOPE_WORKGROUP);
+      if (nir_intrinsic_memory_scope(intr) == SCOPE_SUBGROUP)
+         nir_intrinsic_set_memory_scope(intr, SCOPE_WORKGROUP);
+      return true;
+
+   default:
+      return false;
+   }
+}
+
+static bool
+panvk_tess_lower(nir_shader *s)
+{
+   return nir_shader_intrinsics_pass(s, panvk_tess_lower_intr,
+                                     nir_metadata_none, NULL);
+}
+
+static void
+panvk_tess_record_info(struct panvk_gpu_prerast_tess_info *t,
+                       const nir_shader *nir)
+{
+   static const uint8_t spacing[] = {
+      [TESS_SPACING_EQUAL] = POLY_TESS_PARTITIONING_INTEGER,
+      [TESS_SPACING_FRACTIONAL_ODD] = POLY_TESS_PARTITIONING_FRACTIONAL_ODD,
+      [TESS_SPACING_FRACTIONAL_EVEN] = POLY_TESS_PARTITIONING_FRACTIONAL_EVEN,
+   };
+
+   t->domain = nir->info.tess._primitive_mode == TESS_PRIMITIVE_TRIANGLES ? 0
+               : nir->info.tess._primitive_mode == TESS_PRIMITIVE_QUADS   ? 1
+               : nir->info.tess._primitive_mode == TESS_PRIMITIVE_ISOLINES
+                  ? 2
+                  : PANVK_GPU_PRERAST_TESS_UNSET;
+   t->spacing = nir->info.tess.spacing != TESS_SPACING_UNSPECIFIED
+                   ? spacing[nir->info.tess.spacing]
+                   : PANVK_GPU_PRERAST_TESS_UNSET;
+   t->ccw = nir->info.tess.ccw;
+   t->point_mode = nir->info.tess.point_mode;
+}
+
+static unsigned glsl_type_size(const struct glsl_type *type, bool bindless);
+
+/* TES inputs become loads from the TCS output buffer, the TES then runs as
+ * a vertex shader over the tessellator indices. */
+static void
+panvk_lower_tes(nir_shader *nir, struct panvk_gpu_prerast_tess_info *t)
+{
+   panvk_tess_record_info(t, nir);
+
+   nir_builder b =
+      nir_builder_at(nir_after_impl(nir_shader_get_entrypoint(nir)));
+   nir_variable *prim_id = nir_variable_create(
+      nir, nir_var_shader_out, glsl_int_type(), "panvk_tes_primitive_id");
+   prim_id->data.location = VARYING_SLOT_PRIMITIVE_ID;
+   prim_id->data.interpolation = INTERP_MODE_FLAT;
+   nir_store_var(&b, prim_id, nir_load_primitive_id(&b), 1);
+   nir->info.outputs_written |= VARYING_BIT_PRIMITIVE_ID;
+
+   NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in, glsl_type_size, 0);
+   NIR_PASS(_, nir, nir_opt_constant_folding);
+   NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_shader_in, NULL);
+   NIR_PASS(_, nir, panvk_tess_lower);
+   /* poly_nir_lower_tes() adds a default point size unless outputs_written
+    * has PSIZ.
+    */
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+   NIR_PASS(_, nir, poly_nir_lower_tes, true);
+   NIR_PASS(_, nir, panvk_tess_lower);
 }
 
 static bool
@@ -870,9 +985,9 @@ panvk_gpu_prerast_lower_vs_before_gs_intr(nir_builder *b,
       b, 1, 64,
       nir_iadd_imm(b, p, offsetof(struct poly_vertex_params, output_buffer)),
       .align_mul = 8);
-   nir_def *linear =
-      nir_iadd(b, nir_imul(b, nir_load_instance_id(b), nr_verts),
-               nir_load_vertex_id_zero_base(b));
+   nir_def *gid = nir_load_global_invocation_id(b, 32);
+   nir_def *linear = nir_iadd(b, nir_imul(b, nir_channel(b, gid, 1), nr_verts),
+                              nir_channel(b, gid, 0));
    nir_def *addr = nir_iadd(
       b, out_buf,
       nir_u2u64(b, nir_iadd_imm(b, nir_imul_imm(b, linear, nout * 16),
@@ -1003,7 +1118,7 @@ panvk_gpu_prerast_emit_generated_records(nir_shader *nir)
                     offsetof(struct panvk_gpu_prerast_params, index_offset)),
        .align_mul = 4);
     index = nir_iadd(&b, vertex, index_offset);
-    nir_def *raw = poly_nir_load_raw_vertex_id(&b, index);
+    nir_def *raw = panvk_poly_load_raw_vertex_id(&b, index);
    nir_def *restart_enable = nir_load_global(
       &b, 1, 32,
       nir_iadd_imm(&b, params,
@@ -2766,8 +2881,13 @@ panvk_compile_shader(struct panvk_device *dev,
       return panvk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
 
 #if PAN_ARCH >= 10
-   if (info->stage == MESA_SHADER_VERTEX) {
-      shader->gpu_prerast.io.abi_version = PANVK_GPU_PRERAST_ABI_VERSION;
+   shader->gpu_prerast.io.abi_version = PANVK_GPU_PRERAST_ABI_VERSION;
+
+   if (info->stage == MESA_SHADER_TESS_EVAL)
+      panvk_lower_tes(info->nir, &shader->gpu_prerast.tess);
+
+   if (info->stage == MESA_SHADER_VERTEX ||
+       info->stage == MESA_SHADER_TESS_EVAL) {
       shader->gpu_prerast.io.clip_distance_array_size =
          info->nir->info.clip_distance_array_size;
       shader->gpu_prerast.io.cull_distance_array_size =
@@ -2791,6 +2911,9 @@ panvk_compile_shader(struct panvk_device *dev,
    };
 
    switch (info->stage) {
+#if PAN_ARCH >= 10
+   case MESA_SHADER_TESS_EVAL:
+#endif
    case MESA_SHADER_VERTEX: {
 #if PAN_ARCH >= 10
       /* Lowered/passthrough variants only exist on the gpu_prerast path. */
@@ -2799,7 +2922,8 @@ panvk_compile_shader(struct panvk_device *dev,
          BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE);
       const bool want_prerast =
          PANVK_DEBUG(GPU_PRERAST) ||
-         (info->next_stage_mask & VK_SHADER_STAGE_GEOMETRY_BIT) ||
+         (info->next_stage_mask & (VK_SHADER_STAGE_GEOMETRY_BIT |
+                                   VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)) ||
          (dev->vk.enabled_features.fillModeNonSolid &&
           (dyn_polygon_mode ||
            state->rs->polygon_mode != VK_POLYGON_MODE_FILL));
@@ -2908,8 +3032,8 @@ panvk_compile_shader(struct panvk_device *dev,
                NIR_PASS(_, nir, pan_nir_lower_vs_inputs_poly, inputs.gpu_id);
                NIR_PASS(_, nir, panvk_gpu_prerast_lower_vs_outputs);
                panvk_gpu_prerast_emit_generated_records(nir);
-               NIR_PASS(_, nir, poly_nir_lower_sw_vs);
-               NIR_PASS(_, nir, poly_nir_lower_sysvals);
+               NIR_PASS(_, nir, panvk_poly_lower_sw_vs);
+               NIR_PASS(_, nir, panvk_poly_lower_sysvals);
                NIR_PASS(_, nir, nir_shader_intrinsics_pass,
                         panvk_lower_gpu_prerast_sysval,
                         nir_metadata_control_flow, NULL);
@@ -3053,6 +3177,57 @@ panvk_compile_shader(struct panvk_device *dev,
          return result;
       }
       gs->kernel_compiled = true;
+      break;
+   }
+
+   case MESA_SHADER_TESS_CTRL: {
+      struct panvk_gpu_prerast_tess_info *t = &shader->gpu_prerast.tess;
+      nir_shader *nir = info->nir;
+
+      shader->gpu_prerast.has_side_effects = nir->info.writes_memory;
+
+      NIR_PASS(_, nir, nir_lower_var_copies);
+      NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
+               glsl_type_size, 0);
+      NIR_PASS(_, nir, nir_opt_constant_folding);
+      nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
+      panvk_tess_record_info(t, nir);
+      t->per_vertex_outputs = poly_tcs_per_vertex_outputs(nir);
+      t->patch_constants = util_last_bit(nir->info.patch_outputs_written);
+      t->out_patch_size = nir->info.tess.tcs_vertices_out;
+      t->stride_el = poly_tcs_output_stride(nir) / 4;
+
+      NIR_PASS(_, nir, panvk_tess_lower);
+      NIR_PASS(_, nir, poly_nir_lower_tcs, false);
+      NIR_PASS(_, nir, panvk_tess_lower);
+
+      panvk_lower_nir(dev, nir, info->set_layout_count, info->set_layouts,
+                      info->robustness, state, &shader->desc_info, false);
+      NIR_PASS(_, nir, panvk_poly_lower_sysvals);
+      NIR_PASS(_, nir, nir_shader_intrinsics_pass,
+               panvk_lower_gpu_prerast_sysval, nir_metadata_control_flow,
+               NULL);
+
+      nir->info.stage = MESA_SHADER_COMPUTE;
+      memset(&nir->info.cs, 0, sizeof(nir->info.cs));
+      nir->info.workgroup_size[0] = t->out_patch_size;
+      nir->info.workgroup_size[1] = 1;
+      nir->info.workgroup_size[2] = 1;
+
+      struct panvk_shader_variant *variant =
+         (struct panvk_shader_variant *)panvk_shader_only_variant(shader);
+      struct pan_compile_inputs k_inputs = inputs;
+      k_inputs.varying_layout = NULL;
+      k_inputs.view_mask = 0;
+      variant->own_bin = true;
+      result = panvk_compile_nir(dev, nir, info->flags, &k_inputs, state, NULL,
+                                 &shader->desc_info, variant);
+      if (result != VK_SUCCESS) {
+         panvk_shader_destroy(&dev->vk, &shader->vk, pAllocator);
+         return result;
+      }
+      t->compiled = true;
       break;
    }
 #endif
@@ -4095,11 +4270,23 @@ panvk_cmd_bind_shader(struct panvk_cmd_buffer *cmd, const mesa_shader_stage stag
          gfx_state_set_dirty(cmd, FS);
       }
       break;
-#endif
+   case MESA_SHADER_TESS_CTRL:
+      cmd->state.gfx.tcs.shader = shader;
+      break;
+   case MESA_SHADER_TESS_EVAL:
+      if (cmd->state.gfx.tes.shader != shader) {
+         cmd->state.gfx.tes.shader = shader;
+         gfx_state_set_dirty(cmd, VS);
+         gfx_state_set_dirty(cmd, VS_PUSH_UNIFORMS);
+         gfx_state_set_dirty(cmd, FS);
+      }
+      break;
+#else
    case MESA_SHADER_TESS_CTRL:
    case MESA_SHADER_TESS_EVAL:
       assert(shader == NULL);
       break;
+#endif
    default:
       assert(!"Unsupported stage");
       break;

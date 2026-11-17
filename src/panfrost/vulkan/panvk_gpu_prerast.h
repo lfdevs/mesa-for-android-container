@@ -9,10 +9,12 @@
 #include "compiler/pan_compiler.h"
 #include "panvk_macros.h"
 #include "poly/geometry.h"
+#include "poly/tessellator.h"
+#include "libpan/tess_draw.h"
 #include "util/macros.h"
 #include "vulkan/vulkan_core.h"
 
-#define PANVK_GPU_PRERAST_ABI_VERSION 4
+#define PANVK_GPU_PRERAST_ABI_VERSION 5
 #define PANVK_GPU_PRERAST_MAX_EXECUTION_BYTES (256ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_VS_REGION_END (32ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_GS_INDEX_OFFSET PANVK_GPU_PRERAST_VS_REGION_END
@@ -118,9 +120,25 @@ struct panvk_gpu_prerast_gs_info {
    bool _pad;
 };
 
+/* TCS/TES state the tessellation kernels need. The tessellation modes are
+ * recorded by both stages, the TES ones win when set. */
+struct panvk_gpu_prerast_tess_info {
+   uint64_t per_vertex_outputs;
+   uint32_t stride_el;
+   uint8_t patch_constants;
+   uint8_t out_patch_size;
+   uint8_t domain;
+   uint8_t spacing;
+   bool ccw;
+   bool point_mode;
+   bool compiled;
+   bool _pad;
+};
+
 struct panvk_gpu_prerast_shader {
    struct panvk_gpu_prerast_io io;
    struct panvk_gpu_prerast_gs_info gs;
+   struct panvk_gpu_prerast_tess_info tess;
    uint32_t requirements;
    bool lowered_vs_compiled;
    bool passthrough_vs_compiled;
@@ -202,7 +220,10 @@ struct panvk_gpu_prerast_params {
    uint32_t primitive_restart;
    uint32_t index_offset;
    uint32_t record_capacity;
-   uint32_t _pad;
+   uint32_t draw_id;
+   /* Tessellation chunk start, added to the invocation IDs. */
+   uint32_t chunk_vertex;
+   uint32_t chunk_instance;
    struct {
       uint64_t indices;
       uint64_t draw;
@@ -228,6 +249,75 @@ panvk_gpu_prerast_record_capacity(uint32_t record_stride)
            record_stride
       : 0;
    return MIN2(cap, PANVK_GPU_PRERAST_MAX_INVOCATIONS);
+}
+
+/* The tessellation arena reuses the gpu_prerast header and VS region layout
+ * for the control points, the TCS outputs, domain points and indices live
+ * past it. Sized for patches tessellated at the maximum level.
+ */
+#define PANVK_GPU_PRERAST_TESS_ARENA_SIZE (96ull * 1024 * 1024)
+#define PANVK_GPU_PRERAST_TESS_DATA_OFFSET PANVK_GPU_PRERAST_VS_REGION_END
+#define PANVK_GPU_PRERAST_TESS_MAX_LEVEL 64
+#define PANVK_GPU_PRERAST_TESS_MAX_PATCH_SIZE 32
+#define PANVK_GPU_PRERAST_TESS_UNSET 0xff
+#define PANVK_GPU_PRERAST_TESS_MAX_POINTS                                      \
+   ((PANVK_GPU_PRERAST_TESS_MAX_LEVEL + 1) *                                   \
+    (PANVK_GPU_PRERAST_TESS_MAX_LEVEL + 1))
+#define PANVK_GPU_PRERAST_TESS_MAX_INDICES                                     \
+   (PANVK_GPU_PRERAST_TESS_MAX_LEVEL * PANVK_GPU_PRERAST_TESS_MAX_LEVEL * 6)
+
+static_assert(offsetof(struct panlib_tess_draw, total_patches) % 8 == 0 &&
+                 offsetof(struct panlib_tess_draw, ready) % 8 == 0 &&
+                 offsetof(struct panlib_tess_draw, free) % 8 == 0,
+              "panlib_tess_draw 64-bit fields and syncs must be aligned");
+
+struct panvk_gpu_prerast_tess_layout {
+   uint64_t tcs, counts, coord_allocs, heap, index;
+   uint32_t heap_size, index_size;
+};
+
+static inline uint64_t
+panvk_gpu_prerast_tess_patch_bytes(uint32_t tcs_stride_B)
+{
+   return ALIGN_POT((uint64_t)tcs_stride_B, 16) + 2 * sizeof(uint32_t) +
+          PANVK_GPU_PRERAST_TESS_MAX_POINTS * sizeof(struct poly_tess_point) +
+          16 + PANVK_GPU_PRERAST_TESS_MAX_INDICES * sizeof(uint32_t);
+}
+
+static inline uint32_t
+panvk_gpu_prerast_tess_max_patches(uint32_t tcs_stride_B,
+                                   uint32_t vs_record_stride,
+                                   uint32_t patch_size)
+{
+   uint64_t tess = (PANVK_GPU_PRERAST_TESS_ARENA_SIZE -
+                    PANVK_GPU_PRERAST_TESS_DATA_OFFSET - 4 * 16) /
+                   panvk_gpu_prerast_tess_patch_bytes(tcs_stride_B);
+   uint64_t vs =
+      panvk_gpu_prerast_record_capacity(vs_record_stride) / MAX2(patch_size, 1);
+   return MIN2(tess, vs);
+}
+
+static inline void
+panvk_gpu_prerast_tess_layout(uint64_t arena, uint32_t patches,
+                              uint32_t tcs_stride_B,
+                              struct panvk_gpu_prerast_tess_layout *l)
+{
+   uint64_t off = arena + PANVK_GPU_PRERAST_TESS_DATA_OFFSET;
+
+   l->tcs = off;
+   off += ALIGN_POT((uint64_t)patches * tcs_stride_B, 16);
+   l->counts = off;
+   off += ALIGN_POT((uint64_t)patches * sizeof(uint32_t), 16);
+   l->coord_allocs = off;
+   off += ALIGN_POT((uint64_t)patches * sizeof(uint32_t), 16);
+   l->heap = off;
+   l->heap_size = patches * (PANVK_GPU_PRERAST_TESS_MAX_POINTS *
+                                sizeof(struct poly_tess_point) + 16) + 16;
+   off += l->heap_size;
+   l->index = off;
+   l->index_size =
+      patches * PANVK_GPU_PRERAST_TESS_MAX_INDICES * sizeof(uint32_t);
+   assert(off + l->index_size <= arena + PANVK_GPU_PRERAST_TESS_ARENA_SIZE);
 }
 
 struct panvk_gpu_prerast_arena {

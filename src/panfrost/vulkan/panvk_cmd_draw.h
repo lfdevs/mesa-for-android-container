@@ -210,7 +210,7 @@ struct panvk_cmd_graphics_state {
    struct {
       const struct panvk_shader *shader;
       struct panvk_shader_desc_state desc;
-   } gs;
+   } gs, tcs, tes;
 #endif
 
    struct {
@@ -460,6 +460,8 @@ struct panvk_draw_info {
    bool gpu_prerast_generated;
    /* Already counted by a pipeline statistics query (split chunks). */
    bool pstats_counted;
+   /* The primitives generated query was updated by the tessellation kernels. */
+   bool prims_generated_counted;
    uint32_t gpu_prerast_prim_base;
 
 #if PAN_ARCH < 9

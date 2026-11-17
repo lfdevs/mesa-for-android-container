@@ -1081,7 +1081,7 @@ with_llvm = with_llvm \
 
 with_poly = [
   with_gallium_asahi, with_asahi_vk, with_tools.contains('asahi'),
-  with_kosmickrisp_vk,
+  with_kosmickrisp_vk, with_panfrost_vk,
 ].contains(true)
 
 dep_clc = null_dep

@@ -798,7 +798,10 @@ panvk_per_arch(cmd_pstats_draw)(struct panvk_cmd_buffer *cmdbuf,
    uint32_t counted = q->mask & (PSTAT(INPUT_ASSEMBLY_VERTICES) |
                                  PSTAT(INPUT_ASSEMBLY_PRIMITIVES) |
                                  PSTAT(VERTEX_SHADER_INVOCATIONS));
-   if (!cmdbuf->state.gfx.gs.shader) {
+   const uint32_t patch_size =
+      cmdbuf->vk.dynamic_graphics_state.ts.patch_control_points;
+   /* The GS and tessellation kernels count clipping from their output. */
+   if (!cmdbuf->state.gfx.gs.shader && !cmdbuf->state.gfx.tes.shader) {
       counted |= q->mask & (PSTAT(CLIPPING_INVOCATIONS) |
                             PSTAT(CLIPPING_PRIMITIVES));
    }
@@ -816,7 +819,10 @@ panvk_per_arch(cmd_pstats_draw)(struct panvk_cmd_buffer *cmdbuf,
       struct cs_builder *b =
          panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
       uint64_t prims =
-         u_decomposed_prims_for_vertices(draw->prim, draw->vertex.count) *
+         (draw->prim == MESA_PRIM_PATCHES
+             ? draw->vertex.count / MAX2(patch_size, 1)
+             : u_decomposed_prims_for_vertices(draw->prim,
+                                               draw->vertex.count)) *
          instances;
 
       pstats_cs_add(b, panvk_pstats_counter_addr(
@@ -876,6 +882,7 @@ panvk_per_arch(cmd_pstats_draw)(struct panvk_cmd_buffer *cmdbuf,
       .restart = restart,
       .prim = draw->prim,
       .view_count = view_count,
+      .patch_size = patch_size,
    };
    struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmdbuf);
 
