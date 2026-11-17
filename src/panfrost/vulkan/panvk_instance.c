@@ -16,6 +16,12 @@
 #include "util/os_misc.h"
 #include "util/u_call_once.h"
 
+#if defined(HAVE_PAN_KMOD_KBASE)
+#include <limits.h>
+#include <stdio.h>
+#include <unistd.h>
+#endif
+
 #include "vk_alloc.h"
 #include "vk_log.h"
 
@@ -54,6 +60,7 @@ static const struct debug_control panvk_debug_options[] = {
    {"no_extended_va_range", PANVK_DEBUG_NO_EXTENDED_VA_RANGE},
    {"hsr_prepass", PANVK_DEBUG_HSR_PREPASS},
    {"no_crc", PANVK_DEBUG_NO_CRC},
+   {"kbase_diag", PANVK_DEBUG_KBASE_DIAG},
    {NULL, 0},
 };
 
@@ -156,6 +163,69 @@ panvk_physical_device_try_create(struct vk_instance *vk_instance,
    return VK_SUCCESS;
 }
 
+static VkResult
+panvk_enumerate_physical_devices(struct vk_instance *vk_instance)
+{
+   struct panvk_instance *instance =
+      container_of(vk_instance, struct panvk_instance, vk);
+
+   /* Enumerate DRM render nodes (panfrost / panthor). */
+   drmDevicePtr drm_devices[256];
+   int max_drm = drmGetDevices2(0, drm_devices, ARRAY_SIZE(drm_devices));
+
+   if (max_drm > 0) {
+      for (int i = 0; i < max_drm; i++) {
+         struct vk_physical_device *pdevice = NULL;
+         VkResult result =
+            panvk_physical_device_try_create(vk_instance, drm_devices[i],
+                                             &pdevice);
+         if (result == VK_ERROR_INCOMPATIBLE_DRIVER)
+            continue;
+         if (result != VK_SUCCESS) {
+            drmFreeDevices(drm_devices, max_drm);
+            return result;
+         }
+         list_addtail(&pdevice->link, &vk_instance->physical_devices.list);
+      }
+      drmFreeDevices(drm_devices, max_drm);
+   }
+
+#if defined(HAVE_PAN_KMOD_KBASE)
+   /* Enumerate kbase (Mali) non-DRM nodes. */
+   for (int i = 0; i < PAN_KBASE_MAX_NODES; i++) {
+      char path[PATH_MAX];
+      snprintf(path, sizeof(path), "/dev/mali%d", i);
+
+      /* Missing optional nodes are normal and should not emit loader
+       * warnings.  Existing nodes still go through full initialization so
+       * permission and uAPI failures remain visible. */
+      if (access(path, F_OK) != 0)
+         continue;
+
+      struct panvk_physical_device *device =
+         vk_zalloc(&instance->vk.alloc, sizeof(*device), 8,
+                   VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+      if (!device)
+         return panvk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+      VkResult result =
+         panvk_physical_device_init_kbase(device, instance, path);
+      if (result != VK_SUCCESS) {
+         vk_free(&instance->vk.alloc, device);
+         /* No device at this path; try the next node. */
+         if (result == VK_ERROR_INCOMPATIBLE_DRIVER)
+            continue;
+         /* A real failure; stop enumeration. */
+         return result;
+      }
+
+      list_addtail(&device->vk.link, &vk_instance->physical_devices.list);
+   }
+#endif /* HAVE_PAN_KMOD_KBASE */
+
+   return VK_SUCCESS;
+}
+
 static void
 panvk_destroy_physical_device(struct vk_physical_device *device)
 {
@@ -255,8 +325,8 @@ panvk_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
       .priv = &instance->vk.alloc,
    };
 
-   instance->vk.physical_devices.try_create_for_drm =
-      panvk_physical_device_try_create;
+   instance->vk.physical_devices.enumerate =
+      panvk_enumerate_physical_devices;
    instance->vk.physical_devices.destroy = panvk_destroy_physical_device;
 
    if (PANVK_DEBUG(STARTUP))
