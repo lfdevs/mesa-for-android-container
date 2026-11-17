@@ -1116,6 +1116,7 @@ nir_get_io_offset_src_number(const nir_intrinsic_instr *instr)
    case nir_intrinsic_store_ssbo_intel:
    case nir_intrinsic_store_global_amd:
    case nir_intrinsic_global_atomic_amd:
+   case nir_intrinsic_load_attr_pan:
       return 2;
    case nir_intrinsic_load_ssbo_ir3:
       /* This intrinsic has 2 offsets (src1 bytes, src2 dwords), we return the
