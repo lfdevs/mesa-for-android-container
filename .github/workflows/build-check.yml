@@ -1716,8 +1716,14 @@ jobs:
           recipe = mesa / "default.nix"
           text = recipe.read_text()
           text = replace(text, r'  patches = \[.*?\n  \];', '  patches = [];')
-          # The separate nixpkgs header package tracks a different Mesa release.
-          text = replace(text, r"  postPatch = ''.*?\n  '';", "  postPatch = ''patchShebangs .'';")
+          # Adapt nixpkgs' clang library path fix to this Mesa baseline.
+          post_patch = """  postPatch = ''
+              patchShebangs .
+              substituteInPlace meson.build \\
+                --replace-fail "llvm_libdir = dep_llvm.get_variable(cmake : 'LLVM_LIBRARY_DIR', configtool: 'libdir')" \\
+                "llvm_libdir = '${lib.getLib llvmPackages.clang-unwrapped}/lib'"
+            '';"""
+          text = replace(text, r"  postPatch = ''.*?\n  '';", post_patch)
           text = replace(text, r'  outputs = \[.*?\n  \];', '  outputs = [ "out" ];')
           text = replace(text, r'  mesonFlags = \[', '  mesonBuildType = "release";\n\n  mesonFlags = [')
           flags = [
