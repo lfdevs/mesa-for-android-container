@@ -82,8 +82,7 @@ panvk_per_arch(gpu_prerast_can_lower)(
         (poly && !shader->polygon_compiled) ||
         (gs && (!gs->gpu_prerast.gs.kernel_compiled ||
                 !gs->gpu_prerast.gs.passthrough_compiled)) ||
-        (draw->indirect.buffer_dev_addr && draw->indirect.draw_count > 1) ||
-        draw->indirect.count_buffer_dev_addr)
+        (draw->indirect.buffer_dev_addr && draw->indirect.draw_count > 1))
        return false;
 
     if (!draw->indirect.buffer_dev_addr) {

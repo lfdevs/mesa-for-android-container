@@ -815,7 +815,13 @@ panvk_gpu_prerast_lower_sw_vs_intr(nir_builder *b, nir_intrinsic_instr *intr,
    b->cursor = nir_before_instr(&intr->instr);
    if (intr->intrinsic == nir_intrinsic_load_vertex_id) {
       nir_def *id = nir_channel(b, nir_load_global_invocation_id(b, 32), 0);
-      nir_def_replace(&intr->def, poly_nir_load_vertex_id(b, id));
+      nir_def *first_index = nir_load_global(
+         b, 1, 32,
+         nir_iadd_imm(b, nir_load_vertex_param_buffer_poly(b),
+                      offsetof(struct panvk_gpu_prerast_params, index_offset)),
+         .align_mul = 4);
+      nir_def_replace(&intr->def,
+                      poly_nir_load_vertex_id(b, nir_iadd(b, id, first_index)));
       return true;
    }
    if (intr->intrinsic == nir_intrinsic_load_vertex_id_zero_base) {
@@ -1705,6 +1711,7 @@ panvk_gpu_prerast_lower_gs(nir_shader *nir,
       nir_pop_if(b, NULL);
       s.prim_id = nir_iadd(b, nir_load_var(b, before), lp);
    }
+   s.prim_id = nir_iadd(b, s.prim_id, GS_PARAM(b, p, 32, prim_id_base));
 
    nir_store_var(b, s.vcount, zero, 1);
    nir_store_var(b, s.ipos, zero, 1);

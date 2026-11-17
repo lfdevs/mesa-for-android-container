@@ -447,10 +447,12 @@ struct panvk_draw_info {
       uint64_t count_buffer_dev_addr;
       uint32_t draw_count;
       uint32_t stride;
+      uint32_t draw_index;
    } indirect;
 
    enum mesa_prim prim;
    bool gpu_prerast_generated;
+   uint32_t gpu_prerast_prim_base;
 
 #if PAN_ARCH < 9
    uint32_t layer_id;

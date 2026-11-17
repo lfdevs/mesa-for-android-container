@@ -3635,10 +3635,14 @@ gpu_prerast_gs_run(struct panvk_cmd_buffer *cmdbuf,
       *(uint64_t *)((uint8_t *)push.cpu + off) = gs_params;
    }
 
+   /* Take the counts gpu_prerast_draw() stored, they are zeroed for draws
+    * past the indirect count. */
    if (indirect) {
-      cs_move64_to(compute, base, source->indirect.buffer_dev_addr);
-      cs_load32_to(compute, count_reg, base, 0);
-      cs_load32_to(compute, instance_reg, base, 4);
+      cs_move64_to(compute, base, arena + PANVK_GPU_PRERAST_PARAMS_OFFSET);
+      cs_load32_to(compute, count_reg, base,
+                   offsetof(struct panvk_gpu_prerast_params, vertex_count));
+      cs_load32_to(compute, instance_reg, base,
+                   offsetof(struct panvk_gpu_prerast_params, instance_count));
       cs_wait_slot(compute, SB_ID(LS));
    }
 
@@ -3677,6 +3681,7 @@ gpu_prerast_gs_run(struct panvk_cmd_buffer *cmdbuf,
    STORE_GS32(provoking_last,
               cmdbuf->vk.dynamic_graphics_state.rs.provoking_vertex ==
                  VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT);
+   STORE_GS32(prim_id_base, source->gpu_prerast_prim_base);
 #undef STORE_GS32
 #undef STORE_GS64
 
@@ -3779,6 +3784,21 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
          cs_load32_to(compute, vertex_base_reg, draw_params, 8);
          cs_load32_to(compute, first_instance_reg, draw_params, 12);
          cs_move32_to(compute, first_index_reg, 0);
+      }
+      struct cs_index draw_count = cs_scratch_reg32(compute, 11);
+      if (source->indirect.count_buffer_dev_addr) {
+         cs_move64_to(compute, draw_params,
+                      source->indirect.count_buffer_dev_addr);
+         cs_load32_to(compute, draw_count, draw_params, 0);
+      }
+      cs_wait_slot(compute, SB_ID(LS));
+      if (source->indirect.count_buffer_dev_addr) {
+         cs_add_imm32(compute, draw_count, draw_count,
+                      -(int32_t)source->indirect.draw_index);
+         cs_if(compute, MALI_CS_CONDITION_LEQUAL, draw_count) {
+            cs_move32_to(compute, count_reg, 0);
+            cs_move32_to(compute, instance_reg, 0);
+         }
       }
       cs_move64_to(compute, draw_params, params);
       cs_store32(compute, count_reg, draw_params,
@@ -4001,6 +4021,127 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
     return true;
 }
 
+#define gpu_prerast_unhandled(why)                                             \
+   do {                                                                        \
+      mesa_loge_once("panvk: gpu_prerast cannot lower this draw (%s), "       \
+                     "skipping it", why);                                      \
+      assert(!"gpu_prerast draw not lowered");                                 \
+   } while (0)
+
+static bool
+gpu_prerast_needed(const struct panvk_cmd_buffer *cmdbuf,
+                   const struct panvk_draw_info *draw)
+{
+   return !draw->gpu_prerast_generated && cmdbuf->state.gfx.gs.shader;
+}
+
+/* Returns true if the draw was split into draws that fit the arena. */
+static bool
+gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
+                  const struct panvk_draw_info *draw)
+{
+   const struct panvk_shader *vs = cmdbuf->state.gfx.vs.shader;
+   const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
+   struct panvk_draw_info chunk = *draw;
+
+   /* ponytail: indirect draws are lowered one at a time, and the arena caps
+    * in the kernels truncate an indirect draw that exceeds them. A CS loop
+    * over GPU-side chunks is the upgrade path if that shows up.
+    */
+   if (draw->indirect.buffer_dev_addr) {
+      if (draw->indirect.draw_count <= 1)
+         return false;
+
+      chunk.indirect.draw_count = 1;
+      for (uint32_t i = 0; i < draw->indirect.draw_count; i++) {
+         chunk.indirect.draw_index = i;
+         panvk_cmd_draw(cmdbuf, chunk);
+         chunk.indirect.buffer_dev_addr += draw->indirect.stride;
+      }
+      return true;
+   }
+
+   uint32_t max_verts =
+      panvk_gpu_prerast_record_capacity(vs->gpu_prerast.io.record_stride);
+   if (gs)
+      max_verts = MIN2(max_verts,
+                       panvk_gpu_prerast_gs_cap_slots(&gs->gpu_prerast.gs) /
+                          gs->gpu_prerast.gs.invocations);
+
+   if ((uint64_t)draw->vertex.count * draw->instance.count <= max_verts)
+      return false;
+
+   if (draw->vertex.count <= max_verts) {
+      const uint32_t step = max_verts / draw->vertex.count;
+      for (uint32_t i = 0; i < draw->instance.count; i += step) {
+         chunk.instance.base = draw->instance.base + i;
+         chunk.instance.count = MIN2(step, draw->instance.count - i);
+         panvk_cmd_draw(cmdbuf, chunk);
+      }
+      return true;
+   }
+
+   uint32_t align = 1, overlap = 0, prim_div = 1;
+   switch (draw->prim) {
+   case MESA_PRIM_POINTS:
+      break;
+   case MESA_PRIM_LINES:
+      align = prim_div = 2;
+      break;
+   case MESA_PRIM_TRIANGLES:
+      align = prim_div = 3;
+      break;
+   case MESA_PRIM_LINES_ADJACENCY:
+      align = prim_div = 4;
+      break;
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+      align = prim_div = 6;
+      break;
+   case MESA_PRIM_LINE_STRIP:
+      overlap = 1;
+      break;
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      overlap = 3;
+      break;
+   case MESA_PRIM_TRIANGLE_STRIP:
+      align = overlap = 2;
+      break;
+   default:
+      /* ponytail: fans and triangle strips with adjacency are not split by
+       * vertex range, the kernels need a first-vertex/strip-end input for
+       * that.
+       */
+      gpu_prerast_unhandled("vertex count over the arena capacity");
+      return true;
+   }
+
+   const uint32_t step =
+      max_verts > overlap ? (max_verts - overlap) / align * align : 0;
+   /* ponytail: restart segments would straddle chunks, a restart-aware split
+    * needs the segment starts, which live in the index buffer.
+    */
+   if (!step || (overlap && draw->index.index_size &&
+                 draw->index.restart_enable)) {
+      gpu_prerast_unhandled("vertex count over the arena capacity");
+      return true;
+   }
+
+   chunk.instance.count = 1;
+   for (uint32_t inst = 0; inst < draw->instance.count; inst++) {
+      chunk.instance.base = draw->instance.base + inst;
+      for (uint32_t i = 0; i + overlap < draw->vertex.count; i += step) {
+         chunk.vertex.count = MIN2(step + overlap, draw->vertex.count - i);
+         if (draw->index.index_size)
+            chunk.index.offset = draw->index.offset + i;
+         else
+            chunk.vertex.base = draw->vertex.base + i;
+         chunk.gpu_prerast_prim_base = i / prim_div;
+         panvk_cmd_draw(cmdbuf, chunk);
+      }
+   }
+   return true;
+}
+
 static void
 panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
 {
@@ -4012,17 +4153,8 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
    if (!panvk_priv_mem_check_alloc(vs->spd))
       return;
 
-   if (cmdbuf->state.gfx.gs.shader && !draw.gpu_prerast_generated &&
-       draw.indirect.buffer_dev_addr && draw.indirect.draw_count > 1 &&
-       !draw.indirect.count_buffer_dev_addr) {
-      struct panvk_draw_info one = draw;
-      one.indirect.draw_count = 1;
-      for (uint32_t i = 0; i < draw.indirect.draw_count; i++) {
-         panvk_cmd_draw(cmdbuf, one);
-         one.indirect.buffer_dev_addr += draw.indirect.stride;
-      }
+   if (gpu_prerast_needed(cmdbuf, &draw) && gpu_prerast_split(cmdbuf, &draw))
       return;
-   }
 
    if (draw.indirect.buffer_dev_addr)
       account_tiler_work(cmdbuf, (uint64_t)draw.indirect.draw_count * 256);
@@ -4053,9 +4185,13 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
    if (result != VK_SUCCESS)
       return;
 
-   if (!draw.gpu_prerast_generated &&
-       (gpu_prerast_draw(cmdbuf, &draw) || cmdbuf->state.gfx.gs.shader))
+   if (!draw.gpu_prerast_generated && gpu_prerast_draw(cmdbuf, &draw))
       return;
+
+   if (gpu_prerast_needed(cmdbuf, &draw)) {
+      gpu_prerast_unhandled("shader variants missing");
+      return;
+   }
 
    /* For indirect draws, we need to patch the descriptors we just emitted */
    if (draw.indirect.buffer_dev_addr)

@@ -12,7 +12,7 @@
 #include "util/macros.h"
 #include "vulkan/vulkan_core.h"
 
-#define PANVK_GPU_PRERAST_ABI_VERSION 3
+#define PANVK_GPU_PRERAST_ABI_VERSION 4
 #define PANVK_GPU_PRERAST_MAX_EXECUTION_BYTES (256ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_VS_REGION_END (32ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_GS_INDEX_OFFSET PANVK_GPU_PRERAST_VS_REGION_END
@@ -142,7 +142,7 @@ struct panvk_gpu_prerast_gs_params {
    uint32_t cap_slots;
    uint32_t vs_record_capacity;
    uint32_t provoking_last;
-   uint32_t _pad;
+   uint32_t prim_id_base;
 };
 
 static_assert(PANVK_GPU_PRERAST_GS_PARAMS_OFFSET +
