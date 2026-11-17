@@ -316,10 +316,8 @@ panvk_gpu_prerast_record_capacity(uint32_t record_stride)
 #define PANVK_GPU_PRERAST_TESS_MAX_INDICES                                     \
    (PANVK_GPU_PRERAST_TESS_MAX_LEVEL * PANVK_GPU_PRERAST_TESS_MAX_LEVEL * 6)
 
-static_assert(offsetof(struct panlib_tess_draw, total_patches) % 8 == 0 &&
-                 offsetof(struct panlib_tess_draw, ready) % 8 == 0 &&
-                 offsetof(struct panlib_tess_draw, free) % 8 == 0,
-              "panlib_tess_draw 64-bit fields and syncs must be aligned");
+static_assert(offsetof(struct panlib_tess_draw, total_patches) % 8 == 0,
+              "panlib_tess_draw 64-bit fields must be aligned");
 
 struct panvk_gpu_prerast_tess_layout {
    uint64_t tcs, counts, coord_allocs, heap, index;
@@ -371,11 +369,20 @@ panvk_gpu_prerast_tess_layout(uint64_t arena, uint32_t patches,
 }
 
 struct panvk_gpu_prerast_arena {
-   uint32_t available;
-   uint32_t error;
-   uint32_t _pad[14];
+   uint32_t _pad[16];
    struct panvk_gpu_prerast_params params;
    uint8_t data[];
+};
+
+/* Ownership syncs of the two arenas, {seqno, error} CQS pairs taken on the
+ * compute subqueue and given back on the vertex/tiler one. Each subqueue is
+ * its own CSG on kbase, and kbase re-evaluates the SYNC_WAIT of an evicted
+ * CSG through a kernel mapping that only CSF event memory has. A wait on any
+ * other memory never wakes up once its group is suspended.
+ */
+struct panvk_gpu_prerast_syncs {
+   uint32_t arena[2];
+   uint32_t tess_arena[2];
 };
 
 struct panvk_gpu_prerast_sync_contract {

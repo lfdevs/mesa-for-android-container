@@ -3644,6 +3644,18 @@ gpu_prerast_wait_compute(struct panvk_cmd_buffer *cmdbuf)
                            MALI_CS_CONDITION_GREATER, sync_point, sync_addr);
 }
 
+static uint64_t
+gpu_prerast_arena_sync(const struct panvk_device *dev, uint64_t arena)
+{
+   const bool tess =
+      arena == panvk_priv_mem_dev_addr(dev->gpu_prerast_tess_arena);
+
+   assert(tess || arena == panvk_priv_mem_dev_addr(dev->gpu_prerast_arena));
+   return dev->gpu_prerast_syncs->addr.dev +
+          (tess ? offsetof(struct panvk_gpu_prerast_syncs, tess_arena)
+                : offsetof(struct panvk_gpu_prerast_syncs, arena));
+}
+
 static void
 gpu_prerast_release_arena(struct panvk_cmd_buffer *cmdbuf, uint64_t arena)
 {
@@ -3654,8 +3666,7 @@ gpu_prerast_release_arena(struct panvk_cmd_buffer *cmdbuf, uint64_t arena)
    struct cs_index one = cs_scratch_reg32(b, 2);
 
    cs_wait_slots(b, dev->csf.sb.all_iters_mask);
-   cs_move64_to(b, addr, arena + offsetof(struct panvk_gpu_prerast_arena,
-                                          available));
+   cs_move64_to(b, addr, gpu_prerast_arena_sync(dev, arena));
    cs_move32_to(b, one, 1);
    cs_sync32_add(b, true, panvk_cs_signal_scope(cmdbuf), one, addr, cs_now());
 }
@@ -3885,16 +3896,16 @@ gpu_prerast_gs_run(struct panvk_cmd_buffer *cmdbuf,
 static void
 gpu_prerast_acquire_arena(struct panvk_cmd_buffer *cmdbuf, uint64_t arena)
 {
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
    struct cs_index addr = cs_scratch_reg64(b, 0);
    struct cs_index value = cs_scratch_reg32(b, 2);
 
-   cs_move64_to(b, addr,
-                arena + offsetof(struct panvk_gpu_prerast_arena, available));
+   cs_move64_to(b, addr, gpu_prerast_arena_sync(dev, arena));
    cs_move32_to(b, value, 0);
    cs_sync32_wait(b, false, MALI_CS_CONDITION_GREATER, value, addr);
    cs_move32_to(b, value, -1);
-   cs_sync32_add(b, true, MALI_CS_SYNC_SCOPE_CSG, value, addr, cs_now());
+   cs_sync32_add(b, true, panvk_cs_signal_scope(cmdbuf), value, addr, cs_now());
 }
 
 static bool
@@ -4374,32 +4385,45 @@ gpu_prerast_tess_max_patches(const struct panvk_cmd_buffer *cmdbuf)
       ps);
 }
 
+/* Loads the address of a tessellation sync of the queue syncobjs BO, see
+ * PANVK_QUEUE_TESS_READY_SYNC_OFFSET.
+ */
+static struct cs_index
+gpu_prerast_tess_sync(struct cs_builder *b, uint32_t offset)
+{
+   struct cs_index addr = cs_scratch_reg64(b, 0);
+
+   cs_load64_to(b, addr, cs_subqueue_ctx_reg(b),
+                offsetof(struct panvk_cs_subqueue_context, syncobjs));
+   cs_add_imm64(b, addr, addr, offset);
+   return addr;
+}
+
 static void
 gpu_prerast_sync32_take(struct panvk_cmd_buffer *cmdbuf,
-                        enum panvk_subqueue_id subqueue, uint64_t sync)
+                        enum panvk_subqueue_id subqueue, uint32_t offset)
 {
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, subqueue);
-   struct cs_index addr = cs_scratch_reg64(b, 0);
+   struct cs_index addr = gpu_prerast_tess_sync(b, offset);
    struct cs_index value = cs_scratch_reg32(b, 2);
 
-   cs_move64_to(b, addr, sync);
    cs_move32_to(b, value, 0);
    cs_sync32_wait(b, false, MALI_CS_CONDITION_GREATER, value, addr);
    cs_move32_to(b, value, -1);
-   cs_sync32_add(b, true, MALI_CS_SYNC_SCOPE_CSG, value, addr, cs_now());
+   cs_sync32_add(b, true, panvk_cs_signal_scope(cmdbuf), value, addr, cs_now());
 }
 
 static void
 gpu_prerast_sync32_give(struct panvk_cmd_buffer *cmdbuf,
-                        enum panvk_subqueue_id subqueue, uint64_t sync)
+                        enum panvk_subqueue_id subqueue, uint32_t offset)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, subqueue);
-   struct cs_index addr = cs_scratch_reg64(b, 0);
-   struct cs_index value = cs_scratch_reg32(b, 2);
 
    cs_wait_slots(b, dev->csf.sb.all_iters_mask);
-   cs_move64_to(b, addr, sync);
+   struct cs_index addr = gpu_prerast_tess_sync(b, offset);
+   struct cs_index value = cs_scratch_reg32(b, 2);
+
    cs_move32_to(b, value, 1);
    cs_sync32_add(b, true, panvk_cs_signal_scope(cmdbuf), value, addr, cs_now());
 }
@@ -4418,10 +4442,10 @@ gpu_prerast_load_flag(struct cs_builder *b, uint64_t addr)
 }
 
 /* GPU tessellation, as one CS loop on each of the compute and vertex/tiler
- * queues, handshaking through the ready/free syncs of struct
- * panlib_tess_draw. Each compute iteration either runs VS -> TCS ->
- * tessellator on the next chunk of patches that fits the tessellation arena,
- * or moves to the next index range of the current chunk. When the TES output
+ * queues, handshaking through the queue's tessellation ready/free syncs.
+ * Each compute iteration either runs VS -> TCS -> tessellator on the next
+ * chunk of patches that fits the tessellation arena, or moves to the next
+ * index range of the current chunk. When the TES output
  * goes through gpu_prerast again (GS, non-fill polygon mode), that range is
  * sized to the gpu_prerast arena and the TES and GS kernels run in the same
  * iteration. The vertex/tiler iteration then draws that range. Nothing is
@@ -4568,7 +4592,6 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
    t->indexed = indexed;
    t->range = range;
    t->verts_per_prim = vpp;
-   t->free.seqno = 1;
 
    uint64_t src = draw->indirect.buffer_dev_addr;
    if (!indirect) {
@@ -4673,7 +4696,8 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
     */
    bool ok = true;
    cs_while(b, MALI_CS_CONDITION_ALWAYS, cs_undef()) {
-      gpu_prerast_sync32_take(cmdbuf, PANVK_SUBQUEUE_COMPUTE, TD(free));
+      gpu_prerast_sync32_take(cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+                              PANVK_QUEUE_TESS_FREE_SYNC_OFFSET);
 
       panlib_tess_step(&ctx, panlib_1d(1), PANLIB_BARRIER_NONE, td.gpu,
                        tcs_stat);
@@ -4735,7 +4759,8 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
          gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
       }
 
-      gpu_prerast_sync32_give(cmdbuf, PANVK_SUBQUEUE_COMPUTE, TD(ready));
+      gpu_prerast_sync32_give(cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+                              PANVK_QUEUE_TESS_READY_SYNC_OFFSET);
       cs_loop_conditional_break(b, __loop, MALI_CS_CONDITION_EQUAL,
                                 gpu_prerast_load_flag(b, TD(more)));
    }
@@ -4749,7 +4774,8 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
 
    struct panvk_draw_info raster = out;
    cs_while(vt, MALI_CS_CONDITION_ALWAYS, cs_undef()) {
-      gpu_prerast_sync32_take(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER, TD(ready));
+      gpu_prerast_sync32_take(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER,
+                              PANVK_QUEUE_TESS_READY_SYNC_OFFSET);
 
       cmdbuf->state.gfx.vs.shader = tes;
       gfx_state_set_dirty(cmdbuf, VS);
@@ -4769,7 +4795,8 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
       struct cs_index more = gpu_prerast_load_flag(vt, TD(more));
       struct cs_index more_keep = cs_scratch_reg32(vt, 4);
       cs_add_imm32(vt, more_keep, more, 0);
-      gpu_prerast_sync32_give(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER, TD(free));
+      gpu_prerast_sync32_give(cmdbuf, PANVK_SUBQUEUE_VERTEX_TILER,
+                              PANVK_QUEUE_TESS_FREE_SYNC_OFFSET);
       cs_loop_conditional_break(vt, __loop, MALI_CS_CONDITION_EQUAL,
                                 more_keep);
    }

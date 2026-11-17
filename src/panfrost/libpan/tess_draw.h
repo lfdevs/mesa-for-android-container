@@ -9,11 +9,6 @@
 #include "poly/geometry.h"
 #include "poly/tessellator.h"
 
-struct panlib_tess_sync {
-   uint32_t seqno;
-   uint32_t error;
-};
-
 /* Per-draw tessellation state shared by the CS loop and the panlib_tess_*
  * kernels. Each loop iteration either starts a new chunk of patches (VS, TCS,
  * tessellator) or draws the next index range of the current chunk.
@@ -57,7 +52,4 @@ struct panlib_tess_draw {
 
    uint64_t total_patches;
    uint64_t next_patch;
-
-   struct panlib_tess_sync ready;
-   struct panlib_tess_sync free;
 } PACKED;

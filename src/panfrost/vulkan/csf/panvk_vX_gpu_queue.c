@@ -1875,9 +1875,11 @@ init_queue(struct panvk_gpu_queue *queue)
    struct panvk_device *dev = to_panvk_device(queue->vk.base.device);
    VkResult result;
 
+   static_assert(sizeof(struct panvk_cs_sync64) * PANVK_SUBQUEUE_COUNT <=
+                    PANVK_QUEUE_TESS_READY_SYNC_OFFSET,
+                 "subqueue syncobjs overlap the tess syncs");
    struct panvk_pool_alloc_info alloc_info = {
-      .size =
-         ALIGN_POT(sizeof(struct panvk_cs_sync64), 64) * PANVK_SUBQUEUE_COUNT,
+      .size = PANVK_QUEUE_SYNCOBJS_SIZE,
       .alignment = 64,
    };
 
@@ -1904,8 +1906,21 @@ init_queue(struct panvk_gpu_queue *queue)
       return panvk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                           "Failed to allocate subqueue sync objects");
 
+   /* The tessellation loops leave ready at 0 and free at 1. */
+   panvk_priv_mem_write(queue->syncobjs, PANVK_QUEUE_TESS_READY_SYNC_OFFSET,
+                        struct panvk_cs_sync32, sync) {
+      *sync = (struct panvk_cs_sync32){0};
+   }
+   panvk_priv_mem_write(queue->syncobjs, PANVK_QUEUE_TESS_FREE_SYNC_OFFSET,
+                        struct panvk_cs_sync32, sync) {
+      *sync = (struct panvk_cs_sync32){.seqno = 1};
+   }
+
 #ifdef HAVE_PAN_KMOD_KBASE
    if (gpu_queue_uses_kbase(dev)) {
+      kbase_clean_priv_mem(queue->syncobjs, PANVK_QUEUE_TESS_READY_SYNC_OFFSET,
+                           PANVK_QUEUE_SYNCOBJS_SIZE -
+                              PANVK_QUEUE_TESS_READY_SYNC_OFFSET);
       result = kbase_init_seqnos(queue);
       if (result != VK_SUCCESS)
          return result;
