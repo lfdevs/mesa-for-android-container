@@ -364,13 +364,15 @@ kbase_dev_query_props(struct kbase_kmod_dev *kbase_dev,
    /* Timestamp: expose if gpu_id is non-zero (safe assumption). */
    props->gpu_can_query_timestamp = (props->gpu_id != 0);
    props->timestamp_device_coherent = (coherency_mode != 0);
-   /* The GPU cycle counter frequency is not exposed through the GPU props
-    * blob in the kbase uAPI.  It can be inferred at runtime by correlating
-    * KBASE_IOCTL_GET_CPU_GPU_TIMEINFO with OS monotonic time, but that
-    * requires a sampling window.  Leave it as 0 so the upper layers use
-    * OS timestamps instead of cycle counts; callers that need accurate
-    * frequency should perform their own calibration. */
    props->timestamp_frequency = 0;
+#if defined(__aarch64__)
+   uint64_t cntfrq;
+   __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(cntfrq));
+   props->timestamp_frequency = cntfrq;
+#endif
+   if (props->timestamp_frequency)
+      props->timestamp_cycles_to_ns_factor =
+         1000000000.0 / props->timestamp_frequency;
 
    /* Priorities: kbase currently only advertises medium. */
    props->allowed_group_priorities_mask =

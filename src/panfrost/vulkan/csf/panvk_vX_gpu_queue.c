@@ -1524,8 +1524,7 @@ init_utrace(struct panvk_gpu_queue *queue)
 
 #ifdef HAVE_PAN_KMOD_KBASE
    /* kbase queues use the synchronous submission model and never process
-    * utrace on the GPU timeline (timestamp_frequency is 0 there), so no
-    * utrace sync object is needed. */
+    * utrace on the GPU timeline, so no utrace sync object is needed. */
    if (gpu_queue_uses_kbase(dev))
       return VK_SUCCESS;
 #endif
@@ -2286,6 +2285,10 @@ panvk_queue_submit_init(struct panvk_queue_submit *submit,
    submit->process_utrace =
       u_trace_should_process(&submit->dev->utrace.utctx) &&
       submit->phys_dev->kmod.dev->props.timestamp_frequency;
+#ifdef HAVE_PAN_KMOD_KBASE
+   if (gpu_queue_uses_kbase(submit->dev))
+      submit->process_utrace = false;
+#endif
 
    submit->force_sync = PANVK_DEBUG(TRACE) || PANVK_DEBUG(SYNC);
 }
