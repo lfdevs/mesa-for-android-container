@@ -3713,7 +3713,7 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
                  const struct panvk_draw_info *source)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
-   struct panvk_shader *shader = cmdbuf->state.gfx.vs.shader;
+   const struct panvk_shader *shader = cmdbuf->state.gfx.vs.shader;
    if (!panvk_per_arch(gpu_prerast_can_lower)(cmdbuf, source,
                                                &shader->gpu_prerast))
       return false;
