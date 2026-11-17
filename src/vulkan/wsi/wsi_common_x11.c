@@ -2596,8 +2596,12 @@ x11_manage_present_queue(void *state)
       VkPresentModeKHR present_mode = chain->images[image_index].present_mode;
 
       /* Not necessary to block when we have explicit sync */
+      /* x11.wait_for_fences: no fence on the dma-buf, so the X server cannot
+       * wait and we do, in every present mode. Checked here and not in
+       * x11_needs_wait_for_fences(), which also decides the image count. */
       bool need_fence_wait =
-            x11_needs_wait_for_fences(chain->base.wsi, wsi_conn, present_mode) &&
+            (chain->base.wsi->x11.wait_for_fences ||
+             x11_needs_wait_for_fences(chain->base.wsi, wsi_conn, present_mode)) &&
             !chain->base.image_info.explicit_sync;
 
       bool need_timing_fence_wait = x11_swapchain_present_timing_is_out_of_order_completion(

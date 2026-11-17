@@ -137,6 +137,11 @@ struct wsi_device {
        * games that cannot handle SUBOPTIMAL correctly. */
       bool ignore_suboptimal;
 
+      /* Wait for an image's rendering before presenting it, in every
+       * present mode. For drivers that put no fence on the dma-buf (kgsl).
+       */
+      bool wait_for_fences;
+
       /* Select and read Present events on a separate connection to the X
        * server, so the WSI never reads from the application's connection. */
       bool dedicated_event_connection;
