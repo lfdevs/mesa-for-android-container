@@ -60,6 +60,31 @@
 #include "drm-uapi/panthor_drm.h"
 
 #include "kbase_kmod.h"
+
+/* ION new-ABI uapi (<linux/ion.h> is not in the NDK). */
+struct kbase_ion_alloc {
+   uint64_t len;
+   uint32_t heap_id_mask;
+   uint32_t flags;
+   uint32_t fd;
+   uint32_t unused;
+};
+struct kbase_ion_heap_data {
+   char name[32];
+   uint32_t type;
+   uint32_t heap_id;
+   uint32_t reserved[3];
+};
+struct kbase_ion_heap_query {
+   uint32_t cnt;
+   uint32_t reserved0;
+   uint64_t heaps;
+   uint32_t reserved1;
+   uint32_t reserved2;
+};
+#define KBASE_ION_IOC_ALLOC      _IOWR('I', 0, struct kbase_ion_alloc)
+#define KBASE_ION_IOC_HEAP_QUERY _IOWR('I', 8, struct kbase_ion_heap_query)
+
 #include "pan_kmod_backend.h"
 #include "pan_props.h"
 #include "pan_trace.h"
@@ -146,6 +171,11 @@ struct kbase_kmod_dev {
 
    /* Android dma-heap used for BOs which need to be shared with WSI. */
    int dma_heap_fd;
+
+   /* Kernels without dma-heap (4.14/5.4 ION) use /dev/ion through the same
+    * fd field; ion_heap_mask is the system heap id mask. */
+   bool heap_is_ion;
+   uint32_t ion_heap_mask;
 
    /* Set when the CSF notification stream reports a queue-group error.
     * Vulkan queue status queries use this latch instead of invalidating and
@@ -1697,6 +1727,37 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
       mesa_logd("kbase: dma-heap unavailable at %s: %s", dma_heap,
                 strerror(errno));
 
+   /* ION fallback (new ABI, kernels 4.14-5.4): placed maps need a dma-buf. */
+   if (kbase_dev->dma_heap_fd < 0) {
+      int ion = open("/dev/ion", O_RDONLY | O_CLOEXEC);
+      if (ion >= 0) {
+         struct kbase_ion_heap_data heaps[16] = {0};
+         struct kbase_ion_heap_query q = {
+            .cnt = ARRAY_SIZE(heaps),
+            .heaps = (uintptr_t)heaps,
+         };
+         if (!ioctl(ion, KBASE_ION_IOC_HEAP_QUERY, &q)) {
+            for (uint32_t i = 0; i < q.cnt && i < ARRAY_SIZE(heaps); i++) {
+               if (heaps[i].type == 0 /* ION_HEAP_TYPE_SYSTEM */) {
+                  kbase_dev->ion_heap_mask = 1u << heaps[i].heap_id;
+                  break;
+               }
+            }
+         }
+         if (kbase_dev->ion_heap_mask) {
+            kbase_dev->dma_heap_fd = ion;
+            kbase_dev->heap_is_ion = true;
+            mesa_logi("kbase: using ION system heap, mask 0x%x",
+                      kbase_dev->ion_heap_mask);
+         } else {
+            mesa_logi("kbase: no usable ION system heap");
+            close(ion);
+         }
+      } else {
+         mesa_logi("kbase: /dev/ion unavailable: %s", strerror(errno));
+      }
+   }
+
    if (!kbase_dev->base.props.gpu_id) {
       mesa_loge("kbase: failed to determine GPU ID from properties");
       if (kbase_dev->dma_heap_fd >= 0)
@@ -2138,7 +2199,18 @@ kbase_kmod_bo_alloc_dmabuf(struct pan_kmod_dev *dev, uint64_t size,
       .fd_flags = O_RDWR | O_CLOEXEC,
    };
 
-   if (ioctl(kbase_dev->dma_heap_fd, DMA_HEAP_IOCTL_ALLOC, &alloc)) {
+   if (kbase_dev->heap_is_ion) {
+      struct kbase_ion_alloc ia = {
+         .len = alloc.len,
+         .heap_id_mask = kbase_dev->ion_heap_mask,
+         .flags = 1, /* ION_FLAG_CACHED */
+      };
+      if (ioctl(kbase_dev->dma_heap_fd, KBASE_ION_IOC_ALLOC, &ia)) {
+         mesa_loge("kbase: ION_IOC_ALLOC failed: %s", strerror(errno));
+         return NULL;
+      }
+      alloc.fd = ia.fd;
+   } else if (ioctl(kbase_dev->dma_heap_fd, DMA_HEAP_IOCTL_ALLOC, &alloc)) {
       mesa_loge("kbase: DMA_HEAP_IOCTL_ALLOC failed: %s", strerror(errno));
       return NULL;
    }
