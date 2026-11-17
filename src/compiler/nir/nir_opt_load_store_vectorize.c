@@ -1444,6 +1444,15 @@ check_for_robustness(struct vectorize_ctx *ctx, struct entry *low, uint64_t high
    if (low->info->base_src < 0)
       return true;
 
+   nir_def *base = low->intrin->src[low->info->base_src].ssa;
+   if (base->bit_size == 32 && base->num_components == 1 &&
+       high_offset <= UINT32_MAX && get_offset_scale(low) == 1 &&
+       (!nir_intrinsic_has_base(low->intrin) ||
+        nir_intrinsic_base(low->intrin) == 0) &&
+       !nir_addition_might_overflow(ctx->shader, &ctx->uub_ht,
+                                    nir_get_scalar(base, 0), high_offset))
+      return false;
+
    /* Second, use information about the factors from address calculation (offset_defs_mul). These
     * are not guaranteed to be power-of-2.
     */
