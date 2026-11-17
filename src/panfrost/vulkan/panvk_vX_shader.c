@@ -729,7 +729,8 @@ panvk_gpu_prerast_collect_out_type(nir_builder *b, nir_intrinsic_instr *intr,
 
 static nir_shader *
 panvk_gpu_prerast_passthrough_nir(const nir_shader *source, uint64_t outputs,
-                                  const struct panvk_gpu_prerast_out_types *t)
+                                  const struct panvk_gpu_prerast_out_types *t,
+                                  const struct pan_varying_layout *layout)
 {
    nir_builder b = nir_builder_init_simple_shader(
       MESA_SHADER_VERTEX, source->options, "panvk_gpu_prerast_passthrough");
@@ -752,12 +753,26 @@ panvk_gpu_prerast_passthrough_nir(const nir_shader *source, uint64_t outputs,
     nir_def *record = nir_iadd(&b, base, nir_imul(&b, nir_u2u64(&b, linear), stride));
 
     u_foreach_bit64(location, outputs) {
+       /* store_output base is the HW varying-layout slot index, not the
+        * varying location. */
+       unsigned layout_idx = UINT_MAX;
+       for (unsigned i = 0; i < layout->count; i++) {
+          const struct pan_varying_slot *ls =
+             pan_varying_layout_slot_at(layout, i);
+          if (ls && ls->location == location) {
+             layout_idx = i;
+             break;
+          }
+       }
+       if (layout_idx == UINT_MAX)
+          continue;
+
        unsigned slot = util_bitcount64(outputs & BITFIELD64_MASK(location));
        nir_def *addr = nir_iadd_imm(&b, record, slot * 16);
        nir_def *value = nir_load_global(&b, 4, 32, addr, .align_mul = 16);
        nir_alu_type type = t->type[location] ? t->type[location]
                                              : nir_type_float32;
-       nir_store_output(&b, value, nir_imm_int(&b, 0), .base = location,
+       nir_store_output(&b, value, nir_imm_int(&b, 0), .base = layout_idx,
                         .write_mask = 0xf,
                         .src_type = type,
                         .io_semantics = { .location = location, .num_slots = 1 });
@@ -1761,7 +1776,10 @@ panvk_compile_shader(struct panvk_device *dev,
    switch (info->stage) {
    case MESA_SHADER_VERTEX: {
 #if PAN_ARCH >= 10
-      const enum panvk_vs_variant last_variant = PANVK_VS_VARIANT_GPU_PASSTHROUGH;
+      /* Lowered/passthrough variants only exist on the gpu_prerast path. */
+      const enum panvk_vs_variant last_variant =
+         PANVK_DEBUG(GPU_PRERAST) ? PANVK_VS_VARIANT_GPU_PASSTHROUGH
+                                  : PANVK_VS_VARIANT_HW;
       struct panvk_gpu_prerast_out_types out_types = {0};
 #else
       const enum panvk_vs_variant last_variant = PANVK_VS_VARIANT_HW;
@@ -1778,7 +1796,8 @@ panvk_compile_shader(struct panvk_device *dev,
                               ? panvk_gpu_prerast_passthrough_nir(
                                    info->nir,
                                    shader->gpu_prerast.io.outputs_written,
-                                   &out_types)
+                                   &out_types,
+                                   &shader->gpu_prerast.io.varyings)
                               : nir_shader_clone(NULL, info->nir);
 #else
          const bool clone_nir = (v != last_variant);
