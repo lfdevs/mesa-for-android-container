@@ -961,10 +961,24 @@ panvk_lower_tes(nir_shader *nir, struct panvk_gpu_prerast_tess_info *t)
    NIR_PASS(_, nir, nir_opt_constant_folding);
    NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_shader_in, NULL);
    NIR_PASS(_, nir, panvk_tess_lower);
-   /* poly_nir_lower_tes() adds a default point size unless outputs_written
-    * has PSIZ.
+   /* PointMode may be set only on the TCS. poly_nir_lower_tes() then emits
+    * store_output(base=0, src_type=0). Varying collection ignores src_type 0,
+    * pan_nir_resize_varying_io deletes the store, and outputs_written still
+    * has VARYING_BIT_PSIZ, so the IDVS no-psiz pass NULL-derefs. A real
+    * output var gets a unique driver_location and float32 src_type, and the
+    * poly helper then leaves it alone.
     */
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+   if (nir->info.tess.point_mode &&
+       !(nir->info.outputs_written & VARYING_BIT_PSIZ)) {
+      nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+      nir_builder psiz_b = nir_builder_at(nir_after_impl(impl));
+      nir_variable *psiz = nir_variable_create(
+         nir, nir_var_shader_out, glsl_float_type(), "gl_PointSize");
+      psiz->data.location = VARYING_SLOT_PSIZ;
+      nir_store_var(&psiz_b, psiz, nir_imm_float(&psiz_b, 1.0f), 1);
+      nir->info.outputs_written |= VARYING_BIT_PSIZ;
+   }
    NIR_PASS(_, nir, poly_nir_lower_tes, true);
    NIR_PASS(_, nir, panvk_tess_lower);
 }
