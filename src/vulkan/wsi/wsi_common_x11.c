@@ -2007,6 +2007,15 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index)
    free(err);
    free(geom);
 
+   if (image->present_id) {
+      mtx_lock(&chain->present_progress_mutex);
+      if (image->present_id > chain->present_id) {
+         chain->present_id = image->present_id;
+         u_cnd_monotonic_broadcast(&chain->present_progress_cond);
+      }
+      mtx_unlock(&chain->present_progress_mutex);
+   }
+
    wsi_queue_push(&chain->acquire_queue, image_index);
    return result;
 }
