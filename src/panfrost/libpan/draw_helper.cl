@@ -970,22 +970,6 @@ panlib_xfb_capture(constant struct panlib_xfb_params *x)
    }
 }
 
-/* vkCmdDrawIndirectByteCountEXT: the VkDrawIndirectCommand. */
-KERNEL(1)
-panlib_xfb_byte_count_draw(constant uint32_t *counter, uint32_t counter_offset,
-                           uint32_t stride, uint32_t instance_count,
-                           uint32_t first_instance, global uint32_t *draw)
-{
-   uint32_t bytes = counter[0];
-
-   draw[0] = bytes > counter_offset && stride
-                ? (bytes - counter_offset) / stride
-                : 0;
-   draw[1] = instance_count;
-   draw[2] = 0;
-   draw[3] = first_instance;
-}
-
 #include "vp_runs.cl"
 
 #elif PAN_ARCH < 9
@@ -2264,6 +2248,24 @@ panlib_v7_vs_ref_mark(global uint8_t *index_buffer_ptr,
    }
 }
 
+#endif
+
+#if PAN_ARCH >= 6
+/* vkCmdDrawIndirectByteCountEXT: the VkDrawIndirectCommand. */
+KERNEL(1)
+panlib_xfb_byte_count_draw(constant uint32_t *counter, uint32_t counter_offset,
+                           uint32_t stride, uint32_t instance_count,
+                           uint32_t first_instance, global uint32_t *draw)
+{
+   uint32_t bytes = counter[0];
+
+   draw[0] = bytes > counter_offset && stride
+                ? (bytes - counter_offset) / stride
+                : 0;
+   draw[1] = instance_count;
+   draw[2] = 0;
+   draw[3] = first_instance;
+}
 #endif
 
 #if PAN_ARCH == 9

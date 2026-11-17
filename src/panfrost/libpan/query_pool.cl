@@ -124,7 +124,9 @@ panlib_copy_pstats_query_result(uint64_t pool_addr,
       vk_write_query(dst, stat_count, flags, available);
 }
 
-#else
+#endif
+
+#if PAN_ARCH >= 6 && PAN_ARCH < 10
 
 static inline void
 write_occlusion_query_result(uintptr_t dst_addr, int32_t idx, uint32_t flags,
