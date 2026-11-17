@@ -290,8 +290,9 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
       assert(i * stride < dataSize);
       void *dst = (char *)pData + i * stride;
 
-      panvk_priv_mem_readback(pool->mem, panvk_query_offset(pool, query),
-                              struct panvk_query_report, src) {
+      panvk_priv_mem_readback_array(pool->mem, panvk_query_offset(pool, query),
+                                    struct panvk_query_report,
+                                    pool->reports_per_query, src) {
          switch (pool->vk.query_type) {
          case VK_QUERY_TYPE_OCCLUSION: {
             if (write_results)

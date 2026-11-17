@@ -880,7 +880,7 @@ panvk_per_arch(cmd_pstats_draw)(struct panvk_cmd_buffer *cmdbuf,
    struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmdbuf);
 
    panlib_update_pstats_draw_struct(&precomp_ctx, panlib_1d(draw_count),
-                                    PANLIB_BARRIER_NONE, args);
+                                    PANLIB_BARRIER_CSF_SYNC, args);
 }
 
 void
@@ -934,7 +934,7 @@ panvk_per_arch(cmd_pstats_dispatch)(struct panvk_cmd_buffer *cmdbuf,
    struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmdbuf);
 
    panlib_update_pstats_dispatch_struct(&precomp_ctx, panlib_1d(1),
-                                        PANLIB_BARRIER_NONE, args);
+                                        PANLIB_BARRIER_CSF_SYNC, args);
 }
 
 /* ponytail: the fragment shader invocation count is the sample count of the

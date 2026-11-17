@@ -358,6 +358,8 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
       panvk_shader_only_variant(cmdbuf->state.compute.shader);
    VkResult result;
 
+   panvk_per_arch(cmd_pstats_dispatch)(cmdbuf, cs, info);
+
    /* If there's no compute shader, we can skip the dispatch. */
    if (!panvk_priv_mem_check_alloc(cs->spd))
       return;
@@ -422,8 +424,6 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
       cs_store64(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
       cs_flush_stores(b);
    }
-
-   panvk_per_arch(cmd_pstats_dispatch)(cmdbuf, cs, info);
 
    panvk_per_arch(cmd_dispatch_shader)(cmdbuf, cs, cs_desc_state,
                                        cmdbuf->state.compute.push_uniforms,
