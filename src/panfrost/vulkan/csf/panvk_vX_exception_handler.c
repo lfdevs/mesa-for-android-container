@@ -183,7 +183,7 @@ generate_tiler_oom_handler(struct panvk_device *dev,
    const uint32_t fbd_size = get_fbd_size(has_zs_ext, rt_count);
 
    const struct drm_panthor_csif_info *csif_info =
-      panthor_kmod_get_csif_props(dev->kmod.dev);
+      panvk_get_csif_props(dev);
 
    struct cs_builder b;
    struct cs_builder_conf conf = {

@@ -1601,7 +1601,7 @@ init_subqueue(struct panvk_gpu_queue *queue, enum panvk_subqueue_id subqueue)
 
    struct cs_builder b;
    const struct drm_panthor_csif_info *csif_info =
-      panthor_kmod_get_csif_props(dev->kmod.dev);
+      panvk_get_csif_props(dev);
 
    struct cs_buffer root_cs = {
       .cpu = panvk_priv_mem_host_addr(subq->req_resource.buf),
@@ -1791,7 +1791,7 @@ init_subqueue(struct panvk_gpu_queue *queue, enum panvk_subqueue_id subqueue)
       .queue_index = subqueue,
       .stream_size = cs_root_chunk_size(&b),
       .stream_addr = cs_root_chunk_gpu_addr(&b),
-      .latest_flush = panthor_kmod_get_flush_id(dev->kmod.dev),
+      .latest_flush = panvk_get_flush_id(dev),
       .syncs = DRM_PANTHOR_OBJ_ARRAY(1, &syncop),
    };
    struct drm_panthor_group_submit gsubmit = {
@@ -2471,7 +2471,7 @@ panvk_queue_submit_init_req_resource(struct panvk_queue_submit *submit)
       return;
 
    struct panvk_device *dev = submit->dev;
-   uint32_t flush_id = panthor_kmod_get_flush_id(dev->kmod.dev);
+   uint32_t flush_id = panvk_get_flush_id(dev);
 
    u_foreach_bit(i, submit->req_resource_subqueue_mask) {
       struct panvk_subqueue *subq = &submit->queue->subqueues[i];
@@ -2562,7 +2562,7 @@ panvk_queue_submit_init_cmdbufs(struct panvk_queue_submit *submit,
       }
 
       if (util_bitcount(submit->utrace.queue_mask) > 0)
-         flush_id = panthor_kmod_get_flush_id(dev->kmod.dev);
+         flush_id = panvk_get_flush_id(dev);
 
       u_foreach_bit(j, submit->utrace.queue_mask) {
          struct u_trace *ut = &cmdbuf->utrace.uts[j];

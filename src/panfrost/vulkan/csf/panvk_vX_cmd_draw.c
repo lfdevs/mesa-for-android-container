@@ -105,7 +105,7 @@ generate_fn_set_fbds_provoking_vertex(struct panvk_device *dev,
                                       uint32_t *dump_region_size)
 {
    const struct drm_panthor_csif_info *csif_info =
-      panthor_kmod_get_csif_props(dev->kmod.dev);
+      panvk_get_csif_props(dev);
 
    struct cs_builder b;
    struct cs_builder_conf conf = {
