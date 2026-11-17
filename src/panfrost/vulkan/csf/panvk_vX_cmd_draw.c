@@ -2855,6 +2855,8 @@ get_tiler_flags_override(const struct panvk_draw_info *draw)
    return flags_override;
 }
 
+static VkResult split_render_ctx(struct panvk_cmd_buffer *cmdbuf);
+
 static VkResult
 prepare_draw(struct panvk_cmd_buffer *cmdbuf,
              const struct panvk_draw_info *draw)
@@ -2900,33 +2902,40 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf,
    if (result != VK_SUCCESS)
       return result;
 
+   bool reemit_render_ctx = false;
+
    if (!cmdbuf->vk.dynamic_graphics_state.rs.rasterizer_discard_enable) {
-      ASSERTED const struct pan_fb_layout *fb =
-         &cmdbuf->state.gfx.render.fb.layout;
+      const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
       uint32_t *nr_samples = &cmdbuf->state.gfx.render.fb.nr_samples;
       uint32_t rasterization_samples =
          cmdbuf->vk.dynamic_graphics_state.ms.rasterization_samples;
 
-      /* If there's no attachment, we patch nr_samples to match
-       * rasterization_samples, otherwise, we make sure those two numbers match.
+      /* No attachments: rasterizationSamples may change inside the pass.
+       * Flush descriptors baked for another count and re-emit them.
+       * Attachments fix the sample count for the whole pass.
        */
       if (!cmdbuf->state.gfx.render.bound_attachments) {
          assert(rasterization_samples > 0);
+         /* ponytail: only split a render context this command buffer owns;
+          * inherited contexts (secondaries, cross-cmdbuf resume) keep the
+          * sample count they were created with.
+          */
+         if (!inherits_render_ctx(cmdbuf) && fb->sample_count != 0 &&
+             fb->sample_count != rasterization_samples) {
+            result = split_render_ctx(cmdbuf);
+            if (result != VK_SUCCESS)
+               return result;
+
+            reemit_render_ctx = true;
+         }
          *nr_samples = rasterization_samples;
       } else {
          assert(rasterization_samples == *nr_samples);
+         assert(fb->sample_count == 0 || fb->sample_count == *nr_samples);
       }
-
-      /* In case we already emitted tiler/framebuffer descriptors, we ensure
-       * that the sample count didn't change
-       * XXX: This currently can happen in case we resume a render pass with no
-       * attachements and without any draw as the FBD is emitted when suspending.
-       */
-      assert(fb->sample_count == 0 ||
-             fb->sample_count == cmdbuf->state.gfx.render.fb.nr_samples);
    }
 
-   if (!inherits_render_ctx(cmdbuf)) {
+   if (reemit_render_ctx || !inherits_render_ctx(cmdbuf)) {
       result = get_render_ctx(cmdbuf);
       if (result != VK_SUCCESS)
          return result;
@@ -5300,7 +5309,24 @@ panvk_per_arch(CmdBeginRendering)(VkCommandBuffer commandBuffer,
 
    bool resuming = pRenderingInfo->flags & VK_RENDERING_RESUMING_BIT;
 
+   /* cmd_init_render_state() memsets the FB. A suspended pass may already
+    * have baked sample count and tile size into the descriptors it emitted.
+    */
+   const uint8_t suspended_sample_count =
+      resuming ? state->render.fb.layout.sample_count : 0;
+   const unsigned suspended_tile_size_px =
+      resuming ? state->render.fb.layout.tile_size_px : 0;
+   const unsigned suspended_tile_rt_alloc_B =
+      resuming ? state->render.fb.layout.tile_rt_alloc_B : 0;
+
    panvk_per_arch(cmd_init_render_state)(cmdbuf, pRenderingInfo);
+
+   if (suspended_sample_count != 0) {
+      state->render.fb.layout.sample_count = suspended_sample_count;
+      state->render.fb.layout.tile_size_px = suspended_tile_size_px;
+      state->render.fb.layout.tile_rt_alloc_B = suspended_tile_rt_alloc_B;
+      state->render.fb.nr_samples = suspended_sample_count;
+   }
 
    /* Renderpass lowering can fold an initial layout transition into
     * CmdBeginRendering() and report the old layout through
@@ -6235,6 +6261,40 @@ handle_deferred_queries(struct panvk_cmd_buffer *cmdbuf)
          offsetof(struct panvk_cs_subqueue_context, render.ts_chain.head));
       cs_flush_stores(b);
    }
+}
+
+/* End the current tiler/fragment context so get_render_ctx() can emit a new
+ * one. The render pass stays open: no resolve, no flag clear, no instr_end.
+ */
+static VkResult
+split_render_ctx(struct panvk_cmd_buffer *cmdbuf)
+{
+   VkResult result = VK_SUCCESS;
+
+   if (cmdbuf->state.gfx.render.oq.last !=
+       cmdbuf->state.gfx.occlusion_query.syncobj) {
+      result = wrap_prev_oq(cmdbuf);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
+   if (cmdbuf->state.gfx.render.fbds.gpu || inherits_render_ctx(cmdbuf)) {
+      flush_tiling(cmdbuf);
+      issue_fragment_jobs(cmdbuf);
+      handle_deferred_queries(cmdbuf);
+   }
+
+   panvk_per_arch(cmd_pstats_flush_pending)(cmdbuf);
+
+   cmdbuf->state.gfx.render.oq.chain = 0;
+   memset(&cmdbuf->state.gfx.render.fbds, 0,
+          sizeof(cmdbuf->state.gfx.render.fbds));
+   cmdbuf->state.gfx.render.tiler = 0;
+   cmdbuf->state.gfx.render.fb.layout.sample_count = 0;
+   cmdbuf->state.gfx.render.fb.layout.tile_size_px = 0;
+   cmdbuf->state.gfx.render.fb.layout.tile_rt_alloc_B = 0;
+
+   return VK_SUCCESS;
 }
 
 VKAPI_ATTR void VKAPI_CALL

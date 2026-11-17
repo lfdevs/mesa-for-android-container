@@ -374,7 +374,7 @@ panvk_per_arch(get_physical_device_features)(
       .sparseResidency8Samples = false,
       .sparseResidency16Samples = false,
       .sparseResidencyAliased = false, /* https://gitlab.freedesktop.org/panfrost/mesa/-/issues/237 */
-      .variableMultisampleRate = false,
+      .variableMultisampleRate = PAN_ARCH >= 10,
       .inheritedQueries = false,
 
       /* Vulkan 1.1 */
