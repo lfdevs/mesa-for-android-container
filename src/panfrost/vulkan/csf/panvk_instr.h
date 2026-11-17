@@ -4,6 +4,7 @@
  */
 
 #include "panvk_cmd_buffer.h"
+#include "panvk_physical_device.h"
 #include "panvk_queue.h"
 
 enum panvk_instr_work_type {
@@ -90,6 +91,16 @@ void panvk_per_arch(panvk_instr_end_work_async)(
    const struct panvk_instr_end_args *const args,
    struct cs_async_op ts_async_op);
 
+static inline enum mali_cs_sync_scope
+panvk_cs_signal_scope(const struct panvk_cmd_buffer *cmdbuf)
+{
+   if (to_panvk_physical_device(cmdbuf->vk.base.device->physical)
+          ->kbase_node_path[0])
+      return MALI_CS_SYNC_SCOPE_SYSTEM;
+
+   return MALI_CS_SYNC_SCOPE_CSG;
+}
+
 #define PANVK_INSTR_SYNC_OPS(__cnt_width)                                      \
    static inline void panvk_instr_sync##__cnt_width##_add(                     \
       struct panvk_cmd_buffer *cmdbuf, enum panvk_subqueue_id id,              \
@@ -99,6 +110,8 @@ void panvk_per_arch(panvk_instr_end_work_async)(
       struct cs_builder *b = panvk_get_cs_builder(cmdbuf, id);                 \
       panvk_per_arch(panvk_instr_begin_work)(                                  \
          id, cmdbuf, PANVK_INSTR_WORK_TYPE_SYNC##__cnt_width##_ADD);           \
+      if (scope == MALI_CS_SYNC_SCOPE_CSG)                                     \
+         scope = panvk_cs_signal_scope(cmdbuf);                                \
       cs_sync##__cnt_width##_add(b, propagate_error, scope, val, addr, async); \
       struct panvk_instr_end_args instr_info = {                               \
          .sync = {.addr_regs = addr, .val_regs = val},                         \

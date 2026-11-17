@@ -3656,7 +3656,7 @@ gpu_prerast_release_arena(struct panvk_cmd_buffer *cmdbuf, uint64_t arena)
    cs_move64_to(b, addr, arena + offsetof(struct panvk_gpu_prerast_arena,
                                           available));
    cs_move32_to(b, one, 1);
-   cs_sync32_add(b, true, MALI_CS_SYNC_SCOPE_CSG, one, addr, cs_now());
+   cs_sync32_add(b, true, panvk_cs_signal_scope(cmdbuf), one, addr, cs_now());
 }
 
 static void
@@ -4400,7 +4400,7 @@ gpu_prerast_sync32_give(struct panvk_cmd_buffer *cmdbuf,
    cs_wait_slots(b, dev->csf.sb.all_iters_mask);
    cs_move64_to(b, addr, sync);
    cs_move32_to(b, value, 1);
-   cs_sync32_add(b, true, MALI_CS_SYNC_SCOPE_CSG, value, addr, cs_now());
+   cs_sync32_add(b, true, panvk_cs_signal_scope(cmdbuf), value, addr, cs_now());
 }
 
 /* Loads a 32-bit flag into scratch register 0 for a loop exit test. */
@@ -6264,7 +6264,7 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
 #endif
 
       if (free_render_descs) {
-         cs_sync32_add(b, true, MALI_CS_SYNC_SCOPE_CSG, release_sz,
+         cs_sync32_add(b, true, panvk_cs_signal_scope(cmdbuf), release_sz,
                        ringbuf_sync_addr, async);
       }
 
