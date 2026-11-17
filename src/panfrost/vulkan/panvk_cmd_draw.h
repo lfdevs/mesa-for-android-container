@@ -165,6 +165,16 @@ struct panvk_cmd_graphics_state {
 #if PAN_ARCH >= 10
    struct panvk_prims_generated_query_state prims_generated_query;
    struct panvk_pstats_query_state pstats_query;
+
+   struct {
+      bool active;
+      uint64_t offsets;
+      struct {
+         uint64_t addr;
+         uint32_t size;
+      } buffers[4];
+      uint64_t queries[4];
+   } xfb;
 #endif
    struct panvk_graphics_sysvals sysvals;
 

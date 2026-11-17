@@ -77,6 +77,10 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
          MAX2(2 * util_bitcount(pCreateInfo->pipelineStatistics), 1);
       break;
    }
+   case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
+      reports_per_query = 4;
+      break;
+   }
 #endif
    default:
       UNREACHABLE("Unsupported query type");
@@ -271,6 +275,8 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
    const uint32_t result_count =
       pool->vk.query_type == VK_QUERY_TYPE_PIPELINE_STATISTICS
          ? util_bitcount(pool->vk.pipeline_statistics)
+      : pool->vk.query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT
+         ? 2
          : 1;
    for (uint32_t i = 0; i < queryCount; i++) {
       const uint32_t query = firstQuery + i;
@@ -312,7 +318,8 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
                cpu_write_query_result(dst, 0, flags, src[0].value);
             break;
          }
-         case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+         case VK_QUERY_TYPE_PIPELINE_STATISTICS:
+         case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
             for (uint32_t s = 0; write_results && s < result_count; s++) {
                cpu_write_query_result(dst, s, flags,
                                       src[s].value +

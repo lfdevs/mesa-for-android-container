@@ -36,6 +36,8 @@
 #include "nir_builder.h"
 #include "nir_conversion_builder.h"
 #include "nir_deref.h"
+#include "nir_xfb_info.h"
+#include "util/log.h"
 
 #include "shader_enums.h"
 #include "vk_graphics_state.h"
@@ -530,10 +532,7 @@ panvk_lower_clip_cull_vs(nir_shader *nir)
                      : nir_imm_float(&b, 1.0f);
       cull_v[i] =
          i < ncull && cull[i].var
-            ? nir_b2f32(&b, nir_flt_imm(&b,
-                                        nir_load_array_var_imm(
-                                           &b, cull[i].var, cull[i].idx),
-                                        0.0))
+            ? nir_load_array_var_imm(&b, cull[i].var, cull[i].idx)
             : nir_imm_float(&b, 0.0f);
    }
 
@@ -1374,7 +1373,77 @@ struct panvk_gs_lower_state {
    nir_def *idx_base;
    nir_def *prim_id;
    nir_def *invocation;
+   nir_def *raster_stream;
+   nir_variable *restart[4];
 };
+
+static void
+panvk_gs_store_tag(nir_builder *b, struct panvk_gs_lower_state *s,
+                   nir_def *vc, nir_def *value, unsigned comp)
+{
+   nir_def *addr = nir_iadd(
+      b, s->rec_base,
+      nir_u2u64(b, nir_iadd_imm(b, nir_imul_imm(b, vc, s->gs->record_stride),
+                                s->gs->record_stride - 16 + comp * 4)));
+   nir_store_global(b, value, addr, .write_mask = 1, .align_mul = 4);
+}
+
+static void
+panvk_gpu_prerast_gather_xfb(struct panvk_gpu_prerast_xfb_info *x,
+                             const nir_xfb_info *xfb, uint64_t outputs,
+                             unsigned nclip)
+{
+   memset(x, 0, sizeof(*x));
+   if (!xfb)
+      return;
+
+   for (unsigned b = 0; b < PANLIB_XFB_MAX_BUFFERS; b++) {
+      if (xfb->buffers_written & BITFIELD_BIT(b)) {
+         x->stride[b] = xfb->buffers[b].stride;
+         x->buffer_to_stream[b] = xfb->buffer_to_stream[b];
+      }
+   }
+
+   const bool has_culls = (outputs & (VARYING_BIT_CULL_DIST0 |
+                                      VARYING_BIT_CULL_DIST1)) != 0;
+
+   for (unsigned i = 0; i < xfb->output_count; i++) {
+      const nir_xfb_output_info *o = &xfb->outputs[i];
+      const bool is_clip_slot = (o->location == VARYING_SLOT_CLIP_DIST0 ||
+                                 o->location == VARYING_SLOT_CLIP_DIST1);
+      if (!is_clip_slot && !(outputs & BITFIELD64_BIT(o->location)))
+         continue;
+
+      unsigned dst = o->offset / 4;
+      u_foreach_bit(c, o->component_mask) {
+         gl_varying_slot loc = o->location;
+         unsigned comp = c;
+         if (has_culls && is_clip_slot) {
+            unsigned d = (loc - VARYING_SLOT_CLIP_DIST0) * 4 + c;
+            if (d >= nclip) {
+               loc = VARYING_SLOT_CULL_DIST0 + (d - nclip) / 4;
+               comp = (d - nclip) % 4;
+            }
+         }
+
+         if (!(outputs & BITFIELD64_BIT(loc))) {
+            dst++;
+            continue;
+         }
+
+         if (x->output_count == PANLIB_XFB_MAX_OUTPUTS) {
+            mesa_loge_once("panvk: more than %u transform feedback "
+                           "components, the rest are not captured",
+                           PANLIB_XFB_MAX_OUTPUTS);
+            assert(!"xfb component count over PANLIB_XFB_MAX_OUTPUTS");
+            return;
+         }
+         unsigned slot = util_bitcount64(outputs & BITFIELD64_MASK(loc));
+         x->outputs[x->output_count++] =
+            panlib_xfb_output(dst++, slot * 4 + comp, o->buffer);
+      }
+   }
+}
 
 static nir_def *
 panvk_gs_is_restart(nir_builder *b, nir_def *restart_en, nir_def *gen,
@@ -1470,7 +1539,7 @@ panvk_gs_lower_intr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    case nir_intrinsic_store_output: {
       b->cursor = nir_instr_remove(&intr->instr);
       nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
-      if (sem.gs_streams & 0x3)
+      if ((sem.gs_streams & 0x3) && !gs->xfb)
          return true;
       unsigned location = sem.location;
       if (nir_src_is_const(intr->src[1]))
@@ -1497,11 +1566,22 @@ panvk_gs_lower_intr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 
    case nir_intrinsic_emit_vertex: {
       b->cursor = nir_instr_remove(&intr->instr);
-      if (nir_intrinsic_stream_id(intr) != 0)
+      const unsigned stream = nir_intrinsic_stream_id(intr);
+      if (stream != 0 && !gs->xfb)
          return true;
       nir_def *vc = nir_load_var(b, s->vcount);
       nir_push_if(b, nir_ult_imm(b, vc, gs->max_vertices));
       {
+         nir_if *raster = NULL;
+         if (gs->xfb) {
+            nir_def *rst = nir_load_var(b, s->restart[stream]);
+            panvk_gs_store_tag(b, s, vc,
+                               nir_ior_imm(b, nir_ishl_imm(b, rst, 2), stream),
+                               0);
+            nir_store_var(b, s->restart[stream], nir_imm_int(b, 0), 1);
+            nir_store_var(b, s->vcount, nir_iadd_imm(b, vc, 1), 1);
+            raster = nir_push_if(b, nir_ieq_imm(b, s->raster_stream, stream));
+         }
          nir_def *ip = nir_load_var(b, s->ipos);
          nir_push_if(b, nir_ult_imm(b, ip, gs->index_stride));
          nir_store_global(b, nir_iadd(b, s->rec_idx_base, vc),
@@ -1510,7 +1590,8 @@ panvk_gs_lower_intr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
                           .write_mask = 1, .align_mul = 4);
          nir_pop_if(b, NULL);
          nir_store_var(b, s->ipos, nir_iadd_imm(b, ip, 1), 1);
-         nir_store_var(b, s->vcount, nir_iadd_imm(b, vc, 1), 1);
+         if (!gs->xfb)
+            nir_store_var(b, s->vcount, nir_iadd_imm(b, vc, 1), 1);
 
          const unsigned prim_verts =
             gs->output_prim == MESA_PRIM_POINTS       ? 1
@@ -1522,6 +1603,8 @@ panvk_gs_lower_intr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
                        nir_iadd(b, nir_load_var(b, s->prims),
                                 nir_b2i32(b, nir_uge_imm(b, len, prim_verts))),
                        1);
+         if (raster)
+            nir_pop_if(b, raster);
       }
       nir_pop_if(b, NULL);
       return true;
@@ -1529,11 +1612,19 @@ panvk_gs_lower_intr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 
    case nir_intrinsic_end_primitive: {
       b->cursor = nir_instr_remove(&intr->instr);
-      if (nir_intrinsic_stream_id(intr) != 0)
+      const unsigned stream = nir_intrinsic_stream_id(intr);
+      if (stream != 0 && !gs->xfb)
          return true;
+      nir_if *raster = NULL;
+      if (gs->xfb) {
+         nir_store_var(b, s->restart[stream], nir_imm_int(b, 1), 1);
+         raster = nir_push_if(b, nir_ieq_imm(b, s->raster_stream, stream));
+      }
       nir_store_var(b, s->ipos, nir_iadd_imm(b, nir_load_var(b, s->ipos), 1),
                     1);
       nir_store_var(b, s->strip_len, nir_imm_int(b, 0), 1);
+      if (raster)
+         nir_pop_if(b, raster);
       return true;
    }
 
@@ -1629,6 +1720,14 @@ panvk_gpu_prerast_lower_gs(nir_shader *nir,
    s.vs_stride = nir_imul_imm(b, nir_bit_count(b, s.vs_outputs), 16);
    nir_def *records = GS_PARAM(b, p, 64, records);
    nir_def *indices = GS_PARAM(b, p, 64, indices);
+   if (gs->xfb) {
+      s.raster_stream = GS_PARAM(b, p, 32, raster_stream);
+      for (unsigned i = 0; i < ARRAY_SIZE(s.restart); i++) {
+         s.restart[i] =
+            nir_local_variable_create(impl, glsl_uint_type(), "gs_restart");
+         nir_store_var(b, s.restart[i], nir_imm_int(b, 0), 1);
+      }
+   }
 
    nir_def *slot_idx = nir_iadd(
       b, nir_imul_imm(b, nir_iadd(b, nir_imul(b, s.inst, s.n), j),
@@ -1876,6 +1975,12 @@ panvk_gpu_prerast_lower_gs(nir_shader *nir,
       }
    }
    nir_pop_if(b, NULL);
+
+   if (gs->xfb) {
+      nir_push_if(b, in_cap);
+      panvk_gs_store_tag(b, &s, zero, nir_load_var(b, s.vcount), 1);
+      nir_pop_if(b, NULL);
+   }
 
    nir_progress(true, impl, nir_metadata_none);
 
@@ -2855,6 +2960,24 @@ panvk_shader_destroy(struct vk_device *vk_dev, struct vk_shader *vk_shader,
    vk_shader_free(vk_dev, pAllocator, &shader->vk);
 }
 
+static bool
+panvk_lower_cull_dist_flags_intr(nir_builder *b, nir_intrinsic_instr *intr,
+                                 UNUSED void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_store_output)
+      return false;
+
+   gl_varying_slot loc = nir_intrinsic_io_semantics(intr).location;
+   if (loc != VARYING_SLOT_CULL_DIST0 && loc != VARYING_SLOT_CULL_DIST1)
+      return false;
+
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def *val = intr->src[0].ssa;
+   nir_def *flag = nir_b2f32(b, nir_flt_imm(b, val, 0.0));
+   nir_src_rewrite(&intr->src[0], flag);
+   return true;
+}
+
 static const struct vk_shader_ops panvk_shader_ops;
 
 static VkResult
@@ -2921,7 +3044,7 @@ panvk_compile_shader(struct panvk_device *dev,
          !state || !state->rs ||
          BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE);
       const bool want_prerast =
-         PANVK_DEBUG(GPU_PRERAST) ||
+         PANVK_DEBUG(GPU_PRERAST) || info->nir->xfb_info ||
          (info->next_stage_mask & (VK_SHADER_STAGE_GEOMETRY_BIT |
                                    VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)) ||
          (dev->vk.enabled_features.fillModeNonSolid &&
@@ -3064,6 +3187,15 @@ panvk_compile_shader(struct panvk_device *dev,
             inputs.varying_layout = &shader->gpu_prerast.io.varyings;
 #endif
 
+         if (v == PANVK_VS_VARIANT_HW
+#if PAN_ARCH >= 10
+             || v == PANVK_VS_VARIANT_GPU_PASSTHROUGH
+#endif
+         ) {
+            nir_shader_intrinsics_pass(nir, panvk_lower_cull_dist_flags_intr,
+                                       nir_metadata_control_flow, NULL);
+         }
+
          variant->own_bin = true;
 
          result = panvk_compile_nir(dev, nir, info->flags, &inputs, state,
@@ -3087,6 +3219,11 @@ panvk_compile_shader(struct panvk_device *dev,
          }
       }
 #if PAN_ARCH >= 10
+      if (shader->gpu_prerast.lowered_vs_compiled)
+         panvk_gpu_prerast_gather_xfb(&shader->gpu_prerast.xfb,
+                                      info->nir->xfb_info,
+                                      shader->gpu_prerast.io.outputs_written,
+                                      info->nir->info.clip_distance_array_size);
       if (want_prerast && shader->gpu_prerast.lowered_vs_compiled &&
           shader->gpu_prerast.passthrough_vs_compiled &&
           (shader->gpu_prerast.io.outputs_written & VARYING_BIT_POS)) {
@@ -3099,6 +3236,11 @@ panvk_compile_shader(struct panvk_device *dev,
          struct pan_compile_inputs poly_inputs = inputs;
          poly_inputs.varying_layout = NULL;
          variant->own_bin = true;
+         if (nir->info.outputs_written & (VARYING_BIT_CULL_DIST0 |
+                                          VARYING_BIT_CULL_DIST1)) {
+            nir_shader_intrinsics_pass(nir, panvk_lower_cull_dist_flags_intr,
+                                       nir_metadata_control_flow, NULL);
+         }
          result = panvk_compile_nir(dev, nir, info->flags, &poly_inputs, state,
                                     NULL, &shader->desc_info, variant);
          ralloc_free(nir);
@@ -3131,6 +3273,11 @@ panvk_compile_shader(struct panvk_device *dev,
       gs->outputs_written = nir->info.outputs_written;
       gs->record_stride =
          MAX2(ALIGN_POT(util_bitcount64(gs->outputs_written) * 16, 16), 16);
+      gs->xfb = nir->xfb_info || (nir->info.gs.active_stream_mask & ~1);
+      if (gs->xfb)
+         gs->record_stride += 16;
+      panvk_gpu_prerast_gather_xfb(&shader->gpu_prerast.xfb, nir->xfb_info,
+                                   gs->outputs_written, 0);
       gs->max_vertices = MAX2(nir->info.gs.vertices_out, 1);
       gs->index_stride = ALIGN_POT(2 * gs->max_vertices, 4);
       gs->invocations = MAX2(nir->info.gs.invocations, 1);

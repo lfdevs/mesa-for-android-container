@@ -7,6 +7,7 @@
 #define PANVK_GPU_PRERAST_H
 
 #include "compiler/pan_compiler.h"
+#include "libpan/libpan_xfb.h"
 #include "panvk_macros.h"
 #include "poly/geometry.h"
 #include "poly/tessellator.h"
@@ -14,7 +15,7 @@
 #include "util/macros.h"
 #include "vulkan/vulkan_core.h"
 
-#define PANVK_GPU_PRERAST_ABI_VERSION 5
+#define PANVK_GPU_PRERAST_ABI_VERSION 6
 #define PANVK_GPU_PRERAST_MAX_EXECUTION_BYTES (256ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_VS_REGION_END (32ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_GS_INDEX_OFFSET PANVK_GPU_PRERAST_VS_REGION_END
@@ -117,7 +118,7 @@ struct panvk_gpu_prerast_gs_info {
    uint8_t output_prim;
    bool kernel_compiled;
    bool passthrough_compiled;
-   bool _pad;
+   bool xfb;
 };
 
 /* TCS/TES state the tessellation kernels need. The tessellation modes are
@@ -135,10 +136,29 @@ struct panvk_gpu_prerast_tess_info {
    bool _pad;
 };
 
+struct panvk_gpu_prerast_xfb_info {
+   uint16_t stride[PANLIB_XFB_MAX_BUFFERS];
+   uint8_t buffer_to_stream[PANLIB_XFB_MAX_BUFFERS];
+   uint8_t output_count;
+   uint8_t _pad[3];
+   uint32_t outputs[PANLIB_XFB_MAX_OUTPUTS];
+};
+
+static inline bool
+panvk_gpu_prerast_has_xfb(const struct panvk_gpu_prerast_xfb_info *x)
+{
+   for (unsigned b = 0; b < PANLIB_XFB_MAX_BUFFERS; b++) {
+      if (x->stride[b])
+         return true;
+   }
+   return false;
+}
+
 struct panvk_gpu_prerast_shader {
    struct panvk_gpu_prerast_io io;
    struct panvk_gpu_prerast_gs_info gs;
    struct panvk_gpu_prerast_tess_info tess;
+   struct panvk_gpu_prerast_xfb_info xfb;
    uint32_t requirements;
    bool lowered_vs_compiled;
    bool passthrough_vs_compiled;
@@ -161,6 +181,8 @@ struct panvk_gpu_prerast_gs_params {
    uint32_t vs_record_capacity;
    uint32_t provoking_last;
    uint32_t prim_id_base;
+   uint32_t raster_stream;
+   uint32_t _pad;
    /* Pipeline statistics counters the GS kernel adds to, 0 when not
     * counted: GS invocations, GS primitives, clipping invocations and
     * clipping primitives. */

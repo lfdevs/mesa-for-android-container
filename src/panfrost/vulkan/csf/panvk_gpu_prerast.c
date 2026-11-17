@@ -76,8 +76,11 @@ panvk_per_arch(gpu_prerast_can_lower)(
     const bool poly = !gs &&
                       panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, draw) !=
                          PANVK_GPU_PRERAST_POLY_NONE;
-    if (!(PANVK_DEBUG(GPU_PRERAST) || poly || gs) ||
-        (!gs && !poly && shader->has_side_effects) ||
+    const bool xfb = cmdbuf->state.gfx.xfb.active &&
+                     panvk_gpu_prerast_has_xfb(gs ? &gs->gpu_prerast.xfb
+                                                  : &shader->xfb);
+    if (!(PANVK_DEBUG(GPU_PRERAST) || poly || gs || xfb) ||
+        (!gs && !poly && !xfb && shader->has_side_effects) ||
         !shader->lowered_vs_compiled || !shader->passthrough_vs_compiled ||
         (poly && !shader->polygon_compiled) ||
         (gs && (!gs->gpu_prerast.gs.kernel_compiled ||
@@ -122,6 +125,10 @@ panvk_per_arch(gpu_prerast_can_lower)(
    case MESA_PRIM_TRIANGLES:
    case MESA_PRIM_TRIANGLE_STRIP:
    case MESA_PRIM_TRIANGLE_FAN:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
       return true;
    default:
       return false;

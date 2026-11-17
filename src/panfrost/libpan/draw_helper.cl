@@ -13,6 +13,7 @@
 #include "draw_helper.h"
 #include "poly/geometry.h"
 #include "tess_draw.h"
+#include "libpan_xfb.h"
 
 #if PAN_ARCH >= 10
 
@@ -317,6 +318,282 @@ panlib_tess_draw(global struct panlib_tess_draw *t, global uint32_t *c_invs,
 
    if (prims_generated)
       atomic_fetch_add((global atomic_uint *)prims_generated, count / vpp);
+}
+
+#define XFB_WG 256
+
+static uint32_t
+xfb_prim_verts(uint32_t prim)
+{
+   switch (prim) {
+   case MESA_PRIM_POINTS:
+      return 1;
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      return 2;
+   default:
+      return 3;
+   }
+}
+
+static uint32_t
+xfb_topology_vertex(uint32_t prim, uint32_t v)
+{
+   switch (prim) {
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      return v + 1;
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return v * 2;
+   default:
+      return v;
+   }
+}
+
+static uint32_t
+xfb_scan(uint32_t v, local uint32_t *tmp, uint32_t *total)
+{
+   uint32_t tid = cl_local_id.x;
+
+   barrier(CLK_LOCAL_MEM_FENCE);
+   tmp[tid] = v;
+   barrier(CLK_LOCAL_MEM_FENCE);
+   for (uint32_t o = 1; o < XFB_WG; o <<= 1) {
+      uint32_t t = tid >= o ? tmp[tid - o] : 0;
+      barrier(CLK_LOCAL_MEM_FENCE);
+      tmp[tid] += t;
+      barrier(CLK_LOCAL_MEM_FENCE);
+   }
+   *total = tmp[XFB_WG - 1];
+   return tmp[tid] - v;
+}
+
+static void
+xfb_write(constant struct panlib_xfb_params *x, uint32_t s, uint32_t g,
+          uint32_t *vtx, uint32_t k, uint32_t *off, uint32_t *fit)
+{
+   if (g >= fit[s])
+      return;
+
+   for (uint32_t o = 0; o < x->output_count; o++) {
+      uint32_t out = x->outputs[o];
+      uint32_t b = (out >> PANLIB_XFB_OUT_BUF_SHIFT) & 3;
+      uint32_t dst_dw = (out >> PANLIB_XFB_OUT_DST_SHIFT) & 0xfff;
+      uint32_t src_dw = (out >> PANLIB_XFB_OUT_SRC_SHIFT) & 0xff;
+
+      if (!x->strides[b] || !x->buffers[b] ||
+          ((x->buffer_to_stream >> (2 * b)) & 3) != s)
+         continue;
+
+      for (uint32_t v = 0; v < k; v++) {
+         global uint32_t *src =
+            (global uint32_t *)(x->records +
+                                (uint64_t)vtx[v] * x->record_stride);
+         global uint32_t *dst =
+            (global uint32_t *)(x->buffers[b] + off[b] +
+                                ((uint64_t)g * k + v) * x->strides[b]);
+         dst[dst_dw] = src[src_dw];
+      }
+   }
+}
+
+static void
+xfb_gs_walk(constant struct panlib_xfb_params *x, uint32_t rec0,
+            uint32_t count, uint32_t tag_dw, uint32_t k, bool emit,
+            uint32_t *base, uint32_t *off, uint32_t *fit, uint32_t *cnt)
+{
+   uint32_t len[PANLIB_XFB_MAX_STREAMS] = {0};
+   uint32_t p0[PANLIB_XFB_MAX_STREAMS] = {0};
+   uint32_t p1[PANLIB_XFB_MAX_STREAMS] = {0};
+   uint32_t vtx[3];
+
+   for (uint32_t v = 0; v < count; v++) {
+      uint32_t r = rec0 + v;
+      global uint32_t *rec =
+         (global uint32_t *)(x->records + (uint64_t)r * x->record_stride);
+      uint32_t tag = rec[tag_dw];
+      uint32_t s = tag & 3;
+      bool prim = false;
+
+      if (tag & 4)
+         len[s] = 0;
+
+      if (k == 1) {
+         vtx[0] = r;
+         prim = true;
+      } else if (k == 2) {
+         if (len[s] >= 1) {
+            vtx[0] = p1[s];
+            vtx[1] = r;
+            prim = true;
+         }
+      } else if (len[s] >= 2) {
+         bool odd = (len[s] - 2) & 1;
+         vtx[0] = p0[s];
+         vtx[1] = odd ? r : p1[s];
+         vtx[2] = odd ? p1[s] : r;
+         prim = true;
+      }
+
+      p0[s] = p1[s];
+      p1[s] = r;
+      len[s]++;
+
+      if (prim) {
+         if (emit)
+            xfb_write(x, s, base[s] + cnt[s], vtx, k, off, fit);
+         cnt[s]++;
+      }
+   }
+}
+
+KERNEL(XFB_WG)
+panlib_xfb_capture(constant struct panlib_xfb_params *x)
+{
+   global uint32_t *offsets = (global uint32_t *)x->offsets;
+   constant uint32_t *counts = (constant uint32_t *)x->counts;
+   local uint32_t tmp[XFB_WG];
+   POLY_DECL_UNROLL_RESTART_SCRATCH(scratch, XFB_WG);
+   uint32_t tid = cl_local_id.x;
+   uint32_t n = counts[0], inst = counts[1];
+   uint32_t k = xfb_prim_verts(x->prim);
+   uint32_t off[PANLIB_XFB_MAX_BUFFERS];
+   uint32_t fit[PANLIB_XFB_MAX_STREAMS];
+   uint32_t total[PANLIB_XFB_MAX_STREAMS] = {0};
+
+   if (!x->active)
+      return;
+
+   for (uint32_t s = 0; s < PANLIB_XFB_MAX_STREAMS; s++)
+      fit[s] = UINT32_MAX;
+
+   for (uint32_t b = 0; b < PANLIB_XFB_MAX_BUFFERS; b++) {
+      off[b] = offsets[b];
+      if (!x->strides[b] || !x->buffers[b])
+         continue;
+
+      uint32_t s = (x->buffer_to_stream >> (2 * b)) & 3;
+      uint32_t bytes = k * x->strides[b];
+      uint32_t avail = off[b] < x->sizes[b] ? (x->sizes[b] - off[b]) / bytes : 0;
+      fit[s] = min(fit[s], avail);
+   }
+
+   if (x->gs_max_vertices) {
+      uint32_t tag_dw = x->record_stride / 4 - 4;
+      uint32_t slots = min((uint64_t)n * inst * x->gs_invocations,
+                           (uint64_t)x->record_capacity);
+
+      for (uint32_t base_slot = 0; base_slot < slots; base_slot += XFB_WG) {
+         uint32_t slot = base_slot + tid;
+         uint32_t rec0 = slot * x->gs_max_vertices;
+         uint32_t count = 0;
+         uint32_t cnt[PANLIB_XFB_MAX_STREAMS] = {0};
+         uint32_t pre[PANLIB_XFB_MAX_STREAMS];
+
+         if (slot < slots) {
+            global uint32_t *r0 =
+               (global uint32_t *)(x->records +
+                                   (uint64_t)rec0 * x->record_stride);
+            count = min(r0[tag_dw + 1], x->gs_max_vertices);
+            xfb_gs_walk(x, rec0, count, tag_dw, k, false, total, off, fit,
+                        cnt);
+         }
+
+         for (uint32_t s = 0; s < PANLIB_XFB_MAX_STREAMS; s++) {
+            uint32_t sum;
+            pre[s] = total[s] + xfb_scan(cnt[s], tmp, &sum);
+            total[s] += sum;
+            cnt[s] = 0;
+         }
+
+         if (slot < slots)
+            xfb_gs_walk(x, rec0, count, tag_dw, k, true, pre, off, fit, cnt);
+      }
+   } else {
+      constant uint32_t *gen = (constant uint32_t *)x->indices;
+      uint32_t vtx[3];
+
+      for (uint32_t i = 0; i < inst; i++) {
+         uint32_t rec_base = i * n;
+         if (rec_base >= x->record_capacity)
+            break;
+
+         uint32_t nn = min(n, x->record_capacity - rec_base);
+         uint32_t needle = 0;
+
+         while (needle < nn) {
+            uint32_t next = nn;
+
+            if (x->restart) {
+               next = needle;
+               for (;;) {
+                  uint32_t idx = next + tid;
+                  bool is_restart = idx >= nn || gen[idx] == 0xffffffff;
+                  uint32_t first =
+                     poly_work_group_first_true(is_restart, scratch);
+
+                  next += first;
+                  if (first < XFB_WG)
+                     break;
+               }
+            }
+
+            uint32_t prims =
+               u_decomposed_prims_for_vertices((enum mesa_prim)x->prim,
+                                               next - needle);
+
+            for (uint32_t p = tid; p < prims; p += XFB_WG) {
+               for (uint32_t v = 0; v < k; v++)
+                  vtx[v] = rec_base + needle +
+                           poly_vertex_id_for_topology(
+                              (enum mesa_prim)x->prim, true, p, xfb_topology_vertex(x->prim, v),
+                              prims);
+               xfb_write(x, 0, total[0] + p, vtx, k, off, fit);
+            }
+
+            total[0] += prims;
+            needle = next + 1;
+         }
+      }
+   }
+
+   barrier(CLK_GLOBAL_MEM_FENCE);
+   if (tid)
+      return;
+
+   for (uint32_t b = 0; b < PANLIB_XFB_MAX_BUFFERS; b++) {
+      if (!x->strides[b] || !x->buffers[b])
+         continue;
+
+      uint32_t s = (x->buffer_to_stream >> (2 * b)) & 3;
+      offsets[b] = off[b] + min(total[s], fit[s]) * k * x->strides[b];
+   }
+
+   for (uint32_t s = 0; s < PANLIB_XFB_MAX_STREAMS; s++) {
+      global uint64_t *q = (global uint64_t *)x->queries[s];
+      if (q) {
+         q[0] += min(total[s], fit[s]);
+         q[1] += total[s];
+      }
+   }
+}
+
+KERNEL(1)
+panlib_xfb_byte_count_draw(constant uint32_t *counter, uint32_t counter_offset,
+                           uint32_t stride, uint32_t instance_count,
+                           uint32_t first_instance, global uint32_t *draw)
+{
+   uint32_t bytes = counter[0];
+
+   draw[0] = bytes > counter_offset && stride
+                ? (bytes - counter_offset) / stride
+                : 0;
+   draw[1] = instance_count;
+   draw[2] = 0;
+   draw[3] = first_instance;
 }
 
 #elif PAN_ARCH < 9

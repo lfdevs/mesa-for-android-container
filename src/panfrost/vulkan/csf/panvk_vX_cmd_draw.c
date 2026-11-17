@@ -3696,6 +3696,8 @@ gpu_prerast_gs_run(struct panvk_cmd_buffer *cmdbuf,
    } else {
       STORE_GS32(prim_id_base, source->gpu_prerast_prim_base);
    }
+   STORE_GS32(raster_stream,
+              cmdbuf->vk.dynamic_graphics_state.rs.rasterization_stream);
 
    const struct panvk_pstats_query_state *pstats =
       &cmdbuf->state.gfx.pstats_query;
@@ -3753,6 +3755,89 @@ gpu_prerast_acquire_arena(struct panvk_cmd_buffer *cmdbuf, uint64_t arena)
    cs_sync32_wait(b, false, MALI_CS_CONDITION_GREATER, value, addr);
    cs_move32_to(b, value, -1);
    cs_sync32_add(b, true, MALI_CS_SYNC_SCOPE_CSG, value, addr, cs_now());
+}
+
+static bool
+gpu_prerast_xfb_active(const struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_shader *last = cmdbuf->state.gfx.gs.shader
+                                        ? cmdbuf->state.gfx.gs.shader
+                                        : cmdbuf->state.gfx.vs.shader;
+
+   return cmdbuf->state.gfx.xfb.active && last &&
+          panvk_gpu_prerast_has_xfb(&last->gpu_prerast.xfb);
+}
+
+static void
+gpu_prerast_xfb(struct panvk_cmd_buffer *cmdbuf,
+                const struct panvk_draw_info *source, uint64_t arena,
+                enum panlib_barrier barrier)
+{
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
+   const struct panvk_shader *last = gs ? gs : cmdbuf->state.gfx.vs.shader;
+   const struct panvk_gpu_prerast_xfb_info *xi = &last->gpu_prerast.xfb;
+   struct pan_ptr ptr = panvk_cmd_alloc_dev_mem(
+      cmdbuf, desc, sizeof(struct panlib_xfb_params), 16);
+
+   if (!ptr.gpu)
+      return;
+
+   struct panlib_xfb_params *x = ptr.cpu;
+   memset(x, 0, sizeof(*x));
+   x->offsets = cmdbuf->state.gfx.xfb.offsets;
+   for (unsigned i = 0; i < PANLIB_XFB_MAX_BUFFERS; i++) {
+      x->buffers[i] = cmdbuf->state.gfx.xfb.buffers[i].addr;
+      x->sizes[i] = cmdbuf->state.gfx.xfb.buffers[i].size;
+      x->strides[i] = xi->stride[i];
+      x->buffer_to_stream |= xi->buffer_to_stream[i] << (2 * i);
+      x->queries[i] = cmdbuf->state.gfx.xfb.queries[i];
+   }
+   x->output_count = xi->output_count;
+   memcpy(x->outputs, xi->outputs, xi->output_count * sizeof(uint32_t));
+
+   if (gs) {
+      const struct panvk_gpu_prerast_gs_info *g = &gs->gpu_prerast.gs;
+
+      x->records = arena + PANVK_GPU_PRERAST_GS_RECORD_OFFSET;
+      x->counts = arena + PANVK_GPU_PRERAST_GS_PARAMS_OFFSET +
+                  offsetof(struct panvk_gpu_prerast_gs_params, vertex_count);
+      x->record_stride = g->record_stride;
+      x->record_capacity = panvk_gpu_prerast_gs_cap_slots(g);
+      x->prim = g->output_prim;
+      x->gs_max_vertices = g->max_vertices;
+      x->gs_invocations = g->invocations;
+   } else {
+      x->records = arena + PANVK_GPU_PRERAST_RECORD_OFFSET;
+      x->indices = arena + PANVK_GPU_PRERAST_INDEX_OFFSET;
+      x->counts = arena + PANVK_GPU_PRERAST_PARAMS_OFFSET +
+                  offsetof(struct panvk_gpu_prerast_params, vertex_count);
+      x->record_stride = last->gpu_prerast.io.record_stride;
+      x->record_capacity =
+         panvk_gpu_prerast_record_capacity(x->record_stride);
+      x->prim = source->prim;
+      x->restart = source->index.index_size && source->index.restart_enable;
+   }
+
+   struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+   x->active = 1;
+   if (cmdbuf->state.cond_render.enabled || cmdbuf->state.cond_render.inherited) {
+      struct cs_index active = cs_scratch_reg32(b, 0);
+      struct cs_index addr = cs_scratch_reg64(b, 2);
+
+      cs_move32_to(b, active, 0);
+      panvk_cond_render(cmdbuf, b)
+         cs_move32_to(b, active, 1);
+      cs_move64_to(b, addr,
+                   ptr.gpu + offsetof(struct panlib_xfb_params, active));
+      cs_store32(b, active, addr, 0);
+      cs_flush_stores(b);
+   }
+
+   cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+   panlib_xfb_capture(&ctx, panlib_1d(1), barrier, ptr.gpu);
 }
 
 /* Acquires the arena and runs the lowered VS, plus the polygon kernel when
@@ -4045,6 +4130,9 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
       return true;
    }
 
+   if (gpu_prerast_xfb_active(cmdbuf))
+      gpu_prerast_xfb(cmdbuf, source, arena, PANLIB_BARRIER_CSF_SYNC);
+
    gpu_prerast_wait_compute(cmdbuf);
    gpu_prerast_draw_generated(cmdbuf, source, arena, poly_mode);
    gpu_prerast_release_arena(cmdbuf, arena);
@@ -4264,11 +4352,15 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
    const enum panvk_gpu_prerast_poly_mode poly_mode =
       gs ? PANVK_GPU_PRERAST_POLY_NONE
          : panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, &out);
+   const bool xfb = cmdbuf->state.gfx.xfb.active &&
+                    panvk_gpu_prerast_has_xfb(gs ? &gs->gpu_prerast.xfb
+                                                 : &tes->gpu_prerast.xfb);
    const bool nested =
       panvk_per_arch(gpu_prerast_can_lower)(cmdbuf, &out, &tes->gpu_prerast);
    uint32_t range = 0;
 
-   if (!nested && (gs || poly_mode != PANVK_GPU_PRERAST_POLY_NONE)) {
+   if (!nested && (gs || poly_mode != PANVK_GPU_PRERAST_POLY_NONE ||
+                   xfb)) {
       gpu_prerast_unhandled("tessellation gpu_prerast variants missing");
       return;
    }
@@ -4516,6 +4608,10 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
                   poly_compact_prim(gs_out_prim));
             }
          }
+         if (xfb) {
+            gpu_prerast_xfb(cmdbuf, &out, prerast_arena, PANLIB_BARRIER_NONE);
+            cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+         }
          cmdbuf->state.gfx.vs.shader = vs;
          gfx_state_set_dirty(cmdbuf, VS);
          gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
@@ -4575,6 +4671,7 @@ gpu_prerast_needed(const struct panvk_cmd_buffer *cmdbuf,
 {
    return !draw->gpu_prerast_generated &&
           (draw->prim == MESA_PRIM_PATCHES || cmdbuf->state.gfx.gs.shader ||
+           gpu_prerast_xfb_active(cmdbuf) ||
            panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, draw) !=
               PANVK_GPU_PRERAST_POLY_NONE);
 }
@@ -4700,7 +4797,8 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
    /* If there's no vertex shader, we can skip the draw. With tessellation,
     * the TES rasterizes and the VS may be empty.
     */
-   if (draw.prim != MESA_PRIM_PATCHES && !panvk_priv_mem_check_alloc(vs->spd))
+   if (draw.prim != MESA_PRIM_PATCHES && !panvk_priv_mem_check_alloc(vs->spd) &&
+       (draw.gpu_prerast_generated || !gpu_prerast_xfb_active(cmdbuf)))
       return;
 
    /* Count once per API draw, before gpu_prerast splits or lowers it. */
@@ -6339,4 +6437,153 @@ panvk_per_arch(cmd_draw_volume)(struct vk_command_buffer *cmd,
    if (layer_count == 0)
       return;
    panvk_per_arch(cmd_draw_fullscreen)(cmd, meta, 1, rect, layer_count);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdBindTransformFeedbackBuffersEXT)(
+   VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount,
+   const VkBuffer *pBuffers, const VkDeviceSize *pOffsets,
+   const VkDeviceSize *pSizes)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+
+   for (uint32_t i = 0; i < bindingCount; i++) {
+      VK_FROM_HANDLE(panvk_buffer, buffer, pBuffers[i]);
+      uint64_t size = vk_buffer_range(&buffer->vk, pOffsets[i],
+                                      pSizes ? pSizes[i] : VK_WHOLE_SIZE);
+
+      cmdbuf->state.gfx.xfb.buffers[firstBinding + i].addr =
+         panvk_buffer_gpu_ptr(buffer, pOffsets[i]);
+      cmdbuf->state.gfx.xfb.buffers[firstBinding + i].size =
+         MIN2(size, UINT32_MAX);
+   }
+}
+
+static uint64_t
+xfb_counter_addr(uint32_t i, uint32_t first, uint32_t count,
+                 const VkBuffer *buffers, const VkDeviceSize *offsets)
+{
+   if (!buffers || i < first || i - first >= count)
+      return 0;
+
+   VK_FROM_HANDLE(panvk_buffer, buffer, buffers[i - first]);
+   return buffer ? panvk_buffer_gpu_ptr(buffer,
+                                        offsets ? offsets[i - first] : 0)
+                 : 0;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdBeginTransformFeedbackEXT)(
+   VkCommandBuffer commandBuffer, uint32_t firstCounterBuffer,
+   uint32_t counterBufferCount, const VkBuffer *pCounterBuffers,
+   const VkDeviceSize *pCounterBufferOffsets)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   struct pan_ptr offsets = panvk_cmd_alloc_dev_mem(
+      cmdbuf, desc, PANLIB_XFB_MAX_BUFFERS * sizeof(uint32_t), 16);
+
+   if (!offsets.gpu)
+      return;
+
+   struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
+   struct cs_index addr = cs_scratch_reg64(b, 0);
+   struct cs_index vals = cs_scratch_reg_tuple(b, 2, PANLIB_XFB_MAX_BUFFERS);
+
+   for (uint32_t i = 0; i < PANLIB_XFB_MAX_BUFFERS; i++) {
+      uint64_t counter =
+         xfb_counter_addr(i, firstCounterBuffer, counterBufferCount,
+                          pCounterBuffers, pCounterBufferOffsets);
+      struct cs_index val = cs_scratch_reg32(b, 2 + i);
+
+      if (counter) {
+         cs_move64_to(b, addr, counter);
+         cs_load32_to(b, val, addr, 0);
+         cs_wait_slot(b, SB_ID(LS));
+      } else {
+         cs_move32_to(b, val, 0);
+      }
+   }
+
+   cs_move64_to(b, addr, offsets.gpu);
+   cs_store(b, vals, addr, BITFIELD_MASK(PANLIB_XFB_MAX_BUFFERS), 0);
+   cs_flush_stores(b);
+
+   cmdbuf->state.gfx.xfb.offsets = offsets.gpu;
+   cmdbuf->state.gfx.xfb.active = true;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdEndTransformFeedbackEXT)(
+   VkCommandBuffer commandBuffer, uint32_t firstCounterBuffer,
+   uint32_t counterBufferCount, const VkBuffer *pCounterBuffers,
+   const VkDeviceSize *pCounterBufferOffsets)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const uint64_t offsets = cmdbuf->state.gfx.xfb.offsets;
+
+   cmdbuf->state.gfx.xfb.active = false;
+   cmdbuf->state.gfx.xfb.offsets = 0;
+   if (!offsets)
+      return;
+
+   struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
+   struct cs_index addr = cs_scratch_reg64(b, 0);
+   struct cs_index vals = cs_scratch_reg_tuple(b, 2, PANLIB_XFB_MAX_BUFFERS);
+
+   cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+   cs_move64_to(b, addr, offsets);
+   cs_load_to(b, vals, addr, BITFIELD_MASK(PANLIB_XFB_MAX_BUFFERS), 0);
+   cs_wait_slot(b, SB_ID(LS));
+
+   for (uint32_t i = 0; i < PANLIB_XFB_MAX_BUFFERS; i++) {
+      uint64_t counter =
+         xfb_counter_addr(i, firstCounterBuffer, counterBufferCount,
+                          pCounterBuffers, pCounterBufferOffsets);
+
+      if (!counter)
+         continue;
+
+      cs_move64_to(b, addr, counter);
+      cs_store32(b, cs_scratch_reg32(b, 2 + i), addr, 0);
+   }
+   cs_flush_stores(b);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_per_arch(CmdDrawIndirectByteCountEXT)(
+   VkCommandBuffer commandBuffer, uint32_t instanceCount,
+   uint32_t firstInstance, VkBuffer counterBuffer,
+   VkDeviceSize counterBufferOffset, uint32_t counterOffset,
+   uint32_t vertexStride)
+{
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   VK_FROM_HANDLE(panvk_buffer, counter, counterBuffer);
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+
+   if (!instanceCount)
+      return;
+
+   struct pan_ptr draw = panvk_cmd_alloc_dev_mem(
+      cmdbuf, desc, sizeof(VkDrawIndirectCommand), 16);
+   if (!draw.gpu)
+      return;
+
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+   panlib_xfb_byte_count_draw(
+      &ctx, panlib_1d(1), PANLIB_BARRIER_CSF_SYNC,
+      panvk_buffer_gpu_ptr(counter, counterBufferOffset), counterOffset,
+      vertexStride, instanceCount, firstInstance, draw.gpu);
+   cs_wait_slots(panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE),
+                 dev->csf.sb.all_iters_mask);
+   gpu_prerast_wait_compute(cmdbuf);
+
+   struct panvk_draw_info info = {
+      .indirect.buffer_dev_addr = draw.gpu,
+      .indirect.draw_count = 1,
+      .indirect.stride = sizeof(VkDrawIndirectCommand),
+      .prim = panvk_get_client_prim(cmdbuf),
+   };
+
+   panvk_cmd_draw(cmdbuf, info);
 }

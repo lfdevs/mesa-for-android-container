@@ -38,6 +38,7 @@ panvk_subqueue_for_query_type(VkQueryType type)
    case VK_QUERY_TYPE_OCCLUSION:
       return PANVK_SUBQUEUE_FRAGMENT;
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+   case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
       return PANVK_SUBQUEUE_COMPUTE;
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
       /* Availability is signalled from the fragment subqueue, after the
@@ -144,7 +145,8 @@ panvk_cmd_reset_queries(struct panvk_cmd_buffer *cmd,
    /* Pipeline statistics reports are written from several subqueues and
     * zeroed by Begin on the subqueue that owns each counter, zeroing them
     * here could race with a following Begin. */
-   if (pool->vk.query_type != VK_QUERY_TYPE_PIPELINE_STATISTICS) {
+   if (pool->vk.query_type != VK_QUERY_TYPE_PIPELINE_STATISTICS &&
+       pool->vk.query_type != VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) {
       cs_move64_to(b, addr, panvk_query_report_dev_addr(pool, first_query));
       reset_queries_batch(b, addr, zero_regs, query_count);
    }
@@ -730,6 +732,52 @@ panvk_cmd_end_prims_generated_query(
                  cs_defer(SB_MASK(DEFERRED_FLUSH), SB_ID(DEFERRED_SYNC)));
 }
 
+static void
+panvk_cmd_begin_xfb_query(struct panvk_cmd_buffer *cmd,
+                          struct panvk_query_pool *pool, uint32_t query,
+                          uint32_t index)
+{
+   uint64_t report_addr = panvk_query_report_dev_addr(pool, query);
+
+   cmd->state.gfx.xfb.queries[index] = report_addr;
+
+   struct cs_builder *b = panvk_get_cs_builder(cmd, PANVK_SUBQUEUE_COMPUTE);
+   struct cs_index addr = cs_scratch_reg64(b, 0);
+   struct cs_index zero = cs_scratch_reg64(b, 2);
+
+   cs_move64_to(b, addr, report_addr);
+   cs_move64_to(b, zero, 0);
+   for (uint32_t i = 0; i < pool->reports_per_query; i++)
+      cs_store64(b, zero, addr, i * sizeof(uint64_t));
+   cs_flush_stores(b);
+}
+
+static void
+panvk_cmd_end_xfb_query(struct panvk_cmd_buffer *cmd,
+                        struct panvk_query_pool *pool, uint32_t query,
+                        uint32_t index)
+{
+   struct panvk_device *dev = to_panvk_device(cmd->vk.base.device);
+
+   cmd->state.gfx.xfb.queries[index] = 0;
+
+   struct cs_builder *b = panvk_get_cs_builder(cmd, PANVK_SUBQUEUE_COMPUTE);
+   struct cs_index query_syncobj = cs_scratch_reg64(b, 0);
+   struct cs_index val = cs_scratch_reg32(b, 2);
+
+   cs_wait_slots(b, dev->csf.sb.all_iters_mask);
+   cs_move32_to(b, val, 0);
+   cs_flush_caches(
+      b, MALI_CS_FLUSH_MODE_CLEAN, MALI_CS_FLUSH_MODE_CLEAN,
+      MALI_CS_OTHER_FLUSH_MODE_NONE, val,
+      cs_defer(SB_IMM_MASK, SB_ID(DEFERRED_FLUSH)));
+
+   cs_move32_to(b, val, 1);
+   cs_move64_to(b, query_syncobj, panvk_query_available_dev_addr(pool, query));
+   cs_sync32_set(b, true, MALI_CS_SYNC_SCOPE_CSG, val, query_syncobj,
+                 cs_defer(SB_MASK(DEFERRED_FLUSH), SB_ID(DEFERRED_SYNC)));
+}
+
 #define PSTAT(name) VK_QUERY_PIPELINE_STATISTIC_##name##_BIT
 
 /* The largest per-draw or per-dispatch increment added with CS immediates,
@@ -1135,6 +1183,13 @@ panvk_copy_pstats_query_results(struct panvk_cmd_buffer *cmd,
       BITFIELD_BIT(PANVK_SUBQUEUE_FRAGMENT);
    panvk_per_arch(emit_barrier)(cmd, deps);
 
+   const bool xfb =
+      pool->vk.query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT;
+
+   if (xfb)
+      cs_wait_slot(panvk_get_cs_builder(cmd, PANVK_SUBQUEUE_COMPUTE),
+                   SB_ID(DEFERRED_SYNC));
+
    const struct panlib_copy_pstats_query_result_args push = {
       .pool_addr = panvk_query_report_dev_addr(pool, first_query),
       .available_addr = panvk_query_available_dev_addr(pool, first_query),
@@ -1143,7 +1198,7 @@ panvk_copy_pstats_query_results(struct panvk_cmd_buffer *cmd,
       .dst_addr = dst_buffer_addr,
       .dst_stride = stride,
       .flags = flags,
-      .stat_count = util_bitcount(pool->vk.pipeline_statistics),
+      .stat_count = xfb ? 2 : util_bitcount(pool->vk.pipeline_statistics),
    };
    struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmd);
 
@@ -1173,7 +1228,8 @@ panvk_per_arch(CmdResetQueryPool)(VkCommandBuffer commandBuffer,
    switch (pool->vk.query_type) {
    case VK_QUERY_TYPE_OCCLUSION:
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
-   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS:
+   case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
       panvk_cmd_reset_queries(cmd, pool, firstQuery, queryCount);
       break;
    }
@@ -1195,10 +1251,14 @@ panvk_per_arch(CmdBeginQueryIndexedEXT)(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(panvk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(panvk_query_pool, pool, queryPool);
 
-   /* TODO: transform feedback */
-   assert(index == 0);
+   assert(index == 0 ||
+          pool->vk.query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT);
 
    switch (pool->vk.query_type) {
+   case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
+      panvk_cmd_begin_xfb_query(cmd, pool, query, index);
+      break;
+   }
    case VK_QUERY_TYPE_OCCLUSION: {
       panvk_cmd_begin_occlusion_query(cmd, pool, query, flags);
       break;
@@ -1224,10 +1284,14 @@ panvk_per_arch(CmdEndQueryIndexedEXT)(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(panvk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(panvk_query_pool, pool, queryPool);
 
-   /* TODO: transform feedback */
-   assert(index == 0);
+   assert(index == 0 ||
+          pool->vk.query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT);
 
    switch (pool->vk.query_type) {
+   case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
+      panvk_cmd_end_xfb_query(cmd, pool, query, index);
+      break;
+   }
    case VK_QUERY_TYPE_OCCLUSION: {
       panvk_cmd_end_occlusion_query(cmd, pool, query);
       break;
@@ -1275,7 +1339,8 @@ panvk_per_arch(CmdCopyQueryPoolResults)(
                                dst_buffer_addr, stride, flags);
       break;
    }
-   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS:
+   case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
       panvk_copy_pstats_query_results(cmd, pool, firstQuery, queryCount,
                                       dst_buffer_addr, stride, flags);
       break;
