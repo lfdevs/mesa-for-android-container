@@ -4800,7 +4800,8 @@ cmd_run_fullscreen(struct panvk_cmd_buffer *cmdbuf, uint64_t dcd,
 
       cs_add_imm64(b, tiler_ctx_tmp, tiler_ctx_addr, 0);
 
-      set_run_fullscreen_tiler_flags(b, MAX_LAYERS_PER_TILER_DESC, 0);
+      set_run_fullscreen_tiler_flags(b, 0,
+                                     BITFIELD_MASK(MAX_LAYERS_PER_TILER_DESC));
 
       cs_while(b, MALI_CS_CONDITION_GREATER, td_count) {
          cs_add_imm32(b, td_count, td_count, -1);
