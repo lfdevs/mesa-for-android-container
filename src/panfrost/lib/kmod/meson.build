@@ -18,6 +18,10 @@ endif
 
 libpankmod_lib_files = files(libpankmod_lib_code)
 
+if panfrost_kmds.contains('kbase')
+  libpankmod_lib_files += files('kbase_kmod.c')
+endif
+
 libpankmod_lib = static_library(
   'pankmod_lib',
   [libpankmod_lib_files],
