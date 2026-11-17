@@ -958,7 +958,7 @@ panvk_per_arch(get_physical_device_properties)(
       .maxTessellationControlTotalOutputComponents = PAN_ARCH >= 10 ? 4096 : 0,
       .maxTessellationEvaluationInputComponents = PAN_ARCH >= 10 ? 128 : 0,
       .maxTessellationEvaluationOutputComponents = PAN_ARCH >= 10 ? 128 : 0,
-      .maxGeometryShaderInvocations = PAN_ARCH >= 10 ? 32 : 0,
+      .maxGeometryShaderInvocations = PAN_ARCH >= 10 ? 64 : 0,
       .maxGeometryInputComponents = PAN_ARCH >= 10 ? 64 : 0,
       .maxGeometryOutputComponents = PAN_ARCH >= 10 ? 128 : 0,
       .maxGeometryOutputVertices = PAN_ARCH >= 10 ? 256 : 0,
