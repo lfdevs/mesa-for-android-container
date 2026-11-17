@@ -336,7 +336,7 @@ panvk_per_arch(get_physical_device_features)(
       .textureCompressionBC = has_texture_compression_bc(device) ||
                               panvk_bc_emul_enabled(device),
       .occlusionQueryPrecise = true,
-      .pipelineStatisticsQuery = false,
+      .pipelineStatisticsQuery = PAN_ARCH >= 10,
       /* On v13+, the hardware isn't speculatively referencing to invalid
          indices anymore. */
       .vertexPipelineStoresAndAtomics =
