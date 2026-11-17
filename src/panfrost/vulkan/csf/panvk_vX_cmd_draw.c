@@ -4793,6 +4793,18 @@ gpu_prerast_needed(const struct panvk_cmd_buffer *cmdbuf,
               PANVK_GPU_PRERAST_POLY_NONE);
 }
 
+/* VS stores and atomics run once per vertex through gpu_prerast. Draws it
+ * cannot lower fall back to IDVS.
+ */
+static bool
+gpu_prerast_wanted(const struct panvk_cmd_buffer *cmdbuf,
+                   const struct panvk_draw_info *draw)
+{
+   return gpu_prerast_needed(cmdbuf, draw) ||
+          (PAN_ARCH < 13 && !draw->gpu_prerast_generated &&
+           cmdbuf->state.gfx.vs.shader->gpu_prerast.has_side_effects);
+}
+
 /* Returns true if the draw was split into draws that fit the arena. */
 static bool
 gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
@@ -4873,6 +4885,8 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
        * vertex range, the kernels need a first-vertex/strip-end input for
        * that.
        */
+      if (!gpu_prerast_needed(cmdbuf, draw))
+         return false;
       gpu_prerast_unhandled("vertex count over the arena capacity");
       return true;
    }
@@ -4884,6 +4898,8 @@ gpu_prerast_split(struct panvk_cmd_buffer *cmdbuf,
     */
    if (!step || (overlap && draw->index.index_size &&
                  draw->index.restart_enable)) {
+      if (!gpu_prerast_needed(cmdbuf, draw))
+         return false;
       gpu_prerast_unhandled("vertex count over the arena capacity");
       return true;
    }
@@ -4928,7 +4944,7 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
       draw.pstats_counted = true;
    }
 
-   if (gpu_prerast_needed(cmdbuf, &draw) && gpu_prerast_split(cmdbuf, &draw))
+   if (gpu_prerast_wanted(cmdbuf, &draw) && gpu_prerast_split(cmdbuf, &draw))
       return;
 
    if (draw.indirect.buffer_dev_addr)

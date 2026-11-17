@@ -1200,6 +1200,45 @@ panvk_gpu_prerast_passthrough_nir(const nir_shader *source, uint64_t outputs,
    return b.shader;
 }
 
+static nir_def *
+panvk_gpu_prerast_vs_is_restart(nir_builder *b)
+{
+   nir_def *vertex = nir_channel(b, nir_load_global_invocation_id(b, 32), 0);
+   nir_def *params = load_sysval(b, graphics, 64, gpu_prerast_params);
+   nir_def *index_offset = nir_load_global(
+      b, 1, 32,
+      nir_iadd_imm(b, params,
+                   offsetof(struct panvk_gpu_prerast_params, index_offset)),
+      .align_mul = 4);
+   nir_def *raw = panvk_poly_load_raw_vertex_id(b, nir_iadd(b, vertex, index_offset));
+   nir_def *restart_enable = nir_load_global(
+      b, 1, 32,
+      nir_iadd_imm(b, params,
+                   offsetof(struct panvk_gpu_prerast_params, primitive_restart)),
+      .align_mul = 4);
+   nir_def *restart_index = nir_load_global(
+      b, 1, 32,
+      nir_iadd_imm(b, params,
+                   offsetof(struct panvk_gpu_prerast_params, restart_index)),
+      .align_mul = 4);
+   return nir_iand(b, nir_ine_imm(b, restart_enable, 0),
+                   nir_ieq(b, raw, restart_index));
+}
+
+/* A restart index is not a vertex, don't run the VS stores for it. */
+static void
+panvk_gpu_prerast_skip_restart(nir_shader *nir)
+{
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_cf_list body;
+   nir_cf_extract(&body, nir_before_impl(impl), nir_after_impl(impl));
+   nir_builder b = nir_builder_at(nir_before_impl(impl));
+   nir_push_if(&b, nir_inot(&b, panvk_gpu_prerast_vs_is_restart(&b)));
+   nir_cf_reinsert(&body, b.cursor);
+   nir_pop_if(&b, NULL);
+   nir_progress(true, impl, nir_metadata_none);
+}
+
 static void
 panvk_gpu_prerast_emit_generated_records(nir_shader *nir)
 {
@@ -1209,27 +1248,7 @@ panvk_gpu_prerast_emit_generated_records(nir_shader *nir)
    nir_def *vertex = nir_channel(&b, gid, 0);
    nir_def *instance = nir_channel(&b, gid, 1);
    nir_def *params = load_sysval(&b, graphics, 64, gpu_prerast_params);
-
-    nir_def *index = vertex;
-    nir_def *index_offset = nir_load_global(
-       &b, 1, 32,
-       nir_iadd_imm(&b, params,
-                    offsetof(struct panvk_gpu_prerast_params, index_offset)),
-       .align_mul = 4);
-    index = nir_iadd(&b, vertex, index_offset);
-    nir_def *raw = panvk_poly_load_raw_vertex_id(&b, index);
-   nir_def *restart_enable = nir_load_global(
-      &b, 1, 32,
-      nir_iadd_imm(&b, params,
-                   offsetof(struct panvk_gpu_prerast_params, primitive_restart)),
-      .align_mul = 4);
-   nir_def *restart_index = nir_load_global(
-      &b, 1, 32,
-      nir_iadd_imm(&b, params,
-                   offsetof(struct panvk_gpu_prerast_params, restart_index)),
-      .align_mul = 4);
-   nir_def *is_restart = nir_iand(
-      &b, nir_ine_imm(&b, restart_enable, 0), nir_ieq(&b, raw, restart_index));
+   nir_def *is_restart = panvk_gpu_prerast_vs_is_restart(&b);
    nir_def *verts = nir_load_global(
       &b, 1, 32,
       nir_iadd_imm(&b, params,
@@ -3154,6 +3173,8 @@ panvk_compile_shader(struct panvk_device *dev,
          info->nir->info.clip_distance_array_size;
       shader->gpu_prerast.io.cull_distance_array_size =
          info->nir->info.cull_distance_array_size;
+      nir_shader_gather_info(info->nir,
+                             nir_shader_get_entrypoint(info->nir));
       shader->gpu_prerast.has_side_effects = info->nir->info.writes_memory;
    }
 #endif
@@ -3184,6 +3205,7 @@ panvk_compile_shader(struct panvk_device *dev,
          BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_RS_POLYGON_MODE);
       const bool want_prerast =
          PANVK_DEBUG(GPU_PRERAST) || info->nir->xfb_info ||
+         (PAN_ARCH < 13 && info->nir->info.writes_memory) ||
          (info->next_stage_mask & (VK_SHADER_STAGE_GEOMETRY_BIT |
                                    VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)) ||
          (dev->vk.enabled_features.fillModeNonSolid &&
@@ -3293,6 +3315,9 @@ panvk_compile_shader(struct panvk_device *dev,
                                           nir_metadata_all, &out_types);
                NIR_PASS(_, nir, pan_nir_lower_vs_inputs_poly, inputs.gpu_id);
                NIR_PASS(_, nir, panvk_gpu_prerast_lower_vs_outputs);
+               if (info->stage == MESA_SHADER_VERTEX &&
+                   nir->info.writes_memory)
+                  panvk_gpu_prerast_skip_restart(nir);
                panvk_gpu_prerast_emit_generated_records(nir);
                NIR_PASS(_, nir, panvk_poly_lower_sw_vs);
                NIR_PASS(_, nir, panvk_poly_lower_sysvals);

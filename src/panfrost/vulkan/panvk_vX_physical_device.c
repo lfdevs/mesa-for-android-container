@@ -343,8 +343,10 @@ panvk_per_arch(get_physical_device_features)(
       .occlusionQueryPrecise = true,
       .pipelineStatisticsQuery = PAN_ARCH >= 10,
       /* On v13+, the hardware isn't speculatively referencing to invalid
-         indices anymore. */
+         indices anymore. On v10-v12, pre-rasterization stages that write
+         memory run through gpu_prerast compute instead of IDVS. */
       .vertexPipelineStoresAndAtomics =
+         (PAN_ARCH >= 10 && PAN_ARCH < 13) ||
          (PAN_ARCH >= 13 && instance->drirc.misc.enable_vertex_pipeline_stores_atomics) ||
          instance->drirc.misc.force_enable_shader_atomics,
       .fragmentStoresAndAtomics = true,
