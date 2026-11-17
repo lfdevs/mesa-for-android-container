@@ -336,6 +336,18 @@ add_execution_dependency(uint32_t wait_masks[static PANVK_SUBQUEUE_COUNT],
          dst_subqueues |= BITFIELD_BIT(i);
    }
 
+   /* gpu_prerast runs the lowered VS on the COMPUTE subqueue, which reads
+    * indirect params, vertex inputs and VS resources.  Make it a consumer of
+    * those stages so GPU-written inputs are visible before the dispatch. */
+   if (PANVK_DEBUG(GPU_PRERAST) &&
+       (dst_stages & (VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT |
+                      VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT |
+                      VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT |
+                      VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT |
+                      VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT |
+                      VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT)))
+      dst_subqueues |= BITFIELD_BIT(PANVK_SUBQUEUE_COMPUTE);
+
    const bool dst_host = dst_stages & VK_PIPELINE_STAGE_2_HOST_BIT;
 
    /* nothing to wait */

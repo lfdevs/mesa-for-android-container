@@ -3506,6 +3506,37 @@ gpu_prerast_release_arena(struct panvk_cmd_buffer *cmdbuf, uint64_t arena)
    cs_sync32_add(b, true, MALI_CS_SYNC_SCOPE_CSG, one, addr, cs_now());
 }
 
+static void
+gpu_prerast_launch_cs(struct panvk_cmd_buffer *cmdbuf,
+                      const struct panvk_shader_variant *cs,
+                      uint64_t push_uniforms, uint64_t tsd,
+                      const struct panvk_dispatch_info *info)
+{
+   /* Same TLS pointer copy as cmd_dispatch(): the global TLS descriptor is
+    * only filled at EndCommandBuffer, so copy its pointer on the GPU.
+    */
+   if (cs->info.tls_size) {
+      struct cs_builder *b =
+         panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
+      cs_move64_to(b, cs_scratch_reg64(b, 0), cmdbuf->state.tls.desc.gpu);
+      cs_load64_to(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
+      cs_move64_to(b, cs_scratch_reg64(b, 0), tsd);
+      cs_store64(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
+      cs_flush_stores(b);
+   }
+
+   compute_state_set_dirty(cmdbuf, CS);
+   compute_state_set_dirty(cmdbuf, DESC_STATE);
+   compute_state_set_dirty(cmdbuf, PUSH_UNIFORMS);
+
+   panvk_per_arch(cmd_dispatch_shader)(cmdbuf, cs, &cmdbuf->state.gfx.vs.desc,
+                                       push_uniforms, tsd, info);
+
+   compute_state_set_dirty(cmdbuf, CS);
+   compute_state_set_dirty(cmdbuf, DESC_STATE);
+   compute_state_set_dirty(cmdbuf, PUSH_UNIFORMS);
+}
+
 static bool
 gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
                  const struct panvk_draw_info *source)
@@ -3518,6 +3549,20 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
 
    panvk_per_arch(cmd_prepare_draw_sysvals)(
       cmdbuf, source, panvk_shader_only_variant(get_fs(cmdbuf)));
+
+   /* The lowered VS runs as RUN_COMPUTE and needs its own LOCAL_STORAGE
+    * descriptor. gfx.tsd is only allocated by prepare_draw(), which runs
+    * after this point, so reusing it passed TSD=0 and the compute CS raised
+    * DATA_INVALID_FAULT (0x58) before any store executed.
+    */
+   struct pan_compute_dim tls_dim = {source->vertex.count,
+                                     source->instance.count, 1};
+   uint64_t tsd = panvk_per_arch(cmd_dispatch_prepare_tls)(
+      cmdbuf,
+      panvk_shader_gpu_prerast_variant(shader, PANVK_VS_VARIANT_GPU_LOWERED),
+      &tls_dim, source->indirect.buffer_dev_addr != 0);
+   if (!tsd)
+      return true;
 
    uint64_t arena = panvk_priv_mem_dev_addr(dev->gpu_prerast_arena);
    uint64_t params = arena + PANVK_GPU_PRERAST_PARAMS_OFFSET;
@@ -3675,8 +3720,7 @@ gpu_prerast_draw(struct panvk_cmd_buffer *cmdbuf,
    };
    if (source->indirect.buffer_dev_addr)
       dispatch.indirect.buffer_dev_addr = dispatch_params;
-   launch_gfx_cs(cmdbuf, lowered, &cmdbuf->state.gfx.vs.desc,
-                 push.gpu, &dispatch);
+   gpu_prerast_launch_cs(cmdbuf, lowered, push.gpu, tsd, &dispatch);
    gpu_prerast_wait_compute(cmdbuf);
 
    struct panvk_draw_info generated = *source;

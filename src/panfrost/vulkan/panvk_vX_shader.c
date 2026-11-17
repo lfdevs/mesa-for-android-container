@@ -658,8 +658,11 @@ panvk_gpu_prerast_lower_vs_before_gs_intr(nir_builder *b,
    b->cursor = nir_instr_remove(&intr->instr);
    nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
    uint64_t mask = b->shader->info.outputs_written;
+   unsigned location = sem.location;
+   if (nir_src_is_const(intr->src[1]))
+      location += nir_src_as_uint(intr->src[1]);
    unsigned slot =
-      util_bitcount64(mask & (((uint64_t)1 << sem.location) - 1));
+      util_bitcount64(mask & (((uint64_t)1 << location) - 1));
    unsigned nout = util_bitcount64(mask);
    nir_def *p = nir_load_vertex_param_buffer_poly(b);
    nir_def *nr_verts = nir_load_global(
@@ -677,7 +680,16 @@ panvk_gpu_prerast_lower_vs_before_gs_intr(nir_builder *b,
       b, out_buf,
       nir_u2u64(b, nir_iadd_imm(b, nir_imul_imm(b, linear, nout * 16),
                                 slot * 16 + nir_intrinsic_component(intr) * 4)));
-   nir_store_global(b, intr->src[0].ssa, addr,
+   /* Records are 32-bit per component; widen mediump values. */
+   nir_def *value = intr->src[0].ssa;
+   if (value->bit_size != 32) {
+      nir_alu_type base =
+         nir_alu_type_get_base_type(nir_intrinsic_src_type(intr));
+      value = base == nir_type_float ? nir_f2f32(b, value)
+              : base == nir_type_int ? nir_i2i32(b, value)
+                                     : nir_u2u32(b, value);
+   }
+   nir_store_global(b, value, addr,
                     .write_mask = nir_intrinsic_write_mask(intr),
                     .align_mul = 4);
    return true;
@@ -690,37 +702,68 @@ panvk_gpu_prerast_lower_vs_outputs(nir_shader *vs)
                                      nir_metadata_control_flow, NULL);
 }
 
+/* Output slot types seen by the lowered VS, so the passthrough stores each
+ * record slot with the same NIR type the original VS used.
+ */
+struct panvk_gpu_prerast_out_types {
+   nir_alu_type type[VARYING_SLOT_MAX];
+};
+
+static bool
+panvk_gpu_prerast_collect_out_type(nir_builder *b, nir_intrinsic_instr *intr,
+                                   void *data)
+{
+   struct panvk_gpu_prerast_out_types *t = data;
+   if (intr->intrinsic != nir_intrinsic_store_output)
+      return false;
+
+   nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
+   unsigned location = sem.location;
+   if (nir_src_is_const(intr->src[1]))
+      location += nir_src_as_uint(intr->src[1]);
+   if (location < VARYING_SLOT_MAX)
+      t->type[location] =
+         nir_alu_type_get_base_type(nir_intrinsic_src_type(intr)) | 32;
+   return false;
+}
+
 static nir_shader *
-panvk_gpu_prerast_passthrough_nir(const nir_shader *source)
+panvk_gpu_prerast_passthrough_nir(const nir_shader *source, uint64_t outputs,
+                                  const struct panvk_gpu_prerast_out_types *t)
 {
    nir_builder b = nir_builder_init_simple_shader(
       MESA_SHADER_VERTEX, source->options, "panvk_gpu_prerast_passthrough");
     nir_def *base = load_sysval(&b, graphics, 64, gpu_prerast_records);
     nir_def *params = load_sysval(&b, graphics, 64, gpu_prerast_params);
     nir_def *stride = nir_u2u64(
-       &b, nir_imm_int(&b, ALIGN_POT(util_bitcount64(source->info.outputs_written) * 16, 16)));
+       &b, nir_imm_int(&b, ALIGN_POT(util_bitcount64(outputs) * 16, 16)));
     nir_def *verts = nir_load_global(
        &b, 1, 32,
        nir_iadd_imm(&b, params,
                     offsetof(struct panvk_gpu_prerast_params, vertex_count)),
        .align_mul = 4);
-    nir_def *vertex = nir_load_vertex_id_zero_base(&b);
+    /* The generated draw uses indices 0..n-1 with vertexOffset 0, so the
+     * Valhall IDVS vertex ID is the record index. load_vertex_id_zero_base
+     * has no backend lowering here (preprocess already ran).
+     */
+    nir_def *vertex = nir_load_vertex_id(&b);
     nir_def *linear = nir_iadd(&b, vertex,
                                nir_imul(&b, nir_load_instance_id(&b), verts));
     nir_def *record = nir_iadd(&b, base, nir_imul(&b, nir_u2u64(&b, linear), stride));
 
-    u_foreach_bit64(location, source->info.outputs_written) {
-       unsigned slot = util_bitcount64(source->info.outputs_written &
-                                       BITFIELD64_MASK(location));
+    u_foreach_bit64(location, outputs) {
+       unsigned slot = util_bitcount64(outputs & BITFIELD64_MASK(location));
        nir_def *addr = nir_iadd_imm(&b, record, slot * 16);
        nir_def *value = nir_load_global(&b, 4, 32, addr, .align_mul = 16);
+       nir_alu_type type = t->type[location] ? t->type[location]
+                                             : nir_type_float32;
        nir_store_output(&b, value, nir_imm_int(&b, 0), .base = location,
                         .write_mask = 0xf,
-                        .src_type = nir_type_uint32,
+                        .src_type = type,
                         .io_semantics = { .location = location, .num_slots = 1 });
     }
 
-   b.shader->info.outputs_written = source->info.outputs_written;
+   b.shader->info.outputs_written = outputs;
    return b.shader;
 }
 
@@ -1693,7 +1736,6 @@ panvk_compile_shader(struct panvk_device *dev,
 #if PAN_ARCH >= 10
    if (info->stage == MESA_SHADER_VERTEX) {
       shader->gpu_prerast.io.abi_version = PANVK_GPU_PRERAST_ABI_VERSION;
-      shader->gpu_prerast.io.outputs_written = info->nir->info.outputs_written;
       shader->gpu_prerast.io.clip_distance_array_size =
          info->nir->info.clip_distance_array_size;
       shader->gpu_prerast.io.cull_distance_array_size =
@@ -1720,6 +1762,7 @@ panvk_compile_shader(struct panvk_device *dev,
    case MESA_SHADER_VERTEX: {
 #if PAN_ARCH >= 10
       const enum panvk_vs_variant last_variant = PANVK_VS_VARIANT_GPU_PASSTHROUGH;
+      struct panvk_gpu_prerast_out_types out_types = {0};
 #else
       const enum panvk_vs_variant last_variant = PANVK_VS_VARIANT_HW;
 #endif
@@ -1732,7 +1775,10 @@ panvk_compile_shader(struct panvk_device *dev,
 #if PAN_ARCH >= 10
          const bool clone_nir = true;
          nir_shader *nir = v == PANVK_VS_VARIANT_GPU_PASSTHROUGH
-                              ? panvk_gpu_prerast_passthrough_nir(info->nir)
+                              ? panvk_gpu_prerast_passthrough_nir(
+                                   info->nir,
+                                   shader->gpu_prerast.io.outputs_written,
+                                   &out_types)
                               : nir_shader_clone(NULL, info->nir);
 #else
          const bool clone_nir = (v != last_variant);
@@ -1802,6 +1848,17 @@ panvk_compile_shader(struct panvk_device *dev,
             panvk_lower_nir_io(nir);
 #if PAN_ARCH >= 10
             if (gpu_lower) {
+               /* outputs_written is only valid after panvk_lower_nir()
+                * gathered info; info->nir may still report 0. The record
+                * layout and the passthrough variant both key off this mask.
+                */
+               shader->gpu_prerast.io.outputs_written =
+                  nir->info.outputs_written;
+               shader->gpu_prerast.io.record_stride = ALIGN_POT(
+                  util_bitcount64(nir->info.outputs_written) * 16, 16);
+               nir_shader_intrinsics_pass(nir,
+                                          panvk_gpu_prerast_collect_out_type,
+                                          nir_metadata_all, &out_types);
                NIR_PASS(_, nir, pan_nir_lower_vs_inputs_poly, inputs.gpu_id);
                NIR_PASS(_, nir, panvk_gpu_prerast_lower_vs_outputs);
                panvk_gpu_prerast_emit_generated_records(nir);
@@ -1829,8 +1886,6 @@ panvk_compile_shader(struct panvk_device *dev,
 #if PAN_ARCH >= 10
             shader->gpu_prerast.io.varyings = varying_layout;
             shader->gpu_prerast.io.varying_count = nir->num_outputs;
-            shader->gpu_prerast.io.record_stride =
-               ALIGN_POT(util_bitcount64(info->nir->info.outputs_written) * 16, 16);
 #endif
          }
 
