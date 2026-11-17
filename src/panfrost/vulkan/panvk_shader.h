@@ -458,6 +458,14 @@ enum panvk_vs_variant {
    PANVK_VS_VARIANTS,
 };
 
+#if PAN_ARCH >= 10
+enum panvk_gs_variant {
+   PANVK_GS_VARIANT_PASSTHROUGH,
+   PANVK_GS_VARIANT_KERNEL,
+   PANVK_GS_VARIANTS,
+};
+#endif
+
 struct panvk_shader {
    struct vk_shader vk;
 
@@ -475,6 +483,10 @@ panvk_shader_num_variants(mesa_shader_stage stage)
 {
    if (stage == MESA_SHADER_VERTEX)
       return PANVK_VS_VARIANTS;
+#if PAN_ARCH >= 10
+   if (stage == MESA_SHADER_GEOMETRY)
+      return PANVK_GS_VARIANTS;
+#endif
 
    return 1;
 }
@@ -499,6 +511,11 @@ panvk_shader_variant_name(const struct panvk_shader *shader,
       assert(i < ARRAY_SIZE(panvk_vs_shader_variant_name));
       return panvk_vs_shader_variant_name[i];
    }
+
+#if PAN_ARCH >= 10
+   if (shader->vk.stage == MESA_SHADER_GEOMETRY)
+      return i == PANVK_GS_VARIANT_KERNEL ? "GS_KERNEL" : "GS_PASSTHROUGH";
+#endif
 
    assert(panvk_shader_num_variants(shader->vk.stage) == 1);
 

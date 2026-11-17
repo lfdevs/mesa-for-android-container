@@ -12,15 +12,24 @@
 #include "util/macros.h"
 #include "vulkan/vulkan_core.h"
 
-#define PANVK_GPU_PRERAST_ABI_VERSION 2
+#define PANVK_GPU_PRERAST_ABI_VERSION 3
 #define PANVK_GPU_PRERAST_MAX_EXECUTION_BYTES (256ull * 1024 * 1024)
-#define PANVK_GPU_PRERAST_ARENA_SIZE (32ull * 1024 * 1024)
+#define PANVK_GPU_PRERAST_VS_REGION_END (32ull * 1024 * 1024)
+#define PANVK_GPU_PRERAST_GS_INDEX_OFFSET PANVK_GPU_PRERAST_VS_REGION_END
+#define PANVK_GPU_PRERAST_GS_INDEX_CAPACITY (2u * 1024 * 1024)
+#define PANVK_GPU_PRERAST_GS_RECORD_OFFSET \
+   (PANVK_GPU_PRERAST_GS_INDEX_OFFSET + \
+    PANVK_GPU_PRERAST_GS_INDEX_CAPACITY * sizeof(uint32_t))
+#define PANVK_GPU_PRERAST_ARENA_SIZE (64ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_MAX_INVOCATIONS (65536u)
 #define PANVK_GPU_PRERAST_POLY_INDICES_PER_PRIM 6
 #define PANVK_GPU_PRERAST_PARAMS_OFFSET 64
 #define PANVK_GPU_PRERAST_DISPATCH_OFFSET 256
 #define PANVK_GPU_PRERAST_DRAW_OFFSET 320
 #define PANVK_GPU_PRERAST_POLY_DRAW_OFFSET 384
+#define PANVK_GPU_PRERAST_GS_DISPATCH_OFFSET 448
+#define PANVK_GPU_PRERAST_GS_DRAW_OFFSET 512
+#define PANVK_GPU_PRERAST_GS_PARAMS_OFFSET 1024
 #define PANVK_GPU_PRERAST_INDEX_OFFSET 4096
 #define PANVK_GPU_PRERAST_POLY_INDEX_OFFSET \
    (PANVK_GPU_PRERAST_INDEX_OFFSET + \
@@ -96,14 +105,63 @@ struct panvk_gpu_prerast_io {
    struct pan_varying_layout varyings;
 };
 
+struct panvk_gpu_prerast_gs_info {
+   uint64_t outputs_written;
+   uint32_t record_stride;
+   uint32_t index_stride;
+   uint16_t max_vertices;
+   uint8_t invocations;
+   uint8_t input_prim;
+   uint8_t output_prim;
+   bool kernel_compiled;
+   bool passthrough_compiled;
+   bool _pad;
+};
+
 struct panvk_gpu_prerast_shader {
    struct panvk_gpu_prerast_io io;
+   struct panvk_gpu_prerast_gs_info gs;
    uint32_t requirements;
    bool lowered_vs_compiled;
    bool passthrough_vs_compiled;
    bool polygon_compiled;
    bool has_side_effects;
 };
+
+struct panvk_gpu_prerast_gs_params {
+   uint64_t vs_records;
+   uint64_t vs_outputs;
+   uint64_t gen_indices;
+   uint64_t records;
+   uint64_t indices;
+   uint64_t draw;
+   uint32_t vertex_count;
+   uint32_t instance_count;
+   uint32_t primitive_restart;
+   uint32_t prim;
+   uint32_t cap_slots;
+   uint32_t vs_record_capacity;
+   uint32_t provoking_last;
+   uint32_t _pad;
+};
+
+static_assert(PANVK_GPU_PRERAST_GS_PARAMS_OFFSET +
+                    sizeof(struct panvk_gpu_prerast_gs_params) <=
+                 PANVK_GPU_PRERAST_INDEX_OFFSET,
+              "gpu_prerast GS params overlap the index buffer");
+
+static inline uint32_t
+panvk_gpu_prerast_gs_cap_slots(const struct panvk_gpu_prerast_gs_info *gs)
+{
+   if (!gs->max_vertices || !gs->record_stride || !gs->index_stride)
+      return 0;
+
+   uint64_t rec = (PANVK_GPU_PRERAST_ARENA_SIZE -
+                   PANVK_GPU_PRERAST_GS_RECORD_OFFSET) /
+                  ((uint64_t)gs->record_stride * gs->max_vertices);
+   uint64_t idx = PANVK_GPU_PRERAST_GS_INDEX_CAPACITY / gs->index_stride;
+   return MIN2(rec, idx);
+}
 
 struct panvk_gpu_prerast_draw {
    uint64_t index_buffer;
@@ -162,7 +220,7 @@ static inline uint32_t
 panvk_gpu_prerast_record_capacity(uint32_t record_stride)
 {
    uint64_t cap = record_stride
-      ? (PANVK_GPU_PRERAST_ARENA_SIZE - PANVK_GPU_PRERAST_RECORD_OFFSET) /
+      ? (PANVK_GPU_PRERAST_VS_REGION_END - PANVK_GPU_PRERAST_RECORD_OFFSET) /
            record_stride
       : 0;
    return MIN2(cap, PANVK_GPU_PRERAST_MAX_INVOCATIONS);

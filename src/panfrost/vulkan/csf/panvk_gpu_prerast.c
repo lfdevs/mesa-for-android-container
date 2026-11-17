@@ -72,11 +72,16 @@ panvk_per_arch(gpu_prerast_can_lower)(
    const struct panvk_cmd_buffer *cmdbuf, const struct panvk_draw_info *draw,
    const struct panvk_gpu_prerast_shader *shader)
 {
-    const bool poly = panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, draw) !=
-                      PANVK_GPU_PRERAST_POLY_NONE;
-    if (!(PANVK_DEBUG(GPU_PRERAST) || poly) || shader->has_side_effects ||
+    const struct panvk_shader *gs = cmdbuf->state.gfx.gs.shader;
+    const bool poly = !gs &&
+                      panvk_per_arch(gpu_prerast_poly_mode)(cmdbuf, draw) !=
+                         PANVK_GPU_PRERAST_POLY_NONE;
+    if (!(PANVK_DEBUG(GPU_PRERAST) || poly || gs) ||
+        (!gs && shader->has_side_effects) ||
         !shader->lowered_vs_compiled || !shader->passthrough_vs_compiled ||
         (poly && !shader->polygon_compiled) ||
+        (gs && (!gs->gpu_prerast.gs.kernel_compiled ||
+                !gs->gpu_prerast.gs.passthrough_compiled)) ||
         (draw->indirect.buffer_dev_addr && draw->indirect.draw_count > 1) ||
         draw->indirect.count_buffer_dev_addr)
        return false;
@@ -87,7 +92,29 @@ panvk_per_arch(gpu_prerast_can_lower)(
        if ((uint64_t)draw->vertex.count * draw->instance.count >
            panvk_gpu_prerast_record_capacity(shader->io.record_stride))
           return false;
+       if (gs && (uint64_t)draw->vertex.count * draw->instance.count *
+                       gs->gpu_prerast.gs.invocations >
+                    panvk_gpu_prerast_gs_cap_slots(&gs->gpu_prerast.gs))
+          return false;
     }
+
+   if (gs) {
+      switch (draw->prim) {
+      case MESA_PRIM_POINTS:
+      case MESA_PRIM_LINES:
+      case MESA_PRIM_LINE_STRIP:
+      case MESA_PRIM_TRIANGLES:
+      case MESA_PRIM_TRIANGLE_STRIP:
+      case MESA_PRIM_TRIANGLE_FAN:
+      case MESA_PRIM_LINES_ADJACENCY:
+      case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      case MESA_PRIM_TRIANGLES_ADJACENCY:
+      case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+         return true;
+      default:
+         return false;
+      }
+   }
 
    switch (draw->prim) {
    case MESA_PRIM_POINTS:

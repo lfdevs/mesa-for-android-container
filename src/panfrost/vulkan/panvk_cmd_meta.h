@@ -62,6 +62,10 @@ struct panvk_cmd_meta_graphics_save_ctx {
       struct panvk_shader_desc_state desc;
    } vs;
 
+#if PAN_ARCH >= 10
+   const struct panvk_shader *gs;
+#endif
+
    struct panvk_occlusion_query_state occlusion_query;
    bool cond_render_enabled;
    bool cond_render_inherited;

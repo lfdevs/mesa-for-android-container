@@ -1228,6 +1228,7 @@ create_copy_table(nir_shader *nir, struct lower_desc_ctx *ctx)
       dummy_sampler_idx = desc_info->num_varying_attr_descs;
       break;
    case MESA_SHADER_COMPUTE:
+   case MESA_SHADER_GEOMETRY:
       dummy_sampler_idx = 0;
       break;
    default:

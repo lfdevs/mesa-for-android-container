@@ -200,6 +200,13 @@ struct panvk_cmd_graphics_state {
 #endif
    } vs;
 
+#if PAN_ARCH >= 10
+   struct {
+      const struct panvk_shader *shader;
+      struct panvk_shader_desc_state desc;
+   } gs;
+#endif
+
    struct {
       struct panvk_attrib_buf bufs[MAX_VBS];
       unsigned count;

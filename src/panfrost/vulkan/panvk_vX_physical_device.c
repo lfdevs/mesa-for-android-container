@@ -315,7 +315,7 @@ panvk_per_arch(get_physical_device_features)(
       .fullDrawIndexUint32 = true,
       .imageCubeArray = true,
       .independentBlend = true,
-      .geometryShader = false,
+      .geometryShader = PAN_ARCH >= 10 && PANVK_DEBUG(GS),
       .tessellationShader = false,
       .sampleRateShading = true,
       .dualSrcBlend = true,
@@ -950,12 +950,11 @@ panvk_per_arch(get_physical_device_properties)(
       .maxTessellationControlTotalOutputComponents = 0,
       .maxTessellationEvaluationInputComponents = 0,
       .maxTessellationEvaluationOutputComponents = 0,
-      /* Geometry shaders not supported. */
-      .maxGeometryShaderInvocations = 0,
-      .maxGeometryInputComponents = 0,
-      .maxGeometryOutputComponents = 0,
-      .maxGeometryOutputVertices = 0,
-      .maxGeometryTotalOutputComponents = 0,
+      .maxGeometryShaderInvocations = PAN_ARCH >= 10 ? 32 : 0,
+      .maxGeometryInputComponents = PAN_ARCH >= 10 ? 64 : 0,
+      .maxGeometryOutputComponents = PAN_ARCH >= 10 ? 128 : 0,
+      .maxGeometryOutputVertices = PAN_ARCH >= 10 ? 256 : 0,
+      .maxGeometryTotalOutputComponents = PAN_ARCH >= 10 ? 1024 : 0,
       /* 32 vec4 varyings. */
       .maxFragmentInputComponents = 128,
       /* 8 render targets. */
