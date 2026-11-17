@@ -463,6 +463,38 @@ panvk_GetMemoryFdPropertiesKHR(VkDevice _device,
 
    assert(handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
 
+#if defined(HAVE_PAN_KMOD_KBASE)
+   /* On kbase, a full transient import per query is not free: repeated
+    * import/free cycles of one dma-buf alias to a single GPU VA, and the
+    * frees can tear down GPU PTEs that re-import does not restore,
+    * breaking the later real import (GPU TRANSLATION_FAULT). Answer from
+    * the same assumptions the fd-import path uses instead.
+    */
+   if (phys_dev->kbase_node_path[0]) {
+      if (fd < 0 || lseek(fd, 0, SEEK_END) < 0)
+         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+
+      /* Matches kbase_kmod_bo_import_fd(..., kmod_flags=0, external): */
+      const bool can_do_host_visible = true;
+      const bool can_do_host_coherent = true;
+      const bool can_do_host_cached = false;
+      pMemoryFdProperties->memoryTypeBits = 0;
+      for (uint32_t i = 0; i < phys_dev->memory.type_count; i++) {
+         if (!can_do_host_visible && (phys_dev->memory.types[i].propertyFlags &
+                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
+            continue;
+         if (!can_do_host_coherent && (phys_dev->memory.types[i].propertyFlags &
+                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+            continue;
+         if (!can_do_host_cached && (phys_dev->memory.types[i].propertyFlags &
+                                     VK_MEMORY_PROPERTY_HOST_CACHED_BIT))
+            continue;
+         pMemoryFdProperties->memoryTypeBits |= BITFIELD_BIT(i);
+      }
+      return VK_SUCCESS;
+   }
+#endif
+
    struct pan_kmod_bo *bo = pan_kmod_bo_import(device->kmod.dev, fd);
    if (!bo)
       return VK_ERROR_INVALID_EXTERNAL_HANDLE;
