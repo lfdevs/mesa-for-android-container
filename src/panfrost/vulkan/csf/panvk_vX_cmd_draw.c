@@ -878,6 +878,57 @@ prepare_blend(struct panvk_cmd_buffer *cmdbuf)
    return VK_SUCCESS;
 }
 
+static void
+panvk_full_fb_box(const struct panvk_cmd_buffer *cmdbuf,
+                  uint32_t *max_x, uint32_t *max_y)
+{
+   uint32_t w = cmdbuf->state.gfx.render.fb.layout.width_px;
+   uint32_t h = cmdbuf->state.gfx.render.fb.layout.height_px;
+
+   if (!w)
+      w = MAX_FRAMEBUFFER_DIMENSION;
+   if (!h)
+      h = MAX_FRAMEBUFFER_DIMENSION;
+   *max_x = MIN2(w - 1, (uint32_t)UINT16_MAX);
+   *max_y = MIN2(h - 1, (uint32_t)UINT16_MAX);
+}
+
+static void
+panvk_prerast_depth_union(const struct panvk_cmd_buffer *cmdbuf,
+                          float *z_min, float *z_max)
+{
+   const struct vk_viewport_state *vp = &cmdbuf->vk.dynamic_graphics_state.vp;
+
+   if (vp->depth_clamp_mode == VK_DEPTH_CLAMP_MODE_USER_DEFINED_RANGE_EXT) {
+      *z_min = vp->depth_clamp_range.minDepthClamp;
+      *z_max = vp->depth_clamp_range.maxDepthClamp;
+      return;
+   }
+
+   const struct vk_rasterization_state *rs =
+      &cmdbuf->vk.dynamic_graphics_state.rs;
+   unsigned n = vp->viewport_count ? vp->viewport_count : 1;
+
+   n = MIN2(n, ARRAY_SIZE(vp->viewports));
+   for (unsigned i = 0; i < n; i++) {
+      float sz, oz;
+      float a, b, lo, hi;
+
+      panvk_viewport_z_coeffs(vp, rs, i, &sz, &oz);
+      a = vp->depth_clip_negative_one_to_one ? oz - sz : oz;
+      b = oz + sz;
+      lo = MIN2(a, b);
+      hi = MAX2(a, b);
+      if (i == 0) {
+         *z_min = lo;
+         *z_max = hi;
+      } else {
+         *z_min = MIN2(*z_min, lo);
+         *z_max = MAX2(*z_max, hi);
+      }
+   }
+}
+
 #if PAN_ARCH >= 12
 static void
 prepare_vp(struct panvk_cmd_buffer *cmdbuf)
@@ -887,29 +938,59 @@ prepare_vp(struct panvk_cmd_buffer *cmdbuf)
    const VkViewport *viewport =
       &cmdbuf->vk.dynamic_graphics_state.vp.viewports[0];
    const VkRect2D *scissor = &cmdbuf->vk.dynamic_graphics_state.vp.scissors[0];
+   /* decode_csf.c treats scissor_array_enable as a pointer plus a length.
+    * The index source is not documented, and LAYER and VIEWPORT share one
+    * attribute byte, so the array stays off. Per-viewport scissor is four
+    * clip distances in the prerast passthrough. The box below is the
+    * framebuffer, which cannot clip a primitive that belongs to another
+    * viewport. refresh re-emits the index-0 box when that path is left.
+    */
+   const bool indexed =
+      panvk_prerast_viewport_shader(&cmdbuf->state.gfx) != NULL &&
+      cmdbuf->vk.dynamic_graphics_state.vp.viewport_count > 1;
+   const bool refresh = gfx_state_dirty(cmdbuf, VS) ||
+                        dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORT_COUNT) ||
+                        dyn_gfx_state_dirty(cmdbuf, VP_SCISSOR_COUNT);
+   bool scissor_dirty = dyn_gfx_state_dirty(cmdbuf, VP_SCISSORS) || refresh;
+   bool viewport_dirty =
+      dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORTS) ||
+      dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) ||
+      dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLIP_ENABLE) ||
+      dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE) ||
+      dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLAMP_RANGE) || refresh;
 
-   /* XXX: Switch scissor_array_enable to true and use array based variant
-    * for future proofness */
+   if (indexed && (scissor_dirty || viewport_dirty))
+      scissor_dirty = viewport_dirty = true;
 
-   if (dyn_gfx_state_dirty(cmdbuf, VP_SCISSORS)) {
+   if (scissor_dirty) {
       struct mali_scissor_packed scissor_box;
       pan_pack(&scissor_box, SCISSOR, cfg) {
-         assert(scissor->offset.x >= 0 && scissor->offset.y >= 0);
+         if (indexed) {
+            uint32_t maxx, maxy;
 
-         int minx = scissor->offset.x;
-         int miny = scissor->offset.y;
-         int maxx = scissor->offset.x + scissor->extent.width;
-         int maxy = scissor->offset.y + scissor->extent.height;
+            panvk_full_fb_box(cmdbuf, &maxx, &maxy);
+            cfg.scissor_minimum_x = 0;
+            cfg.scissor_minimum_y = 0;
+            cfg.scissor_maximum_x = maxx;
+            cfg.scissor_maximum_y = maxy;
+         } else {
+            assert(scissor->offset.x >= 0 && scissor->offset.y >= 0);
 
-         /* Make sure we don't end up with a max < min when width/height is 0 */
-         maxx = maxx > minx ? maxx - 1 : maxx;
-         maxy = maxy > miny ? maxy - 1 : maxy;
+            int minx = scissor->offset.x;
+            int miny = scissor->offset.y;
+            int maxx = scissor->offset.x + scissor->extent.width;
+            int maxy = scissor->offset.y + scissor->extent.height;
 
-         /* Clamp scissor to valid range */
-         cfg.scissor_minimum_x = CLAMP(minx, 0, UINT16_MAX);
-         cfg.scissor_minimum_y = CLAMP(miny, 0, UINT16_MAX);
-         cfg.scissor_maximum_x = CLAMP(maxx, 0, UINT16_MAX);
-         cfg.scissor_maximum_y = CLAMP(maxy, 0, UINT16_MAX);
+            /* Make sure we don't end up with a max < min when width/height is 0 */
+            maxx = maxx > minx ? maxx - 1 : maxx;
+            maxy = maxy > miny ? maxy - 1 : maxy;
+
+            /* Clamp scissor to valid range */
+            cfg.scissor_minimum_x = CLAMP(minx, 0, UINT16_MAX);
+            cfg.scissor_minimum_y = CLAMP(miny, 0, UINT16_MAX);
+            cfg.scissor_maximum_x = CLAMP(maxx, 0, UINT16_MAX);
+            cfg.scissor_maximum_y = CLAMP(maxy, 0, UINT16_MAX);
+         }
       }
 
       struct mali_scissor_packed *scissor_box_ptr = &scissor_box;
@@ -917,38 +998,46 @@ prepare_vp(struct panvk_cmd_buffer *cmdbuf)
                    *((uint64_t *)scissor_box_ptr));
    }
 
-   if (dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORTS) ||
-       dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) ||
-       dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLIP_ENABLE) ||
-       dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE) ||
-       dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLAMP_RANGE)) {
+   if (viewport_dirty) {
       struct mali_viewport_packed mali_viewport;
       pan_pack(&mali_viewport, VIEWPORT, cfg) {
-         /* The spec says "width must be greater than 0.0" */
-         assert(viewport->width >= 0);
-         int minx = (int)viewport->x;
-         int maxx = (int)(viewport->x + viewport->width);
-
-         /* Viewport height can be negative */
-         int miny =
-            MIN2((int)viewport->y, (int)(viewport->y + viewport->height));
-         int maxy =
-            MAX2((int)viewport->y, (int)(viewport->y + viewport->height));
-
-         /* Make sure we don't end up with a max < min when width/height is 0 */
-         maxx = maxx > minx ? maxx - 1 : maxx;
-         maxy = maxy > miny ? maxy - 1 : maxy;
-
-         /* Clamp viewport to valid range */
-         cfg.min_x = CLAMP(minx, 0, UINT16_MAX);
-         cfg.min_y = CLAMP(miny, 0, UINT16_MAX);
-         cfg.max_x = CLAMP(maxx, 0, UINT16_MAX);
-         cfg.max_y = CLAMP(maxy, 0, UINT16_MAX);
-
          float z_min, z_max;
-         panvk_depth_range(&cmdbuf->state.gfx,
-                           &cmdbuf->vk.dynamic_graphics_state.vp,
-                           &z_min, &z_max);
+
+         if (indexed) {
+            uint32_t maxx, maxy;
+
+            panvk_full_fb_box(cmdbuf, &maxx, &maxy);
+            cfg.min_x = 0;
+            cfg.min_y = 0;
+            cfg.max_x = maxx;
+            cfg.max_y = maxy;
+            panvk_prerast_depth_union(cmdbuf, &z_min, &z_max);
+         } else {
+            /* The spec says "width must be greater than 0.0" */
+            assert(viewport->width >= 0);
+            int minx = (int)viewport->x;
+            int maxx = (int)(viewport->x + viewport->width);
+
+            /* Viewport height can be negative */
+            int miny =
+               MIN2((int)viewport->y, (int)(viewport->y + viewport->height));
+            int maxy =
+               MAX2((int)viewport->y, (int)(viewport->y + viewport->height));
+
+            /* Make sure we don't end up with a max < min when width/height is 0 */
+            maxx = maxx > minx ? maxx - 1 : maxx;
+            maxy = maxy > miny ? maxy - 1 : maxy;
+
+            /* Clamp viewport to valid range */
+            cfg.min_x = CLAMP(minx, 0, UINT16_MAX);
+            cfg.min_y = CLAMP(miny, 0, UINT16_MAX);
+            cfg.max_x = CLAMP(maxx, 0, UINT16_MAX);
+            cfg.max_y = CLAMP(maxy, 0, UINT16_MAX);
+
+            panvk_depth_range(&cmdbuf->state.gfx,
+                              &cmdbuf->vk.dynamic_graphics_state.vp,
+                              &z_min, &z_max);
+         }
          cfg.min_depth = z_min;
          cfg.max_depth = z_max;
       }
@@ -969,38 +1058,66 @@ prepare_vp(struct panvk_cmd_buffer *cmdbuf)
    const VkViewport *viewport =
       &cmdbuf->vk.dynamic_graphics_state.vp.viewports[0];
    const VkRect2D *scissor = &cmdbuf->vk.dynamic_graphics_state.vp.scissors[0];
+   /* Same scissor-array rejection as the v12 prepare_vp. The single SCISSOR
+    * register is the framebuffer when the prerast shader selects a viewport.
+    */
+   const bool indexed =
+      panvk_prerast_viewport_shader(&cmdbuf->state.gfx) != NULL &&
+      cmdbuf->vk.dynamic_graphics_state.vp.viewport_count > 1;
+   const bool refresh = gfx_state_dirty(cmdbuf, VS) ||
+                        dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORT_COUNT) ||
+                        dyn_gfx_state_dirty(cmdbuf, VP_SCISSOR_COUNT);
+   bool scissor_dirty = dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORTS) ||
+                        dyn_gfx_state_dirty(cmdbuf, VP_SCISSORS) || refresh;
+   bool depth_dirty =
+      dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORTS) ||
+      dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) ||
+      dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLIP_ENABLE) ||
+      dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE) ||
+      dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLAMP_RANGE) || refresh;
 
-   if (dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORTS) ||
-       dyn_gfx_state_dirty(cmdbuf, VP_SCISSORS)) {
+   if (indexed && (scissor_dirty || depth_dirty))
+      scissor_dirty = depth_dirty = true;
+
+   if (scissor_dirty) {
       struct mali_scissor_packed scissor_box;
       pan_pack(&scissor_box, SCISSOR, cfg) {
+         if (indexed) {
+            uint32_t maxx, maxy;
 
-         /* The spec says "width must be greater than 0.0" */
-         assert(viewport->width >= 0);
-         int minx = (int)viewport->x;
-         int maxx = (int)(viewport->x + viewport->width);
+            panvk_full_fb_box(cmdbuf, &maxx, &maxy);
+            cfg.scissor_minimum_x = 0;
+            cfg.scissor_minimum_y = 0;
+            cfg.scissor_maximum_x = maxx;
+            cfg.scissor_maximum_y = maxy;
+         } else {
+            /* The spec says "width must be greater than 0.0" */
+            assert(viewport->width >= 0);
+            int minx = (int)viewport->x;
+            int maxx = (int)(viewport->x + viewport->width);
 
-         /* Viewport height can be negative */
-         int miny =
-            MIN2((int)viewport->y, (int)(viewport->y + viewport->height));
-         int maxy =
-            MAX2((int)viewport->y, (int)(viewport->y + viewport->height));
+            /* Viewport height can be negative */
+            int miny =
+               MIN2((int)viewport->y, (int)(viewport->y + viewport->height));
+            int maxy =
+               MAX2((int)viewport->y, (int)(viewport->y + viewport->height));
 
-         assert(scissor->offset.x >= 0 && scissor->offset.y >= 0);
-         minx = MAX2(scissor->offset.x, minx);
-         miny = MAX2(scissor->offset.y, miny);
-         maxx = MIN2(scissor->offset.x + scissor->extent.width, maxx);
-         maxy = MIN2(scissor->offset.y + scissor->extent.height, maxy);
+            assert(scissor->offset.x >= 0 && scissor->offset.y >= 0);
+            minx = MAX2(scissor->offset.x, minx);
+            miny = MAX2(scissor->offset.y, miny);
+            maxx = MIN2(scissor->offset.x + scissor->extent.width, maxx);
+            maxy = MIN2(scissor->offset.y + scissor->extent.height, maxy);
 
-         /* Make sure we don't end up with a max < min when width/height is 0 */
-         maxx = maxx > minx ? maxx - 1 : maxx;
-         maxy = maxy > miny ? maxy - 1 : maxy;
+            /* Make sure we don't end up with a max < min when width/height is 0 */
+            maxx = maxx > minx ? maxx - 1 : maxx;
+            maxy = maxy > miny ? maxy - 1 : maxy;
 
-         /* Clamp viewport scissor to valid range */
-         cfg.scissor_minimum_x = CLAMP(minx, 0, UINT16_MAX);
-         cfg.scissor_minimum_y = CLAMP(miny, 0, UINT16_MAX);
-         cfg.scissor_maximum_x = CLAMP(maxx, 0, UINT16_MAX);
-         cfg.scissor_maximum_y = CLAMP(maxy, 0, UINT16_MAX);
+            /* Clamp viewport scissor to valid range */
+            cfg.scissor_minimum_x = CLAMP(minx, 0, UINT16_MAX);
+            cfg.scissor_minimum_y = CLAMP(miny, 0, UINT16_MAX);
+            cfg.scissor_maximum_x = CLAMP(maxx, 0, UINT16_MAX);
+            cfg.scissor_maximum_y = CLAMP(maxy, 0, UINT16_MAX);
+         }
       }
 
       struct mali_scissor_packed *scissor_box_ptr = &scissor_box;
@@ -1008,14 +1125,15 @@ prepare_vp(struct panvk_cmd_buffer *cmdbuf)
                    *((uint64_t *)scissor_box_ptr));
    }
 
-   if (dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORTS) ||
-       dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) ||
-       dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLIP_ENABLE) ||
-       dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE) ||
-       dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLAMP_RANGE)) {
+   if (depth_dirty) {
       float z_min, z_max;
-      panvk_depth_range(&cmdbuf->state.gfx,
-                        &cmdbuf->vk.dynamic_graphics_state.vp, &z_min, &z_max);
+
+      if (indexed)
+         panvk_prerast_depth_union(cmdbuf, &z_min, &z_max);
+      else
+         panvk_depth_range(&cmdbuf->state.gfx,
+                           &cmdbuf->vk.dynamic_graphics_state.vp, &z_min,
+                           &z_max);
       cs_move32_to(b, cs_sr_reg32(b, IDVS, LOW_DEPTH_CLAMP), fui(z_min));
       cs_move32_to(b, cs_sr_reg32(b, IDVS, HIGH_DEPTH_CLAMP), fui(z_max));
    }

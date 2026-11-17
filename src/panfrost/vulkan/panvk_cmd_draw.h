@@ -261,6 +261,17 @@ struct panvk_cmd_graphics_state {
    BITSET_DECLARE(dirty, PANVK_CMD_GRAPHICS_DIRTY_STATE_COUNT);
 };
 
+#if PAN_ARCH >= 10
+/* Geometry shader whose passthrough selects a viewport, or NULL. */
+static inline const struct panvk_shader *
+panvk_prerast_viewport_shader(const struct panvk_cmd_graphics_state *gfx)
+{
+   const struct panvk_shader *gs = gfx->gs.shader;
+
+   return gs && gs->gpu_prerast.gs.scissor_clip_loc ? gs : NULL;
+}
+#endif
+
 #define dyn_gfx_state_dirty(__cmdbuf, __name)                                  \
    BITSET_TEST((__cmdbuf)->vk.dynamic_graphics_state.dirty,                    \
                MESA_VK_DYNAMIC_##__name)
@@ -295,6 +306,49 @@ struct panvk_device_draw_context {
    uint64_t fn_set_fbds_provoking_vertex_stride;
 };
 #endif
+
+/* dEQP-VK.draw.renderpass.inverted_depth_ranges.nodepthclamp_deltazero.
+ * A zero depth range flattens clip-space Z before the viewport clip.
+ */
+#define PANVK_MIN_DEPTH_CLIP_RANGE 37.7E-06f
+
+static inline void
+panvk_viewport_z_coeffs(const struct vk_viewport_state *vp,
+                        const struct vk_rasterization_state *rs,
+                        unsigned index, float *scale_z, float *offset_z)
+{
+   const VkViewport *viewport = &vp->viewports[index];
+   float z_min = viewport->minDepth;
+   float z_max = viewport->maxDepth;
+
+   if (vk_rasterization_state_depth_clip_enable(rs)) {
+      float dz = z_max - z_min;
+
+      if (dz < 0.0f)
+         dz = -dz;
+      if (dz < PANVK_MIN_DEPTH_CLIP_RANGE) {
+         float z_sign = z_min <= z_max ? 1.0f : -1.0f;
+         float z_center = 0.5f * (z_max + z_min);
+         float lo = 0.5f * PANVK_MIN_DEPTH_CLIP_RANGE;
+         float hi = 1.0f - lo;
+
+         if (z_center < lo)
+            z_center = lo;
+         else if (z_center > hi)
+            z_center = hi;
+         z_min = z_center - 0.5f * z_sign * PANVK_MIN_DEPTH_CLIP_RANGE;
+         z_max = z_center + 0.5f * z_sign * PANVK_MIN_DEPTH_CLIP_RANGE;
+      }
+   }
+
+   if (vp->depth_clip_negative_one_to_one) {
+      *scale_z = 0.5f * (z_max - z_min);
+      *offset_z = 0.5f * (z_min + z_max);
+   } else {
+      *scale_z = z_max - z_min;
+      *offset_z = z_min;
+   }
+}
 
 static inline void
 panvk_depth_range(const struct panvk_cmd_graphics_state *state,

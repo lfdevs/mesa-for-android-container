@@ -166,6 +166,7 @@ struct panvk_graphics_sysvals {
    aligned_u64 gpu_prerast_params;
    aligned_u64 gpu_prerast_records;
    aligned_u64 gpu_prerast_tess;
+   aligned_u64 gpu_prerast_viewports;
 #endif
 
    struct {

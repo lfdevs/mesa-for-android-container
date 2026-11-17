@@ -15,7 +15,7 @@
 #include "util/macros.h"
 #include "vulkan/vulkan_core.h"
 
-#define PANVK_GPU_PRERAST_ABI_VERSION 6
+#define PANVK_GPU_PRERAST_ABI_VERSION 7
 #define PANVK_GPU_PRERAST_MAX_EXECUTION_BYTES (256ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_VS_REGION_END (32ull * 1024 * 1024)
 #define PANVK_GPU_PRERAST_GS_INDEX_OFFSET PANVK_GPU_PRERAST_VS_REGION_END
@@ -98,6 +98,31 @@ struct panvk_gpu_prerast_record {
    uint32_t varying_data[];
 };
 
+/* Indexed by gl_ViewportIndex from the prerast passthrough. The scale and
+ * offset match nir_lower_viewport_transform. min/max are the exclusive
+ * window edges of viewport[i] intersected with scissor[i].
+ */
+struct panvk_prerast_viewport {
+   float scale[4];
+   float offset[4];
+   float minx, miny, maxx, maxy;
+};
+
+struct panvk_prerast_vp_table {
+   uint32_t count;
+   uint32_t pad[3];
+   struct panvk_prerast_viewport vp[16];
+};
+
+static_assert(offsetof(struct panvk_prerast_vp_table, vp) == 16,
+              "prerast viewport table header is 16 bytes");
+static_assert(sizeof(struct panvk_prerast_viewport) == 48,
+              "prerast viewport entry is 48 bytes");
+static_assert(offsetof(struct panvk_prerast_viewport, offset) == 16,
+              "prerast viewport offset");
+static_assert(offsetof(struct panvk_prerast_viewport, minx) == 32,
+              "prerast viewport box");
+
 struct panvk_gpu_prerast_io {
    uint32_t abi_version;
    uint32_t record_stride;
@@ -119,6 +144,7 @@ struct panvk_gpu_prerast_gs_info {
    bool kernel_compiled;
    bool passthrough_compiled;
    bool xfb;
+   uint8_t scissor_clip_loc;
 };
 
 /* TCS/TES state the tessellation kernels need. The tessellation modes are
