@@ -611,7 +611,7 @@ bi_lower_tex(nir_builder *b, nir_tex_instr *tex, unsigned arch)
             comps[i] = nir_get_scalar(nir_imm_int(b, 0), 0);
       }
 
-      if (pan_arch(gpu_id) == 6) {
+      if (arch == 6) {
          /* jm-v7 102: pack the u8vec4 with 32-bit shifts on v6. The 8-bit
           * vector pack (MKVEC.v4i8 and friends) of a non-constant offset
           * faulted with INSTR_INVALID_ENC (event 0x51) on the FTL Galaxy S9
@@ -743,7 +743,7 @@ va_lower_txf_buf(nir_builder *b, nir_tex_instr *tex, unsigned arch)
 
    nir_def *addr = nir_pack_64_2x32(b,
       nir_lea_buf_pan(b, srcs.tex_h, srcs.coord));
-   nir_def *cvt = pan_nir_load_va_buf_cvt(b, srcs.tex_h, pan_arch(gpu_id));
+   nir_def *cvt = pan_nir_load_va_buf_cvt(b, srcs.tex_h, arch);
    nir_def *val = nir_load_global_cvt_pan(b, tex->def.num_components,
                                           tex->def.bit_size, addr, cvt,
                                           tex->dest_type);
