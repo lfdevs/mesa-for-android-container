@@ -724,7 +724,8 @@ panvk_image_plane_bind_mem(struct panvk_device *dev,
                                  crc_size, PAN_KMOD_BO_SYNC_CPU_CACHE_FLUSH);
 
       if (temporary_map) {
-         int ret = os_munmap(cpu_map, pan_kmod_bo_size(mem->bo));
+         int ret =
+            pan_kmod_bo_munmap(mem->bo, cpu_map, pan_kmod_bo_size(mem->bo));
          assert(!ret);
       }
    }
