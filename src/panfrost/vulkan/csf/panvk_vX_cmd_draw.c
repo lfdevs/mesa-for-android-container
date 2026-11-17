@@ -4065,7 +4065,11 @@ invalidate_initial_attachment_crcs(struct panvk_cmd_buffer *cmdbuf,
          vk_find_struct_const(att->pNext,
                               RENDERING_ATTACHMENT_INITIAL_LAYOUT_INFO_MESA);
 
-      if (!initial || initial->initialLayout != VK_IMAGE_LAYOUT_PREINITIALIZED)
+      bool host_preinit =
+         initial && initial->initialLayout == VK_IMAGE_LAYOUT_PREINITIALIZED;
+      bool discard = att->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ||
+                     att->loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      if (!host_preinit && !discard)
          continue;
 
       VK_FROM_HANDLE(panvk_image_view, iview, att->imageView);
