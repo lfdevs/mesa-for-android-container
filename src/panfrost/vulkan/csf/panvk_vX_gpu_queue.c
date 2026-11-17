@@ -2026,7 +2026,7 @@ init_tiler(struct panvk_gpu_queue *queue)
     * so we can pass it through a single 64-bit register to the VERTEX_TILER
     * command streams. */
    struct panvk_pool_alloc_info alloc_info = {
-      .size = (64 * 1024) + 4096,
+      .size = (64 * 1024) + 8192,
       .alignment = 4096,
    };
 
