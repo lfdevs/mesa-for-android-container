@@ -143,6 +143,10 @@ struct panvk_gpu_prerast_gs_params {
    uint32_t vs_record_capacity;
    uint32_t provoking_last;
    uint32_t prim_id_base;
+   /* Pipeline statistics counters the GS kernel adds to, 0 when not
+    * counted: GS invocations, GS primitives, clipping invocations and
+    * clipping primitives. */
+   uint64_t stats[4];
 };
 
 static_assert(PANVK_GPU_PRERAST_GS_PARAMS_OFFSET +

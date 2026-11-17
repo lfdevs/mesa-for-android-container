@@ -3682,6 +3682,19 @@ gpu_prerast_gs_run(struct panvk_cmd_buffer *cmdbuf,
               cmdbuf->vk.dynamic_graphics_state.rs.provoking_vertex ==
                  VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT);
    STORE_GS32(prim_id_base, source->gpu_prerast_prim_base);
+
+   const struct panvk_pstats_query_state *pstats =
+      &cmdbuf->state.gfx.pstats_query;
+   STORE_GS64(stats[0], panvk_pstats_counter_addr(
+      pstats, VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_INVOCATIONS_BIT,
+      true));
+   STORE_GS64(stats[1], panvk_pstats_counter_addr(
+      pstats, VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT,
+      true));
+   STORE_GS64(stats[2], panvk_pstats_counter_addr(
+      pstats, VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT, true));
+   STORE_GS64(stats[3], panvk_pstats_counter_addr(
+      pstats, VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT, true));
 #undef STORE_GS32
 #undef STORE_GS64
 

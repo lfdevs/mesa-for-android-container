@@ -1243,6 +1243,10 @@ struct panvk_gs_lower_state {
    const struct panvk_gpu_prerast_gs_info *gs;
    nir_variable *vcount;
    nir_variable *ipos;
+   /* Vertices in the current strip and primitives emitted, for the
+    * pipeline statistics. */
+   nir_variable *strip_len;
+   nir_variable *prims;
    nir_def *vin[6];
    unsigned nvin;
    nir_def *inst;
@@ -1392,6 +1396,17 @@ panvk_gs_lower_intr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
          nir_pop_if(b, NULL);
          nir_store_var(b, s->ipos, nir_iadd_imm(b, ip, 1), 1);
          nir_store_var(b, s->vcount, nir_iadd_imm(b, vc, 1), 1);
+
+         const unsigned prim_verts =
+            gs->output_prim == MESA_PRIM_POINTS       ? 1
+            : gs->output_prim == MESA_PRIM_LINE_STRIP ? 2
+                                                      : 3;
+         nir_def *len = nir_iadd_imm(b, nir_load_var(b, s->strip_len), 1);
+         nir_store_var(b, s->strip_len, len, 1);
+         nir_store_var(b, s->prims,
+                       nir_iadd(b, nir_load_var(b, s->prims),
+                                nir_b2i32(b, nir_uge_imm(b, len, prim_verts))),
+                       1);
       }
       nir_pop_if(b, NULL);
       return true;
@@ -1403,6 +1418,7 @@ panvk_gs_lower_intr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
          return true;
       nir_store_var(b, s->ipos, nir_iadd_imm(b, nir_load_var(b, s->ipos), 1),
                     1);
+      nir_store_var(b, s->strip_len, nir_imm_int(b, 0), 1);
       return true;
    }
 
@@ -1474,6 +1490,9 @@ panvk_gpu_prerast_lower_gs(nir_shader *nir,
    };
    s.vcount = nir_local_variable_create(impl, glsl_uint_type(), "gs_vcount");
    s.ipos = nir_local_variable_create(impl, glsl_uint_type(), "gs_ipos");
+   s.strip_len =
+      nir_local_variable_create(impl, glsl_uint_type(), "gs_strip_len");
+   s.prims = nir_local_variable_create(impl, glsl_uint_type(), "gs_prims");
 
    nir_def *gid = nir_load_global_invocation_id(b, 32);
    nir_def *j = nir_channel(b, gid, 0);
@@ -1715,10 +1734,33 @@ panvk_gpu_prerast_lower_gs(nir_shader *nir,
 
    nir_store_var(b, s.vcount, zero, 1);
    nir_store_var(b, s.ipos, zero, 1);
+   nir_store_var(b, s.strip_len, zero, 1);
+   nir_store_var(b, s.prims, zero, 1);
 
    nir_if *vif = nir_push_if(b, valid);
    b->cursor = nir_cf_reinsert(&body, b->cursor);
    nir_pop_if(b, vif);
+
+   /* Pipeline statistics: one GS invocation per valid invocation, and the
+    * emitted primitives for the GS primitive and clipping counters. */
+   nir_push_if(b, valid);
+   {
+      nir_def *emitted = nir_u2u64(b, nir_load_var(b, s.prims));
+      for (unsigned i = 0; i < 4; i++) {
+         nir_def *counter = nir_load_global(
+            b, 1, 64,
+            nir_iadd_imm(b, p,
+                         offsetof(struct panvk_gpu_prerast_gs_params, stats) +
+                            i * sizeof(uint64_t)),
+            .align_mul = 8);
+         nir_push_if(b, nir_ine_imm(b, counter, 0));
+         nir_global_atomic(b, 64, counter,
+                           i == 0 ? nir_imm_int64(b, 1) : emitted,
+                           .atomic_op = nir_atomic_op_iadd);
+         nir_pop_if(b, NULL);
+      }
+   }
+   nir_pop_if(b, NULL);
 
    nir_progress(true, impl, nir_metadata_none);
 
