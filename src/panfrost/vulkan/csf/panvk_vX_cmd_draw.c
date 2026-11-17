@@ -2989,10 +2989,14 @@ update_prims_generated_query(struct panvk_cmd_buffer *cmdbuf,
    if (!state->ptr)
       return;
 
-   assert(!draw->index.index_size || !ia->primitive_restart_enable);
+   /* The GS kernel adds the primitives it emits. */
+   if (draw->gpu_prerast_generated && cmdbuf->state.gfx.gs.shader)
+      return;
 
    uint32_t view_count = cmdbuf->state.gfx.render.view_mask ?
       util_bitcount(cmdbuf->state.gfx.render.view_mask) : 1;
+
+   assert(!draw->index.index_size || !ia->primitive_restart_enable);
 
    if (draw->index.index_size && ia->primitive_restart_enable) {
       struct panvk_precomp_ctx precomp_ctx = panvk_per_arch(precomp_cs)(cmdbuf);
@@ -3718,6 +3722,7 @@ gpu_prerast_gs_run(struct panvk_cmd_buffer *cmdbuf,
       pstats, VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT, true));
    STORE_GS64(stats[3], panvk_pstats_counter_addr(
       pstats, VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT, true));
+   STORE_GS64(prims_generated, cmdbuf->state.gfx.prims_generated_query.ptr);
 #undef STORE_GS32
 #undef STORE_GS64
 
@@ -4503,18 +4508,10 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
       panlib_1d(DIV_ROUND_UP(max_patches, 64));
    const uint64_t prims_generated =
       gs ? 0 : cmdbuf->state.gfx.prims_generated_query.ptr;
-   const uint64_t prims_generated_gs =
-      gs ? cmdbuf->state.gfx.prims_generated_query.ptr : 0;
    const uint32_t view_count =
       cmdbuf->state.gfx.render.view_mask
          ? util_bitcount(cmdbuf->state.gfx.render.view_mask)
          : 1;
-   const enum mesa_prim gs_out_prim =
-      !gs ? MESA_PRIM_POINTS
-      : gs->gpu_prerast.gs.output_prim == MESA_PRIM_POINTS ? MESA_PRIM_POINTS
-      : gs->gpu_prerast.gs.output_prim == MESA_PRIM_LINE_STRIP
-         ? MESA_PRIM_LINE_STRIP
-         : MESA_PRIM_TRIANGLE_STRIP;
    const uint64_t c_invs =
       gs ? 0
          : panvk_pstats_counter_addr(
@@ -4600,20 +4597,6 @@ gpu_prerast_tess(struct panvk_cmd_buffer *cmdbuf,
                prerast_arena + PANVK_GPU_PRERAST_RECORD_OFFSET,
                prerast_arena + PANVK_GPU_PRERAST_INDEX_OFFSET,
                TD(gs_prim_base), PANVK_CSF_BARRIER_WAIT);
-            /* Counted per range, like the GS output draw of gpu_prerast_draw. */
-            if (prims_generated_gs) {
-               cs_wait_slots(b, dev->csf.sb.all_iters_mask);
-               struct panlib_update_prims_generated_query_indirect_args args = {
-                  .prims_generated = prims_generated_gs,
-                  .max_draw_count = 1,
-                  .cmd_stride = sizeof(struct poly_indirect_draw),
-                  .cmd = prerast_arena + PANVK_GPU_PRERAST_GS_DRAW_OFFSET,
-                  .view_count = view_count,
-               };
-               panlib_update_prims_generated_query_indirect_struct(
-                  &ctx, panlib_1d(1), PANLIB_BARRIER_NONE, args,
-                  poly_compact_prim(gs_out_prim));
-            }
          }
          if (xfb) {
             gpu_prerast_xfb(cmdbuf, &out, prerast_arena, PANLIB_BARRIER_NONE);
@@ -4804,8 +4787,12 @@ panvk_cmd_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_info draw)
    /* If there's no vertex shader, we can skip the draw. With tessellation,
     * the TES rasterizes and the VS may be empty.
     */
+   /* A GS that writes no outputs still generates primitives for the query. */
+   const bool gs_counts_prims = cmdbuf->state.gfx.gs.shader &&
+                                cmdbuf->state.gfx.prims_generated_query.ptr;
    if (draw.prim != MESA_PRIM_PATCHES && !panvk_priv_mem_check_alloc(vs->spd) &&
-       (draw.gpu_prerast_generated || !gpu_prerast_xfb_active(cmdbuf)))
+       (draw.gpu_prerast_generated ||
+        (!gpu_prerast_xfb_active(cmdbuf) && !gs_counts_prims)))
       return;
 
    /* Count once per API draw, before gpu_prerast splits or lowers it. */

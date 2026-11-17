@@ -717,13 +717,15 @@ panvk_cmd_end_prims_generated_query(
     *
     * No need to wait on iter_sb because all shader invocations to update the
     * counter use PANLIB_BARRIER_CSF_WAIT already, and all direct draws update
-    * the counter synchronously.
+    * the counter synchronously. The gpu_prerast GS kernel adds to the counter
+    * without such a barrier, so wait for all iterators.
     */
+   struct panvk_device *dev = to_panvk_device(cmd->vk.base.device);
    cs_move32_to(b, val, 0);
    cs_flush_caches(
       b, MALI_CS_FLUSH_MODE_CLEAN, MALI_CS_FLUSH_MODE_CLEAN,
       MALI_CS_OTHER_FLUSH_MODE_NONE, val,
-      cs_defer(SB_IMM_MASK, SB_ID(DEFERRED_FLUSH)));
+      cs_defer(dev->csf.sb.all_iters_mask, SB_ID(DEFERRED_FLUSH)));
 
    /* Signal the query syncobj after the flush is effective. */
    cs_move32_to(b, val, 1);

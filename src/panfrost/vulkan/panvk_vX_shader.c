@@ -1973,6 +1973,17 @@ panvk_gpu_prerast_lower_gs(nir_shader *nir,
                            .atomic_op = nir_atomic_op_iadd);
          nir_pop_if(b, NULL);
       }
+
+      nir_def *pgq = nir_load_global(
+         b, 1, 64,
+         nir_iadd_imm(b, p,
+                      offsetof(struct panvk_gpu_prerast_gs_params,
+                               prims_generated)),
+         .align_mul = 8);
+      nir_push_if(b, nir_ine_imm(b, pgq, 0));
+      nir_global_atomic(b, 32, pgq, nir_load_var(b, s.prims),
+                        .atomic_op = nir_atomic_op_iadd);
+      nir_pop_if(b, NULL);
    }
    nir_pop_if(b, NULL);
 

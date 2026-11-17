@@ -187,6 +187,8 @@ struct panvk_gpu_prerast_gs_params {
     * counted: GS invocations, GS primitives, clipping invocations and
     * clipping primitives. */
    uint64_t stats[4];
+   /* 32-bit primitives generated query counter, 0 when no query is active. */
+   uint64_t prims_generated;
 };
 
 static_assert(PANVK_GPU_PRERAST_GS_PARAMS_OFFSET +
