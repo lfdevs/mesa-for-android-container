@@ -23,6 +23,9 @@
 
 #include "wsi_common_private.h"
 #include "wsi_common_entrypoints.h"
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+#include <android/native_window.h>
+#endif
 #include "util/u_debug.h"
 #include "util/macros.h"
 #include "util/os_file.h"
@@ -388,6 +391,13 @@ wsi_DestroySurfaceKHR(VkInstance _instance,
    if (surface->platform == VK_ICD_WSI_PLATFORM_WIN32) {
       wsi_win32_surface_destroy(surface, _instance, pAllocator);
       return;
+   }
+#endif
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   if (surface->platform == VK_ICD_WSI_PLATFORM_ANDROID) {
+      VkIcdSurfaceAndroid *android_surface = (VkIcdSurfaceAndroid *)surface;
+      if (android_surface->window)
+         ANativeWindow_release(android_surface->window);
    }
 #endif
 
