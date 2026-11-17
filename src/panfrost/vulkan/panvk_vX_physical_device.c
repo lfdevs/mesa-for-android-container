@@ -333,7 +333,8 @@ panvk_per_arch(get_physical_device_features)(
       .samplerAnisotropy = true,
       .textureCompressionETC2 = has_texture_compression_etc2(device),
       .textureCompressionASTC_LDR = has_texture_compression_astc_ldr(device),
-      .textureCompressionBC = has_texture_compression_bc(device),
+      .textureCompressionBC = has_texture_compression_bc(device) ||
+                              panvk_bc_emul_enabled(device),
       .occlusionQueryPrecise = true,
       .pipelineStatisticsQuery = false,
       /* On v13+, the hardware isn't speculatively referencing to invalid

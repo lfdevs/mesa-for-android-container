@@ -347,7 +347,7 @@ panvk_image_get_mod(struct panvk_image *image,
    }
 
    /* legacy scanout (images without any external modifier info) should default to LINEAR. */
-   if (iusage.legacy_scanout)
+   if (iusage.legacy_scanout || image->bc_emul)
       return DRM_FORMAT_MOD_LINEAR;
 
    /* Without external dependencies, pick the best modifier that supports the image. */
@@ -520,6 +520,22 @@ panvk_image_init_layouts(struct panvk_image *image,
          plane_layout.offset_B += image->planes[plane].plane.layout.data_size_B;
    }
 
+   if (image->bc_emul) {
+      struct pan_image *dec = &image->bc_decoded.image;
+      enum pipe_format dec_pfmt =
+         vk_format_to_pipe_format(panvk_bc_decoded_format(image->vk.format));
+
+      *dec = (struct pan_image){
+         .props = get_pan_image_props(&image->vk, dec_pfmt, 0, false),
+         .mod_handler = mod_handler,
+      };
+      dec->planes[0] = &image->bc_decoded.plane;
+      plane_layout.offset_B = ALIGN_POT(plane_layout.offset_B, 4096);
+      if (!pan_image_layout_init(arch, dec, 0, &plane_layout))
+         return panvk_error(image->vk.base.device,
+                            VK_ERROR_INITIALIZATION_FAILED);
+   }
+
    return VK_SUCCESS;
 }
 
@@ -609,6 +625,10 @@ panvk_image_get_total_size(const struct panvk_image *image)
    uint64_t size = 0;
    for (uint8_t plane = 0; plane < image->plane_count; plane++)
       size = MAX2(size, panvk_image_plane_size(image, plane));
+   if (image->bc_emul) {
+      const struct pan_image_layout *l = &image->bc_decoded.plane.layout;
+      size = MAX2(size, l->slices[0].offset_B + l->data_size_B);
+   }
    return size;
 }
 
@@ -651,6 +671,10 @@ panvk_image_init(struct panvk_image *image,
 {
    /* Needs to happen early for some panvk_image_ helpers to work. */
    image->plane_count = get_plane_count(image);
+   image->bc_emul =
+      panvk_format_is_bc(image->vk.format) &&
+      panvk_bc_emul_enabled(
+         to_panvk_physical_device(image->vk.base.device->physical));
 
    /* Add any create/usage flags that might be needed for meta operations.
     * This is run before the modifier selection because some
@@ -1441,6 +1465,8 @@ panvk_image_bind(struct panvk_device *dev,
    } else {
       for (unsigned plane = 0; plane < image->plane_count; plane++)
          panvk_image_plane_bind_mem(dev, &image->planes[plane], mem, offset);
+      if (image->bc_emul)
+         panvk_image_plane_bind_mem(dev, &image->bc_decoded, mem, offset);
       panvk_image_report_binding(dev, image,
                                  VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
    }

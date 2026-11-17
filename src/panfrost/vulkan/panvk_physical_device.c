@@ -1807,6 +1807,20 @@ format_is_supported(struct panvk_physical_device *physical_device,
    return true;
 }
 
+bool
+panvk_bc_emul_enabled(const struct panvk_physical_device *physical_device)
+{
+   if (!PANVK_DEBUG(BC_EMUL))
+      return false;
+
+   const struct pan_format fmt =
+      physical_device->formats.all[PIPE_FORMAT_DXT1_RGBA];
+   uint32_t supported_compr_fmts =
+      pan_query_compressed_formats(&physical_device->kmod.dev->props);
+
+   return !(BITFIELD_BIT(fmt.texfeat_bit) & supported_compr_fmts);
+}
+
 static VkFormatFeatureFlags2
 get_image_plane_format_features(struct panvk_physical_device *physical_device,
                                 VkFormat format)
@@ -1815,6 +1829,20 @@ get_image_plane_format_features(struct panvk_physical_device *physical_device,
    enum pipe_format pfmt = vk_format_to_pipe_format(format);
    const struct pan_format fmt = physical_device->formats.all[pfmt];
    unsigned arch = pan_arch(physical_device->kmod.dev->props.gpu_id);
+
+   if (panvk_format_is_bc(format)) {
+      if (!panvk_bc_emul_enabled(physical_device))
+         return 0;
+
+      features = VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT |
+                 VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT |
+                 VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT |
+                 VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+                 VK_FORMAT_FEATURE_2_BLIT_SRC_BIT;
+      if (arch >= 10)
+         features |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_MINMAX_BIT;
+      return features;
+   }
 
    if (!format_is_supported(physical_device, fmt, pfmt))
       return 0;
@@ -2074,8 +2102,10 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
    VkFormatFeatureFlags buffer_legacy =
       vk_format_features2_to_features(buffer);
 
+   const bool optimal_only = panvk_format_is_bc(format);
+
    pFormatProperties->formatProperties = (VkFormatProperties){
-      .linearTilingFeatures = tex_legacy,
+      .linearTilingFeatures = optimal_only ? 0 : tex_legacy,
       .optimalTilingFeatures = tex_legacy,
       .bufferFeatures = buffer_legacy,
    };
@@ -2083,7 +2113,7 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
    VkFormatProperties3 *formatProperties3 =
       vk_find_struct(pFormatProperties->pNext, FORMAT_PROPERTIES_3);
    if (formatProperties3) {
-      formatProperties3->linearTilingFeatures = tex;
+      formatProperties3->linearTilingFeatures = optimal_only ? 0 : tex;
       formatProperties3->optimalTilingFeatures = tex;
       formatProperties3->bufferFeatures = buffer;
    }
@@ -2326,6 +2356,18 @@ get_image_format_properties(struct panvk_physical_device *physical_device,
        * enumerants [...] */
       goto unsupported;
    }
+   if (panvk_format_is_bc(info->format) &&
+       (info->tiling != VK_IMAGE_TILING_OPTIMAL ||
+        info->type == VK_IMAGE_TYPE_1D ||
+        (info->flags & (VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+                        VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT |
+                        VK_IMAGE_CREATE_SPARSE_ALIASED_BIT |
+                        VK_IMAGE_CREATE_DISJOINT_BIT)) ||
+        (info->usage & (VK_IMAGE_USAGE_HOST_TRANSFER_BIT |
+                        VK_IMAGE_USAGE_STORAGE_BIT |
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT))))
+      goto unsupported;
 
    if (ycbcr_info && info->type != VK_IMAGE_TYPE_2D)
       goto unsupported;

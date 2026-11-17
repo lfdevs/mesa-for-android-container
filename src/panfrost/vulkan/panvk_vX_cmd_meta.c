@@ -13,6 +13,11 @@
 #include "csf/panvk_instr.h"
 #endif
 
+#include "bc/panvk_bc_bc6_spv.h"
+#include "bc/panvk_bc_bc7_spv.h"
+#include "bc/panvk_bc_rgtc_spv.h"
+#include "bc/panvk_bc_s3tc_spv.h"
+
 #include "panvk_cmd_precomp.h"
 #include "libpan.h"
 #include "libpan_copy.h"
@@ -471,8 +476,227 @@ lower_copy_memory_to_image(
    return true;
 }
 
+static void copy_memory_to_image_raw(
+   VkCommandBuffer commandBuffer,
+   const VkCopyDeviceMemoryImageInfoKHR *pCopyMemoryInfo);
+static void copy_image_raw(VkCommandBuffer commandBuffer,
+                           const VkCopyImageInfo2 *pCopyImageInfo);
+
+struct panvk_bc_decode_push {
+   uint32_t src[2];
+   uint32_t dst[2];
+   uint32_t src_row_B;
+   uint32_t src_slice_B;
+   uint32_t dst_row_B;
+   uint32_t dst_slice_B;
+   int32_t width;
+   int32_t height;
+   int32_t depth;
+   int32_t format;
+};
+
+struct panvk_bc_decode_key {
+   enum panvk_meta_object_key_type type;
+   uint32_t shader;
+};
+
+static uint32_t
+bc_decode_shader_index(VkFormat format)
+{
+   if (format <= VK_FORMAT_BC3_SRGB_BLOCK)
+      return 0;
+   if (format <= VK_FORMAT_BC5_SNORM_BLOCK)
+      return 1;
+   if (format <= VK_FORMAT_BC6H_SFLOAT_BLOCK)
+      return 2;
+   return 3;
+}
+
+static VkResult
+get_bc_decode_pipeline(struct panvk_device *dev, uint32_t shader,
+                       VkPipelineLayout *layout_out, VkPipeline *pipeline_out)
+{
+   static const struct {
+      const uint32_t *code;
+      size_t size;
+   } spv[] = {
+      {panvk_bc_s3tc_spv, sizeof(panvk_bc_s3tc_spv)},
+      {panvk_bc_rgtc_spv, sizeof(panvk_bc_rgtc_spv)},
+      {panvk_bc_bc6_spv, sizeof(panvk_bc_bc6_spv)},
+      {panvk_bc_bc7_spv, sizeof(panvk_bc_bc7_spv)},
+   };
+   const enum panvk_meta_object_key_type layout_key =
+      PANVK_META_OBJECT_KEY_BC_DECODE_LAYOUT;
+   const VkPushConstantRange push_range = {
+      .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+      .offset = 0,
+      .size = sizeof(struct panvk_bc_decode_push),
+   };
+   VkResult result =
+      vk_meta_get_pipeline_layout(&dev->vk, &dev->meta, NULL, &push_range,
+                                  &layout_key, sizeof(layout_key), layout_out);
+   if (result != VK_SUCCESS)
+      return result;
+
+   const struct panvk_bc_decode_key key = {
+      .type = PANVK_META_OBJECT_KEY_BC_DECODE_SHADER,
+      .shader = shader,
+   };
+   VkPipeline cached = vk_meta_lookup_pipeline(&dev->meta, &key, sizeof(key));
+   if (cached != VK_NULL_HANDLE) {
+      *pipeline_out = cached;
+      return VK_SUCCESS;
+   }
+
+   const VkShaderModuleCreateInfo module_info = {
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = spv[shader].size,
+      .pCode = spv[shader].code,
+   };
+   const VkComputePipelineCreateInfo info = {
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .stage = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .pNext = &module_info,
+         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+         .pName = "main",
+      },
+      .layout = *layout_out,
+   };
+
+   return vk_meta_create_compute_pipeline(&dev->vk, &dev->meta, &info, &key,
+                                          sizeof(key), pipeline_out);
+}
+
+/* Decode raw BC blocks (planes[0]) of one copy region into bc_decoded. */
+static void
+bc_decode_region(struct panvk_cmd_buffer *cmdbuf, struct panvk_image *img,
+                 const VkImageSubresourceLayers *subres, VkOffset3D offset,
+                 VkExtent3D extent)
+{
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const struct vk_device_dispatch_table *disp = &dev->vk.dispatch_table;
+   VkCommandBuffer cmd = panvk_cmd_buffer_to_handle(cmdbuf);
+   VkPipelineLayout layout;
+   VkPipeline pipeline;
+
+   VkResult result = get_bc_decode_pipeline(
+      dev, bc_decode_shader_index(img->vk.format), &layout, &pipeline);
+   if (result != VK_SUCCESS) {
+      vk_command_buffer_set_error(&cmdbuf->vk, result);
+      return;
+   }
+
+   const uint32_t level = subres->mipLevel;
+   const VkExtent3D mip = vk_image_mip_level_extent(&img->vk, level);
+   const bool is_3d = img->vk.image_type == VK_IMAGE_TYPE_3D;
+   const struct pan_image_layout *sl = &img->planes[0].plane.layout;
+   const struct pan_image_layout *dl = &img->bc_decoded.plane.layout;
+   const struct pan_image_slice_layout *ss = &sl->slices[level];
+   const struct pan_image_slice_layout *ds = &dl->slices[level];
+   const unsigned blk_B = vk_format_get_blocksize(img->vk.format);
+   const unsigned texel_B =
+      vk_format_get_blocksize(panvk_bc_decoded_format(img->vk.format));
+
+   const uint32_t x0 = offset.x & ~3, y0 = offset.y & ~3;
+   const uint32_t z0 = is_3d ? offset.z : subres->baseArrayLayer;
+   const uint32_t w = MIN2(extent.width + (offset.x - x0), mip.width - x0);
+   const uint32_t h = MIN2(extent.height + (offset.y - y0), mip.height - y0);
+   const uint32_t d = is_3d ? extent.depth
+                            : vk_image_subresource_layer_count(&img->vk, subres);
+   const uint64_t src_z_B =
+      is_3d ? ss->tiled_or_linear.surface_stride_B : sl->array_stride_B;
+   const uint64_t dst_z_B =
+      is_3d ? ds->tiled_or_linear.surface_stride_B : dl->array_stride_B;
+
+   if (!w || !h || !d)
+      return;
+
+   const uint64_t src = img->planes[0].plane.base + ss->offset_B +
+                        z0 * src_z_B +
+                        (y0 / 4) * ss->tiled_or_linear.row_stride_B +
+                        (x0 / 4) * blk_B;
+   const uint64_t dst = img->bc_decoded.plane.base + ds->offset_B +
+                        z0 * dst_z_B +
+                        y0 * ds->tiled_or_linear.row_stride_B + x0 * texel_B;
+
+   const struct panvk_bc_decode_push push = {
+      .src = {(uint32_t)src, (uint32_t)(src >> 32)},
+      .dst = {(uint32_t)dst, (uint32_t)(dst >> 32)},
+      .src_row_B = ss->tiled_or_linear.row_stride_B,
+      .src_slice_B = src_z_B,
+      .dst_row_B = ds->tiled_or_linear.row_stride_B,
+      .dst_slice_B = dst_z_B,
+      .width = w,
+      .height = h,
+      .depth = d,
+      .format = img->vk.format,
+   };
+
+   disp->CmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+   disp->CmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                          sizeof(push), &push);
+   disp->CmdDispatch(cmd, DIV_ROUND_UP(w, 8), DIV_ROUND_UP(h, 8), d);
+}
+
+static void
+bc_decode_barrier(VkCommandBuffer cmd, VkPipelineStageFlags2 dst_stage,
+                  VkAccessFlags2 dst_access)
+{
+   const VkMemoryBarrier2 mem_barrier = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+      .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+      .dstStageMask = dst_stage,
+      .dstAccessMask = dst_access,
+   };
+   const VkDependencyInfo dep_info = {
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .memoryBarrierCount = 1,
+      .pMemoryBarriers = &mem_barrier,
+   };
+   panvk_per_arch(CmdPipelineBarrier2)(cmd, &dep_info);
+}
+
+static void
+bc_decode_begin(struct panvk_cmd_buffer *cmdbuf,
+                struct panvk_cmd_meta_compute_save_ctx *save)
+{
+   bc_decode_barrier(panvk_cmd_buffer_to_handle(cmdbuf),
+                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
+                        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+   meta_compute_start(cmdbuf, save);
+}
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdCopyMemoryToImageKHR)(
+   VkCommandBuffer commandBuffer,
+   const VkCopyDeviceMemoryImageInfoKHR* pCopyMemoryInfo)
+{
+   VK_FROM_HANDLE(panvk_image, bc_img, pCopyMemoryInfo->image);
+
+   if (bc_img->bc_emul) {
+      VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+      struct panvk_cmd_meta_compute_save_ctx save = {0};
+
+      copy_memory_to_image_raw(commandBuffer, pCopyMemoryInfo);
+
+      bc_decode_begin(cmdbuf, &save);
+      for (uint32_t i = 0; i < pCopyMemoryInfo->regionCount; i++) {
+         const VkDeviceMemoryImageCopyKHR *r = &pCopyMemoryInfo->pRegions[i];
+         bc_decode_region(cmdbuf, bc_img, &r->imageSubresource, r->imageOffset,
+                          r->imageExtent);
+      }
+      meta_compute_end(cmdbuf, &save);
+      return;
+   }
+
+   copy_memory_to_image_raw(commandBuffer, pCopyMemoryInfo);
+}
+
+static void
+copy_memory_to_image_raw(
    VkCommandBuffer commandBuffer,
    const VkCopyDeviceMemoryImageInfoKHR* pCopyMemoryInfo)
 {
@@ -676,6 +900,37 @@ lower_copy_image(VkCommandBuffer commandBuffer,
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdCopyImage2)(VkCommandBuffer commandBuffer,
                               const VkCopyImageInfo2 *pCopyImageInfo)
+{
+   VK_FROM_HANDLE(panvk_image, bc_src, pCopyImageInfo->srcImage);
+   VK_FROM_HANDLE(panvk_image, bc_dst, pCopyImageInfo->dstImage);
+
+   copy_image_raw(commandBuffer, pCopyImageInfo);
+
+   if (!bc_dst->bc_emul)
+      return;
+
+   VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
+   struct panvk_cmd_meta_compute_save_ctx save = {0};
+   const bool src_blocks = vk_format_is_compressed(bc_src->vk.format);
+
+   bc_decode_begin(cmdbuf, &save);
+   for (uint32_t i = 0; i < pCopyImageInfo->regionCount; i++) {
+      const VkImageCopy2 *r = &pCopyImageInfo->pRegions[i];
+      VkExtent3D extent = r->extent;
+
+      if (!src_blocks) {
+         extent.width *= 4;
+         extent.height *= 4;
+      }
+      bc_decode_region(cmdbuf, bc_dst, &r->dstSubresource, r->dstOffset,
+                       extent);
+   }
+   meta_compute_end(cmdbuf, &save);
+}
+
+static void
+copy_image_raw(VkCommandBuffer commandBuffer,
+               const VkCopyImageInfo2 *pCopyImageInfo)
 {
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);

@@ -48,6 +48,11 @@ struct panvk_image {
    /* If an image can track validity of CRC even when external access is
     * possible. */
    bool crc_safe_external;
+
+   /* BCn on HW without BC texturing: planes[0] keeps the raw blocks (linear),
+    * bc_decoded holds GPU-decoded texels (linear) used by sampled views. */
+   bool bc_emul;
+   struct panvk_image_plane bc_decoded;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_image, vk.base, VkImage,
@@ -66,6 +71,45 @@ panvk_image_set_compression_props(VkImageCompressionPropertiesEXT *props,
                                      : VK_IMAGE_COMPRESSION_DISABLED_EXT;
    props->imageCompressionFixedRateFlags =
       VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
+}
+
+static inline bool
+panvk_format_is_bc(VkFormat format)
+{
+   return format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK &&
+          format <= VK_FORMAT_BC7_SRGB_BLOCK;
+}
+
+/* Storage format of the decoded plane. BC4/BC5 use 16-bit RG to keep the
+ * interpolation precision; BC1-3/7 decode to RGBA8, BC6H to RGBA16F. */
+static inline VkFormat
+panvk_bc_decoded_format(VkFormat format)
+{
+   switch (format) {
+   case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
+   case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
+   case VK_FORMAT_BC2_UNORM_BLOCK:
+   case VK_FORMAT_BC3_UNORM_BLOCK:
+   case VK_FORMAT_BC7_UNORM_BLOCK:
+      return VK_FORMAT_R8G8B8A8_UNORM;
+   case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+   case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
+   case VK_FORMAT_BC2_SRGB_BLOCK:
+   case VK_FORMAT_BC3_SRGB_BLOCK:
+   case VK_FORMAT_BC7_SRGB_BLOCK:
+      return VK_FORMAT_R8G8B8A8_SRGB;
+   case VK_FORMAT_BC4_UNORM_BLOCK:
+   case VK_FORMAT_BC5_UNORM_BLOCK:
+      return VK_FORMAT_R16G16_UNORM;
+   case VK_FORMAT_BC4_SNORM_BLOCK:
+   case VK_FORMAT_BC5_SNORM_BLOCK:
+      return VK_FORMAT_R16G16_SNORM;
+   case VK_FORMAT_BC6H_UFLOAT_BLOCK:
+   case VK_FORMAT_BC6H_SFLOAT_BLOCK:
+      return VK_FORMAT_R16G16B16A16_SFLOAT;
+   default:
+      return VK_FORMAT_UNDEFINED;
+   }
 }
 
 static inline unsigned

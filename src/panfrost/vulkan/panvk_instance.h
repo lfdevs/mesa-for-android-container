@@ -37,6 +37,7 @@ enum panvk_debug_flags {
    PANVK_DEBUG_NO_CRC = 1 << 19,
    PANVK_DEBUG_KBASE_DIAG = 1 << 20,
    PANVK_DEBUG_GPU_PRERAST = 1 << 21,
+   PANVK_DEBUG_BC_EMUL = 1 << 22,
 };
 
 extern uint64_t panvk_debug;
