@@ -162,6 +162,12 @@ tu_physical_device_get_format_properties(
       goto end;
    }
 
+   /* TODO test if writing to MRT other than 0 works with these media formats
+    */
+   if (format == PIPE_FORMAT_X6R10_UNORM ||
+       format == PIPE_FORMAT_X6R10X6G10_UNORM)
+      supported_color = false;
+
    /* We never have to spill to memory for MSRTSS. */
    if (msrtss_out)
       msrtss_out->optimal = true;

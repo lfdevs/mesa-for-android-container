@@ -51,7 +51,7 @@ nir_alu_instr *
 ssa_def_bits_used_test::build_alu_instr(nir_op op,
                                         nir_def *src0, nir_def *src1)
 {
-   nir_def *def = nir_build_alu(b, op, src0, src1, NULL, NULL);
+   nir_def *def = nir_build_alu(b, op, src0, src1, nullptr, nullptr);
 
    if (def == NULL)
       return NULL;

@@ -25,8 +25,13 @@
 
 #include "c11/threads.h"
 #include "util/u_call_once.h"
+#include "util/u_debug.h"
 #include "util/macros.h"
 #include "util/timespec.h"
+
+#if DETECT_OS_LINUX && !DETECT_OS_ANDROID
+#include <stdio.h>
+#endif
 
 /* perfetto requires string literals */
 #define UTIL_PERFETTO_CATEGORY_DEFAULT_STR "mesa.default"
@@ -38,6 +43,8 @@ PERFETTO_DEFINE_CATEGORIES(
 PERFETTO_TRACK_EVENT_STATIC_STORAGE();
 
 int util_perfetto_tracing_state;
+
+static bool util_perfetto_initialized;
 
 static uint64_t util_perfetto_unique_id = 1;
 
@@ -139,6 +146,9 @@ uint64_t
 util_perfetto_new_track(const char *name)
 {
    uint64_t track_id = util_perfetto_next_id();
+   if (!util_perfetto_initialized)
+      return track_id;
+
    auto track = perfetto::Track(track_id);
    auto desc = track.Serialize();
    desc.set_name(name);
@@ -199,9 +209,38 @@ util_perfetto_fini(void)
    perfetto::Tracing::Shutdown();
 }
 
+/* Under a seccomp filter (e.g. Chrome's sandbox), syscalls like inotify_init1()
+ * made by perfetto will abort.  Android always runs apps under seccomp, so it
+ * is excluded.
+ */
+static bool
+util_perfetto_is_sandboxed(void)
+{
+#if DETECT_OS_LINUX && !DETECT_OS_ANDROID
+   FILE *f = fopen("/proc/self/status", "r");
+   if (!f)
+      return true;
+
+   char line[128];
+   int mode = 0;
+   while (fgets(line, sizeof(line), f)) {
+      if (sscanf(line, "Seccomp: %d", &mode) == 1)
+         break;
+   }
+   fclose(f);
+   return mode != 0;
+#else
+   return false;
+#endif
+}
+
 static void
 util_perfetto_init_once(void)
 {
+   if (!debug_get_bool_option("MESA_PERFETTO_BYPASS_SANDBOX_CHECK", false) &&
+       util_perfetto_is_sandboxed())
+      return;
+
    // Connects to the system tracing service
    perfetto::TracingInitArgs args;
    args.backends = perfetto::kSystemBackend;
@@ -212,12 +251,16 @@ util_perfetto_init_once(void)
    perfetto::TrackEvent::Register();
 
    atexit(&util_perfetto_fini);
+
+   util_perfetto_initialized = true;
 }
 
 static once_flag perfetto_once_flag = ONCE_FLAG_INIT;
 
-void
+/* Returns false if perfetto isn't running, in which case data sources must not be registered. */
+bool
 util_perfetto_init(void)
 {
    call_once(&perfetto_once_flag, util_perfetto_init_once);
+   return util_perfetto_initialized;
 }

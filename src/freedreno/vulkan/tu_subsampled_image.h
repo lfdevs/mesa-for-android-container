@@ -82,8 +82,9 @@ tu_calc_subsampled_aprons(VkRect2D *dst,
                           const struct tu_framebuffer *fb,
                           const VkOffset2D *fdm_offsets);
 
+#define tu_get_subsampled_coordinates(...) MESA_CALL_WITH_LTR_ARGS(_tu_get_subsampled_coordinates, __VA_ARGS__)
 nir_def *
-tu_get_subsampled_coordinates(nir_builder *b,
+_tu_get_subsampled_coordinates(nir_builder *b,
                               nir_def *coords,
                               nir_def *descriptor,
                               bool can_speculate);

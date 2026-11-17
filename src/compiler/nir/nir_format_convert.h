@@ -42,8 +42,9 @@ nir_shift_imm(nir_builder *b, nir_def *value, int left_shift)
       return value;
 }
 
+#define nir_shift(...) MESA_CALL_WITH_LTR_ARGS(_nir_shift, __VA_ARGS__)
 static inline nir_def *
-nir_shift(nir_builder *b, nir_def *value, nir_def *left_shift)
+_nir_shift(nir_builder *b, nir_def *value, nir_def *left_shift)
 {
    return nir_bcsel(b,
                     nir_ige_imm(b, left_shift, 0),
@@ -58,8 +59,9 @@ nir_mask_shift(struct nir_builder *b, nir_def *src,
    return nir_shift_imm(b, nir_iand_imm(b, src, mask), left_shift);
 }
 
+#define nir_mask_shift_or(...) MESA_CALL_WITH_LTR_ARGS(_nir_mask_shift_or, __VA_ARGS__)
 static inline nir_def *
-nir_mask_shift_or(struct nir_builder *b, nir_def *dst, nir_def *src,
+_nir_mask_shift_or(struct nir_builder *b, nir_def *dst, nir_def *src,
                   uint32_t src_mask, int src_left_shift)
 {
    return nir_ior(b, nir_mask_shift(b, src, src_mask, src_left_shift), dst);
@@ -91,7 +93,9 @@ nir_format_unpack_sint(nir_builder *b, nir_def *packed,
 nir_def *nir_format_pack_uint_unmasked(nir_builder *b, nir_def *color,
                                        const unsigned *bits,
                                        unsigned num_components);
-nir_def *nir_format_pack_uint_unmasked_ssa(nir_builder *b, nir_def *color,
+
+#define nir_format_pack_uint_unmasked_ssa(...) MESA_CALL_WITH_LTR_ARGS(_nir_format_pack_uint_unmasked_ssa, __VA_ARGS__)
+nir_def *_nir_format_pack_uint_unmasked_ssa(nir_builder *b, nir_def *color,
                                            nir_def *bits);
 nir_def *nir_format_pack_uint(nir_builder *b, nir_def *color,
                               const unsigned *bits,

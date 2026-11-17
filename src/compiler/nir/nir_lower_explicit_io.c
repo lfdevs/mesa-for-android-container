@@ -1282,7 +1282,7 @@ explicit_io_offset_from_deref(nir_builder *b, nir_deref_instr *deref,
 }
 
 nir_def *
-nir_explicit_io_address_from_deref(nir_builder *b, nir_deref_instr *deref,
+_nir_explicit_io_address_from_deref(nir_builder *b, nir_deref_instr *deref,
                                    nir_def *base_addr,
                                    nir_address_format addr_format)
 {
@@ -2322,7 +2322,7 @@ nir_address_format_null_value(nir_address_format addr_format)
 }
 
 nir_def *
-nir_build_addr_ieq(nir_builder *b, nir_def *addr0, nir_def *addr1,
+_nir_build_addr_ieq(nir_builder *b, nir_def *addr0, nir_def *addr1,
                    nir_address_format addr_format)
 {
    switch (addr_format) {
@@ -2356,7 +2356,7 @@ nir_build_addr_ieq(nir_builder *b, nir_def *addr0, nir_def *addr1,
 }
 
 nir_def *
-nir_build_addr_isub(nir_builder *b, nir_def *addr0, nir_def *addr1,
+_nir_build_addr_isub(nir_builder *b, nir_def *addr0, nir_def *addr1,
                     nir_address_format addr_format)
 {
    switch (addr_format) {
@@ -2403,7 +2403,7 @@ nir_build_addr_isub(nir_builder *b, nir_def *addr0, nir_def *addr1,
 }
 
 nir_def *
-nir_build_addr_iadd(nir_builder *b, nir_def *addr,
+_nir_build_addr_iadd(nir_builder *b, nir_def *addr,
                     nir_address_format addr_format,
                     nir_variable_mode modes,
                     nir_def *offset)

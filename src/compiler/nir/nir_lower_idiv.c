@@ -28,8 +28,10 @@
 #include "nir_builder.h"
 
 /* ported from LLVM's AMDGPUTargetLowering::LowerUDIVREM */
+
+#define emit_udiv(...) MESA_CALL_WITH_LTR_ARGS(_emit_udiv, __VA_ARGS__)
 static nir_def *
-emit_udiv(nir_builder *bld, nir_def *numer, nir_def *denom, bool modulo)
+_emit_udiv(nir_builder *bld, nir_def *numer, nir_def *denom, bool modulo)
 {
    nir_def *rcp = nir_frcp(bld, nir_u2f32(bld, denom));
    rcp = nir_f2u32(bld, nir_fmul_imm(bld, rcp, 4294966784.0));
@@ -65,8 +67,10 @@ emit_udiv(nir_builder *bld, nir_def *numer, nir_def *denom, bool modulo)
 }
 
 /* ported from LLVM's AMDGPUTargetLowering::LowerSDIVREM */
+
+#define emit_idiv(...) MESA_CALL_WITH_LTR_ARGS(_emit_idiv, __VA_ARGS__)
 static nir_def *
-emit_idiv(nir_builder *bld, nir_def *numer, nir_def *denom, nir_op op)
+_emit_idiv(nir_builder *bld, nir_def *numer, nir_def *denom, nir_op op)
 {
    nir_def *lhs = nir_iabs(bld, numer);
    nir_def *rhs = nir_iabs(bld, denom);
@@ -93,8 +97,9 @@ emit_idiv(nir_builder *bld, nir_def *numer, nir_def *denom, nir_op op)
    }
 }
 
+#define convert_instr_small(...) MESA_CALL_WITH_LTR_ARGS(_convert_instr_small, __VA_ARGS__)
 static nir_def *
-convert_instr_small(nir_builder *b, nir_op op,
+_convert_instr_small(nir_builder *b, nir_op op,
                     nir_def *numer, nir_def *denom,
                     const nir_lower_idiv_options *options)
 {

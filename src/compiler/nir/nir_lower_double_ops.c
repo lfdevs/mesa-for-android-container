@@ -29,8 +29,9 @@
 #include <float.h>
 #include <math.h>
 
+#define nir_fmad_or_ffma(...) MESA_CALL_WITH_LTR_ARGS(_nir_fmad_or_ffma, __VA_ARGS__)
 static nir_def *
-nir_fmad_or_ffma(nir_builder *build, nir_def *src0, nir_def *src1,
+_nir_fmad_or_ffma(nir_builder *build, nir_def *src0, nir_def *src1,
                  nir_def *src2)
 {
    if (nir_prefers_fmad(build->shader, src0->bit_size))
@@ -39,8 +40,9 @@ nir_fmad_or_ffma(nir_builder *build, nir_def *src0, nir_def *src1,
       return nir_ffma(build, src0, src1, src2);
 }
 
+#define nir_fmad_or_fma_imm2(...) MESA_CALL_WITH_LTR_ARGS(_nir_fmad_or_fma_imm2, __VA_ARGS__)
 static nir_def *
-nir_fmad_or_fma_imm2(nir_builder *build, nir_def *src0, nir_def *src1, double src2)
+_nir_fmad_or_fma_imm2(nir_builder *build, nir_def *src0, nir_def *src1, double src2)
 {
    return nir_fmad_or_ffma(build, src0, src1, nir_imm_floatN_t(build, src2, src0->bit_size));
 }
@@ -56,8 +58,10 @@ nir_fmad_or_fma_imm2(nir_builder *build, nir_def *src0, nir_def *src1, double sr
  */
 
 /* Creates a double with the exponent bits set to a given integer value */
+
+#define set_exponent(...) MESA_CALL_WITH_LTR_ARGS(_set_exponent, __VA_ARGS__)
 static nir_def *
-set_exponent(nir_builder *b, nir_def *src, nir_def *exp)
+_set_exponent(nir_builder *b, nir_def *src, nir_def *exp)
 {
    /* Split into bits 0-31 and 32-63 */
    nir_def *lo = nir_unpack_64_2x32_split_x(b, src);
@@ -116,8 +120,9 @@ get_signed_zero(nir_builder *b, nir_def *src)
    return zero;
 }
 
+#define preserve_nan(...) MESA_CALL_WITH_LTR_ARGS(_preserve_nan, __VA_ARGS__)
 static nir_def *
-preserve_nan(nir_builder *b, nir_def *src, nir_def *res)
+_preserve_nan(nir_builder *b, nir_def *src, nir_def *res)
 {
    if (b->fp_math_ctrl & nir_fp_preserve_nan) {
       nir_def *is_nan = nir_fneu(b, src, src);
@@ -133,8 +138,9 @@ preserve_nan(nir_builder *b, nir_def *src, nir_def *res)
  * too small to be representable.
  */
 
+#define fix_inv_result(...) MESA_CALL_WITH_LTR_ARGS(_fix_inv_result, __VA_ARGS__)
 static nir_def *
-fix_inv_result(nir_builder *b, nir_def *res, nir_def *src,
+_fix_inv_result(nir_builder *b, nir_def *res, nir_def *src,
                nir_def *exp)
 {
    /* If the exponent is too small or the original input was infinity,
@@ -469,8 +475,9 @@ lower_round_even(nir_builder *b, nir_def *src)
                     src);
 }
 
+#define lower_mod(...) MESA_CALL_WITH_LTR_ARGS(_lower_mod, __VA_ARGS__)
 static nir_def *
-lower_mod(nir_builder *b, nir_def *src0, nir_def *src1)
+_lower_mod(nir_builder *b, nir_def *src0, nir_def *src1)
 {
    /* mod(x,y) = x - y * floor(x/y)
     *
@@ -504,8 +511,9 @@ lower_mod(nir_builder *b, nir_def *src0, nir_def *src1)
    return nir_fsub(b, src0, nir_fmul(b, src1, floor));
 }
 
+#define lower_minmax(...) MESA_CALL_WITH_LTR_ARGS(_lower_minmax, __VA_ARGS__)
 static nir_def *
-lower_minmax(nir_builder *b, nir_op cmp, nir_def *src0, nir_def *src1)
+_lower_minmax(nir_builder *b, nir_op cmp, nir_def *src0, nir_def *src1)
 {
    nir_def *src1_is_nan = nir_fneu(b, src1, src1);
    nir_def *cmp_res = nir_build_alu2(b, cmp, src0, src1);

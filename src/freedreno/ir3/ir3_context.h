@@ -228,7 +228,9 @@ struct ir3_array *ir3_get_array(struct ir3_context *ctx, nir_def *reg);
 struct ir3_instruction *ir3_create_array_load(struct ir3_context *ctx,
                                               struct ir3_array *arr, int n,
                                               struct ir3_instruction *address);
-void ir3_create_array_store(struct ir3_context *ctx, struct ir3_array *arr,
+
+#define ir3_create_array_store(...) MESA_CALL_WITH_LTR_ARGS(_ir3_create_array_store, __VA_ARGS__)
+void _ir3_create_array_store(struct ir3_context *ctx, struct ir3_array *arr,
                             int n, struct ir3_instruction *src,
                             struct ir3_instruction *address);
 void ir3_lower_imm_offset(struct ir3_context *ctx, nir_intrinsic_instr *intr,

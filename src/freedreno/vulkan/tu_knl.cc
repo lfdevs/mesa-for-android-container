@@ -177,6 +177,8 @@ tu_bo_sync_cache(struct tu_device *dev,
 {
    char *start = static_cast<char *>(bo->map) + offset;
 
+   if(!bo->map) return; //bo->map is invalid, so can't sync cacheline
+
    size = size == VK_WHOLE_SIZE ? (bo->size - offset) : size;
    if (op == TU_MEM_SYNC_CACHE_TO_GPU) {
       util_flush_range(start, size);

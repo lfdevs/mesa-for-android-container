@@ -75,6 +75,8 @@ enum tu_debug_flags : uint64_t
    TU_DEBUG_FORCE_CONCURRENT_BINNING = BITFIELD64_BIT(36),
    TU_DEBUG_COMPUTE_ROUND_ROBIN      = BITFIELD64_BIT(37),
    TU_DEBUG_GMEM_WARMUP              = BITFIELD64_BIT(38),
+   TU_DEBUG_DECK_EMU                 = BITFIELD64_BIT(39),
+   TU_DEBUG_LOGSOCKET                = BITFIELD64_BIT(40),
 };
 
 struct tu_env {
@@ -472,6 +474,11 @@ tu6_pack_border_color(struct bcolor_entry *bcolor, const VkClearColorValue *val,
 
 void
 tu_dbg_log_gmem_load_store_skips(struct tu_device *device);
+
+void
+tu_debug_socket_write(const char *buf, int len);
+bool
+tu_debug_socket_enabled(void);
 
 #define perf_debug(device, fmt, ...) do {                               \
    if (TU_DEBUG(PERF))                                                  \

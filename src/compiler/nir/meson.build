@@ -495,4 +495,12 @@ if with_tests and not with_nir_headers_only
     ],
     suite : ['compiler', 'nir'],
   )
+
+  executable(
+    'nir_const_fp_eval',
+    files('tests/nir_const_fp_eval.cpp'),
+    cpp_args : [cpp_msvc_compat_args],
+    include_directories : [inc_include, inc_src],
+    dependencies : [idep_nir, idep_mesautil],
+  )
 endif

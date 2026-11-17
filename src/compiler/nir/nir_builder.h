@@ -313,21 +313,29 @@ nir_builder_last_instr(nir_builder *build)
 }
 
 /* General nir_build_alu() taking a variable arg count with NULLs for the rest. */
+
+#define nir_build_alu(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_alu, __VA_ARGS__)
 nir_def *
-nir_build_alu(nir_builder *build, nir_op op, nir_def *src0,
+_nir_build_alu(nir_builder *build, nir_op op, nir_def *src0,
               nir_def *src1, nir_def *src2, nir_def *src3);
 
 /* Fixed-arg-count variants to reduce size of codegen. */
 nir_def *
 nir_build_alu1(nir_builder *build, nir_op op, nir_def *src0);
+
+#define nir_build_alu2(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_alu2, __VA_ARGS__)
 nir_def *
-nir_build_alu2(nir_builder *build, nir_op op, nir_def *src0,
+_nir_build_alu2(nir_builder *build, nir_op op, nir_def *src0,
                nir_def *src1);
+
+#define nir_build_alu3(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_alu3, __VA_ARGS__)
 nir_def *
-nir_build_alu3(nir_builder *build, nir_op op, nir_def *src0,
+_nir_build_alu3(nir_builder *build, nir_op op, nir_def *src0,
                nir_def *src1, nir_def *src2);
+
+#define nir_build_alu4(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_alu4, __VA_ARGS__)
 nir_def *
-nir_build_alu4(nir_builder *build, nir_op op, nir_def *src0,
+_nir_build_alu4(nir_builder *build, nir_op op, nir_def *src0,
                nir_def *src1, nir_def *src2, nir_def *src3);
 
 nir_def *nir_build_alu_src_arr(nir_builder *build, nir_op op, nir_def **srcs);
@@ -346,8 +354,9 @@ nir_push_else(nir_builder *build, nir_if *nif);
 
 void nir_pop_if(nir_builder *build, nir_if *nif);
 
+#define nir_if_phi(...) MESA_CALL_WITH_LTR_ARGS(_nir_if_phi, __VA_ARGS__)
 nir_def *
-nir_if_phi(nir_builder *build, nir_def *then_def, nir_def *else_def);
+_nir_if_phi(nir_builder *build, nir_def *then_def, nir_def *else_def);
 
 nir_loop *
 nir_push_loop(nir_builder *build);
@@ -817,8 +826,10 @@ nir_64_2x32_memory_order(nir_builder *build, nir_def *src)
 }
 
 /* Selects the right fdot given the number of components in each source. */
+
+#define nir_fdot(...) MESA_CALL_WITH_LTR_ARGS(_nir_fdot, __VA_ARGS__)
 static inline nir_def *
-nir_fdot(nir_builder *build, nir_def *src0, nir_def *src1)
+_nir_fdot(nir_builder *build, nir_def *src0, nir_def *src1)
 {
    assert(src0->num_components == src1->num_components);
    switch (src0->num_components) {
@@ -843,8 +854,9 @@ nir_fdot(nir_builder *build, nir_def *src0, nir_def *src1)
    return NULL;
 }
 
+#define nir_bfdot(...) MESA_CALL_WITH_LTR_ARGS(_nir_bfdot, __VA_ARGS__)
 static inline nir_def *
-nir_bfdot(nir_builder *build, nir_def *src0, nir_def *src1)
+_nir_bfdot(nir_builder *build, nir_def *src0, nir_def *src1)
 {
    assert(src0->num_components == src1->num_components);
    switch (src0->num_components) {
@@ -869,8 +881,9 @@ nir_bfdot(nir_builder *build, nir_def *src0, nir_def *src1)
    return NULL;
 }
 
+#define nir_ball_iequal(...) MESA_CALL_WITH_LTR_ARGS(_nir_ball_iequal, __VA_ARGS__)
 static inline nir_def *
-nir_ball_iequal(nir_builder *b, nir_def *src0, nir_def *src1)
+_nir_ball_iequal(nir_builder *b, nir_def *src0, nir_def *src1)
 {
    switch (src0->num_components) {
    case 1:
@@ -898,8 +911,9 @@ nir_ball(nir_builder *b, nir_def *src)
    return nir_ball_iequal(b, src, nir_imm_true(b));
 }
 
+#define nir_bany_inequal(...) MESA_CALL_WITH_LTR_ARGS(_nir_bany_inequal, __VA_ARGS__)
 static inline nir_def *
-nir_bany_inequal(nir_builder *b, nir_def *src0, nir_def *src1)
+_nir_bany_inequal(nir_builder *b, nir_def *src0, nir_def *src1)
 {
    switch (src0->num_components) {
    case 1:
@@ -984,8 +998,9 @@ nir_select_from_ssa_def_array(nir_builder *b, nir_def **arr,
    return _nir_select_from_array_helper(b, arr, idx, 0, arr_len);
 }
 
+#define nir_vector_extract(...) MESA_CALL_WITH_LTR_ARGS(_nir_vector_extract, __VA_ARGS__)
 static inline nir_def *
-nir_vector_extract(nir_builder *b, nir_def *vec, nir_def *c)
+_nir_vector_extract(nir_builder *b, nir_def *vec, nir_def *c)
 {
    nir_src c_src = nir_src_for_ssa(c);
    if (nir_src_is_const(c_src)) {
@@ -1003,8 +1018,10 @@ nir_vector_extract(nir_builder *b, nir_def *vec, nir_def *c)
 }
 
 /** Replaces the component of `vec` specified by `c` with `scalar` */
+
+#define nir_vector_insert_imm(...) MESA_CALL_WITH_LTR_ARGS(_nir_vector_insert_imm, __VA_ARGS__)
 static inline nir_def *
-nir_vector_insert_imm(nir_builder *b, nir_def *vec,
+_nir_vector_insert_imm(nir_builder *b, nir_def *vec,
                       nir_def *scalar, unsigned c)
 {
    assert(scalar->num_components == 1);
@@ -1027,8 +1044,10 @@ nir_vector_insert_imm(nir_builder *b, nir_def *vec,
 }
 
 /** Replaces the component of `vec` specified by `c` with `scalar` */
+
+#define nir_vector_insert(...) MESA_CALL_WITH_LTR_ARGS(_nir_vector_insert, __VA_ARGS__)
 static inline nir_def *
-nir_vector_insert(nir_builder *b, nir_def *vec, nir_def *scalar,
+_nir_vector_insert(nir_builder *b, nir_def *vec, nir_def *scalar,
                   nir_def *c)
 {
    assert(scalar->num_components == 1);
@@ -1092,8 +1111,9 @@ nir_iadd_imm_nuw(nir_builder *b, nir_def *x, uint64_t y)
    return d;
 }
 
+#define nir_iadd_nuw(...) MESA_CALL_WITH_LTR_ARGS(_nir_iadd_nuw, __VA_ARGS__)
 static inline nir_def *
-nir_iadd_nuw(nir_builder *b, nir_def *x, nir_def *y)
+_nir_iadd_nuw(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *d = nir_iadd(b, x, y);
    if (nir_def_is_alu(d))
@@ -1195,8 +1215,9 @@ nir_imul_imm_nuw(nir_builder *build, nir_def *x, uint64_t y)
    return d;
 }
 
+#define nir_imul_nuw(...) MESA_CALL_WITH_LTR_ARGS(_nir_imul_nuw, __VA_ARGS__)
 static inline nir_def *
-nir_imul_nuw(nir_builder *build, nir_def *x, nir_def *y)
+_nir_imul_nuw(nir_builder *build, nir_def *x, nir_def *y)
 {
    nir_def *d = nir_imul(build, x, y);
    if (nir_def_is_alu(d))
@@ -1287,8 +1308,9 @@ nir_ishl_imm(nir_builder *build, nir_def *x, uint32_t y)
    }
 }
 
+#define nir_ishl_nuw(...) MESA_CALL_WITH_LTR_ARGS(_nir_ishl_nuw, __VA_ARGS__)
 static inline nir_def *
-nir_ishl_nuw(nir_builder *b, nir_def *x, nir_def *y)
+_nir_ishl_nuw(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *d = nir_ishl(b, x, y);
    if (nir_def_is_alu(d))
@@ -1316,8 +1338,9 @@ nir_ushr_imm(nir_builder *build, nir_def *x, uint32_t y)
    }
 }
 
+#define nir_shr(...) MESA_CALL_WITH_LTR_ARGS(_nir_shr, __VA_ARGS__)
 static inline nir_def *
-nir_shr(nir_builder *build, bool is_signed, nir_def *x, nir_def *y)
+_nir_shr(nir_builder *build, bool is_signed, nir_def *x, nir_def *y)
 {
    return is_signed ? nir_ishr(build, x, y) : nir_ushr(build, x, y);
 }
@@ -1389,8 +1412,9 @@ nir_ibitfield_extract_imm(nir_builder *build, nir_def *x, uint32_t offset, uint3
    return nir_ibitfield_extract(build, x, nir_imm_int(build, offset), nir_imm_int(build, size));
 }
 
+#define nir_bitfield_insert_imm(...) MESA_CALL_WITH_LTR_ARGS(_nir_bitfield_insert_imm, __VA_ARGS__)
 static inline nir_def *
-nir_bitfield_insert_imm(nir_builder *build, nir_def *x, nir_def *insert, uint32_t offset, uint32_t size)
+_nir_bitfield_insert_imm(nir_builder *build, nir_def *x, nir_def *insert, uint32_t offset, uint32_t size)
 {
    return nir_bitfield_insert(build, x, insert, nir_imm_int(build, offset), nir_imm_int(build, size));
 }
@@ -1407,22 +1431,25 @@ nir_extract_i8_imm(nir_builder *b, nir_def *a, unsigned i)
    return nir_extract_i8(b, a, nir_imm_intN_t(b, i, a->bit_size));
 }
 
+#define nir_fclamp(...) MESA_CALL_WITH_LTR_ARGS(_nir_fclamp, __VA_ARGS__)
 static inline nir_def *
-nir_fclamp(nir_builder *b,
+_nir_fclamp(nir_builder *b,
            nir_def *x, nir_def *min_val, nir_def *max_val)
 {
    return nir_fmin(b, nir_fmax(b, x, min_val), max_val);
 }
 
+#define nir_iclamp(...) MESA_CALL_WITH_LTR_ARGS(_nir_iclamp, __VA_ARGS__)
 static inline nir_def *
-nir_iclamp(nir_builder *b,
+_nir_iclamp(nir_builder *b,
            nir_def *x, nir_def *min_val, nir_def *max_val)
 {
    return nir_imin(b, nir_imax(b, x, min_val), max_val);
 }
 
+#define nir_uclamp(...) MESA_CALL_WITH_LTR_ARGS(_nir_uclamp, __VA_ARGS__)
 static inline nir_def *
-nir_uclamp(nir_builder *b,
+_nir_uclamp(nir_builder *b,
            nir_def *x, nir_def *min_val, nir_def *max_val)
 {
    return nir_umin(b, nir_umax(b, x, min_val), max_val);
@@ -1439,20 +1466,23 @@ nir_ffma_weak_imm12(nir_builder *build, nir_def *src0, double src1, double src2)
                                   nir_imm_floatN_t(build, src2, src0->bit_size));
 }
 
+#define nir_ffma_weak_imm1(...) MESA_CALL_WITH_LTR_ARGS(_nir_ffma_weak_imm1, __VA_ARGS__)
 static inline nir_def *
-nir_ffma_weak_imm1(nir_builder *build, nir_def *src0, double src1, nir_def *src2)
+_nir_ffma_weak_imm1(nir_builder *build, nir_def *src0, double src1, nir_def *src2)
 {
    return nir_ffma_weak(build, src0, nir_imm_floatN_t(build, src1, src0->bit_size), src2);
 }
 
+#define nir_ffma_weak_imm2(...) MESA_CALL_WITH_LTR_ARGS(_nir_ffma_weak_imm2, __VA_ARGS__)
 static inline nir_def *
-nir_ffma_weak_imm2(nir_builder *build, nir_def *src0, nir_def *src1, double src2)
+_nir_ffma_weak_imm2(nir_builder *build, nir_def *src0, nir_def *src1, double src2)
 {
    return nir_ffma_weak(build, src0, src1, nir_imm_floatN_t(build, src2, src0->bit_size));
 }
 
+#define nir_a_minus_bc(...) MESA_CALL_WITH_LTR_ARGS(_nir_a_minus_bc, __VA_ARGS__)
 static inline nir_def *
-nir_a_minus_bc(nir_builder *build, nir_def *src0, nir_def *src1,
+_nir_a_minus_bc(nir_builder *build, nir_def *src0, nir_def *src1,
                nir_def *src2)
 {
    return nir_ffma_weak(build, nir_fneg(build, src1), src2, src0);
@@ -1781,8 +1811,9 @@ nir_build_deref_var(nir_builder *build, nir_variable *var)
    return deref;
 }
 
+#define nir_build_deref_array(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_deref_array, __VA_ARGS__)
 static inline nir_deref_instr *
-nir_build_deref_array(nir_builder *build, nir_deref_instr *parent,
+_nir_build_deref_array(nir_builder *build, nir_deref_instr *parent,
                       nir_def *index)
 {
    assert(glsl_type_is_array(parent->type) ||
@@ -1817,8 +1848,9 @@ nir_build_deref_array_imm(nir_builder *build, nir_deref_instr *parent,
    return nir_build_deref_array(build, parent, idx_ssa);
 }
 
+#define nir_build_deref_ptr_as_array(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_deref_ptr_as_array, __VA_ARGS__)
 static inline nir_deref_instr *
-nir_build_deref_ptr_as_array(nir_builder *build, nir_deref_instr *parent,
+_nir_build_deref_ptr_as_array(nir_builder *build, nir_deref_instr *parent,
                              nir_def *index)
 {
    assert(parent->deref_type == nir_deref_type_array ||
@@ -1949,8 +1981,10 @@ nir_alignment_deref_cast(nir_builder *build, nir_deref_instr *parent,
  * as the leader deref but it may have a different parent.  This is very
  * useful for walking deref paths.
  */
+
+#define nir_build_deref_follower(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_deref_follower, __VA_ARGS__)
 static inline nir_deref_instr *
-nir_build_deref_follower(nir_builder *b, nir_deref_instr *parent,
+_nir_build_deref_follower(nir_builder *b, nir_deref_instr *parent,
                          nir_deref_instr *leader)
 {
    /* If the derefs would have the same parent, don't make a new one */
@@ -2027,8 +2061,9 @@ nir_load_deref(nir_builder *build, nir_deref_instr *deref)
    return nir_load_deref_with_access(build, deref, (enum gl_access_qualifier)0);
 }
 
+#define nir_store_deref_with_access(...) MESA_CALL_WITH_LTR_ARGS(_nir_store_deref_with_access, __VA_ARGS__)
 static inline void
-nir_store_deref_with_access(nir_builder *build, nir_deref_instr *deref,
+_nir_store_deref_with_access(nir_builder *build, nir_deref_instr *deref,
                             nir_def *value, unsigned writemask,
                             enum gl_access_qualifier access)
 {
@@ -2037,16 +2072,19 @@ nir_store_deref_with_access(nir_builder *build, nir_deref_instr *deref,
 }
 
 #undef nir_store_deref
+
+#define nir_store_deref(...) MESA_CALL_WITH_LTR_ARGS(_nir_store_deref, __VA_ARGS__)
 static inline void
-nir_store_deref(nir_builder *build, nir_deref_instr *deref,
+_nir_store_deref(nir_builder *build, nir_deref_instr *deref,
                 nir_def *value, unsigned writemask)
 {
    nir_store_deref_with_access(build, deref, value, writemask,
                                (enum gl_access_qualifier)0);
 }
 
+#define nir_atomic_deref(...) MESA_CALL_WITH_LTR_ARGS(_nir_atomic_deref, __VA_ARGS__)
 static inline nir_def *
-nir_atomic_deref(nir_builder *build, unsigned bit_size,
+_nir_atomic_deref(nir_builder *build, unsigned bit_size,
                  nir_deref_instr *deref,
                  nir_def *value, nir_atomic_op op)
 {
@@ -2054,8 +2092,9 @@ nir_atomic_deref(nir_builder *build, unsigned bit_size,
                            (enum gl_access_qualifier)0, op);
 }
 
+#define nir_build_write_masked_store(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_write_masked_store, __VA_ARGS__)
 static inline void
-nir_build_write_masked_store(nir_builder *b, nir_deref_instr *vec_deref,
+_nir_build_write_masked_store(nir_builder *b, nir_deref_instr *vec_deref,
                              nir_def *value, unsigned component)
 {
    assert(value->num_components == 1);
@@ -2068,8 +2107,9 @@ nir_build_write_masked_store(nir_builder *b, nir_deref_instr *vec_deref,
    nir_store_deref(b, vec_deref, vec, (1u << component));
 }
 
+#define nir_build_write_masked_stores(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_write_masked_stores, __VA_ARGS__)
 static inline void
-nir_build_write_masked_stores(nir_builder *b, nir_deref_instr *vec_deref,
+_nir_build_write_masked_stores(nir_builder *b, nir_deref_instr *vec_deref,
                               nir_def *value, nir_def *index,
                               unsigned start, unsigned end)
 {
@@ -2085,8 +2125,9 @@ nir_build_write_masked_stores(nir_builder *b, nir_deref_instr *vec_deref,
    }
 }
 
+#define nir_copy_deref_with_access(...) MESA_CALL_WITH_LTR_ARGS(_nir_copy_deref_with_access, __VA_ARGS__)
 static inline void
-nir_copy_deref_with_access(nir_builder *build, nir_deref_instr *dest,
+_nir_copy_deref_with_access(nir_builder *build, nir_deref_instr *dest,
                            nir_deref_instr *src,
                            enum gl_access_qualifier dest_access,
                            enum gl_access_qualifier src_access)
@@ -2095,16 +2136,19 @@ nir_copy_deref_with_access(nir_builder *build, nir_deref_instr *dest,
 }
 
 #undef nir_copy_deref
+
+#define nir_copy_deref(...) MESA_CALL_WITH_LTR_ARGS(_nir_copy_deref, __VA_ARGS__)
 static inline void
-nir_copy_deref(nir_builder *build, nir_deref_instr *dest, nir_deref_instr *src)
+_nir_copy_deref(nir_builder *build, nir_deref_instr *dest, nir_deref_instr *src)
 {
    nir_copy_deref_with_access(build, dest, src,
                               (enum gl_access_qualifier)0,
                               (enum gl_access_qualifier)0);
 }
 
+#define nir_memcpy_deref_with_access(...) MESA_CALL_WITH_LTR_ARGS(_nir_memcpy_deref_with_access, __VA_ARGS__)
 static inline void
-nir_memcpy_deref_with_access(nir_builder *build, nir_deref_instr *dest,
+_nir_memcpy_deref_with_access(nir_builder *build, nir_deref_instr *dest,
                              nir_deref_instr *src, nir_def *size,
                              enum gl_access_qualifier dest_access,
                              enum gl_access_qualifier src_access)
@@ -2114,8 +2158,10 @@ nir_memcpy_deref_with_access(nir_builder *build, nir_deref_instr *dest,
 }
 
 #undef nir_memcpy_deref
+
+#define nir_memcpy_deref(...) MESA_CALL_WITH_LTR_ARGS(_nir_memcpy_deref, __VA_ARGS__)
 static inline void
-nir_memcpy_deref(nir_builder *build, nir_deref_instr *dest,
+_nir_memcpy_deref(nir_builder *build, nir_deref_instr *dest,
                  nir_deref_instr *src, nir_def *size)
 {
    nir_memcpy_deref_with_access(build, dest, src, size,
@@ -2135,30 +2181,34 @@ nir_load_var(nir_builder *build, nir_variable *var)
    return nir_load_deref(build, nir_build_deref_var(build, var));
 }
 
+#define nir_store_var(...) MESA_CALL_WITH_LTR_ARGS(_nir_store_var, __VA_ARGS__)
 static inline void
-nir_store_var(nir_builder *build, nir_variable *var, nir_def *value,
+_nir_store_var(nir_builder *build, nir_variable *var, nir_def *value,
               unsigned writemask)
 {
    nir_store_deref(build, nir_build_deref_var(build, var), value, writemask);
 }
 
+#define nir_atomic_var(...) MESA_CALL_WITH_LTR_ARGS(_nir_atomic_var, __VA_ARGS__)
 static inline nir_def *
-nir_atomic_var(nir_builder *build, nir_variable *var, nir_def *value,
+_nir_atomic_var(nir_builder *build, nir_variable *var, nir_def *value,
                nir_atomic_op op)
 {
    return nir_atomic_deref(build, glsl_get_bit_size(var->type),
                            nir_build_deref_var(build, var), value, op);
 }
 
+#define nir_copy_var(...) MESA_CALL_WITH_LTR_ARGS(_nir_copy_var, __VA_ARGS__)
 static inline void
-nir_copy_var(nir_builder *build, nir_variable *dest, nir_variable *src)
+_nir_copy_var(nir_builder *build, nir_variable *dest, nir_variable *src)
 {
    nir_copy_deref(build, nir_build_deref_var(build, dest),
                   nir_build_deref_var(build, src));
 }
 
+#define nir_load_array_var(...) MESA_CALL_WITH_LTR_ARGS(_nir_load_array_var, __VA_ARGS__)
 static inline nir_def *
-nir_load_array_var(nir_builder *build, nir_variable *var, nir_def *index)
+_nir_load_array_var(nir_builder *build, nir_variable *var, nir_def *index)
 {
    nir_deref_instr *deref =
       nir_build_deref_array(build, nir_build_deref_var(build, var), index);
@@ -2173,8 +2223,9 @@ nir_load_array_var_imm(nir_builder *build, nir_variable *var, int64_t index)
    return nir_load_deref(build, deref);
 }
 
+#define nir_store_array_var(...) MESA_CALL_WITH_LTR_ARGS(_nir_store_array_var, __VA_ARGS__)
 static inline void
-nir_store_array_var(nir_builder *build, nir_variable *var, nir_def *index,
+_nir_store_array_var(nir_builder *build, nir_variable *var, nir_def *index,
                     nir_def *value, unsigned writemask)
 {
    nir_deref_instr *deref =
@@ -2182,8 +2233,9 @@ nir_store_array_var(nir_builder *build, nir_variable *var, nir_def *index,
    nir_store_deref(build, deref, value, writemask);
 }
 
+#define nir_store_array_var_imm(...) MESA_CALL_WITH_LTR_ARGS(_nir_store_array_var_imm, __VA_ARGS__)
 static inline void
-nir_store_array_var_imm(nir_builder *build, nir_variable *var, int64_t index,
+_nir_store_array_var_imm(nir_builder *build, nir_variable *var, int64_t index,
                         nir_def *value, unsigned writemask)
 {
    nir_deref_instr *deref =
@@ -2484,8 +2536,9 @@ nir_build_string(nir_builder *build, const char *value);
       nir_build_indirect_call(build, func, callee, ARRAY_SIZE(_args), _args); \
    } while (0)
 
+#define nir_compare_func(...) MESA_CALL_WITH_LTR_ARGS(_nir_compare_func, __VA_ARGS__)
 nir_def *
-nir_compare_func(nir_builder *b, enum compare_func func,
+_nir_compare_func(nir_builder *b, enum compare_func func,
                  nir_def *src0, nir_def *src1);
 
 static inline void
@@ -2497,8 +2550,9 @@ nir_scoped_memory_barrier(nir_builder *b,
    nir_barrier(b, SCOPE_NONE, scope, semantics, modes);
 }
 
+#define nir_gen_rect_vertices(...) MESA_CALL_WITH_LTR_ARGS(_nir_gen_rect_vertices, __VA_ARGS__)
 nir_def *
-nir_gen_rect_vertices(nir_builder *b, nir_def *z, nir_def *w);
+_nir_gen_rect_vertices(nir_builder *b, nir_def *z, nir_def *w);
 
 /* Emits a printf in the same way nir_lower_printf(). Each of the variadic
  * argument is a pointer to a nir_def value.

@@ -809,8 +809,10 @@ build_scan_full(nir_builder *b, nir_intrinsic_op op, nir_op red_op,
 }
 
 /* Fully generic implementation of scan/reduce that takes a mask */
+
+#define build_scan_reduce(...) MESA_CALL_WITH_LTR_ARGS(_build_scan_reduce, __VA_ARGS__)
 static nir_def *
-build_scan_reduce(nir_builder *b, nir_intrinsic_op op, nir_op red_op,
+_build_scan_reduce(nir_builder *b, nir_intrinsic_op op, nir_op red_op,
                   nir_def *data, nir_def *mask, unsigned max_mask_bits,
                   const nir_lower_subgroups_options *options)
 {

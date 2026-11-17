@@ -266,7 +266,7 @@ d3d12_begin_emit_primitives_gs(struct emit_primitives_context *emit_ctx,
       nir_def *odd = nir_build_alu(b, nir_op_imod,
                                        prim_id,
                                        nir_imm_int(b, 2),
-                                       NULL, NULL);
+                                       nullptr, nullptr);
       diagonal_vertex = nir_bcsel(b, nir_i2b(b, odd),
                                   nir_imm_int(b, 2),
                                   nir_imm_int(b, 1));

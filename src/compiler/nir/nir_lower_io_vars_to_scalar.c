@@ -47,8 +47,9 @@ get_channel_variables(struct hash_table *ht, nir_variable *var)
  * instructions are created back to front)
  */
 
+#define clone_deref_array(...) MESA_CALL_WITH_LTR_ARGS(_clone_deref_array, __VA_ARGS__)
 static nir_deref_instr *
-clone_deref_array(nir_builder *b, nir_deref_instr *dst_tail,
+_clone_deref_array(nir_builder *b, nir_deref_instr *dst_tail,
                   const nir_deref_instr *src_head)
 {
    const nir_deref_instr *parent = nir_deref_instr_parent(src_head);

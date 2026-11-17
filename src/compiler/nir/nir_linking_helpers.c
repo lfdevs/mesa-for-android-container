@@ -1154,7 +1154,7 @@ nir_clone_uniform_variable(nir_shader *nir, nir_variable *uniform, bool spirv)
 }
 
 nir_deref_instr *
-nir_clone_deref_instr(nir_builder *b, nir_variable *var,
+_nir_clone_deref_instr(nir_builder *b, nir_variable *var,
                       nir_deref_instr *deref)
 {
    if (deref->deref_type == nir_deref_type_var)

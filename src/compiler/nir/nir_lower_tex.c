@@ -359,8 +359,9 @@ sample_plane(nir_builder *b, nir_tex_instr *tex, int plane,
    return &plane_tex->def;
 }
 
+#define convert_yuv_to_rgb(...) MESA_CALL_WITH_LTR_ARGS(_convert_yuv_to_rgb, __VA_ARGS__)
 static void
-convert_yuv_to_rgb(nir_builder *b, nir_tex_instr *tex,
+_convert_yuv_to_rgb(nir_builder *b, nir_tex_instr *tex,
                    nir_def *y, nir_def *u, nir_def *v,
                    nir_def *a,
                    const nir_lower_tex_options *options,

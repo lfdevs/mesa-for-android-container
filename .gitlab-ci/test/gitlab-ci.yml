@@ -30,6 +30,20 @@ rustfmt:
     - rustfmt --version
     - rustfmt --verbose src/**/*.rs
 
+ir-builder-arg-evaluation-order:
+  extends:
+    - .formatting-check
+    - .ir-builder-arg-evaluation-order-rules
+    - .no-auto-retry  # this job can't be flaky
+  script:
+    - python3 bin/ir-builder-arg-order.py
+    - |
+      if ! git diff --color=always --exit-code; then
+        echo "IR builder argument evaluation order is not enforced."
+        echo "Run bin/ir-builder-arg-order.py locally."
+        exit 1
+      fi
+
 shader-db:
   stage: code-validation
   extends:

@@ -329,7 +329,20 @@ struct tu_autotune {
     */
    void init_renderpass(rp_ctx_t rp_ctx, bool sysmem, uint32_t tile_count);
 
-   void begin_renderpass(struct tu_cmd_buffer *cmd, struct tu_cs *cs, rp_ctx_t rp_ctx);
+   /* Layout details captured at record time, only used for debug-socket logging.
+    * Note: no default member initializers — they can't be used in a default
+    * argument inside the enclosing class; rp_debug_layout() zero-initializes.
+    */
+   struct rp_debug_layout {
+      uint16_t grid_w, grid_h;
+      uint16_t fb_w, fb_h;
+      uint16_t tile0_w, tile0_h;
+      uint16_t layers;
+      uint32_t divisor;
+   };
+
+   void begin_renderpass(struct tu_cmd_buffer *cmd, struct tu_cs *cs, rp_ctx_t rp_ctx,
+                         rp_debug_layout debug_layout = rp_debug_layout());
    void end_renderpass(struct tu_cmd_buffer *cmd, struct tu_cs *cs, rp_ctx_t rp_ctx);
 
    void begin_binning(struct tu_cs *cs, rp_ctx_t rp_ctx);

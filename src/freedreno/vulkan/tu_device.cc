@@ -1040,6 +1040,12 @@ tu_get_physical_device_properties_1_2(struct tu_physical_device *pdevice,
       .patch = 1,
    };
 
+   if (TU_DEBUG(DECK_EMU)) {
+      p->driverID = VK_DRIVER_ID_MESA_RADV;
+      memset(p->driverName, 0, sizeof(p->driverName));
+      snprintf(p->driverName, VK_MAX_DRIVER_NAME_SIZE, "radv");
+   }
+
    p->denormBehaviorIndependence =
       VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL;
    p->roundingModeIndependence =
@@ -1341,6 +1347,11 @@ tu_get_properties(struct tu_physical_device *pdevice,
    props->deviceID = pdevice->dev_id.chip_id;
    props->deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
 
+   if (TU_DEBUG(DECK_EMU)) {
+      props->vendorID = 0x1002;
+      props->deviceID = 0x163F;
+   }
+
    /* Vulkan 1.4 */
    props->dynamicRenderingLocalReadDepthStencilAttachments = true;
    props->dynamicRenderingLocalReadMultisampledAttachments = true;
@@ -1356,6 +1367,10 @@ tu_get_properties(struct tu_physical_device *pdevice,
             (strlen(pdevice->instance->drirc.debug.force_vk_devicename) > 0) ?
             pdevice->instance->drirc.debug.force_vk_devicename : pdevice->name);
    memcpy(props->pipelineCacheUUID, pdevice->cache_uuid, VK_UUID_SIZE);
+
+   if (TU_DEBUG(DECK_EMU)) {
+      strcpy(props->deviceName, "AMD Custom GPU 0405 (RADV VANGOGH)");
+   }
 
    tu_get_physical_device_properties_1_1(pdevice, props);
    tu_get_physical_device_properties_1_2(pdevice, props);
@@ -2179,7 +2194,7 @@ tu_get_budget_memory(struct tu_physical_device *physical_device, uint64_t heap_u
     * Let's not incite the app to starve the system: report at most 90% of
     * available system memory.
     */
-   const float percent = 0.9f;
+   const float percent = 15.0 / 16; //gabe hack to allow using more memory
 
    return vk_physical_device_heap_budget_from_system(&physical_device->vk,
                                                      percent, heap_size,

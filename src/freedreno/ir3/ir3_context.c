@@ -550,7 +550,7 @@ ir3_create_array_load(struct ir3_context *ctx, struct ir3_array *arr, int n,
 
 /* relative (indirect) if address!=NULL */
 void
-ir3_create_array_store(struct ir3_context *ctx, struct ir3_array *arr, int n,
+_ir3_create_array_store(struct ir3_context *ctx, struct ir3_array *arr, int n,
                        struct ir3_instruction *src,
                        struct ir3_instruction *address)
 {

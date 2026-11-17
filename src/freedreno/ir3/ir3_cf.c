@@ -8,8 +8,9 @@
 #include "ir3.h"
 #include "ir3_shader.h"
 
+#define is_safe_conv(...) MESA_CALL_WITH_LTR_ARGS(_is_safe_conv, __VA_ARGS__)
 static bool
-is_safe_conv(struct ir3_instruction *instr, type_t src_type, opc_t *src_opc,
+_is_safe_conv(struct ir3_instruction *instr, type_t src_type, opc_t *src_opc,
              struct ir3_instruction *src_instr)
 {
    if (instr->opc != OPC_MOV)

@@ -47,8 +47,9 @@ build_deref_to_next_wildcard(nir_builder *b,
    return parent;
 }
 
+#define emit_deref_copy_load_store(...) MESA_CALL_WITH_LTR_ARGS(_emit_deref_copy_load_store, __VA_ARGS__)
 static void
-emit_deref_copy_load_store(nir_builder *b,
+_emit_deref_copy_load_store(nir_builder *b,
                            nir_deref_instr *dst_deref,
                            nir_deref_instr **dst_deref_arr,
                            nir_deref_instr *src_deref,

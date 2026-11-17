@@ -560,7 +560,7 @@ vtn_cooperative_matrix_extract(struct vtn_builder *b, struct vtn_ssa_value *mat,
 }
 
 struct vtn_ssa_value *
-vtn_cooperative_matrix_insert(struct vtn_builder *b, struct vtn_ssa_value *mat,
+_vtn_cooperative_matrix_insert(struct vtn_builder *b, struct vtn_ssa_value *mat,
                               struct vtn_ssa_value *insert, const uint32_t *indices,
                               unsigned num_indices)
 {

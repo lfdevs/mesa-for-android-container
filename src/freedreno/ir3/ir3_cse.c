@@ -49,8 +49,9 @@ hash_instr(const void *data)
    return hash;
 }
 
+#define instrs_equal(...) MESA_CALL_WITH_LTR_ARGS(_instrs_equal, __VA_ARGS__)
 static bool
-instrs_equal(const struct ir3_instruction *i1, const struct ir3_instruction *i2)
+_instrs_equal(const struct ir3_instruction *i1, const struct ir3_instruction *i2)
 {
    if (i1->opc != i2->opc)
       return false;

@@ -1960,7 +1960,7 @@ ttn_emit_instruction(struct ttn_compile *c)
       struct tgsi_ind_register *indirect = tgsi_dst->Register.Indirect ?
                                            &tgsi_dst->Indirect : NULL;
       nir_store_deref(b, ttn_array_deref(c, var, offset, indirect), dst,
-                      tgsi_dst->Register.WriteMask);
+                      (unsigned) tgsi_dst->Register.WriteMask);
    } else {
       unsigned index = tgsi_dst->Register.Index;
       nir_def *reg = NULL;

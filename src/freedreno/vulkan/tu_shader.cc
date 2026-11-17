@@ -625,8 +625,9 @@ build_texel_buffer_size(nir_builder *b, nir_def *desc, nir_def **offset_out)
    return size;
 }
 
+#define build_texel_buffer_as_image_coords(...) MESA_CALL_WITH_LTR_ARGS(_build_texel_buffer_as_image_coords, __VA_ARGS__)
 static nir_def *
-build_texel_buffer_as_image_coords(nir_builder *b,
+_build_texel_buffer_as_image_coords(nir_builder *b,
                                    nir_def *offset,
                                    nir_def *desc)
 {

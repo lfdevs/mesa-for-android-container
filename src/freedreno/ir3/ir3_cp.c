@@ -40,8 +40,10 @@ struct ir3_cp_ctx {
  * TODO maybe drop allow_flags since this is only false when dst is
  * NULL (ie. outputs)
  */
+
+#define is_eligible_mov(...) MESA_CALL_WITH_LTR_ARGS(_is_eligible_mov, __VA_ARGS__)
 static bool
-is_eligible_mov(struct ir3_instruction *instr,
+_is_eligible_mov(struct ir3_instruction *instr,
                 struct ir3_instruction *dst_instr, bool allow_flags)
 {
    if (is_same_type_mov(instr)) {

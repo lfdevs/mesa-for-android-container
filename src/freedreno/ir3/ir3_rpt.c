@@ -103,8 +103,9 @@ srcs_can_rpt(struct ir3_instruction *instr, struct ir3_register *src,
    return true;
 }
 
+#define can_rpt(...) MESA_CALL_WITH_LTR_ARGS(_can_rpt, __VA_ARGS__)
 static bool
-can_rpt(struct ir3_instruction *instr, struct ir3_instruction *rpt,
+_can_rpt(struct ir3_instruction *instr, struct ir3_instruction *rpt,
         unsigned rpt_n)
 {
    if (rpt_n >= 4)
@@ -214,8 +215,9 @@ inc_wrmask(unsigned wrmask)
    return (wrmask << 1) | 0x1;
 }
 
+#define try_merge(...) MESA_CALL_WITH_LTR_ARGS(_try_merge, __VA_ARGS__)
 static bool
-try_merge(struct ir3_instruction *instr, struct ir3_instruction *rpt,
+_try_merge(struct ir3_instruction *instr, struct ir3_instruction *rpt,
           unsigned rpt_n)
 {
    assert(rpt_n > 0 && rpt_n < 4);

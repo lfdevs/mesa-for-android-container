@@ -12,11 +12,11 @@ extern "C" {
 
 #ifdef HAVE_GPUVIS
 
+/* Not strictly necessary, but can be used to avoid initialization overhead on first begin call. */
 void util_gpuvis_init(void);
 
+/* All begin/end pairs must be balanced. */
 void util_gpuvis_begin(const char *name);
-
-/* ctx needs to be the return value from begin*/
 void util_gpuvis_end(void);
 
 #else

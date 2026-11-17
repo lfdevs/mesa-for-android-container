@@ -136,7 +136,7 @@ nir_builder_alu_instr_finish_and_insert(nir_builder *build, nir_alu_instr *instr
 }
 
 nir_def *
-nir_build_alu(nir_builder *build, nir_op op, nir_def *src0,
+_nir_build_alu(nir_builder *build, nir_op op, nir_def *src0,
               nir_def *src1, nir_def *src2, nir_def *src3)
 {
    nir_alu_instr *instr = nir_alu_instr_create(build->shader, op);
@@ -167,7 +167,7 @@ nir_build_alu1(nir_builder *build, nir_op op, nir_def *src0)
 }
 
 nir_def *
-nir_build_alu2(nir_builder *build, nir_op op, nir_def *src0,
+_nir_build_alu2(nir_builder *build, nir_op op, nir_def *src0,
                nir_def *src1)
 {
    nir_alu_instr *instr = nir_alu_instr_create(build->shader, op);
@@ -181,7 +181,7 @@ nir_build_alu2(nir_builder *build, nir_op op, nir_def *src0,
 }
 
 nir_def *
-nir_build_alu3(nir_builder *build, nir_op op, nir_def *src0,
+_nir_build_alu3(nir_builder *build, nir_op op, nir_def *src0,
                nir_def *src1, nir_def *src2)
 {
    nir_alu_instr *instr = nir_alu_instr_create(build->shader, op);
@@ -196,7 +196,7 @@ nir_build_alu3(nir_builder *build, nir_op op, nir_def *src0,
 }
 
 nir_def *
-nir_build_alu4(nir_builder *build, nir_op op, nir_def *src0,
+_nir_build_alu4(nir_builder *build, nir_op op, nir_def *src0,
                nir_def *src1, nir_def *src2, nir_def *src3)
 {
    nir_alu_instr *instr = nir_alu_instr_create(build->shader, op);
@@ -577,7 +577,7 @@ nir_pop_if(nir_builder *build, nir_if *nif)
 }
 
 nir_def *
-nir_if_phi(nir_builder *build, nir_def *then_def, nir_def *else_def)
+_nir_if_phi(nir_builder *build, nir_def *then_def, nir_def *else_def)
 {
    nir_block *block = nir_cursor_current_block(build->cursor);
    nir_if *nif = nir_cf_node_as_if(nir_cf_node_prev(&block->cf_node));
@@ -633,7 +633,7 @@ nir_pop_loop(nir_builder *build, nir_loop *loop)
 }
 
 nir_def *
-nir_compare_func(nir_builder *b, enum compare_func func,
+_nir_compare_func(nir_builder *b, enum compare_func func,
                  nir_def *src0, nir_def *src1)
 {
    switch (func) {
@@ -707,7 +707,7 @@ nir_type_convert(nir_builder *b,
 }
 
 nir_def *
-nir_gen_rect_vertices(nir_builder *b, nir_def *z, nir_def *w)
+_nir_gen_rect_vertices(nir_builder *b, nir_def *z, nir_def *w)
 {
    if (!z)
       z = nir_imm_float(b, 0.0);

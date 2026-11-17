@@ -323,8 +323,9 @@ create_new_io_vars(nir_shader *shader, nir_variable_mode mode,
    return merged_any_vars;
 }
 
+#define build_array_deref_of_new_var(...) MESA_CALL_WITH_LTR_ARGS(_build_array_deref_of_new_var, __VA_ARGS__)
 static nir_deref_instr *
-build_array_deref_of_new_var(nir_builder *b, nir_variable *new_var,
+_build_array_deref_of_new_var(nir_builder *b, nir_variable *new_var,
                              nir_deref_instr *leader)
 {
    if (leader->deref_type == nir_deref_type_var)
@@ -336,8 +337,9 @@ build_array_deref_of_new_var(nir_builder *b, nir_variable *new_var,
    return nir_build_deref_follower(b, parent, leader);
 }
 
+#define build_array_index(...) MESA_CALL_WITH_LTR_ARGS(_build_array_index, __VA_ARGS__)
 static nir_def *
-build_array_index(nir_builder *b, nir_deref_instr *deref, nir_def *base,
+_build_array_index(nir_builder *b, nir_deref_instr *deref, nir_def *base,
                   bool vs_in, bool per_vertex)
 {
    switch (deref->deref_type) {
@@ -360,8 +362,9 @@ build_array_index(nir_builder *b, nir_deref_instr *deref, nir_def *base,
    }
 }
 
+#define build_array_deref_of_new_var_flat(...) MESA_CALL_WITH_LTR_ARGS(_build_array_deref_of_new_var_flat, __VA_ARGS__)
 static nir_deref_instr *
-build_array_deref_of_new_var_flat(nir_shader *shader,
+_build_array_deref_of_new_var_flat(nir_shader *shader,
                                   nir_builder *b, nir_variable *new_var,
                                   nir_deref_instr *leader, unsigned base)
 {

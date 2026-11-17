@@ -69,8 +69,9 @@ dup_mem_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    return dup;
 }
 
+#define shift_load_data_alignbyte_amd(...) MESA_CALL_WITH_LTR_ARGS(_shift_load_data_alignbyte_amd, __VA_ARGS__)
 static nir_def *
-shift_load_data_alignbyte_amd(nir_builder *b, nir_def *load, nir_def *offset)
+_shift_load_data_alignbyte_amd(nir_builder *b, nir_def *load, nir_def *offset)
 {
    /* We don't need to mask the offset by 0x3 because only the low 2 bits matter. */
    nir_def *comps[NIR_MAX_VEC_COMPONENTS];
@@ -84,8 +85,9 @@ shift_load_data_alignbyte_amd(nir_builder *b, nir_def *load, nir_def *offset)
    return nir_vec(b, comps, load->num_components);
 }
 
+#define shift_load_data_shift64(...) MESA_CALL_WITH_LTR_ARGS(_shift_load_data_shift64, __VA_ARGS__)
 static nir_def *
-shift_load_data_shift64(nir_builder *b, nir_def *load, nir_def *offset, uint64_t align_mask)
+_shift_load_data_shift64(nir_builder *b, nir_def *load, nir_def *offset, uint64_t align_mask)
 {
    nir_def *comps[NIR_MAX_VEC_COMPONENTS];
    nir_def *shift = nir_imul_imm(b, nir_iand_imm(b, offset, 0x3), 8);
@@ -102,8 +104,9 @@ shift_load_data_shift64(nir_builder *b, nir_def *load, nir_def *offset, uint64_t
    return nir_vec(b, comps, load->num_components);
 }
 
+#define shift_load_data_scalar(...) MESA_CALL_WITH_LTR_ARGS(_shift_load_data_scalar, __VA_ARGS__)
 static nir_def *
-shift_load_data_scalar(nir_builder *b, nir_def *load, nir_def *offset, uint64_t align_mask)
+_shift_load_data_scalar(nir_builder *b, nir_def *load, nir_def *offset, uint64_t align_mask)
 {
    nir_def *pad = nir_iand_imm(b, offset, align_mask);
    nir_def *shift = nir_imul_imm(b, pad, 8);
@@ -129,8 +132,9 @@ shift_load_data_scalar(nir_builder *b, nir_def *load, nir_def *offset, uint64_t 
    return shifted;
 }
 
+#define shift_load_data(...) MESA_CALL_WITH_LTR_ARGS(_shift_load_data, __VA_ARGS__)
 static nir_def *
-shift_load_data(nir_builder *b, nir_def *load, nir_def *offset, uint64_t align_mask,
+_shift_load_data(nir_builder *b, nir_def *load, nir_def *offset, uint64_t align_mask,
                 nir_mem_access_shift_method method)
 {
    bool use_alignbyte = method == nir_mem_access_shift_method_bytealign_amd &&

@@ -32,8 +32,9 @@
  *
  */
 
+#define get_io_offset(...) MESA_CALL_WITH_LTR_ARGS(_get_io_offset, __VA_ARGS__)
 static unsigned
-get_io_offset(nir_builder *b, nir_deref_instr *deref, nir_variable *var,
+_get_io_offset(nir_builder *b, nir_deref_instr *deref, nir_variable *var,
               unsigned *element_index, unsigned *xfb_offset,
               nir_def **array_index)
 {

@@ -24,12 +24,20 @@ template = """\
 #ifndef _NIR_BUILDER_OPCODES_
 #define _NIR_BUILDER_OPCODES_
 
+#include "util/u_func_arg_order.h"
+
 <%
 def src_decl_list(num_srcs):
    return ', '.join('nir_def *src' + str(i) for i in range(num_srcs))
 
 def src_list(num_srcs):
    return ', '.join('src' + str(i) for i in range(num_srcs))
+
+def needs_ltr_args(num_srcs):
+   return num_srcs >= 2
+
+def alu_helper_name(name, num_srcs):
+   return f'_nir_{name}' if num_srcs >= 2 else f'nir_{name}'
 
 def needs_num_components(opcode):
    return "replicated" in opcode.name
@@ -44,7 +52,7 @@ def intrinsic_prefix(name):
 % for name, opcode in sorted(opcodes.items()):
 % if not needs_num_components(opcode):
 static inline nir_def *
-nir_${name}(nir_builder *build, ${src_decl_list(opcode.num_inputs)})
+${alu_helper_name(name, opcode.num_inputs)}(nir_builder *build, ${src_decl_list(opcode.num_inputs)})
 {
 % if opcode.is_conversion and \
      type_base_type(opcode.output_type) == opcode.input_types[0]:
@@ -62,6 +70,10 @@ nir_${name}(nir_builder *build, ${src_decl_list(opcode.num_inputs)})
    return nir_build_alu_src_arr(build, nir_op_${name}, srcs);
 % endif
 }
+% if needs_ltr_args(opcode.num_inputs):
+#define nir_${name}(...) MESA_CALL_WITH_LTR_ARGS(_nir_${name}, __VA_ARGS__)
+% endif
+
 % endif
 % endfor
 
@@ -112,6 +124,32 @@ def get_intrinsic_bitsize(opcode):
         return 'src' + str(opcode.bit_size_src) + '->bit_size'
     else:
         return 'bit_size'
+
+def intrinsic_alias(name, opcode):
+    public_name = intrinsic_prefix(name) + '_' + name if opcode.indices else 'nir_' + name
+    args = 'build' + intrinsic_macro_list(opcode)
+
+    if needs_ltr_args(opcode.num_srcs):
+        if opcode.indices:
+            return f'''#ifdef __cplusplus
+#define {public_name}({args}, ...) \\\\
+MESA_CALL_WITH_LTR_ARGS(_nir_build_{name}, {args}, (_nir_{name}_indices{{0, __VA_ARGS__}}))
+#else
+#define {public_name}({args}, ...) \\\\
+MESA_CALL_WITH_LTR_ARGS(_nir_build_{name}, {args}, ((struct _nir_{name}_indices){{0, __VA_ARGS__}}))
+#endif'''
+        else:
+            return f'#define {public_name}(...) MESA_CALL_WITH_LTR_ARGS(_nir_build_{name}, __VA_ARGS__)'
+    elif opcode.indices:
+        return f'''#ifdef __cplusplus
+#define {public_name}({args}, ...) \\\\
+_nir_build_{name}({args}, _nir_{name}_indices{{0, __VA_ARGS__}})
+#else
+#define {public_name}({args}, ...) \\\\
+_nir_build_{name}({args}, (struct _nir_{name}_indices){{0, __VA_ARGS__}})
+#endif'''
+    else:
+        return f'#define {public_name} _nir_build_{name}'
 %>
 
 % for name, opcode in sorted(INTR_OPCODES.items()):
@@ -181,17 +219,7 @@ _nir_build_${name}(nir_builder *build${intrinsic_decl_list(opcode)})
 % endfor
 
 % for name, opcode in sorted(INTR_OPCODES.items()):
-% if opcode.indices:
-#ifdef __cplusplus
-#define ${intrinsic_prefix(name)}_${name}(build${intrinsic_macro_list(opcode)}, ...) ${'\\\\'}
-_nir_build_${name}(build${intrinsic_macro_list(opcode)}, _nir_${name}_indices{0, __VA_ARGS__})
-#else
-#define ${intrinsic_prefix(name)}_${name}(build${intrinsic_macro_list(opcode)}, ...) ${'\\\\'}
-_nir_build_${name}(build${intrinsic_macro_list(opcode)}, (struct _nir_${name}_indices){0, __VA_ARGS__})
-#endif
-% else:
-#define nir_${name} _nir_build_${name}
-% endif
+${intrinsic_alias(name, opcode)}
 % if name in build_prefixed_intrinsics:
 #define nir_${name} nir_build_${name}
 % endif

@@ -45,6 +45,7 @@ fdl6_format_swiz(enum pipe_format format, bool has_z24uint_s8uint,
    case PIPE_FORMAT_B8G8_R8G8_UNORM:
    case PIPE_FORMAT_G8_B8R8_420_UNORM:
    case PIPE_FORMAT_G8_B8_R8_420_UNORM:
+   case PIPE_FORMAT_X6G10_X6B10X6R10_420_UNORM:
       /* These formats are currently only used for Vulkan, and border colors
        * aren't allowed on these formats in Vulkan because, from the
        * description of VkImageViewCreateInfo:
@@ -279,6 +280,9 @@ fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,
    memset(view->descriptor, 0, sizeof(view->descriptor));
 
    bool is_mutable = layout->is_mutable && tile_mode == TILE6_3;
+
+   if (texture_format == FMT6_P010 && ubwc_enabled)
+      texture_format = FMT6_TP10;
 
    if (CHIP <= A7XX) {
       view->descriptor[0] =

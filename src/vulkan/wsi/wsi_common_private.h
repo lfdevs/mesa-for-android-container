@@ -25,6 +25,7 @@
 
 #include "wsi_common.h"
 #include "util/perf/cpu_trace.h"
+#include <vulkan/vulkan_core.h>
 #include "vk_object.h"
 #include "vk_sync.h"
 
@@ -67,6 +68,8 @@ struct wsi_drm_image_params {
    bool same_gpu;
    /* See wsi_image_info.explicit_sync. */
    bool explicit_sync;
+   /* See wsi_image_info.explicit_sync_image_fence_in. */
+   bool explicit_sync_image_fence_in;
 
    uint32_t num_modifier_lists;
    const uint32_t *num_modifiers;
@@ -105,6 +108,15 @@ struct wsi_image_info {
     * or the scanned-out frame being flipped away from).
     */
    bool explicit_sync;
+
+   /**
+    * If set, the WSI backend will take the image's chain->fences[image_index]
+    * and synchronize on that before presentation.  No release fence will be
+    * associated with the image (as in direct-scanout-only environments where
+    * AcquireNextImage implies that the original in-fence for the image has
+    * passed).
+    */
+   bool explicit_sync_image_fence_in;
 
    bool prime_use_linear_modifier;
 
@@ -343,6 +355,18 @@ struct wsi_swapchain {
     *   but has been locked to maximum of 60 Hz. This would allow for application to request e.g. 40 Hz.
     */
    uint64_t (*poll_early_refresh)(struct wsi_swapchain *swap_chain, uint64_t *interval);
+   VkResult (*cac_plane_adjust)(struct wsi_swapchain *swap_chain,
+                             uint32_t image_index,
+                             uint32_t plane_index,
+                             uint32_t src_x,
+                             uint32_t src_y,
+                             uint32_t src_width,
+                             uint32_t src_height,
+                             uint32_t dst_x,
+                             uint32_t dst_y,
+                             uint32_t dst_width,
+                             uint32_t dst_height);
+   void (*set_display_mode)(struct wsi_swapchain *swap_chain, VkDisplayModeKHR display_mode);
 };
 
 bool

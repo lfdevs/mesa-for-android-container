@@ -214,6 +214,7 @@ wsi_device_init(struct wsi_device *wsi,
    WSI_GET_CB(FreeMemory);
    WSI_GET_CB(FreeCommandBuffers);
    WSI_GET_CB(GetBufferMemoryRequirements);
+   WSI_GET_CB(GetFenceFdKHR);
    WSI_GET_CB(GetFenceStatus);
    WSI_GET_CB(GetImageDrmFormatModifierPropertiesEXT);
    WSI_GET_CB(GetImageMemoryRequirements);
@@ -2471,7 +2472,17 @@ wsi_common_queue_present(const struct wsi_device *wsi,
                                        &swapchain->fences[image_index]);
          if (results[i] != VK_SUCCESS)
             continue;
-      } else {
+      } else if (!swapchain->image_info.explicit_sync_image_fence_in) {
+         /* Throttle on the fence for the previous presentation of this image,
+          * since you can't reset while the fence is outstanding on the queue.
+          * This is unlikely to trigger in practice, since it's unlikely that
+          * you managed to AcquireNextImage() the image back until the previous
+          * present had completed.
+          *
+          * We don't need to bother with this step if this very fence was
+          * blocked on in the presentation process and we're guaranteed to not
+          * acquire the image again until it's done.
+          */
          MESA_TRACE_SCOPE("throttle");
          results[i] = wsi->WaitForFences(vk_device_to_handle(dev),
                                          1, &swapchain->fences[image_index],
@@ -2854,6 +2865,12 @@ wsi_common_queue_present(const struct wsi_device *wsi,
       vk_find_struct_const(pPresentInfo->pNext, PRESENT_REGIONS_KHR);
    const VkSwapchainPresentModeInfoKHR *present_mode_info =
       vk_find_struct_const(pPresentInfo->pNext, SWAPCHAIN_PRESENT_MODE_INFO_KHR);
+   const struct queue_present_cac_plane_adjust_info_valve *cacplaneadjust =
+      vk_find_struct_const(pPresentInfo->pNext, QUEUE_PRESENT_CAC_PLANE_ADJUST_INFO_VALVE);
+   const struct VkQueuePresentSetModeVALVE *mode_info =
+      vk_find_struct_const(pPresentInfo->pNext, QUEUE_PRESENT_SET_MODE_INFO_VALVE);
+   const struct queue_present_update_cac_info_valve *cac_info_update =
+      vk_find_struct_const(pPresentInfo->pNext, QUEUE_PRESENT_UPDATE_CAC_INFO_VALVE);
 
    for (uint32_t i = 0; i < pPresentInfo->swapchainCount; i++) {
       VK_FROM_HANDLE(wsi_swapchain, swapchain, pPresentInfo->pSwapchains[i]);
@@ -2901,6 +2918,40 @@ wsi_common_queue_present(const struct wsi_device *wsi,
       const VkPresentRegionKHR *region = NULL;
       if (regions && regions->pRegions)
          region = &regions->pRegions[i];
+
+      if (mode_info) {
+         swapchain->set_display_mode(swapchain, mode_info->displayMode);
+      }
+
+      if(cacplaneadjust) {
+         results[i] = swapchain->cac_plane_adjust(swapchain, image_index,
+                                                  cacplaneadjust->plane_index,
+                                                  cacplaneadjust->src_x,
+                                                  cacplaneadjust->src_y,
+                                                  cacplaneadjust->src_width,
+                                                  cacplaneadjust->src_height,
+                                                  cacplaneadjust->dst_x,
+                                                  cacplaneadjust->dst_y,
+                                                  cacplaneadjust->dst_width,
+                                                  cacplaneadjust->dst_height);
+      }
+
+      if(cac_info_update)
+      {
+         for(int j=0; j<VALVESURFACEPLANESMAX; j++)
+         {
+            results[i] = swapchain->cac_plane_adjust(swapchain, image_index,
+                                                   j, 
+                                                   cac_info_update->src_rgb[j].offset.x,
+                                                   cac_info_update->src_rgb[j].offset.y,
+                                                   cac_info_update->src_rgb[j].extent.width,
+                                                   cac_info_update->src_rgb[j].extent.height,
+                                                   cac_info_update->dst_rgb[j].offset.x,
+                                                   cac_info_update->dst_rgb[j].offset.y,
+                                                   cac_info_update->dst_rgb[j].extent.width,
+                                                   cac_info_update->dst_rgb[j].extent.height);
+         }
+      }
 
       results[i] = swapchain->queue_present(swapchain, image_index,
                                             image_signal_infos[i].present_id,
@@ -3136,7 +3187,7 @@ wsi_create_buffer_blit_context(const struct wsi_swapchain *chain,
       .sType = VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA,
       .pNext = NULL,
       .implicit_sync = info->image_type == WSI_IMAGE_TYPE_DRM &&
-                       !info->explicit_sync && !chain->dma_buf_semaphore,
+                       !info->explicit_sync && !info->explicit_sync_image_fence_in && !chain->dma_buf_semaphore,
       .dma_buf_sync_file = chain->dma_buf_semaphore,
    };
    VkMemoryDedicatedAllocateInfo buf_mem_dedicated_info = {

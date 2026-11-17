@@ -170,8 +170,9 @@ emit_output_copies_impl(struct lower_io_state *state, nir_function_impl *impl)
  * foo[0/1].
  */
 
+#define emit_interp(...) MESA_CALL_WITH_LTR_ARGS(_emit_interp, __VA_ARGS__)
 static void
-emit_interp(nir_builder *b, nir_deref_instr **old_interp_deref,
+_emit_interp(nir_builder *b, nir_deref_instr **old_interp_deref,
             nir_deref_instr *temp_deref, nir_deref_instr *new_interp_deref,
             nir_intrinsic_instr *interp)
 {

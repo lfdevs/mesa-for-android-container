@@ -1697,8 +1697,9 @@ get_image_ssbo_samp_tex_src(struct ir3_context *ctx, nir_src *src, bool image)
    return info;
 }
 
+#define emit_sam(...) MESA_CALL_WITH_LTR_ARGS(_emit_sam, __VA_ARGS__)
 static struct ir3_instruction *
-emit_sam(struct ir3_context *ctx, opc_t opc, struct tex_src_info info,
+_emit_sam(struct ir3_context *ctx, opc_t opc, struct tex_src_info info,
          type_t type, unsigned wrmask, struct ir3_instruction *src0,
          struct ir3_instruction *src1)
 {
@@ -1768,7 +1769,7 @@ emit_intrinsic_load_image(struct ir3_context *ctx, nir_intrinsic_instr *intr,
    }
 
    sam = emit_sam(ctx, OPC_ISAM, info, type, MASK(intr->num_components),
-                  ir3_create_collect(b, coords, ncoords), NULL);
+                  ir3_create_collect(b, coords, ncoords), (struct ir3_instruction *)NULL);
 
    ir3_handle_nonuniform(sam, intr);
 
@@ -1783,7 +1784,7 @@ emit_intrinsic_load_image(struct ir3_context *ctx, nir_intrinsic_instr *intr,
        * it doesn't need any barriers.
        */
       rck = emit_sam(ctx, OPC_ISAM, info, type, 0b1,
-                     ir3_create_collect(b, coords, ncoords), NULL);
+                     ir3_create_collect(b, coords, ncoords), (struct ir3_instruction *)NULL);
       rck->flags |= IR3_INSTR_RCK;
       dst[4] = rck;
    }
@@ -1804,7 +1805,8 @@ emit_intrinsic_image_size_tex(struct ir3_context *ctx,
    info.flags |= flags;
    assert(nir_src_as_uint(intr->src[1]) == 0);
    lod = create_immed(b, 0);
-   sam = emit_sam(ctx, OPC_GETSIZE, info, dst_type, 0b1111, lod, NULL);
+   sam = emit_sam(ctx, OPC_GETSIZE, info, dst_type, 0b1111, lod,
+                  (struct ir3_instruction *)NULL);
 
    /* Array size actually ends up in .w rather than .z. This doesn't
     * matter for miplevel 0, but for higher mips the value in z is
@@ -2636,8 +2638,9 @@ emit_ray_intersection(struct ir3_context *ctx, nir_intrinsic_instr *intr,
 static void setup_input(struct ir3_context *ctx, nir_intrinsic_instr *intr);
 static void setup_output(struct ir3_context *ctx, nir_intrinsic_instr *intr);
 
+#define apply_mov_half_shared_quirk(...) MESA_CALL_WITH_LTR_ARGS(_apply_mov_half_shared_quirk, __VA_ARGS__)
 static struct ir3_instruction *
-apply_mov_half_shared_quirk(struct ir3_context *ctx,
+_apply_mov_half_shared_quirk(struct ir3_context *ctx,
                             struct ir3_instruction *src,
                             struct ir3_instruction *dst)
 {
@@ -3489,7 +3492,8 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
       struct tex_src_info info =
          get_bindless_samp_src(ctx, &intr->src[0], &intr->src[1], NULL, NULL);
       struct ir3_instruction *sam =
-         emit_sam(ctx, OPC_SAM, info, TYPE_F32, 0b1111, NULL, NULL);
+         emit_sam(ctx, OPC_SAM, info, TYPE_F32, 0b1111, (struct ir3_instruction *)NULL,
+                  (struct ir3_instruction *)NULL);
 
       make_dst_dummy(sam);
       array_insert(ctx->block, ctx->block->keeps, sam);
@@ -4097,8 +4101,8 @@ emit_tex(struct ir3_context *ctx, nir_tex_instr *tex)
 
       struct ir3_builder build =
          ir3_builder_at(ir3_before_terminator(ctx->in_block));
-      sam = ir3_SAM(&build, opc, type, MASK(ncomp), 0, NULL,
-                    get_barycentric(ctx, IJ_PERSP_PIXEL), 0);
+      sam = ir3_SAM(&build, opc, type, MASK(ncomp), 0, (struct ir3_instruction *)NULL,
+                    get_barycentric(ctx, IJ_PERSP_PIXEL), (struct ir3_instruction *)NULL);
       sam->prefetch.input_offset = ir3_nir_coord_offset(tex->src[idx].src.ssa, NULL);
       /* make sure not to add irrelevant flags like S2EN */
       sam->flags = flags | (info.flags & IR3_INSTR_B);
@@ -4213,7 +4217,9 @@ emit_tex_info(struct ir3_context *ctx, nir_tex_instr *tex, unsigned idx)
 
    dst = ir3_get_def(ctx, &tex->def, 1);
 
-   sam = emit_sam(ctx, OPC_GETINFO, info, dst_type, 1 << idx, NULL, NULL);
+   sam = emit_sam(ctx, OPC_GETINFO, info, dst_type, 1 << idx,
+                  (struct ir3_instruction *)NULL,
+                  (struct ir3_instruction *)NULL);
 
    /* even though there is only one component, since it ends
     * up in .y/.z/.w rather than .x, we need a split_dest()
@@ -4256,14 +4262,17 @@ emit_tex_txs(struct ir3_context *ctx, nir_tex_instr *tex)
    lod = ir3_get_src(ctx, &tex->src[lod_idx].src)[0];
 
    if (tex->sampler_dim != GLSL_SAMPLER_DIM_BUF) {
-      sam = emit_sam(ctx, OPC_GETSIZE, info, dst_type, 0b1111, lod, NULL);
+      sam = emit_sam(ctx, OPC_GETSIZE, info, dst_type, 0b1111, lod,
+                     (struct ir3_instruction *)NULL);
    } else {
       /*
        * The maximum value which OPC_GETSIZE could return for one dimension
        * is 0x007ff0, however sampler buffer could be much bigger.
        * Blob uses OPC_GETBUF for them.
        */
-      sam = emit_sam(ctx, OPC_GETBUF, info, dst_type, 0b1111, NULL, NULL);
+      sam = emit_sam(ctx, OPC_GETBUF, info, dst_type, 0b1111,
+                     (struct ir3_instruction *)NULL,
+                     (struct ir3_instruction *)NULL);
    }
 
    ir3_split_dest(b, dst, sam, 0, 4);

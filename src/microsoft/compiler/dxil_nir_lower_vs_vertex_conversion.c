@@ -65,7 +65,7 @@ from_10_10_10_2_scaled(nir_builder *b, nir_def *src,
 static nir_def *
 from_10_10_10_2_snorm(nir_builder *b, nir_def *src, nir_def *lshift)
 {
-   nir_def *split = from_10_10_10_2_scaled(b, src, lshift, nir_ishr);
+   nir_def *split = from_10_10_10_2_scaled(b, src, lshift, _nir_ishr);
    nir_def *scale_rgb = nir_imm_vec4(b,
                                          1.0f / 0x1ff,
                                          1.0f / 0x1ff,
@@ -77,7 +77,7 @@ from_10_10_10_2_snorm(nir_builder *b, nir_def *src, nir_def *lshift)
 static nir_def *
 from_10_10_10_2_unorm(nir_builder *b, nir_def *src, nir_def *lshift)
 {
-   nir_def *split = from_10_10_10_2_scaled(b, src, lshift, nir_ushr);
+   nir_def *split = from_10_10_10_2_scaled(b, src, lshift, _nir_ushr);
    nir_def *scale_rgb = nir_imm_vec4(b,
                                          1.0f / 0x3ff,
                                          1.0f / 0x3ff,
@@ -125,13 +125,13 @@ lower_vs_vertex_conversion_impl(nir_builder *b, nir_instr *instr, void *options)
       case PIPE_FORMAT_B10G10R10A2_UNORM:
          return from_10_10_10_2_unorm(b, src, lshift_bgra(b));
       case PIPE_FORMAT_R10G10B10A2_SSCALED:
-         return from_10_10_10_2_scaled(b, src, lshift_rgba(b), nir_ishr);
+         return from_10_10_10_2_scaled(b, src, lshift_rgba(b), _nir_ishr);
       case PIPE_FORMAT_B10G10R10A2_SSCALED:
-         return from_10_10_10_2_scaled(b, src, lshift_bgra(b), nir_ishr);
+         return from_10_10_10_2_scaled(b, src, lshift_bgra(b), _nir_ishr);
       case PIPE_FORMAT_R10G10B10A2_USCALED:
-         return from_10_10_10_2_scaled(b, src, lshift_rgba(b), nir_ushr);
+         return from_10_10_10_2_scaled(b, src, lshift_rgba(b), _nir_ushr);
       case PIPE_FORMAT_B10G10R10A2_USCALED:
-         return from_10_10_10_2_scaled(b, src, lshift_bgra(b), nir_ushr);
+         return from_10_10_10_2_scaled(b, src, lshift_bgra(b), _nir_ushr);
       case PIPE_FORMAT_R8G8B8A8_USCALED:
       case PIPE_FORMAT_R16G16B16A16_USCALED:
          return nir_u2f32(b, &intr->def);

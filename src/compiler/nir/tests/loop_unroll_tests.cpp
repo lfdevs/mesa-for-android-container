@@ -35,7 +35,7 @@
       nir_def *limit = nir_imm_##_type(&bld, _limit);               \
       nir_def *step = nir_imm_##_type(&bld, _step);                 \
       loop_unroll_test_helper(&bld, init, limit, step,                  \
-                              &nir_##_cond, &nir_##_incr, _rev);        \
+                              &_nir_##_cond, &_nir_##_incr, _rev);        \
       EXPECT_##_exp_res(nir_opt_loop_unroll(bld.shader));               \
       EXPECT_EQ(_exp_instr_count, count_instr(nir_op_##_incr));         \
       EXPECT_EQ(_exp_loop_count, count_loops());                        \
@@ -52,7 +52,7 @@
       nir_def *limit = nir_imm_##__type(&bld, _limit);                    \
       nir_def *step = nir_imm_##__type(&bld, _step);                      \
       loop_unroll_test_helper(&bld, init, limit, step,                    \
-                              &nir_##_cond, &nir_##_incr, _rev);          \
+                              &_nir_##_cond, &_nir_##_incr, _rev);        \
       EXPECT_##_exp_res(nir_opt_loop_unroll(bld.shader));                 \
       EXPECT_EQ(_exp_instr_count, count_instr(nir_op_##_incr));           \
       EXPECT_EQ(_exp_loop_count, count_loops());                          \

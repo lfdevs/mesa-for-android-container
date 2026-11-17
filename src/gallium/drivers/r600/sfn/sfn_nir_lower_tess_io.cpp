@@ -86,7 +86,7 @@ emil_lsd_in_addr(nir_builder *b,
                  nir_intrinsic_instr *op)
 {
    nir_def *addr =
-      nir_build_alu(b, nir_op_umul24, nir_channel(b, base, 0), patch_id, NULL, NULL);
+      nir_build_alu(b, nir_op_umul24, nir_channel(b, base, 0), patch_id, nullptr, nullptr);
 
    auto idx1 = nir_src_as_const_value(op->src[0]);
    if (!idx1 || idx1->u32 != 0)
@@ -357,8 +357,8 @@ r600_lower_tess_io_impl(nir_builder *b, nir_instr *instr, enum mesa_prim prim_ty
                                              nir_op_umul24,
                                              nir_channel(b, load_out_param_base, 1),
                                              rel_patch_id,
-                                             NULL,
-                                             NULL);
+                                             nullptr,
+                                             nullptr);
       addr = emil_tcs_io_offset(b, addr, op, 1);
       emit_store_lds(b, op, addr);
       nir_instr_remove(instr);

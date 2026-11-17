@@ -5,8 +5,9 @@
 
 #include "vtn_private.h"
 
+#define vtn_build_subgroup_instr(...) MESA_CALL_WITH_LTR_ARGS(_vtn_build_subgroup_instr, __VA_ARGS__)
 static struct vtn_ssa_value *
-vtn_build_subgroup_instr(struct vtn_builder *b,
+_vtn_build_subgroup_instr(struct vtn_builder *b,
                          nir_intrinsic_op nir_op,
                          struct vtn_ssa_value *src0,
                          struct vtn_ssa_value *src1,

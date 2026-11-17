@@ -25,14 +25,16 @@
 #include "nir_builder.h"
 #include "nir_deref.h"
 
+#define emit_load_store_deref(...) MESA_CALL_WITH_LTR_ARGS(_emit_load_store_deref, __VA_ARGS__)
 static void
-emit_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
+_emit_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
                       nir_deref_instr *parent,
                       nir_deref_instr **deref_arr,
                       nir_def **dest, nir_def *src);
 
+#define emit_indirect_load_store_deref(...) MESA_CALL_WITH_LTR_ARGS(_emit_indirect_load_store_deref, __VA_ARGS__)
 static void
-emit_indirect_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
+_emit_indirect_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
                                nir_deref_instr *parent,
                                nir_deref_instr **deref_arr,
                                int start, int end,
@@ -65,7 +67,7 @@ emit_indirect_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
 }
 
 static void
-emit_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
+_emit_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
                       nir_deref_instr *parent,
                       nir_deref_instr **deref_arr,
                       nir_def **dest, nir_def *src)

@@ -262,8 +262,9 @@ vtn_variable_resource_index(struct vtn_builder *b, struct vtn_variable *var,
    return &instr->def;
 }
 
+#define vtn_resource_reindex(...) MESA_CALL_WITH_LTR_ARGS(_vtn_resource_reindex, __VA_ARGS__)
 static nir_def *
-vtn_resource_reindex(struct vtn_builder *b, enum vtn_variable_mode mode,
+_vtn_resource_reindex(struct vtn_builder *b, enum vtn_variable_mode mode,
                      nir_def *base_index, nir_def *offset_index)
 {
    vtn_assert(b->options->environment == NIR_SPIRV_VULKAN);
@@ -641,7 +642,7 @@ vtn_local_load(struct vtn_builder *b, nir_deref_instr *src,
 }
 
 void
-vtn_local_store(struct vtn_builder *b, struct vtn_ssa_value *src,
+_vtn_local_store(struct vtn_builder *b, struct vtn_ssa_value *src,
                 nir_deref_instr *dest, enum gl_access_qualifier access)
 {
    nir_deref_instr *dest_tail = get_deref_tail(dest);

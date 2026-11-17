@@ -165,8 +165,9 @@ validate_cat1(struct validate_ctx *ctx, struct ir3_instruction *instr)
                            instr->cat1.src_type == TYPE_U32);
 }
 
+#define eval_instrs(...) MESA_CALL_WITH_LTR_ARGS(_eval_instrs, __VA_ARGS__)
 static struct eval_state
-eval_instrs(struct validate_ctx *ctx, struct ir3_instruction *copy_instr,
+_eval_instrs(struct validate_ctx *ctx, struct ir3_instruction *copy_instr,
             struct ir3_instruction *before)
 {
    struct eval_state state;
@@ -357,7 +358,7 @@ validate_regs(struct validate_ctx *ctx, struct half_val *actual,
  * such values around in the register state.
  */
 void
-ir3_lower_copies_validate(struct ir3_shader_variant *v,
+_ir3_lower_copies_validate(struct ir3_shader_variant *v,
                           struct ir3_instruction *copy_instr,
                           struct ir3_instruction *before)
 {
