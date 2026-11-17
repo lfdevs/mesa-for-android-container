@@ -244,6 +244,15 @@ pan_kmod_flush_bo_map_syncs_locked(struct pan_kmod_dev *dev)
    util_dynarray_clear(&dev->pending_bo_syncs.array);
 }
 
+int
+pan_kmod_cs_event_signal(struct pan_kmod_dev *dev)
+{
+   if (!dev->ops->cs_event_signal)
+      return 0;
+
+   return dev->ops->cs_event_signal(dev);
+}
+
 void
 pan_kmod_flush_bo_map_syncs(struct pan_kmod_dev *dev)
 {

@@ -511,6 +511,12 @@ struct pan_kmod_ops {
    /* Flush the pending BO map syncs. */
    int (*flush_bo_map_syncs)(struct pan_kmod_dev *dev);
 
+   /* Tell the kernel a CPU-side CSF event word changed, so a CSG evicted
+    * while waiting on it gets re-evaluated. Optional: NULL on backends that
+    * share one CSG and do not need the notification. Returns 0 or -1.
+    */
+   int (*cs_event_signal)(struct pan_kmod_dev *dev);
+
    /* Wait for a buffer object to be ready for read or read/write accesses. */
    bool (*bo_wait)(struct pan_kmod_bo *bo, int64_t timeout_ns,
                    bool for_read_only_access);
@@ -797,6 +803,15 @@ void pan_kmod_queue_bo_map_sync(struct pan_kmod_bo *bo, uint64_t bo_offset,
                                 enum pan_kmod_bo_sync_type type);
 
 void pan_kmod_flush_bo_map_syncs(struct pan_kmod_dev *dev);
+
+/* Notify the kernel that a CPU write to CSF event memory may have satisfied
+ * a SYNC_WAIT. Returns 0 when the backend has nothing to do or the signal
+ * was delivered, -1 when the backend reports a failure.
+ *
+ * Not inline: at -O3 a static inline sees a NULL slot on every backend the
+ * compiler can prove and deletes the call, so kbase never gets the ioctl.
+ */
+int pan_kmod_cs_event_signal(struct pan_kmod_dev *dev);
 
 static inline void
 pan_kmod_set_bo_label(struct pan_kmod_dev *dev, struct pan_kmod_bo *bo, const char *label)

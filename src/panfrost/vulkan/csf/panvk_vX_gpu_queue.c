@@ -1135,8 +1135,6 @@ finish_render_desc_ringbuf(struct panvk_gpu_queue *queue)
    const bool tracing_enabled = PANVK_DEBUG(TRACE);
    struct panvk_desc_ringbuf *ringbuf = &queue->render_desc_ringbuf;
 
-   panvk_pool_free_mem(&ringbuf->syncobj);
-
    if (dev->debug.decode_ctx && ringbuf->addr.dev) {
       pandecode_inject_free(dev->debug.decode_ctx, ringbuf->addr.dev,
                             ringbuf->size);
@@ -1315,29 +1313,10 @@ ringbuf_mapped:
          pandecode_inject_mmap(dev->debug.decode_ctx,
                                ringbuf->addr.dev + ringbuf->size,
                                ringbuf->addr.host, ringbuf->size, NULL);
-   }
+    }
 
-   struct panvk_pool_alloc_info alloc_info = {
-      .size = sizeof(struct panvk_cs_sync32),
-      .alignment = 64,
-   };
-
-   ringbuf->syncobj = panvk_pool_alloc_mem(&dev->mempools.rw, alloc_info);
-   if (!panvk_priv_mem_check_alloc(ringbuf->syncobj))
-      return panvk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                          "Failed to create the render desc ringbuf context");
-
-   panvk_priv_mem_write(ringbuf->syncobj, 0, struct panvk_cs_sync32, syncobj) {
-      *syncobj = (struct panvk_cs_sync32){
-         .seqno = RENDER_DESC_RINGBUF_SIZE,
-      };
-   }
-#ifdef HAVE_PAN_KMOD_KBASE
-   if (gpu_queue_uses_kbase(dev))
-      kbase_clean_priv_mem(ringbuf->syncobj, 0,
-                           sizeof(struct panvk_cs_sync32));
-#endif
-
+   /* The ringbuf sync lives in the queue syncobjs BO, which is CSF event
+    * memory on kbase. init_queue() wrote its initial seqno. */
    return VK_SUCCESS;
 }
 
@@ -1681,8 +1660,8 @@ init_subqueue(struct panvk_gpu_queue *queue, enum panvk_subqueue_id subqueue)
 
          /* Initialize the ringbuf */
          cs_ctx->render.desc_ringbuf = (struct panvk_cs_desc_ringbuf){
-            .syncobj =
-               panvk_priv_mem_dev_addr(queue->render_desc_ringbuf.syncobj),
+            .syncobj = panvk_priv_mem_dev_addr(queue->syncobjs) +
+                       PANVK_QUEUE_DESC_RINGBUF_SYNC_OFFSET,
             .ptr = queue->render_desc_ringbuf.addr.dev,
             .pos = 0,
          };
@@ -1878,6 +1857,14 @@ init_queue(struct panvk_gpu_queue *queue)
    static_assert(sizeof(struct panvk_cs_sync64) * PANVK_SUBQUEUE_COUNT <=
                     PANVK_QUEUE_TESS_READY_SYNC_OFFSET,
                  "subqueue syncobjs overlap the tess syncs");
+   static_assert(PANVK_QUEUE_TESS_FREE_SYNC_OFFSET +
+                    sizeof(struct panvk_cs_sync32) <=
+                    PANVK_QUEUE_DESC_RINGBUF_SYNC_OFFSET,
+                 "tess syncs overlap the render desc ringbuf sync");
+   static_assert(PANVK_QUEUE_DESC_RINGBUF_SYNC_OFFSET +
+                    sizeof(struct panvk_cs_sync32) <=
+                    PANVK_QUEUE_SYNCOBJS_SIZE,
+                 "render desc ringbuf sync exceeds the syncobjs BO");
    struct panvk_pool_alloc_info alloc_info = {
       .size = PANVK_QUEUE_SYNCOBJS_SIZE,
       .alignment = 64,
@@ -1915,6 +1902,12 @@ init_queue(struct panvk_gpu_queue *queue)
                         struct panvk_cs_sync32, sync) {
       *sync = (struct panvk_cs_sync32){.seqno = 1};
    }
+   /* The fragment subqueue releases RENDER_DESC_RINGBUF_SIZE back into this
+    * counter; a reserve waits until it covers the request. */
+   panvk_priv_mem_write(queue->syncobjs, PANVK_QUEUE_DESC_RINGBUF_SYNC_OFFSET,
+                        struct panvk_cs_sync32, sync) {
+      *sync = (struct panvk_cs_sync32){.seqno = RENDER_DESC_RINGBUF_SIZE};
+   }
 
 #ifdef HAVE_PAN_KMOD_KBASE
    if (gpu_queue_uses_kbase(dev)) {
@@ -1923,7 +1916,7 @@ init_queue(struct panvk_gpu_queue *queue)
                               PANVK_QUEUE_TESS_READY_SYNC_OFFSET);
       result = kbase_init_seqnos(queue);
       if (result != VK_SUCCESS)
-         return result;
+         goto err_cleanup_queue;
    }
 #endif
 

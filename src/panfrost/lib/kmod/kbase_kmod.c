@@ -1962,6 +1962,23 @@ kbase_kmod_bo_wait(struct pan_kmod_bo *bo, int64_t timeout_ns,
    return true;
 }
 
+/* KBASE_IOCTL_CS_EVENT_SIGNAL is _IO (mali_kbase_ioctl.h, same as
+ * kbase_csf_uapi.h:302) and carries no payload, so it cannot go through
+ * pan_kmod_ioctl(). The kernel re-walks CSF event memory and resumes any
+ * CSG suspended on a wait the CPU just satisfied. A cache clean does not.
+ */
+static int
+kbase_kmod_cs_event_signal(struct pan_kmod_dev *dev)
+{
+   if (ioctl(dev->fd, KBASE_IOCTL_CS_EVENT_SIGNAL)) {
+      mesa_loge("kbase: KBASE_IOCTL_CS_EVENT_SIGNAL failed: %s",
+                strerror(errno));
+      return -1;
+   }
+
+   return 0;
+}
+
 static int
 kbase_kmod_flush_bo_map_syncs(struct pan_kmod_dev *dev)
 {
@@ -2135,6 +2152,7 @@ const struct pan_kmod_ops kbase_kmod_ops = {
    .bo_mmap                = kbase_kmod_bo_mmap,
    .bo_munmap              = kbase_kmod_bo_munmap,
    .flush_bo_map_syncs     = kbase_kmod_flush_bo_map_syncs,
+   .cs_event_signal        = kbase_kmod_cs_event_signal,
    .bo_wait                = kbase_kmod_bo_wait,
    .bo_make_evictable      = kbase_kmod_bo_make_evictable,
    .bo_make_unevictable    = kbase_kmod_bo_make_unevictable,

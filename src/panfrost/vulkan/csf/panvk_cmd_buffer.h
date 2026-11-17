@@ -59,13 +59,14 @@ struct panvk_cs_sync64 {
 };
 
 /* The queue syncobjs BO holds a panvk_cs_sync64 per subqueue, then the
- * panvk_cs_sync32 ready/free handshake of the gpu_prerast tessellation loops.
- * That BO is CSF event memory on kbase, which kbase needs to re-evaluate the
- * SYNC_WAIT of an evicted CSG.
+ * panvk_cs_sync32 ready/free handshake of the gpu_prerast tessellation loops,
+ * then the render descriptor ringbuf sync. That BO is CSF event memory on
+ * kbase, which kbase needs to re-evaluate the SYNC_WAIT of an evicted CSG.
  */
 #define PANVK_QUEUE_TESS_READY_SYNC_OFFSET 64
 #define PANVK_QUEUE_TESS_FREE_SYNC_OFFSET  128
-#define PANVK_QUEUE_SYNCOBJS_SIZE          192
+#define PANVK_QUEUE_DESC_RINGBUF_SYNC_OFFSET 192
+#define PANVK_QUEUE_SYNCOBJS_SIZE          256
 
 enum panvk_kbase_progress_marker {
    PANVK_KBASE_PROGRESS_CMDBUF_START = 0x001,

@@ -1226,7 +1226,8 @@ calc_render_descs_size(struct panvk_cmd_buffer *cmdbuf)
 }
 
 static void
-cs_render_desc_ringbuf_reserve(struct cs_builder *b, uint32_t size)
+cs_render_desc_ringbuf_reserve(struct panvk_cmd_buffer *cmdbuf,
+                               struct cs_builder *b, uint32_t size)
 {
    /* Make sure we don't allocate more than the ringbuf size. */
    assert(size <= RENDER_DESC_RINGBUF_SIZE);
@@ -1245,9 +1246,11 @@ cs_render_desc_ringbuf_reserve(struct cs_builder *b, uint32_t size)
    cs_move32_to(b, sz_reg, size - 1);
    cs_sync32_wait(b, false, MALI_CS_CONDITION_GREATER, sz_reg, ringbuf_sync);
 
-   /* Decrement the syncobj to reflect the fact we're reserving memory. */
+   /* Decrement the syncobj to reflect the fact we're reserving memory.
+    * Same subqueue as the release, but on kbase the word is CSF event
+    * memory and the signal has to be SYSTEM scope to be re-checked. */
    cs_move32_to(b, sz_reg, -size);
-   cs_sync32_add(b, false, MALI_CS_SYNC_SCOPE_CSG, sz_reg, ringbuf_sync,
+   cs_sync32_add(b, false, panvk_cs_signal_scope(cmdbuf), sz_reg, ringbuf_sync,
                  cs_now());
 }
 
@@ -1426,7 +1429,7 @@ get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
    if (simul_use) {
       uint32_t descs_sz = calc_render_descs_size(cmdbuf);
 
-      cs_render_desc_ringbuf_reserve(b, descs_sz);
+      cs_render_desc_ringbuf_reserve(cmdbuf, b, descs_sz);
 
       /* Reserve ringbuf mem. */
       cs_update_vt_ctx(b) {

@@ -19,7 +19,10 @@ struct panvk_event {
 
    /* v10 is lacking IAND/IOR instructions, which forces us to have one syncobj
     * per-subqueue instead of one syncobj on which subqueues would only
-    * set/clear their bit. */
+    * set/clear their bit. On kbase this is its own CSF event memory BO: the
+    * rw_nc pool is ordinary memory, and kbase never re-checks a SYNC_WAIT
+    * whose word is not event memory once the waiting CSG has been evicted.
+    * Elsewhere it is a suballocation of the rw_nc pool. */
    struct panvk_priv_mem syncobjs;
 };
 

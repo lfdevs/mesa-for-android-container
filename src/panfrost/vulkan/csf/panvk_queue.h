@@ -107,7 +107,6 @@ struct panvk_subqueue {
 };
 
 struct panvk_desc_ringbuf {
-   struct panvk_priv_mem syncobj;
    struct pan_kmod_bo *bo;
    uint64_t size;
    struct {
