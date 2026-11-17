@@ -1810,7 +1810,7 @@ format_is_supported(struct panvk_physical_device *physical_device,
 bool
 panvk_bc_emul_enabled(const struct panvk_physical_device *physical_device)
 {
-   if (!PANVK_DEBUG(BC_EMUL))
+   if (PANVK_DEBUG(NO_BC_EMUL))
       return false;
 
    const struct pan_format fmt =

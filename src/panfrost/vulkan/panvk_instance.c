@@ -62,7 +62,7 @@ static const struct debug_control panvk_debug_options[] = {
    {"no_crc", PANVK_DEBUG_NO_CRC},
    {"kbase_diag", PANVK_DEBUG_KBASE_DIAG},
    {"gpu_prerast", PANVK_DEBUG_GPU_PRERAST},
-   {"bc_emul", PANVK_DEBUG_BC_EMUL},
+   {"no_bc_emul", PANVK_DEBUG_NO_BC_EMUL},
    {NULL, 0},
 };
 
