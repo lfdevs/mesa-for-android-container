@@ -549,6 +549,11 @@ VkResult wsi_x11_init_wsi(struct wsi_device *wsi_device,
                           const struct driOptionCache *dri_options);
 void wsi_x11_finish_wsi(struct wsi_device *wsi_device,
                         const VkAllocationCallbacks *alloc);
+#ifdef WSI_X11_DLOPEN
+bool wsi_x11_dlopen(void);
+#else
+static inline bool wsi_x11_dlopen(void) { return true; }
+#endif
 VkResult wsi_wl_init_wsi(struct wsi_device *wsi_device,
                          const VkAllocationCallbacks *alloc,
                          VkPhysicalDevice physical_device);

@@ -671,6 +671,9 @@ wsi_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice,
    if (!(effective_queues & BITFIELD64_BIT(queueFamilyIndex)))
       return false;
 
+   if (!wsi_x11_dlopen())
+      return false;
+
    struct wsi_x11_connection *wsi_conn =
       wsi_x11_get_connection(wsi_device, connection);
 
@@ -697,7 +700,7 @@ wsi_GetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice,
    /* Our WSI implementation for X11 relies on threads.  Check Xlib is running
     * in thread safe mode before advertising support.
     */
-   if (!x11_xlib_display_is_thread_safe(dpy))
+   if (!wsi_x11_dlopen() || !x11_xlib_display_is_thread_safe(dpy))
       return false;
 
    return wsi_GetPhysicalDeviceXcbPresentationSupportKHR(physicalDevice,
@@ -1195,6 +1198,9 @@ wsi_CreateXcbSurfaceKHR(VkInstance _instance,
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR);
 
+   if (!wsi_x11_dlopen())
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
    unsigned visual_depth;
    xcb_visualtype_t *visual =
       get_visualtype_for_window(pCreateInfo->connection, pCreateInfo->window, &visual_depth, NULL);
@@ -1228,6 +1234,9 @@ wsi_CreateXlibSurfaceKHR(VkInstance _instance,
    struct wsi_x11_vk_surface *surface;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR);
+
+   if (!wsi_x11_dlopen())
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
 
    unsigned visual_depth;
    xcb_visualtype_t *visual =

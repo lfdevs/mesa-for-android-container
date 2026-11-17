@@ -2408,6 +2408,18 @@ if with_platform_x11
   if with_xlib_lease
     dep_xlib_xrandr = dependency('xrandr', version : dep_xlib_xrandr_version)
   endif
+  if with_platform_android and with_any_vk
+    dep_xcb = dep_xcb.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_xrandr = dep_xcb_xrandr.partial_dependency(compile_args : true, includes : true)
+    dep_x11_xcb = dep_x11_xcb.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_dri3 = dep_xcb_dri3.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_present = dep_xcb_present.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_shm = dep_xcb_shm.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_sync = dep_xcb_sync.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_xfixes = dep_xcb_xfixes.partial_dependency(compile_args : true, includes : true)
+    dep_xshmfence = dep_xshmfence.partial_dependency(compile_args : true, includes : true)
+    pre_args += '-DWSI_X11_DLOPEN'
+  endif
 endif
 
 if with_dri

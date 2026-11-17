@@ -11,6 +11,9 @@ endif
 
 if with_platform_x11
   files_vulkan_wsi += files('wsi_common_x11.c')
+  if with_platform_android
+    files_vulkan_wsi += files('wsi_x11_dlopen.c')
+  endif
   links_vulkan_wsi += libloader_x11
   links_vulkan_wsi += libloader
 endif
