@@ -97,7 +97,7 @@ struct panlib_v7_tess {
    uint32_t out_patch_size;
    uint32_t max_patches;
    uint32_t max_indices;
-   /* struct libpan_draw_helper_varying_buf_info the tess eval draw
+   /* struct poly_heap the tess eval draw
     * allocates its varyings from, and what one output vertex takes there
     * (all layers), plus a margin left free: the index count is cut so that
     * the draw fits. 0 for no limit.

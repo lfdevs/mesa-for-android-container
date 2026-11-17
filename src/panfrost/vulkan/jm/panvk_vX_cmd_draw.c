@@ -614,26 +614,25 @@ panvk_draw_get_indirect_varying_info(struct panvk_cmd_buffer *cmdbuf)
    }
 
    struct pan_ptr bufs_info_storage = panvk_cmd_alloc_dev_mem(
-      cmdbuf, desc, sizeof(struct libpan_draw_helper_varying_buf_info), 8);
+      cmdbuf, desc, sizeof(struct poly_heap), 8);
 
    if (!bufs_info_storage.gpu)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
    cmdbuf->state.gfx.vs.indirect_varying_bufs_infos = bufs_info_storage.gpu;
 
-   struct libpan_draw_helper_varying_buf_info *vary_bufs_info =
-      bufs_info_storage.cpu;
-   vary_bufs_info->address = vary_bo->addr.dev;
-   /* jm-v7 106: the GPU advances offset; a re-submitted batch must start
+   struct poly_heap *vary_bufs_info = bufs_info_storage.cpu;
+   vary_bufs_info->base = vary_bo->addr.dev;
+   /* jm-v7 106: the GPU advances bottom; a re-submitted batch must start
     * from 0 again (panvk_reset_issued_batch()), or every submit of the
     * same command buffer moves further into the buffer.
     */
    if (cmdbuf->cur_batch)
       util_dynarray_append_typed(&cmdbuf->cur_batch->vary_infos, uint32_t *,
-                                 (uint32_t *)&vary_bufs_info->offset);
+                                 (uint32_t *)&vary_bufs_info->bottom);
    vary_bufs_info->size = PANVK_JM_MAX_PER_VTX_ATTRIBUTES_INDIRECT_SIZE *
                           PANVK_JM_MAX_VERTICES_INDIRECT;
-   vary_bufs_info->offset = 0;
+   vary_bufs_info->bottom = 0;
    return VK_SUCCESS;
 }
 
@@ -3521,7 +3520,7 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
             .primitive_vertex_count =
                mesa_vertices_per_prim(draw->info.prim),
             .varying_bufs_descs = draw->varying_bufs,
-            .varying_bufs_info = draw->indirect_info.varying_bufs,
+            .heap = cmdbuf->state.gfx.vs.indirect_varying_bufs_infos,
             .attrib_bufs_descs = draw->vs.attribute_bufs,
             .attrib_bufs_infos = draw->indirect_info.attrib_bufs,
             .attrib_bufs_valid = attrib_bufs_valid,
@@ -3545,7 +3544,7 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
                  draw->info.index.index_size) {
          const struct panlib_draw_indexed_indirect_helper_args args = {
             .cmd = draw->info.indirect.buffer_dev_addr,
-            .heap = panvk_priv_mem_dev_addr(dev->poly_heap.state),
+            .heap = cmdbuf->state.gfx.vs.indirect_varying_bufs_infos,
             .index_buffer_ptr = draw->info.index.buffer_dev_addr,
             .index_min_max_res = index_min_max_res_ptr,
             .index_size = draw->info.index.index_size,
@@ -3575,7 +3574,7 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
             .cmd = draw->info.indirect.buffer_dev_addr,
             .primitive_vertex_count =
                mesa_vertices_per_prim(draw->info.prim),
-            .heap = panvk_priv_mem_dev_addr(dev->poly_heap.state),
+            .heap = cmdbuf->state.gfx.vs.indirect_varying_bufs_infos,
             .varying_bufs_descs = draw->varying_bufs,
             .attrib_bufs_descs = draw->vs.attribute_bufs,
             .attrib_bufs_infos = draw->indirect_info.attrib_bufs,
@@ -3652,6 +3651,7 @@ panvk_cmd_draw_indirect(struct panvk_cmd_buffer *cmdbuf,
       panvk_per_arch(cmd_close_batch)(cmdbuf);
       batch = panvk_per_arch(cmd_open_batch)(cmdbuf);
       cmdbuf->state.uses_poly_heap = false;
+      cmdbuf->state.gfx.vs.indirect_varying_bufs_infos = 0;
    }
 
    clear_dirty_after_draw(cmdbuf);

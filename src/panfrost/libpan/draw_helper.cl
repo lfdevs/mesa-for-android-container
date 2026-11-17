@@ -1009,7 +1009,6 @@ struct panlib_draw_info {
 
    struct {
       global struct mali_attribute_buffer_packed *descs;
-      global struct libpan_draw_helper_varying_buf_info *info;
    } varying_bufs;
 
    struct {
@@ -1502,8 +1501,8 @@ panlib_draw_indexed_indirect_helper(
    global struct libpan_draw_helper_index_min_max_result *index_min_max_res,
    uint32_t index_size, uint32_t primitive_vertex_count,
    uint32_t attrib_bufs_valid, uint32_t attribs_valid,
+   global struct poly_heap *heap,
    global struct mali_attribute_buffer_packed *varying_bufs_descs,
-   global struct libpan_draw_helper_varying_buf_info *varying_bufs_info,
    global struct mali_attribute_buffer_packed *attrib_bufs_descs,
    global struct libpan_draw_helper_attrib_buf_info *attrib_bufs_infos,
    global struct mali_attribute_packed *attribs_descs,
@@ -1515,7 +1514,7 @@ panlib_draw_indexed_indirect_helper(
    draw_indexed_indirect_body(
       cmd, index_buffer_ptr, index_min_max_res->min, index_min_max_res->max,
       index_size, primitive_vertex_count, attrib_bufs_valid, attribs_valid,
-      varying_bufs_descs, varying_bufs_info, attrib_bufs_descs,
+      heap, varying_bufs_descs, attrib_bufs_descs,
       attrib_bufs_infos, attribs_descs, attribs_infos, first_vertex_sysval,
       first_instance_sysval, raw_vertex_offset_sysval, idvs_job, vertex_job,
       tiler_job);
@@ -1629,8 +1628,8 @@ panlib_draw_indexed_indirect_minmax_helper(
    global struct libpan_draw_helper_index_min_max_result *index_min_max_res,
    uint32_t index_size, uint32_t primitive_vertex_count,
    uint32_t attrib_bufs_valid, uint32_t attribs_valid,
+   global struct poly_heap *heap,
    global struct mali_attribute_buffer_packed *varying_bufs_descs,
-   global struct libpan_draw_helper_varying_buf_info *varying_bufs_info,
    global struct mali_attribute_buffer_packed *attrib_bufs_descs,
    global struct libpan_draw_helper_attrib_buf_info *attrib_bufs_infos,
    global struct mali_attribute_packed *attribs_descs,
@@ -1661,7 +1660,7 @@ panlib_draw_indexed_indirect_minmax_helper(
    draw_indexed_indirect_body(
       cmd, index_buffer_ptr, min_vertex, max_vertex, index_size,
       primitive_vertex_count, attrib_bufs_valid, attribs_valid,
-      varying_bufs_descs, varying_bufs_info, attrib_bufs_descs,
+      heap, varying_bufs_descs, attrib_bufs_descs,
       attrib_bufs_infos, attribs_descs, attribs_infos, first_vertex_sysval,
       first_instance_sysval, raw_vertex_offset_sysval, idvs_job, vertex_job,
       tiler_job);
@@ -1893,10 +1892,11 @@ panlib_v7_tess_prefix(global struct panlib_v7_tess *t)
    uint32_t budget = t->max_indices;
 
    if (t->varying_info && t->varying_bytes) {
-      global struct libpan_draw_helper_varying_buf_info *vi =
-         (global struct libpan_draw_helper_varying_buf_info *)t->varying_info;
+      global struct poly_heap *vi =
+         (global struct poly_heap *)t->varying_info;
       uint32_t used =
-         atomic_fetch_add_explicit(&vi->offset, 0, memory_order_relaxed);
+         atomic_fetch_add_explicit((volatile global atomic_uint *)&vi->bottom,
+                                   0, memory_order_relaxed);
       uint32_t left = vi->size > used + t->varying_margin
                          ? vi->size - used - t->varying_margin
                          : 0;
