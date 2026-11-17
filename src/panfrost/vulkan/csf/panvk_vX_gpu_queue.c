@@ -2877,12 +2877,17 @@ static void
 panvk_queue_submit_process_signals_kbase(struct panvk_queue_submit *submit,
                                          const struct vk_queue_submit *vk_submit)
 {
+   uint64_t addrs[PANVK_KBASE_SYNC_TARGET_COUNT] = {0};
+
+   for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++)
+      addrs[i] = kbase_subqueue_seqno_dev_addr(submit->queue, i);
+
    for (uint32_t i = 0; i < vk_submit->signal_count; i++) {
       const struct vk_sync_signal *signal = &vk_submit->signals[i];
       assert(signal->signal_value == 0);
       panvk_kbase_sync_set_pending(signal->sync, submit->queue,
                                    kbase_wait_sync_targets,
-                                   submit->kbase_target_seqnos);
+                                   submit->kbase_target_seqnos, addrs);
    }
 }
 #endif /* HAVE_PAN_KMOD_KBASE */

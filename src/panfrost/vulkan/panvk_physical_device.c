@@ -692,6 +692,7 @@ struct kbase_cpu_sync {
    void *pending_data;
    panvk_kbase_sync_wait_func pending_wait;
    uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT];
+   uint64_t target_addrs[PANVK_KBASE_SYNC_TARGET_COUNT];
 };
 
 static VkResult
@@ -714,6 +715,7 @@ kbase_cpu_sync_init(struct vk_device *device, struct vk_sync *sync,
    ks->pending_data = NULL;
    ks->pending_wait = NULL;
    memset(ks->targets, 0, sizeof(ks->targets));
+   memset(ks->target_addrs, 0, sizeof(ks->target_addrs));
    return VK_SUCCESS;
 }
 
@@ -755,6 +757,7 @@ kbase_cpu_sync_reset(UNUSED struct vk_device *device, struct vk_sync *sync)
    ks->pending_data = NULL;
    ks->pending_wait = NULL;
    memset(ks->targets, 0, sizeof(ks->targets));
+   memset(ks->target_addrs, 0, sizeof(ks->target_addrs));
    mtx_unlock(&ks->mutex);
    return VK_SUCCESS;
 }
@@ -768,7 +771,8 @@ kbase_cpu_sync_wait_many(struct vk_device *device, uint32_t wait_count,
 void
 panvk_kbase_sync_set_pending(
    struct vk_sync *sync, void *data, panvk_kbase_sync_wait_func wait,
-   const uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT])
+   const uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT],
+   const uint64_t target_addrs[PANVK_KBASE_SYNC_TARGET_COUNT])
 {
    struct kbase_cpu_sync *ks = container_of(sync, struct kbase_cpu_sync, sync);
 
@@ -782,6 +786,10 @@ panvk_kbase_sync_set_pending(
    ks->pending_data = data;
    ks->pending_wait = wait;
    memcpy(ks->targets, targets, sizeof(ks->targets));
+   if (target_addrs)
+      memcpy(ks->target_addrs, target_addrs, sizeof(ks->target_addrs));
+   else
+      memset(ks->target_addrs, 0, sizeof(ks->target_addrs));
    ks->result = VK_SUCCESS;
    ks->state = KBASE_CPU_SYNC_PENDING;
    u_cnd_monotonic_broadcast(&ks->cond);
@@ -953,12 +961,15 @@ kbase_cpu_sync_move(UNUSED struct vk_device *device, struct vk_sync *dst,
    ks_dst->pending_data = ks_src->pending_data;
    ks_dst->pending_wait = ks_src->pending_wait;
    memcpy(ks_dst->targets, ks_src->targets, sizeof(ks_dst->targets));
+   memcpy(ks_dst->target_addrs, ks_src->target_addrs,
+          sizeof(ks_dst->target_addrs));
 
    ks_src->state = KBASE_CPU_SYNC_RESET;
    ks_src->result = VK_SUCCESS;
    ks_src->pending_data = NULL;
    ks_src->pending_wait = NULL;
    memset(ks_src->targets, 0, sizeof(ks_src->targets));
+   memset(ks_src->target_addrs, 0, sizeof(ks_src->target_addrs));
    u_cnd_monotonic_broadcast(&ks_dst->cond);
    u_cnd_monotonic_broadcast(&ks_src->cond);
    mtx_unlock(&second->mutex);
@@ -1050,47 +1061,10 @@ kbase_cpu_sync_import_sync_file(struct vk_device *device,
    kbase_sync_file_waiter_free(ks);
    mtx_unlock(&ks->mutex);
 
-   panvk_kbase_sync_set_pending(sync, waiter, kbase_sync_file_wait_func, targets);
+   panvk_kbase_sync_set_pending(sync, waiter, kbase_sync_file_wait_func, targets,
+                                NULL);
 
    return VK_SUCCESS;
-}
-
-#ifndef SW_SYNC_IOC_CREATE_FENCE
-struct sw_sync_create_fence_data {
-   __u32 value;
-   char name[32];
-   __s32 fence;
-};
-#define SW_SYNC_IOC_MAGIC 'W'
-#define SW_SYNC_IOC_CREATE_FENCE _IOWR(SW_SYNC_IOC_MAGIC, 0, struct sw_sync_create_fence_data)
-#define SW_SYNC_IOC_INC          _IOW(SW_SYNC_IOC_MAGIC, 1, __u32)
-#endif
-
-static void *
-kbase_export_signaler_thread(void *arg)
-{
-   struct {
-      struct vk_device *device;
-      struct kbase_cpu_sync *ks;
-      int timeline_fd;
-   } *ctx = arg;
-
-   struct vk_sync_wait wait = {
-      .sync = &ctx->ks->sync,
-      .wait_value = 0,
-   };
-
-   VkResult res = kbase_cpu_sync_wait_many(ctx->device, 1, &wait,
-                                           VK_SYNC_WAIT_COMPLETE,
-                                           0xFFFFFFFFFFFFFFFFULL);
-   if (res == VK_SUCCESS) {
-      uint32_t inc = 1;
-      ioctl(ctx->timeline_fd, SW_SYNC_IOC_INC, &inc);
-   }
-
-   close(ctx->timeline_fd);
-   free(ctx);
-   return NULL;
 }
 
 static VkResult
@@ -1099,61 +1073,60 @@ kbase_cpu_sync_export_sync_file(struct vk_device *device,
                                 int *sync_file)
 {
    struct kbase_cpu_sync *ks = container_of(sync, struct kbase_cpu_sync, sync);
+   struct panvk_device *dev = to_panvk_device(device);
+   uint64_t addrs[PANVK_KBASE_SYNC_TARGET_COUNT];
+   uint64_t vals[PANVK_KBASE_SYNC_TARGET_COUNT];
+   unsigned count = 0;
+   int fd;
 
-   /* If already signaled, return an already-signaled sync_file FD using sw_sync */
-   int timeline_fd = open("/dev/sw_sync", O_RDWR | O_CLOEXEC);
-   if (timeline_fd < 0) {
-      return vk_errorf(device, VK_ERROR_OUT_OF_HOST_MEMORY,
-                       "Failed to open /dev/sw_sync: %m");
-   }
-
-   struct sw_sync_create_fence_data create_fence = {
-      .value = 1,
-      .name = "panvk_signal_fence",
-      .fence = -1,
-   };
-
-   if (ioctl(timeline_fd, SW_SYNC_IOC_CREATE_FENCE, &create_fence) < 0) {
-      close(timeline_fd);
-      return vk_errorf(device, VK_ERROR_OUT_OF_HOST_MEMORY,
-                       "SW_SYNC_IOC_CREATE_FENCE failed: %m");
-   }
+   VkResult result =
+      kbase_cpu_sync_wait_one(device, ks, VK_SYNC_WAIT_PENDING, UINT64_MAX);
+   if (result != VK_SUCCESS)
+      return result;
 
    mtx_lock(&ks->mutex);
-   bool already_signaled = (ks->state == KBASE_CPU_SYNC_SIGNALED);
+   if (ks->state == KBASE_CPU_SYNC_PENDING ||
+       ks->state == KBASE_CPU_SYNC_WAITING) {
+      if (ks->pending_wait == kbase_sync_file_wait_func) {
+         struct kbase_sync_file_waiter *waiter = ks->pending_data;
+         fd = dup(waiter->fd);
+         mtx_unlock(&ks->mutex);
+         goto out;
+      }
+      for (unsigned i = 0; i < PANVK_KBASE_SYNC_TARGET_COUNT; i++) {
+         if (!ks->targets[i])
+            continue;
+         if (!ks->target_addrs[i]) {
+            count = UINT32_MAX;
+            break;
+         }
+         addrs[count] = ks->target_addrs[i];
+         vals[count++] = ks->targets[i] - 1;
+      }
+   }
    mtx_unlock(&ks->mutex);
 
-   if (already_signaled) {
-      uint32_t inc = 1;
-      ioctl(timeline_fd, SW_SYNC_IOC_INC, &inc);
-      close(timeline_fd);
-      *sync_file = create_fence.fence;
-      return VK_SUCCESS;
+   if (count == UINT32_MAX) {
+      result = kbase_cpu_sync_wait_one(device, ks, VK_SYNC_WAIT_COMPLETE,
+                                       UINT64_MAX);
+      if (result != VK_SUCCESS)
+         return result;
+      count = 0;
    }
 
-   /* Spawn worker thread to signal fence when CPU sync completes */
-   pthread_t thread;
-   typedef void *(*pthread_func)(void *);
+   fd = kbase_kmod_csf_export_cqs64_fence(dev->kmod.dev, addrs, vals,
+                                          count);
 
-   struct {
-      struct vk_device *device;
-      struct kbase_cpu_sync *ks;
-      int timeline_fd;
-   } *ctx = malloc(sizeof(*ctx));
-
-   ctx->device = device;
-   ctx->ks = ks;
-   ctx->timeline_fd = timeline_fd;
-
-   if (pthread_create(&thread, NULL, (pthread_func)kbase_export_signaler_thread, ctx) != 0) {
-      free(ctx);
-      close(create_fence.fence);
-      close(timeline_fd);
-      return vk_errorf(device, VK_ERROR_OUT_OF_HOST_MEMORY, "pthread_create failed");
+out:
+   if (fd < 0) {
+      if (errno == EMFILE || errno == ENFILE)
+         return vk_errorf(device, VK_ERROR_TOO_MANY_OBJECTS,
+                          "sync_file export failed: %m");
+      return vk_errorf(device, VK_ERROR_OUT_OF_HOST_MEMORY,
+                       "sync_file export failed: %m");
    }
-   pthread_detach(thread);
 
-   *sync_file = create_fence.fence;
+   *sync_file = fd;
    return VK_SUCCESS;
 }
 
@@ -1189,6 +1162,8 @@ get_device_sync_types_kbase(struct panvk_physical_device *device,
    uint32_t sync_type_count = 0;
 
    device->drm_syncobj_type = kbase_cpu_sync_type;
+   if (pan_arch(device->kmod.dev->props.gpu_id) < 10)
+      device->drm_syncobj_type.export_sync_file = NULL;
 
    /* Binary CPU sync first (fences need a binary type with CPU_RESET),
     * software timeline emulation second (timeline semaphores).  Submitted

@@ -109,6 +109,12 @@ struct kbase_kmod_dev {
       uint64_t target_minus_one;
       int fence_fd;
    } kcpu;
+
+   struct {
+      simple_mtx_t lock;
+      base_kcpu_queue_id id;
+      bool valid;
+   } kcpu_export;
 };
 
 struct kbase_kmod_vm {
@@ -991,6 +997,89 @@ out:
    return ret;
 }
 
+int
+kbase_kmod_csf_export_cqs64_fence(struct pan_kmod_dev *dev,
+                                  const uint64_t *addrs,
+                                  const uint64_t *targets_minus_one,
+                                  unsigned count)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   struct base_cqs_wait_operation_info waits[3] = {0};
+   struct base_fence fence = {
+      .basep = {
+         .fd = -1,
+         .stream_fd = -1,
+      },
+   };
+   struct base_kcpu_command commands[2] = {
+      {
+         .type = BASE_KCPU_COMMAND_TYPE_CQS_WAIT_OPERATION,
+         .info.cqs_wait_operation = {
+            .objs = (uintptr_t)waits,
+            .nr_objs = count,
+         },
+      },
+      {
+         .type = BASE_KCPU_COMMAND_TYPE_FENCE_SIGNAL,
+         .info.fence = {
+            .fence = (uintptr_t)&fence,
+         },
+      },
+   };
+
+   if (!kbase_dev->is_csf) {
+      errno = ENOTSUP;
+      return -1;
+   }
+
+   if (count > ARRAY_SIZE(waits)) {
+      errno = EINVAL;
+      return -1;
+   }
+
+   for (unsigned i = 0; i < count; i++) {
+      if (addrs[i] & 15) {
+         errno = EINVAL;
+         return -1;
+      }
+      waits[i] = (struct base_cqs_wait_operation_info){
+         .addr = addrs[i],
+         .val = targets_minus_one[i],
+         .operation = BASEP_CQS_WAIT_OPERATION_GT,
+         .data_type = BASEP_CQS_DATA_TYPE_U64,
+      };
+   }
+
+   simple_mtx_lock(&kbase_dev->kcpu_export.lock);
+   if (!kbase_dev->kcpu_export.valid) {
+      struct kbase_ioctl_kcpu_queue_new create = {0};
+      if (ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_CREATE, &create)) {
+         simple_mtx_unlock(&kbase_dev->kcpu_export.lock);
+         return -1;
+      }
+      kbase_dev->kcpu_export.id = create.id;
+      kbase_dev->kcpu_export.valid = true;
+   }
+
+   for (unsigned i = count ? 0 : 1; i < 2; i++) {
+      struct kbase_ioctl_kcpu_queue_enqueue enqueue = {
+         .addr = (uintptr_t)&commands[i],
+         .nr_commands = 1,
+         .id = kbase_dev->kcpu_export.id,
+      };
+      if (ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_ENQUEUE, &enqueue)) {
+         simple_mtx_unlock(&kbase_dev->kcpu_export.lock);
+         return -1;
+      }
+   }
+   simple_mtx_unlock(&kbase_dev->kcpu_export.lock);
+
+   if (fence.basep.fd < 0)
+      errno = ENOENT;
+   return fence.basep.fd;
+}
+
 bool
 kbase_kmod_csf_has_error(const struct pan_kmod_dev *dev)
 {
@@ -1251,6 +1340,7 @@ kbase_kmod_dev_create(int fd, uint32_t flags,
    kbase_dev->dma_heap_fd = -1;
    kbase_dev->kcpu.fence_fd = -1;
    simple_mtx_init(&kbase_dev->kcpu.lock, mtx_plain);
+   simple_mtx_init(&kbase_dev->kcpu_export.lock, mtx_plain);
 
    if (is_csf && kbase_query_csif_info(fd, &kbase_dev->csif_info)) {
       mesa_loge("kbase: failed to query the CSF global interface");
@@ -1353,6 +1443,14 @@ kbase_kmod_dev_destroy(struct pan_kmod_dev *dev)
    }
    simple_mtx_unlock(&kbase_dev->kcpu.lock);
    simple_mtx_destroy(&kbase_dev->kcpu.lock);
+
+   if (kbase_dev->kcpu_export.valid) {
+      struct kbase_ioctl_kcpu_queue_delete delete = {
+         .id = kbase_dev->kcpu_export.id,
+      };
+      ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_DELETE, &delete);
+   }
+   simple_mtx_destroy(&kbase_dev->kcpu_export.lock);
 
    if (kbase_dev->user_reg_page)
       munmap(kbase_dev->user_reg_page, 4096);

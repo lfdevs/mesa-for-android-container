@@ -68,6 +68,11 @@ int kbase_kmod_csf_wait_cqs64(struct pan_kmod_dev *dev, uint64_t addr,
                               uint64_t target_minus_one,
                               int64_t timeout_ns);
 
+int kbase_kmod_csf_export_cqs64_fence(struct pan_kmod_dev *dev,
+                                      const uint64_t *addrs,
+                                      const uint64_t *targets_minus_one,
+                                      unsigned count);
+
 /* Report whether this kbase context has seen a queue-group error.  The error
  * state is latched while completion waits consume the notification stream. */
 bool kbase_kmod_csf_has_error(const struct pan_kmod_dev *dev);
