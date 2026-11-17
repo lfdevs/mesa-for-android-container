@@ -800,6 +800,8 @@ panvk_per_arch(CmdPipelineBarrier2)(VkCommandBuffer commandBuffer,
    panvk_per_arch(emit_barrier)(cmdbuf, deps);
 
    STACK_ARRAY_FINISH(crc_addrs);
+
+   panvk_per_arch(cmd_bc_decode_zero_initialized)(cmdbuf, pDependencyInfo);
 }
 
 VkResult

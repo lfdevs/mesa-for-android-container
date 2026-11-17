@@ -191,4 +191,9 @@ VkResult panvk_per_arch(meta_get_copy_desc_job)(
    const struct panvk_shader_desc_state *shader_desc_state,
    uint32_t attrib_buf_idx_offset, struct pan_ptr *job_desc);
 #endif
+
+struct panvk_cmd_buffer;
+
+void panvk_per_arch(cmd_bc_decode_zero_initialized)(
+   struct panvk_cmd_buffer *cmdbuf, const VkDependencyInfo *dep_info);
 #endif

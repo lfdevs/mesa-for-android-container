@@ -669,6 +669,52 @@ bc_decode_begin(struct panvk_cmd_buffer *cmdbuf,
    meta_compute_start(cmdbuf, save);
 }
 
+void
+panvk_per_arch(cmd_bc_decode_zero_initialized)(
+   struct panvk_cmd_buffer *cmdbuf, const VkDependencyInfo *dep_info)
+{
+   struct panvk_cmd_meta_compute_save_ctx save = {0};
+   bool started = false;
+
+   for (uint32_t i = 0; i < dep_info->imageMemoryBarrierCount; i++) {
+      const VkImageMemoryBarrier2 *b = &dep_info->pImageMemoryBarriers[i];
+      VK_FROM_HANDLE(panvk_image, img, b->image);
+
+      if (b->oldLayout != VK_IMAGE_LAYOUT_ZERO_INITIALIZED_EXT ||
+          b->newLayout == VK_IMAGE_LAYOUT_ZERO_INITIALIZED_EXT ||
+          !img->bc_emul)
+         continue;
+
+      if (!started) {
+         bc_decode_begin(cmdbuf, &save);
+         started = true;
+      }
+
+      const uint32_t level_count =
+         vk_image_subresource_level_count(&img->vk, &b->subresourceRange);
+      const uint32_t layer_count =
+         vk_image_subresource_layer_count(&img->vk, &b->subresourceRange);
+      for (uint32_t l = 0; l < level_count; l++) {
+         const uint32_t level = b->subresourceRange.baseMipLevel + l;
+         const VkImageSubresourceLayers subres = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = level,
+            .baseArrayLayer = b->subresourceRange.baseArrayLayer,
+            .layerCount = layer_count,
+         };
+         bc_decode_region(cmdbuf, img, &subres, (VkOffset3D){0, 0, 0},
+                          vk_image_mip_level_extent(&img->vk, level));
+      }
+   }
+
+   if (started) {
+      meta_compute_end(cmdbuf, &save);
+      bc_decode_barrier(panvk_cmd_buffer_to_handle(cmdbuf),
+                        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                        VK_ACCESS_2_MEMORY_READ_BIT);
+   }
+}
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdCopyMemoryToImageKHR)(
    VkCommandBuffer commandBuffer,
