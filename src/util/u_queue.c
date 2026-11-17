@@ -31,6 +31,7 @@
 #include "util/os_time.h"
 #include "util/u_string.h"
 #include "util/u_thread.h"
+#include "util/u_cpu_detect.h"
 #include "util/timespec.h"
 #include "u_process.h"
 
