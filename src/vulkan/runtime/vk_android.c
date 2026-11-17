@@ -53,6 +53,7 @@
 #endif
 
 #include <unistd.h>
+#include <sys/stat.h>
 
 static struct u_gralloc *_gralloc;
 
@@ -1258,18 +1259,41 @@ vk_common_GetAndroidHardwareBufferPropertiesANDROID(
    }
 
    const native_handle_t *handle = AHardwareBuffer_getNativeHandle(buffer);
-   assert(handle && handle->numFds > 0);
-   pProperties->allocationSize = lseek(handle->data[0], 0, SEEK_END);
+   if (!handle || handle->numFds <= 0)
+      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
 
+   int dma_buf = -1;
+   off_t dma_buf_size = -1;
    VkMemoryFdPropertiesKHR fd_props = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
    };
-   result = device->dispatch_table.GetMemoryFdPropertiesKHR(
-      device_h, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, handle->data[0],
-      &fd_props);
-   if (result != VK_SUCCESS)
-      return result;
 
+   for (int i = 0; i < handle->numFds; i++) {
+      int fd = handle->data[i];
+      if (fd < 0)
+         continue;
+
+      struct stat st;
+      if (fstat(fd, &st) < 0)
+         continue;
+
+      off_t size = lseek(fd, 0, SEEK_END);
+      if (size <= 0)
+         continue;
+
+      if (device->dispatch_table.GetMemoryFdPropertiesKHR(
+             device_h, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd,
+             &fd_props) == VK_SUCCESS) {
+         dma_buf = fd;
+         dma_buf_size = size;
+         break;
+      }
+   }
+
+   if (dma_buf < 0 || dma_buf_size <= 0)
+      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+
+   pProperties->allocationSize = (VkDeviceSize)dma_buf_size;
    pProperties->memoryTypeBits = fd_props.memoryTypeBits;
 
    return VK_SUCCESS;

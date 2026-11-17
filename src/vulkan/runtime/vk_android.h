@@ -175,6 +175,10 @@ vk_android_get_efr_pipeline_rendering_info(
    VkPipelineRenderingCreateInfo *local_info,
    VkFormat *local_color_format);
 
+VkResult vk_common_GetAndroidHardwareBufferPropertiesANDROID(
+   VkDevice device_h, const struct AHardwareBuffer *buffer,
+   VkAndroidHardwareBufferPropertiesANDROID *pProperties);
+
 #else /* defined(VK_USE_PLATFORM_ANDROID_KHR) && ANDROID_API_LEVEL >= 26 */
 
 static inline uint64_t
