@@ -9,6 +9,7 @@
 #include "panvk_cmd_buffer.h"
 #include "panvk_device_memory.h"
 #include "panvk_entrypoints.h"
+#include "panvk_perf_knobs.h"
 
 #include "pan_desc.h"
 #include "pan_util.h"
@@ -16,6 +17,11 @@
 
 #include "vk_android.h"
 #include "vk_render_pass.h"
+
+#if PAN_ARCH == 9
+#include "util/u_debug.h"
+DEBUG_GET_ONCE_OPTION(v9_rt128, "PANVK_V9_RT128", NULL)
+#endif
 
 static enum pan_fb_load_op
 get_att_fb_load_op(const VkRenderingAttachmentInfo *att)
@@ -592,6 +598,234 @@ render_state_set_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
    }
 }
 
+#if PAN_ARCH >= 10
+/* C4 (115): add the page-aligned range [base, base + size). A zero base
+ * (unbound) is unknown.
+ */
+static void
+frag_written_add_range(struct panvk_frag_written *fw, uint64_t base,
+                       uint64_t size)
+{
+   if (!base) {
+      fw->overflow = true;
+      return;
+   }
+
+   const uint64_t start = ROUND_DOWN_TO(base, 4096);
+   const uint64_t end = align64(base + size, 4096);
+
+   for (unsigned r = 0; r < fw->count; r++) {
+      if (fw->ranges[r].start <= start && end <= fw->ranges[r].end)
+         return;
+   }
+
+   if (fw->count == ARRAY_SIZE(fw->ranges)) {
+      fw->overflow = true;
+      return;
+   }
+
+   fw->ranges[fw->count].start = start;
+   fw->ranges[fw->count].end = end;
+   fw->count++;
+}
+
+static void
+frag_written_add_iview(struct panvk_frag_written *fw,
+                       const struct panvk_image_view *iview)
+{
+   if (!iview)
+      return;
+
+   const struct panvk_image *img =
+      container_of(iview->vk.image, struct panvk_image, vk);
+
+   /* Sparse images can share pages with anything. */
+   if (img->vk.create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) {
+      fw->overflow = true;
+      return;
+   }
+
+   for (unsigned p = 0; p < img->plane_count; p++)
+      frag_written_add_range(fw, img->planes[p].plane.base,
+                             img->planes[p].plane.layout.data_size_B);
+}
+
+/* A direct MSAA resolve stores straight to the resolve image, which is in
+ * none of the attachment views.
+ */
+static void
+frag_written_add_store(struct panvk_frag_written *fw,
+                       const struct pan_fb_store_target *store)
+{
+   if (!store->store || !store->iview)
+      return;
+
+   for (unsigned p = 0; p < ARRAY_SIZE(store->iview->planes); p++) {
+      const struct pan_image_plane_ref pref =
+         pan_image_view_get_plane(store->iview, p);
+
+      if (!pref.image)
+         continue;
+
+      const struct pan_image_plane *plane = pref.image->planes[pref.plane_idx];
+      if (!plane) {
+         fw->overflow = true;
+         continue;
+      }
+
+      frag_written_add_range(fw, plane->base, plane->layout.data_size_B);
+   }
+}
+
+static bool
+frag_written_overlaps_range(const struct panvk_frag_written *fw,
+                            uint64_t base, uint64_t size)
+{
+   if (!base)
+      return true;
+
+   const uint64_t start = ROUND_DOWN_TO(base, 4096);
+   const uint64_t end = align64(base + size, 4096);
+
+   for (unsigned r = 0; r < fw->count; r++) {
+      if (start < fw->ranges[r].end && fw->ranges[r].start < end)
+         return true;
+   }
+
+   return false;
+}
+
+static bool
+frag_written_overlaps(const struct panvk_frag_written *fw,
+                      const struct panvk_image_view *iview)
+{
+   if (!iview)
+      return false;
+
+   const struct panvk_image *img =
+      container_of(iview->vk.image, struct panvk_image, vk);
+
+   if (img->vk.create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
+      return true;
+
+   for (unsigned p = 0; p < img->plane_count; p++) {
+      if (frag_written_overlaps_range(fw, img->planes[p].plane.base,
+                                      img->planes[p].plane.layout.data_size_B))
+         return true;
+   }
+
+   return false;
+}
+
+/* The view the preload actually reads from. */
+static bool
+frag_written_overlaps_load(const struct panvk_frag_written *fw,
+                           const struct pan_fb_load_target *load)
+{
+   if (!load->iview)
+      return false;
+
+   for (unsigned p = 0; p < ARRAY_SIZE(load->iview->planes); p++) {
+      const struct pan_image_plane_ref pref =
+         pan_image_view_get_plane(load->iview, p);
+
+      if (!pref.image)
+         continue;
+
+      const struct pan_image_plane *plane = pref.image->planes[pref.plane_idx];
+      if (!plane || frag_written_overlaps_range(fw, plane->base,
+                                                plane->layout.data_size_B))
+         return true;
+   }
+
+   return false;
+}
+
+/* Called for every fragment job the command buffer issues: everything the
+ * jobs can write. That is the attachments (incremental rendering spills to
+ * them even without a store), the internal multisampled images of
+ * multisampled-render-to-single-sampled, the resolve targets and whatever
+ * the framebuffer stores to.
+ */
+void
+panvk_per_arch(cmd_track_frag_writes)(struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   struct panvk_frag_written *fw = &cmdbuf->state.gfx.frag_written;
+
+   for (unsigned i = 0; i < MAX_RTS; i++) {
+      frag_written_add_iview(fw, render->color_attachments.iviews[i]);
+      frag_written_add_iview(fw, render->color_attachments.preload_iviews[i]);
+      frag_written_add_iview(fw,
+                             render->color_attachments.resolve[i].dst_iview);
+   }
+
+   frag_written_add_iview(fw, render->z_attachment.iview);
+   frag_written_add_iview(fw, render->z_attachment.preload_iview);
+   frag_written_add_iview(fw, render->z_attachment.resolve.dst_iview);
+   frag_written_add_iview(fw, render->s_attachment.iview);
+   frag_written_add_iview(fw, render->s_attachment.preload_iview);
+   frag_written_add_iview(fw, render->s_attachment.resolve.dst_iview);
+
+   for (unsigned rt = 0; rt < PAN_MAX_RTS; rt++) {
+      frag_written_add_store(fw, &render->fb.store.rts[rt]);
+      frag_written_add_store(fw, &render->fb.spill.store.rts[rt]);
+   }
+
+   frag_written_add_store(fw, &render->fb.store.zs);
+   frag_written_add_store(fw, &render->fb.store.s);
+   frag_written_add_store(fw, &render->fb.spill.store.zs);
+   frag_written_add_store(fw, &render->fb.spill.store.s);
+}
+
+static bool
+load_target_reads_image(const struct pan_fb_load_target *target,
+                        bool include_border)
+{
+   return target->in_bounds_load == PAN_FB_LOAD_IMAGE ||
+          (include_border && target->border_load == PAN_FB_LOAD_IMAGE);
+}
+
+/* Whether the preload of this pass has to wait for earlier fragment jobs:
+ * unless this command buffer knows, since its last full fragment wait,
+ * every attachment the fragment jobs wrote and none of them is loaded here.
+ */
+static bool
+preload_needs_frag_wait(const struct panvk_cmd_buffer *cmdbuf,
+                        bool include_border)
+{
+   const struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   const struct panvk_frag_written *fw = &cmdbuf->state.gfx.frag_written;
+   const struct pan_fb_load *load = &render->fb.load;
+
+   if (!fw->valid || fw->overflow)
+      return true;
+
+   for (unsigned rt = 0; rt < MIN2(MAX_RTS, PAN_MAX_RTS); rt++) {
+      if (load_target_reads_image(&load->rts[rt], include_border) &&
+          (frag_written_overlaps_load(fw, &load->rts[rt]) ||
+           frag_written_overlaps(fw, render->color_attachments.iviews[rt]) ||
+           frag_written_overlaps(fw,
+                                 render->color_attachments.preload_iviews[rt])))
+         return true;
+   }
+
+   if (load_target_reads_image(&load->z, include_border) &&
+       (frag_written_overlaps_load(fw, &load->z) ||
+        frag_written_overlaps(fw, render->z_attachment.iview) ||
+        frag_written_overlaps(fw, render->z_attachment.preload_iview)))
+      return true;
+
+   if (load_target_reads_image(&load->s, include_border) &&
+       (frag_written_overlaps_load(fw, &load->s) ||
+        frag_written_overlaps(fw, render->s_attachment.iview) ||
+        frag_written_overlaps(fw, render->s_attachment.preload_iview)))
+      return true;
+
+   return false;
+}
+#endif
+
 void
 panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
                                       const VkRenderingInfo *pRenderingInfo)
@@ -647,6 +881,13 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
       .tile_z_budget_B =
          pan_query_optimal_z_tib_size(PAN_ARCH, phys_dev->model),
    };
+#if PAN_ARCH == 9
+   /* Bisect knob for the bc_decode RGBA32F blit: an eighth of the colour
+    * budget (64-pixel tiles at 16 B/px). */
+   const char *rt128_dbg = debug_get_option_v9_rt128();
+   if (rt128_dbg && strstr(rt128_dbg, "tile"))
+      render->fb.layout.tile_rt_budget_B /= 8;
+#endif
    /* In case ms2ss is enabled, use the provided sample count.
     * All attachments need to have sample count == 1 or the provided value.
     * But, if all attachments have 1, we would end up choosing the wrong value
@@ -724,7 +965,7 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
        * load, we need a barrier to ensure that the texture cache gets
        * invalidated prior to the load.
        */
-      const VkMemoryBarrier2 mem_barrier = {
+      VkMemoryBarrier2 mem_barrier = {
          .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
          .srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
                          VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT |
@@ -734,6 +975,19 @@ panvk_per_arch(cmd_init_render_state)(struct panvk_cmd_buffer *cmdbuf,
          .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
          .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
       };
+#if PAN_ARCH >= 10
+      /* C4 (115): the source scope makes the fragment subqueue wait for all
+       * its earlier jobs. When none of those that ran since its last such
+       * wait wrote what this pass loads, keep only the invalidate (no
+       * source stages: no wait, only the fragment-side cache operation).
+       * PANVK_PRELOAD_BARRIER_TRACK=0 always waits, as in 114.
+       */
+      if (PANVK_PERF(PRELOAD_BARRIER_TRACK) &&
+          !preload_needs_frag_wait(cmdbuf, has_partial_tiles)) {
+         mem_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+         mem_barrier.srcAccessMask = VK_ACCESS_2_NONE;
+      }
+#endif
       const VkDependencyInfo dep_info = {
          .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
          .memoryBarrierCount = 1,
@@ -851,10 +1105,85 @@ prepare_iam_sysvals(struct panvk_cmd_buffer *cmdbuf, BITSET_WORD *dirty_sysvals)
       set_gfx_sysval(cmdbuf, dirty_sysvals, iam[i], iam[i]);
 }
 
-/* This value has been selected to get
- * dEQP-VK.draw.renderpass.inverted_depth_ranges.nodepthclamp_deltazero passing.
- */
-#define MIN_DEPTH_CLIP_RANGE 37.7E-06f
+#if PAN_ARCH >= 9
+static void
+panvk_upload_prerast_viewports(struct panvk_cmd_buffer *cmdbuf,
+                               BITSET_WORD *dirty_sysvals)
+{
+   if (!panvk_prerast_viewport_shader(&cmdbuf->state.gfx))
+      return;
+
+   /* Not keyed on VS dirty: every generated GS draw sets that bit. */
+   bool dirty =
+      dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORTS) ||
+      dyn_gfx_state_dirty(cmdbuf, VP_SCISSORS) ||
+      dyn_gfx_state_dirty(cmdbuf, VP_VIEWPORT_COUNT) ||
+      dyn_gfx_state_dirty(cmdbuf, VP_SCISSOR_COUNT) ||
+      dyn_gfx_state_dirty(cmdbuf, VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE) ||
+      dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLIP_ENABLE) ||
+      dyn_gfx_state_dirty(cmdbuf, RS_DEPTH_CLAMP_ENABLE) ||
+      cmdbuf->state.gfx.sysvals.gpu_prerast_viewports == 0;
+   if (!dirty)
+      return;
+
+   const struct vk_viewport_state *vp = &cmdbuf->vk.dynamic_graphics_state.vp;
+   const struct vk_rasterization_state *rs =
+      &cmdbuf->vk.dynamic_graphics_state.rs;
+   struct panvk_prerast_vp_table table = { 0 };
+   uint32_t n = vp->viewport_count ? vp->viewport_count : 1;
+
+   n = MIN2(n, ARRAY_SIZE(table.vp));
+   table.count = n;
+   for (uint32_t i = 0; i < n; i++) {
+      const VkViewport *viewport = &vp->viewports[i];
+      struct panvk_prerast_viewport *out = &table.vp[i];
+
+      out->scale[0] = 0.5f * viewport->width;
+      out->scale[1] = 0.5f * viewport->height;
+      panvk_viewport_z_coeffs(vp, rs, i, &out->scale[2], &out->offset[2]);
+      out->offset[0] = viewport->x + out->scale[0];
+      out->offset[1] = viewport->y + out->scale[1];
+
+      float minx = viewport->x;
+      float maxx = viewport->x + viewport->width;
+      float y0 = viewport->y;
+      float y1 = viewport->y + viewport->height;
+      float miny = MIN2(y0, y1);
+      float maxy = MAX2(y0, y1);
+
+      if (i < vp->scissor_count) {
+         const VkRect2D *sc = &vp->scissors[i];
+
+         minx = MAX2(minx, (float)sc->offset.x);
+         miny = MAX2(miny, (float)sc->offset.y);
+         maxx = MIN2(maxx, (float)sc->offset.x + (float)sc->extent.width);
+         maxy = MIN2(maxy, (float)sc->offset.y + (float)sc->extent.height);
+      } else {
+         maxx = minx - 1.0f;
+         maxy = miny - 1.0f;
+      }
+      /* max <= min must kill every fragment, including a pixel centre. */
+      if (!(maxx > minx && maxy > miny)) {
+         minx = 0.0f;
+         miny = 0.0f;
+         maxx = -1.0f;
+         maxy = -1.0f;
+      }
+      out->minx = minx;
+      out->miny = miny;
+      out->maxx = maxx;
+      out->maxy = maxy;
+   }
+
+   struct pan_ptr ptr =
+      panvk_cmd_alloc_dev_mem(cmdbuf, desc, sizeof(table), 16);
+   if (!ptr.gpu)
+      return;
+
+   memcpy(ptr.cpu, &table, sizeof(table));
+   set_gfx_sysval(cmdbuf, dirty_sysvals, gpu_prerast_viewports, ptr.gpu);
+}
+#endif
 
 void
 panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
@@ -873,7 +1202,12 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
 #if PAN_ARCH < 9
    set_gfx_sysval(cmdbuf, dirty_sysvals, vs.raw_vertex_offset,
                   info->vertex.raw_offset);
+#endif
+#if PAN_ARCH <= 9
    set_gfx_sysval(cmdbuf, dirty_sysvals, layer_id, info->layer_id);
+#endif
+#if PAN_ARCH == 9
+   set_gfx_sysval(cmdbuf, dirty_sysvals, draw_id, info->indirect.draw_index);
 #endif
 
    if (dyn_gfx_state_dirty(cmdbuf, CB_BLEND_CONSTANTS)) {
@@ -898,32 +1232,6 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
          &cmdbuf->vk.dynamic_graphics_state.vp;
       const VkViewport *viewport = &vp->viewports[0];
 
-      /* Doing the viewport transform in the vertex shader and then depth
-       * clipping with the viewport depth range gets a similar result to
-       * clipping in clip-space, but loses precision when the viewport depth
-       * range is very small. When minDepth == maxDepth, this completely
-       * flattens the clip-space depth and results in never clipping.
-       *
-       * To work around this, set a lower limit on depth range when clipping is
-       * enabled. This results in slightly incorrect fragment depth values, and
-       * doesn't help with the precision loss, but at least clipping isn't
-       * completely broken.
-       */
-      float z_min = viewport->minDepth;
-      float z_max = viewport->maxDepth;
-      if (vk_rasterization_state_depth_clip_enable(rs) &&
-          fabsf(z_max - z_min) < MIN_DEPTH_CLIP_RANGE) {
-         float z_sign = z_min <= z_max ? 1.0f : -1.0f;
-
-         float z_center = 0.5f * (z_max + z_min);
-         /* Bump offset off-center if necessary, to not go out of range */
-         z_center = CLAMP(z_center, 0.5f * MIN_DEPTH_CLIP_RANGE,
-                          1.0f - 0.5f * MIN_DEPTH_CLIP_RANGE);
-
-         z_min = z_center - 0.5f * z_sign * MIN_DEPTH_CLIP_RANGE;
-         z_max = z_center + 0.5f * z_sign * MIN_DEPTH_CLIP_RANGE;
-      }
-
       /* Upload the viewport scale. Defined as (px/2, py/2, pz) at the start of
        * section 24.5 ("Controlling the Viewport") of the Vulkan spec. At the
        * end of the section, the spec defines:
@@ -933,13 +1241,13 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
        * pz = maxDepth - minDepth         if negativeOneToOne is false
        * pz = (maxDepth - minDepth) / 2   if negativeOneToOne is true
        */
+      float z_scale, z_offset;
+      panvk_viewport_z_coeffs(vp, rs, 0, &z_scale, &z_offset);
       set_gfx_sysval(cmdbuf, dirty_sysvals, viewport.scale.x,
                      0.5f * viewport->width);
       set_gfx_sysval(cmdbuf, dirty_sysvals, viewport.scale.y,
                      0.5f * viewport->height);
-      set_gfx_sysval(cmdbuf, dirty_sysvals, viewport.scale.z,
-                     vp->depth_clip_negative_one_to_one ?
-                        0.5f * (z_max - z_min) : z_max - z_min);
+      set_gfx_sysval(cmdbuf, dirty_sysvals, viewport.scale.z, z_scale);
 
       /* Upload the viewport offset. Defined as (ox, oy, oz) at the start of
        * section 24.5 ("Controlling the Viewport") of the Vulkan spec. At the
@@ -954,10 +1262,46 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
                      (0.5f * viewport->width) + viewport->x);
       set_gfx_sysval(cmdbuf, dirty_sysvals, viewport.offset.y,
                      (0.5f * viewport->height) + viewport->y);
-      set_gfx_sysval(cmdbuf, dirty_sysvals, viewport.offset.z,
-                     vp->depth_clip_negative_one_to_one ?
-                        0.5f * (z_min + z_max) : z_min);
+      set_gfx_sysval(cmdbuf, dirty_sysvals, viewport.offset.z, z_offset);
 
+   }
+
+#if PAN_ARCH >= 9
+   panvk_upload_prerast_viewports(cmdbuf, dirty_sysvals);
+#endif
+
+   {
+      const struct vk_depth_stencil_state *dss =
+         &cmdbuf->vk.dynamic_graphics_state.ds;
+      const bool db_enable =
+         dss->depth.bounds_test.enable &&
+         (cmdbuf->state.gfx.render.bound_attachments &
+          MESA_VK_RP_ATTACHMENT_DEPTH_BIT);
+
+      set_gfx_sysval(cmdbuf, dirty_sysvals, ds.bounds[0],
+                     dss->depth.bounds_test.min);
+      set_gfx_sysval(cmdbuf, dirty_sysvals, ds.bounds[1],
+                     dss->depth.bounds_test.max);
+      set_gfx_sysval(cmdbuf, dirty_sysvals, ds.enable, (uint32_t)db_enable);
+      set_gfx_sysval(
+         cmdbuf, dirty_sysvals, ds.samples,
+         MAX2(cmdbuf->vk.dynamic_graphics_state.ms.rasterization_samples, 1));
+#if PAN_ARCH < 9
+      /* LD_TILE of the depth needs its format on Bifrost (jm-v7 022). */
+      uint32_t z_conv = 0;
+      if (db_enable) {
+         VkFormat zfmt = cmdbuf->state.gfx.render.z_attachment.fmt;
+         struct mali_internal_conversion_packed conv;
+
+         pan_pack(&conv, INTERNAL_CONVERSION, cfg) {
+            cfg.register_format = MALI_REGISTER_FILE_FORMAT_F32;
+            cfg.memory_format = GENX(pan_dithered_format_from_pipe_format)(
+               vk_format_to_pipe_format(zfmt), false);
+         }
+         z_conv = conv.opaque[0];
+      }
+      set_gfx_sysval(cmdbuf, dirty_sysvals, ds.z_conv, z_conv);
+#endif
    }
 
    if (dyn_gfx_state_dirty(cmdbuf, INPUT_ATTACHMENT_MAP))
@@ -994,6 +1338,24 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
                         desc_state->sets[i]->descs.dev);
       }
    }
+
+   /* Bindless textures/samplers (jm-v7 050). */
+   {
+      const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+      uint64_t base = panvk_desc_direct_base(dev);
+
+      u_foreach_bit(i, used_set_mask) {
+         const struct panvk_descriptor_set *set = desc_state->sets[i];
+
+         set_gfx_sysval(cmdbuf, dirty_sysvals, desc.direct_idx[i],
+                        set ? panvk_desc_direct_idx(base, set->descs.dev) : 0);
+      }
+      set_gfx_sysval(cmdbuf, dirty_sysvals, desc.dummy_sampler_idx,
+                     panvk_desc_direct_idx(
+                        base, dev->null_descs.dummy_sampler_addr));
+      set_gfx_sysval(cmdbuf, dirty_sysvals, desc.zero_addr,
+                     dev->null_descs.zero_addr);
+   }
 #endif
 
    /* We mask the dirty sysvals by the shader usage, and only flag
@@ -1002,6 +1364,25 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
    BITSET_AND(dirty_shader_sysvals, dirty_sysvals, vs->fau.used_sysvals);
    if (!BITSET_IS_EMPTY(dirty_shader_sysvals))
       gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+
+#if PAN_ARCH >= 9
+   {
+      /* The raster VS for a geometry draw is the GS passthrough, not the
+       * HW VS masked above. Mask that variant too.
+       */
+      const struct panvk_shader *pshader =
+         panvk_prerast_viewport_shader(&cmdbuf->state.gfx);
+      if (pshader) {
+         const struct panvk_shader_variant *pt =
+            pshader == cmdbuf->state.gfx.gs.shader
+               ? &pshader->variants[PANVK_GS_VARIANT_PASSTHROUGH]
+               : &pshader->variants[PANVK_VS_VARIANT_GPU_PASSTHROUGH];
+         BITSET_AND(dirty_shader_sysvals, dirty_sysvals, pt->fau.used_sysvals);
+         if (!BITSET_IS_EMPTY(dirty_shader_sysvals))
+            gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
+      }
+   }
+#endif
 
    if (fs) {
       BITSET_AND(dirty_shader_sysvals, dirty_sysvals, fs->fau.used_sysvals);
@@ -1016,6 +1397,41 @@ panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
          gfx_state_set_dirty(cmdbuf, FS_PUSH_UNIFORMS);
    }
 }
+
+#if PAN_ARCH >= 9
+/* C1 (115): the v9+ form of jm-v7 076's panvk_v7_select_alt_shaders(). Picks
+ * the bound FS's compile for this draw: the depth bounds lowered one while
+ * the test is on and a depth attachment is bound (the ds.enable sysval, and
+ * db_on in build_dcd_flags() and the v9 JM DCD), the unlowered alternate
+ * otherwise. The state keeps whichever compile was last used, alt_parent
+ * leads back to the main one, and a change marks FS dirty as a bind would.
+ * Called once per draw, before fs.required is computed.
+ */
+void
+panvk_per_arch(cmd_select_db_alt_fs)(struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_shader *fs = cmdbuf->state.gfx.fs.shader;
+
+   if (!fs || !PANVK_PERF(DB_ALT))
+      return;
+
+   const struct panvk_shader *main_fs = fs->alt_parent ? fs->alt_parent : fs;
+   if (!main_fs->alt)
+      return;
+
+   const bool db_on =
+      cmdbuf->vk.dynamic_graphics_state.ds.depth.bounds_test.enable &&
+      (cmdbuf->state.gfx.render.bound_attachments &
+       MESA_VK_RP_ATTACHMENT_DEPTH_BIT);
+   const struct panvk_shader *want = db_on ? main_fs : main_fs->alt;
+
+   if (want != fs) {
+      cmdbuf->state.gfx.fs.shader = want;
+      gfx_state_set_dirty(cmdbuf, FS);
+      gfx_state_set_dirty(cmdbuf, FS_PUSH_UNIFORMS);
+   }
+}
+#endif
 
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdBindVertexBuffers2)(VkCommandBuffer commandBuffer,
@@ -1035,23 +1451,53 @@ panvk_per_arch(CmdBindVertexBuffers2)(VkCommandBuffer commandBuffer,
                                         bindingCount, pStrides);
    }
 
+   /* A4 (115): VB dirty rebuilds the VS driver set and resource table on
+    * CSF and the attribute tables on v6/v7 (jm-v7 097), so only set it when
+    * a binding really changes (the strides compare in the runtime).
+    * PANVK_VB_DIRTY_CMP=0 dirties on every call, as in 114.
+    */
+   bool changed = !PANVK_PERF(VB_DIRTY_CMP);
+
    for (uint32_t i = 0; i < bindingCount; i++) {
       VK_FROM_HANDLE(panvk_buffer, buffer, pBuffers[i]);
+      struct panvk_attrib_buf *vb = &cmdbuf->state.gfx.vb.bufs[firstBinding + i];
+      uint64_t address;
+      unsigned size;
 
       if (buffer) {
-         cmdbuf->state.gfx.vb.bufs[firstBinding + i].address =
-            panvk_buffer_gpu_ptr(buffer, pOffsets[i]);
-         cmdbuf->state.gfx.vb.bufs[firstBinding + i].size = panvk_buffer_range(
-            buffer, pOffsets[i], pSizes ? pSizes[i] : VK_WHOLE_SIZE);
+         address = panvk_buffer_gpu_ptr(buffer, pOffsets[i]);
+         size = panvk_buffer_range(buffer, pOffsets[i],
+                                   pSizes ? pSizes[i] : VK_WHOLE_SIZE);
       } else {
-         cmdbuf->state.gfx.vb.bufs[firstBinding + i].address = 0;
-         cmdbuf->state.gfx.vb.bufs[firstBinding + i].size = 0;
+#if PAN_ARCH < 9
+         /* nullDescriptor: zeroed memory nothing writes rather than address
+          * 0, which the Bifrost attribute fetch would fault on.
+          */
+         const struct panvk_device *dev =
+            to_panvk_device(cmdbuf->vk.base.device);
+         address = dev->null_descs.zero_addr;
+#else
+         address = 0;
+#endif
+         size = 0;
+      }
+
+      if (vb->address != address || vb->size != size) {
+         vb->address = address;
+         vb->size = size;
+         changed = true;
       }
    }
 
-   cmdbuf->state.gfx.vb.count =
+   const uint32_t vb_count =
       MAX2(cmdbuf->state.gfx.vb.count, firstBinding + bindingCount);
-   gfx_state_set_dirty(cmdbuf, VB);
+   if (cmdbuf->state.gfx.vb.count != vb_count) {
+      cmdbuf->state.gfx.vb.count = vb_count;
+      changed = true;
+   }
+
+   if (changed)
+      gfx_state_set_dirty(cmdbuf, VB);
 }
 
 VKAPI_ATTR void VKAPI_CALL

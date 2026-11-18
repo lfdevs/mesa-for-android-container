@@ -16,6 +16,12 @@
 #include "util/os_misc.h"
 #include "util/u_call_once.h"
 
+#if defined(HAVE_PAN_KMOD_KBASE)
+#include <limits.h>
+#include <stdio.h>
+#include <unistd.h>
+#endif
+
 #include "vk_alloc.h"
 #include "vk_log.h"
 
@@ -24,6 +30,7 @@
 #include "panvk_entrypoints.h"
 #include "panvk_instance.h"
 #include "panvk_macros.h"
+#include "panvk_perf_knobs.h"
 #include "panvk_physical_device.h"
 
 #ifdef HAVE_VALGRIND
@@ -54,16 +61,79 @@ static const struct debug_control panvk_debug_options[] = {
    {"no_extended_va_range", PANVK_DEBUG_NO_EXTENDED_VA_RANGE},
    {"hsr_prepass", PANVK_DEBUG_HSR_PREPASS},
    {"no_crc", PANVK_DEBUG_NO_CRC},
+   {"kbase_diag", PANVK_DEBUG_KBASE_DIAG},
+   {"gpu_prerast", PANVK_DEBUG_GPU_PRERAST},
+   {"no_bc_emul", PANVK_DEBUG_NO_BC_EMUL},
+   {"no_gs", PANVK_DEBUG_NO_GS},
+   {"robust_ssbo_vec", PANVK_DEBUG_ROBUST_SSBO_VEC},
+   {"bc_compute", PANVK_DEBUG_BC_COMPUTE},
+   {"bc_wide", PANVK_DEBUG_BC_WIDE},
+   {"bc_timing", PANVK_DEBUG_BC_TIMING},
+   {"no_tess", PANVK_DEBUG_NO_TESS},
+   {"ria2", PANVK_DEBUG_RIA2},
    {NULL, 0},
 };
 
 uint64_t panvk_debug;
+
+uint32_t panvk_perf_knobs;
+
+/* panvk_perf_knobs.h: on unless "<name>=0". */
+static const struct {
+   const char *name;
+   uint32_t knob;
+} panvk_perf_knob_names[] = {
+   {"PANVK_CSF_FS_IDLE_CLEAN", PANVK_PERF_FS_IDLE_CLEAN},
+   {"PANVK_DB_ALT", PANVK_PERF_DB_ALT},
+   {"PANVK_DEPTH_BOUNDS", PANVK_PERF_DEPTH_BOUNDS},
+   {"PANVK_CSF_INDIRECT_REEMIT", PANVK_PERF_CSF_INDIRECT_REEMIT},
+   {"PANVK_CSF_DESC_DIRTY", PANVK_PERF_CSF_DESC_DIRTY},
+   {"PANVK_VB_DIRTY_CMP", PANVK_PERF_VB_DIRTY_CMP},
+   {"PANVK_PRERAST_FAST_SKIP", PANVK_PERF_PRERAST_FAST_SKIP},
+   {"PANVK_DESC_POOL_HINT", PANVK_PERF_DESC_POOL_HINT},
+   {"PANVK_WSI_SW_CACHED", PANVK_PERF_WSI_SW_CACHED},
+   {"PANVK_WSI_SW_DEFER_REPLY", PANVK_PERF_WSI_SW_DEFER_REPLY},
+   {"PANVK_ANDROID_PRESENT_FENCE", PANVK_PERF_ANDROID_PRESENT_FENCE},
+   {"PANVK_ANDROID_PRESENT_THREAD", PANVK_PERF_ANDROID_PRESENT_THREAD},
+   {"PANVK_PRELOAD_BARRIER_TRACK", PANVK_PERF_PRELOAD_BARRIER_TRACK},
+   {"PANVK_LOGICOP_FPK", PANVK_PERF_LOGICOP_FPK},
+   {"PANVK_V9_JM_MERGE_WG", PANVK_PERF_V9_JM_MERGE_WG},
+   {"PANVK_PRERAST_MERGE_WG", PANVK_PERF_PRERAST_MERGE_WG},
+};
+
+void
+panvk_perf_knobs_init(void)
+{
+   char off[512];
+   unsigned off_len = 0;
+   uint32_t knobs = 0;
+
+   off[0] = '\0';
+   for (unsigned i = 0; i < ARRAY_SIZE(panvk_perf_knob_names); i++) {
+      const char *e = os_get_option(panvk_perf_knob_names[i].name);
+
+      if (e && e[0] == '0') {
+         if (off_len < sizeof(off))
+            off_len += snprintf(off + off_len, sizeof(off) - off_len, " %s",
+                                panvk_perf_knob_names[i].name);
+      } else {
+         knobs |= panvk_perf_knob_names[i].knob;
+      }
+   }
+
+   panvk_perf_knobs = knobs;
+
+   /* Once per process, so a device log tells which 115 changes were off. */
+   if (off_len)
+      mesa_logi("panvk: 114 behaviour restored for:%s", off);
+}
 
 static void
 panvk_debug_init_once(void)
 {
    panvk_debug =
       parse_debug_string(os_get_option("PANVK_DEBUG"), panvk_debug_options);
+   panvk_perf_knobs_init();
 }
 
 static void
@@ -122,6 +192,9 @@ static const struct vk_instance_extension_table panvk_instance_extensions = {
 #ifdef VK_USE_PLATFORM_XLIB_KHR
    .KHR_xlib_surface = true,
 #endif
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+   .KHR_android_surface = true,
+#endif
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
    .EXT_acquire_xlib_display = true,
 #endif
@@ -153,6 +226,69 @@ panvk_physical_device_try_create(struct vk_instance *vk_instance,
    }
 
    *out = &device->vk;
+   return VK_SUCCESS;
+}
+
+static VkResult
+panvk_enumerate_physical_devices(struct vk_instance *vk_instance)
+{
+   struct panvk_instance *instance =
+      container_of(vk_instance, struct panvk_instance, vk);
+
+   /* Enumerate DRM render nodes (panfrost / panthor). */
+   drmDevicePtr drm_devices[256];
+   int max_drm = drmGetDevices2(0, drm_devices, ARRAY_SIZE(drm_devices));
+
+   if (max_drm > 0) {
+      for (int i = 0; i < max_drm; i++) {
+         struct vk_physical_device *pdevice = NULL;
+         VkResult result =
+            panvk_physical_device_try_create(vk_instance, drm_devices[i],
+                                             &pdevice);
+         if (result == VK_ERROR_INCOMPATIBLE_DRIVER)
+            continue;
+         if (result != VK_SUCCESS) {
+            drmFreeDevices(drm_devices, max_drm);
+            return result;
+         }
+         list_addtail(&pdevice->link, &vk_instance->physical_devices.list);
+      }
+      drmFreeDevices(drm_devices, max_drm);
+   }
+
+#if defined(HAVE_PAN_KMOD_KBASE)
+   /* Enumerate kbase (Mali) non-DRM nodes. */
+   for (int i = 0; i < PAN_KBASE_MAX_NODES; i++) {
+      char path[PATH_MAX];
+      snprintf(path, sizeof(path), "/dev/mali%d", i);
+
+      /* Missing optional nodes are normal and should not emit loader
+       * warnings.  Existing nodes still go through full initialization so
+       * permission and uAPI failures remain visible. */
+      if (access(path, F_OK) != 0)
+         continue;
+
+      struct panvk_physical_device *device =
+         vk_zalloc(&instance->vk.alloc, sizeof(*device), 8,
+                   VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+      if (!device)
+         return panvk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+      VkResult result =
+         panvk_physical_device_init_kbase(device, instance, path);
+      if (result != VK_SUCCESS) {
+         vk_free(&instance->vk.alloc, device);
+         /* No device at this path; try the next node. */
+         if (result == VK_ERROR_INCOMPATIBLE_DRIVER)
+            continue;
+         /* A real failure; stop enumeration. */
+         return result;
+      }
+
+      list_addtail(&device->vk.link, &vk_instance->physical_devices.list);
+   }
+#endif /* HAVE_PAN_KMOD_KBASE */
+
    return VK_SUCCESS;
 }
 
@@ -255,8 +391,8 @@ panvk_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
       .priv = &instance->vk.alloc,
    };
 
-   instance->vk.physical_devices.try_create_for_drm =
-      panvk_physical_device_try_create;
+   instance->vk.physical_devices.enumerate =
+      panvk_enumerate_physical_devices;
    instance->vk.physical_devices.destroy = panvk_destroy_physical_device;
 
    if (PANVK_DEBUG(STARTUP))

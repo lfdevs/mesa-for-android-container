@@ -16,6 +16,7 @@
 
 #include "panvk_device.h"
 
+#include "util/u_queue.h"
 #include "vk_queue.h"
 
 enum panvk_subqueue_id {
@@ -64,10 +65,56 @@ struct panvk_subqueue {
          void *host;
       } addr;
    } tracebuf;
+
+#ifdef HAVE_PAN_KMOD_KBASE
+   /* kbase-backed queues manage the CS ring buffer in userspace (the
+    * panthor kernel driver does the equivalent in kernel-owned rings). */
+   struct {
+      /* kbase compatibility path: each PanVK subqueue owns a CSG and uses
+       * CSI0.  Some Android kbase stacks accept later CSIs into a scheduled
+       * CSG but never execute them. */
+      uint32_t group_handle;
+
+      struct pan_kmod_bo *ringbuf_bo;
+      void *ringbuf_cpu;
+      uint64_t ringbuf_dev;
+
+      /* USER_IO pages from KBASE_IOCTL_CS_QUEUE_BIND: doorbell page,
+       * input page (CS_INSERT), output page (CS_EXTRACT/CS_ACTIVE). */
+      void *user_io;
+
+      /* Monotonically-increasing byte offset of the next ring entry. */
+      uint64_t insert;
+
+      /* Number of jobs emitted; each bumps the subqueue seqno cell by one
+       * when it retires. */
+      uint64_t emitted_jobs;
+
+      /* PANVK_GPU_STATS: last job whose GPU timestamps were reported. */
+      uint64_t stats_done;
+
+      uint32_t last_last_job_offset;
+      uint32_t last_job_offset;
+      uint32_t last_job_size;
+      uint32_t last_job_entry_size;
+      uint32_t last_stream_size;
+      uint32_t last_flush_id;
+      uint64_t last_stream_addr;
+
+      /* TILER_HEAP descriptor last stored into this subqueue's context by a
+       * ring entry (see kbase_renew_tiler_heap()). */
+      uint64_t heap_desc;
+
+      struct panvk_priv_mem init_cs;
+      uint64_t init_stream_addr;
+      uint32_t init_stream_size;
+      uint32_t init_flush_id;
+      uint32_t init_pending;
+   } kbase;
+#endif
 };
 
 struct panvk_desc_ringbuf {
-   struct panvk_priv_mem syncobj;
    struct pan_kmod_bo *bo;
    uint64_t size;
    struct {
@@ -85,6 +132,68 @@ struct panvk_gpu_queue {
    struct panvk_tiler_heap tiler_heap;
    struct panvk_desc_ringbuf render_desc_ringbuf;
    struct panvk_priv_mem syncobjs;
+
+#ifdef HAVE_PAN_KMOD_KBASE
+   /* Per-subqueue completion seqno cells (panvk_cs_sync64 layout), bumped
+    * by a SYNC_ADD64 at the end of every ring entry and polled by the CPU.
+    * Must live in GPU-uncached memory: on inner-shareable pages the sync
+    * write can linger in the GPU L2 where the CPU never sees it. */
+   struct {
+      struct pan_kmod_bo *bo;
+      void *cpu;
+      uint64_t dev;
+   } kbase_seqnos;
+   uint32_t kbase_tiler_submit_count;
+   uint64_t kbase_tiler_work_count;
+   uint64_t kbase_gpu_waits[PANVK_SUBQUEUE_COUNT][PANVK_SUBQUEUE_COUNT];
+   /* Which of the PANVK_KBASE_HEAP_SLOTS TILER_HEAP descriptor slots the
+    * current heap uses. */
+   uint32_t kbase_heap_slot;
+   /* Tiler heap contexts retired by heap renewals, oldest first.  Ring
+    * entries emitted before a renewal keep using the retired heap (their
+    * HEAP_SET and TILER_HEAP descriptor slot), so it is only destroyed once
+    * both graphics subqueues have completed a ring entry emitted after the
+    * retirement.  Several can be in flight so renewal never has to wait for
+    * the GPU to catch up; each holds one descriptor slot. */
+#define PANVK_KBASE_HEAP_SLOTS 4
+   struct {
+      uint64_t ctx;
+      uint64_t vt_jobs;
+      uint64_t frag_jobs;
+   } kbase_retired_heaps[PANVK_KBASE_HEAP_SLOTS - 1];
+   uint32_t kbase_retired_heap_count;
+   /* Descriptor slots in use, 2 to PANVK_KBASE_HEAP_SLOTS (env
+    * PANVK_KBASE_HEAP_SLOTS): at most kbase_heap_slots - 1 retired heaps. */
+   uint32_t kbase_heap_slots;
+   /* Test the retired heaps at every submission, not only at renewal
+    * (PANVK_KBASE_HEAP_EAGER_TERM). */
+   bool kbase_heap_eager_term;
+   /* Heap context pre-created on a worker thread for the next renewal:
+    * KBASE_IOCTL_CS_TILER_HEAP_INIT commits and zeroes the initial chunks,
+    * which took ~7 ms per renewal on the submitting thread. */
+   struct {
+      struct util_queue thread;
+      struct util_queue_fence fence;
+      bool enabled;
+      bool pending;
+      uint64_t ctx;
+      uint64_t first_chunk;
+   } kbase_spare_heap;
+   /* Retired heap contexts that are no longer firmware-visible, waiting to
+    * be destroyed on the kbase_spare_heap thread.  KBASE_IOCTL_CS_TILER_HEAP_TERM
+    * took 1.5 ms p50 (23 ms max) on the submitting thread in NFS Most Wanted.
+    * The submitting thread appends under lock; the job drains the list and
+    * clears queued when it finds it empty. */
+#define PANVK_KBASE_HEAP_TERM_MAX 16
+   struct {
+      mtx_t lock;
+      struct util_queue_fence fence;
+      bool enabled;
+      bool queued;
+      uint32_t count;
+      uint64_t ctxs[PANVK_KBASE_HEAP_TERM_MAX];
+   } kbase_heap_term;
+#endif
 
    struct {
       struct vk_sync *sync;

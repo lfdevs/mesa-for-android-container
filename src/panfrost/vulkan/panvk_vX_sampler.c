@@ -202,7 +202,11 @@ panvk_per_arch(CreateSampler)(VkDevice _device,
       vk_sampler_border_color_value(pCreateInfo, &fmt);
 
 #if PAN_ARCH == 7
-   panvk_afbc_reswizzle_border_color(&border_color, fmt);
+   /* With customBorderColorWithoutFormat enabled, no image of the device
+    * has AFBC with an R/B-swapped order and views keep the native order
+    * (jm-v7 044), so the border color is used as is. */
+   if (!device->vk.enabled_features.customBorderColorWithoutFormat)
+      panvk_afbc_reswizzle_border_color(&border_color, fmt);
 #endif
 
    sampler->desc_count = 1;

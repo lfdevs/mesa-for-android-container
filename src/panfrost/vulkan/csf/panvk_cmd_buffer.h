@@ -58,6 +58,51 @@ struct panvk_cs_sync64 {
    uint32_t pad;
 };
 
+/* The queue syncobjs BO holds a panvk_cs_sync64 per subqueue, then the
+ * panvk_cs_sync32 ready/free handshake of the gpu_prerast tessellation loops,
+ * then the render descriptor ringbuf sync. That BO is CSF event memory on
+ * kbase, which kbase needs to re-evaluate the SYNC_WAIT of an evicted CSG.
+ */
+#define PANVK_QUEUE_TESS_READY_SYNC_OFFSET 64
+#define PANVK_QUEUE_TESS_FREE_SYNC_OFFSET  128
+/* Ready/free pair of the second tessellation arena (csf-v11 tess-arenas),
+ * in the same 64-byte slots. */
+#define PANVK_QUEUE_TESS2_SYNC_DELTA       16
+#define PANVK_QUEUE_TESS_READY2_SYNC_OFFSET \
+   (PANVK_QUEUE_TESS_READY_SYNC_OFFSET + PANVK_QUEUE_TESS2_SYNC_DELTA)
+#define PANVK_QUEUE_TESS_FREE2_SYNC_OFFSET \
+   (PANVK_QUEUE_TESS_FREE_SYNC_OFFSET + PANVK_QUEUE_TESS2_SYNC_DELTA)
+#define PANVK_QUEUE_DESC_RINGBUF_SYNC_OFFSET 192
+#define PANVK_QUEUE_SYNCOBJS_SIZE          256
+
+enum panvk_kbase_progress_marker {
+   PANVK_KBASE_PROGRESS_CMDBUF_START = 0x001,
+
+   PANVK_KBASE_PROGRESS_VT_BEFORE_RUN_IDVS = 0b10,
+   PANVK_KBASE_PROGRESS_VT_AFTER_RUN_IDVS = 0b100,
+   PANVK_KBASE_PROGRESS_VT_BEFORE_FINISH_TILING = 0b1000,
+   PANVK_KBASE_PROGRESS_VT_AFTER_FINISH_TILING = 0b10000,
+   PANVK_KBASE_PROGRESS_VT_AFTER_VT_END = 0b100000,
+   PANVK_KBASE_PROGRESS_VT_AFTER_SYNC_SIGNAL = 0b1000000,
+
+   PANVK_KBASE_PROGRESS_FRAG_ENTER = 1<<1,
+   PANVK_KBASE_PROGRESS_FRAG_BEFORE_TILING_WAIT = 1<<2,
+   PANVK_KBASE_PROGRESS_FRAG_AFTER_TILING_WAIT = 1<<3,
+   PANVK_KBASE_PROGRESS_FRAG_BEFORE_RUN = 1<<4,
+   PANVK_KBASE_PROGRESS_FRAG_AFTER_RUN = 1<<5,
+   PANVK_KBASE_PROGRESS_FRAG_AFTER_FINISH = 1<<6,
+
+   PANVK_KBASE_PROGRESS_COMPUTE_ENTER = 1<<1,
+   PANVK_KBASE_PROGRESS_COMPUTE_BEFORE_ITER = 1<<2,
+   PANVK_KBASE_PROGRESS_COMPUTE_BEFORE_RUN = 1<<3,
+   PANVK_KBASE_PROGRESS_COMPUTE_AFTER_RUN = 1<<4,
+   PANVK_KBASE_PROGRESS_COMPUTE_AFTER_SIGNAL = 1<<5,
+
+   PANVK_KBASE_PROGRESS_FINISH_BEFORE_WAIT = 1<<28,
+   PANVK_KBASE_PROGRESS_FINISH_AFTER_WAIT = 1<<29,
+   PANVK_KBASE_PROGRESS_CMDBUF_DONE = 1<<30,
+};
+
 struct panvk_cs_desc_ringbuf {
    uint64_t syncobj;
    uint64_t ptr;
@@ -197,6 +242,7 @@ struct panvk_cs_subqueue_context {
       struct {
          uint64_t cs;
       } tracebuf;
+   uint64_t kbase_progress_addr;
    } debug;
    /* Non-zero when draws should execute, zero when they should be
     * skipped. Written by the primary before cs_call, read by inherited
@@ -547,10 +593,22 @@ struct panvk_cond_render_state {
    enum mali_cs_condition exec_cond;
 };
 
+/* A CS chunk of the recording, see panvk_cmd_buffer::cs_chunks. */
+struct panvk_cs_chunk {
+   struct panvk_priv_bo *bo;
+   uint64_t gpu;
+   uint32_t offset;
+   /* Bytes to flush: the capacity, or what the builder wrote once it ended
+    * in this chunk. */
+   uint32_t size;
+};
+
 struct panvk_cmd_buffer {
    struct vk_command_buffer vk;
    VkCommandBufferUsageFlags flags;
    struct panvk_pool cs_pool;
+   /* struct panvk_cs_chunk, in allocation order (PANVK_CS_FLUSH_USED). */
+   struct util_dynarray cs_chunks;
    struct panvk_pool desc_pool;
    struct panvk_pool tls_pool;
    struct list_head push_sets;
@@ -567,9 +625,47 @@ struct panvk_cmd_buffer {
       struct panvk_tls_state tls;
       bool contains_timestamp_queries;
       bool uses_poly_heap;
+      /* CPU-side estimate used by the kbase queue to choose a conservative
+       * tiler-heap renewal cadence. */
+      uint64_t tiler_work_estimate;
+      /* Instances before the CPU split chunk being drawn (gpu_prerast_split).
+       * The chunk keeps the API firstInstance (gl_BaseInstance, per-instance
+       * attribute offsets) and the lowered VS adds this to its instance IDs,
+       * so gl_InstanceIndex and attribute divisors see the API instance.
+       */
+      uint32_t gpu_prerast_inst_base;
+      /* Tessellated draws recorded so far; with PANVK_TESS_ARENAS=2 the odd
+       * ones use the second tessellation arena (csf-v11 tess-arenas). */
+      uint32_t tess_draws;
 
       struct panvk_cond_render_state cond_render;
    } state;
+
+   /* Attachment-less secondary: its CS is cut where rasterizationSamples
+    * changes (cmd_cut_vmr_segment). struct panvk_vmr_segment, the finished
+    * segments; the builders hold the last one, with gfx.render.vmr_samples.
+    */
+   struct util_dynarray vmr_segs;
+
+   /* BC emulation (csf-v11/200): PANVK_DEBUG=bc_timing records, read back
+    * when the command buffer is reset or freed. */
+   struct util_dynarray bc_timing;
+
+   /* csf-v11/201: BC raw stores (struct panvk_bc_raw *) this command buffer
+    * reads or writes, released when it is reset or freed. */
+   struct util_dynarray bc_raw_refs;
+
+   /* csf-v11 227: device TLS BOs (struct panvk_priv_bo *) this command
+    * buffer's TLS descriptors point at, released when it is reset or
+    * freed, so outgrown device TLS BOs can go. */
+   struct util_dynarray dev_tls_refs;
+};
+
+struct panvk_vmr_segment {
+   uint64_t addr[PANVK_SUBQUEUE_COUNT];
+   uint32_t size[PANVK_SUBQUEUE_COUNT];
+   uint32_t req_resource_mask[PANVK_SUBQUEUE_COUNT];
+   uint8_t samples;
 };
 
 VK_DEFINE_HANDLE_CASTS(panvk_cmd_buffer, vk.base, VkCommandBuffer,
@@ -860,7 +956,10 @@ void panvk_per_arch(add_cs_deps)(
    bool is_set_event);
 
 VkResult panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(
-   struct panvk_cmd_buffer *primary, struct panvk_cmd_buffer *secondary);
+   struct panvk_cmd_buffer *primary, struct panvk_cmd_buffer *secondary,
+   uint32_t samples);
+
+void panvk_per_arch(cmd_cut_vmr_segment)(struct panvk_cmd_buffer *cmdbuf);
 
 void panvk_per_arch(cmd_inherit_render_state)(
    struct panvk_cmd_buffer *cmdbuf, const VkCommandBufferBeginInfo *pBeginInfo);
@@ -933,6 +1032,7 @@ panvk_get_subqueue_stages(enum panvk_subqueue_id subqueue)
              VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT |
              VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT |
              VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+             VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT |
              VK_PIPELINE_STAGE_2_CONDITIONAL_RENDERING_BIT_EXT;
    case PANVK_SUBQUEUE_FRAGMENT:
       return VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
@@ -944,8 +1044,11 @@ panvk_get_subqueue_stages(enum panvk_subqueue_id subqueue)
              VK_PIPELINE_STAGE_2_CONDITIONAL_RENDERING_BIT_EXT;
    case PANVK_SUBQUEUE_COMPUTE:
       return VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+             VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT |
+             VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT |
              VK_PIPELINE_STAGE_2_COPY_BIT |
              VK_PIPELINE_STAGE_2_COPY_INDIRECT_BIT_KHR |
+             VK_PIPELINE_STAGE_2_TRANSFORM_FEEDBACK_BIT_EXT |
              VK_PIPELINE_STAGE_2_CONDITIONAL_RENDERING_BIT_EXT;
    default:
       UNREACHABLE("Invalid subqueue id");
@@ -1003,6 +1106,21 @@ void panvk_per_arch(emit_barrier)(struct panvk_cmd_buffer *cmdbuf,
                                   struct panvk_cs_deps deps);
 
 VkResult panvk_per_arch(cmd_init_poly_heap)(struct panvk_cmd_buffer *cmdbuf);
+void panvk_per_arch(kbase_mark_progress)(
+   struct panvk_cmd_buffer *cmdbuf, enum panvk_subqueue_id subqueue,
+   enum panvk_kbase_progress_marker marker);
+
+struct panvk_draw_info;
+struct panvk_dispatch_info;
+struct panvk_shader_variant;
+
+void panvk_per_arch(cmd_pstats_draw)(struct panvk_cmd_buffer *cmdbuf,
+                                     const struct panvk_draw_info *draw);
+void panvk_per_arch(cmd_pstats_dispatch)(
+   struct panvk_cmd_buffer *cmdbuf, const struct panvk_shader_variant *cs,
+   const struct panvk_dispatch_info *info);
+void panvk_per_arch(cmd_pstats_flush_pending)(struct panvk_cmd_buffer *cmdbuf);
+void panvk_per_arch(cmd_pstats_restore_oq)(struct panvk_cmd_buffer *cmdbuf);
 
 #if PAN_ARCH >= 14
 static inline void
@@ -1028,6 +1146,11 @@ cs_emit_layer_fragment_state(struct cs_builder *b, struct cs_index fbd_ptr)
                 offsetof(struct panvk_fb_layer_state, dcd_pointer));
 }
 #endif /* PAN_ARCH >= 14 */
+
+/* csf-v11 232: copy the command buffer's TLS pointer (and, with
+ * PANVK_TLS_SPARSE, its stack size) into a per-job TSD on the GPU. */
+void panvk_per_arch(cmd_copy_tls_to_tsd)(struct panvk_cmd_buffer *cmdbuf,
+                                         struct cs_builder *b, uint64_t tsd);
 
 void panvk_per_arch(collect_crc_invalidation_deps)(const VkDependencyInfo *info,
                                                    struct panvk_cs_deps *deps,

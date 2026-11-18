@@ -9,11 +9,14 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "../../lib/pan_trace_gate.h"
 #include "genxml/gen_macros.h"
 
 #include "panvk_buffer.h"
 #include "panvk_cmd_alloc.h"
 #include "panvk_cmd_buffer.h"
+#include "panvk_v7_knobs.h"
+#include "util/log.h"
 #include "panvk_cmd_desc_state.h"
 #include "panvk_cmd_draw.h"
 #include "panvk_cmd_frame_shaders.h"
@@ -35,6 +38,17 @@
 #include "vk_descriptor_update_template.h"
 #include "vk_format.h"
 
+/* ---- PANVK_TRACE gate: debug fprintf(stderr) only when PANVK_TRACE=1 ---- */
+#include <stdio.h>
+#include <stdlib.h>
+#ifdef PANVK_TRACE_BUILD
+static inline int panvk_trace_on_(void) { static int v = -1; if (v < 0) { const char *e = getenv("PANVK_TRACE"); v = (e && e[0] == '1'); } return v; }
+#else
+#define panvk_trace_on_() 0
+#endif
+#define fprintf(f, ...) (((f) == stderr && !panvk_trace_on_()) ? 0 : fprintf(f, __VA_ARGS__))
+/* ---- end gate ---- */
+
 static VkResult
 panvk_cmd_prepare_fragment_job(struct panvk_cmd_buffer *cmdbuf, uint64_t fbd)
 {
@@ -45,12 +59,23 @@ panvk_cmd_prepare_fragment_job(struct panvk_cmd_buffer *cmdbuf, uint64_t fbd)
    if (!job_ptr.gpu)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
+   (void)0;
+   int minx = fb->tiling_area_px.min_x;
+   int miny = fb->tiling_area_px.min_y;
+   int maxx = fb->tiling_area_px.max_x;
+   int maxy = fb->tiling_area_px.max_y;
+   if (maxx <= minx)
+      maxx = minx + 1;
+   if (maxy <= miny)
+      maxy = miny + 1;
+   if (fb->width_px <= 1 || fb->height_px <= 1) {
+      (void)0;
+   }
    pan_section_pack(job_ptr.cpu, FRAGMENT_JOB, PAYLOAD, payload) {
-      assert(pan_fb_bbox_is_valid(fb->tiling_area_px));
-      payload.bound_min_x = fb->tiling_area_px.min_x >> MALI_TILE_SHIFT;
-      payload.bound_min_y = fb->tiling_area_px.min_y >> MALI_TILE_SHIFT;
-      payload.bound_max_x = fb->tiling_area_px.max_x >> MALI_TILE_SHIFT;
-      payload.bound_max_y = fb->tiling_area_px.max_y >> MALI_TILE_SHIFT;
+      payload.bound_min_x = minx >> MALI_TILE_SHIFT;
+      payload.bound_min_y = miny >> MALI_TILE_SHIFT;
+      payload.bound_max_x = maxx >> MALI_TILE_SHIFT;
+      payload.bound_max_y = maxy >> MALI_TILE_SHIFT;
 
       payload.framebuffer = fbd;
    }
@@ -66,8 +91,50 @@ panvk_cmd_prepare_fragment_job(struct panvk_cmd_buffer *cmdbuf, uint64_t fbd)
    return VK_SUCCESS;
 }
 
+static void cmd_close_batch_impl(struct panvk_cmd_buffer *cmdbuf);
+
 void
 panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
+{
+#if PAN_ARCH < 9
+   /* jm-v7 100: availability of the occlusion queries ended in this batch,
+    * in an after_frag batch of its own so it follows the fragment job that
+    * finished counting.
+    */
+   const uint32_t n = cmdbuf->state.gfx.v7_query_end_count;
+   if (n && cmdbuf->cur_batch) {
+      uint64_t ends[PANVK_V7_MAX_DEFERRED_QUERY_ENDS];
+      memcpy(ends, cmdbuf->state.gfx.v7_query_ends, n * sizeof(ends[0]));
+      cmdbuf->state.gfx.v7_query_end_count = 0;
+
+      cmd_close_batch_impl(cmdbuf);
+
+      struct panvk_batch *batch = panvk_per_arch(cmd_open_batch)(cmdbuf);
+      batch->after_frag = true;
+      for (uint32_t i = 0; i < n; i++) {
+         struct pan_ptr job =
+            pan_pool_alloc_desc(&cmdbuf->desc_pool.base, WRITE_VALUE_JOB);
+         if (!job.gpu)
+            break;
+         pan_section_pack(job.cpu, WRITE_VALUE_JOB, PAYLOAD, payload) {
+            payload.type = MALI_WRITE_VALUE_TYPE_IMMEDIATE_32;
+            payload.address = ends[i];
+            payload.immediate_value = 1;
+         };
+         pan_jc_add_job(&batch->vtc_jc, MALI_JOB_TYPE_WRITE_VALUE, true, false,
+                        0, 0, &job, false);
+         util_dynarray_append(&batch->jobs, job.cpu);
+      }
+      cmd_close_batch_impl(cmdbuf);
+      return;
+   }
+   cmdbuf->state.gfx.v7_query_end_count = 0;
+#endif
+   cmd_close_batch_impl(cmdbuf);
+}
+
+static void
+cmd_close_batch_impl(struct panvk_cmd_buffer *cmdbuf)
 {
    struct panvk_batch *batch = cmdbuf->cur_batch;
 
@@ -96,6 +163,9 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
          list_addtail(&batch->node, &cmdbuf->batches);
       }
       cmdbuf->cur_batch = NULL;
+#if PAN_ARCH < 9
+      cmdbuf->state.gfx.xfb.last_job = 0;
+#endif
       return;
    }
 
@@ -113,14 +183,49 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
 
       unsigned size = pan_get_total_stack_size(batch->tlsinfo.tls.size,
                                                thread_tls_alloc, core_id_range);
-      batch->tlsinfo.tls.ptr =
-         panvk_cmd_alloc_dev_mem(cmdbuf, tls, size, 4096).gpu;
+      /* jm-v7 107: reuse this half's buffer when it is large enough. */
+      const unsigned h = batch->heap_half & 1;
+      if (panvk_v7_tls_share() && cmdbuf->tls_half[h].tls_ptr &&
+          cmdbuf->tls_half[h].tls_size >= size) {
+         batch->tlsinfo.tls.ptr = cmdbuf->tls_half[h].tls_ptr;
+      } else {
+         batch->tlsinfo.tls.ptr = panvk_cmd_alloc_tls_mem(cmdbuf, size);
+         if (batch->tlsinfo.tls.ptr) {
+            cmdbuf->tls_half[h].tls_ptr = batch->tlsinfo.tls.ptr;
+            cmdbuf->tls_half[h].tls_size = size;
+         }
+         static unsigned tls_logged;
+         if (tls_logged < 4) {
+            tls_logged++;
+            mesa_logi("panvk: v%u batch TLS %u KiB (stack %u B/thread), "
+                      "half %u%s", PAN_ARCH, size >> 10,
+                      batch->tlsinfo.tls.size, h,
+                      panvk_v7_tls_share() ? ", shared per half" : "");
+         }
+      }
    }
 
    if (batch->tlsinfo.wls.size) {
       assert(batch->wls_total_size);
-      batch->tlsinfo.wls.ptr =
-         panvk_cmd_alloc_dev_mem(cmdbuf, tls, batch->wls_total_size, 4096).gpu;
+      const unsigned h = batch->heap_half & 1;
+      if (panvk_v7_tls_share() && cmdbuf->tls_half[h].wls_ptr &&
+          cmdbuf->tls_half[h].wls_size >= batch->wls_total_size) {
+         batch->tlsinfo.wls.ptr = cmdbuf->tls_half[h].wls_ptr;
+      } else {
+         batch->tlsinfo.wls.ptr =
+            panvk_cmd_alloc_tls_mem(cmdbuf, batch->wls_total_size);
+         if (batch->tlsinfo.wls.ptr) {
+            cmdbuf->tls_half[h].wls_ptr = batch->tlsinfo.wls.ptr;
+            cmdbuf->tls_half[h].wls_size = batch->wls_total_size;
+         }
+         static unsigned wls_logged;
+         if (wls_logged < 4) {
+            wls_logged++;
+            mesa_logi("panvk: v%u batch WLS %u KiB, half %u%s", PAN_ARCH,
+                      (unsigned)(batch->wls_total_size >> 10), h,
+                      panvk_v7_tls_share() ? ", shared per half" : "");
+         }
+      }
    }
 
    if (batch->tls.cpu)
@@ -181,7 +286,11 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
 
          fbd_info.layer = layer_id;
          fbd_info.frame_shaders = fs;
-         fbd_info.frame_shaders.dcd_pointer += layer_id * 3 * pan_size(DRAW);
+         /* Bifrost has one set of pre/post frame DCDs per layer, v9 one set
+          * for all layers (alloc_pre_post_dcds()), the frame shaders read
+          * the layer from the FBD frame argument. */
+         if (PAN_ARCH < 9)
+            fbd_info.frame_shaders.dcd_pointer += layer_id * 3 * pan_size(DRAW);
 
          const struct pan_fb_descs fb_descs = {
             .fbd = fbd.cpu,
@@ -191,6 +300,8 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
                               : fbd.cpu + pan_size(FRAMEBUFFER),
          };
          tagged_fbd_ptr |= GENX(pan_emit_fb_desc)(&fbd_info, &fb_descs);
+
+         /* fontatlas8: no FBD hex dump */
 
          result = panvk_cmd_prepare_fragment_job(cmdbuf, tagged_fbd_ptr);
          if (result != VK_SUCCESS)
@@ -202,6 +313,10 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
    }
 
    cmdbuf->cur_batch = NULL;
+#if PAN_ARCH < 9
+   /* Job indices belong to a batch's chain. */
+   cmdbuf->state.gfx.xfb.last_job = 0;
+#endif
 }
 
 VkResult
@@ -225,9 +340,13 @@ panvk_per_arch(cmd_alloc_fb_desc)(struct panvk_cmd_buffer *cmdbuf)
    fbd_size = ALIGN_POT(fbd_size, pan_alignment(RENDER_TARGET)) +
               (fb->rt_count * pan_size(RENDER_TARGET));
 
+#if PAN_ARCH != 9
+   /* TODO(v9): fb.bo_count/bos tracking not implemented for arch 9,
+    * see cmd_close_batch stub above. */
    batch->fb.bo_count = cmdbuf->state.gfx.render.fb.bo_count;
    memcpy(batch->fb.bos, cmdbuf->state.gfx.render.fb.bos,
           batch->fb.bo_count * sizeof(batch->fb.bos[0]));
+#endif /* PAN_ARCH != 9 */
 
    batch->fb.desc =
       panvk_cmd_alloc_dev_mem(cmdbuf, desc, fbd_size * batch->fb.layer_count,
@@ -250,6 +369,19 @@ panvk_per_arch(cmd_alloc_tls_desc)(struct panvk_cmd_buffer *cmdbuf, bool gfx)
    }
 
    return VK_SUCCESS;
+}
+
+/* v67b: vertex/tiler work overlaps the previous pass (PANVK_OVERLAP=0: off) */
+#include <stdlib.h>
+static __attribute__((unused)) bool
+panvk_overlap_enabled(void)
+{
+   static int on = -1;
+   if (on < 0) {
+      const char *e = getenv("PANVK_OVERLAP");
+      on = !(e && e[0] == '0');
+   }
+   return on;
 }
 
 VkResult
@@ -280,19 +412,64 @@ panvk_per_arch(cmd_prepare_tiler_context)(struct panvk_cmd_buffer *cmdbuf,
       batch->tiler.ctx_descs.gpu + (pan_size(TILER_CONTEXT) * layer_idx);
 
    pan_pack(&batch->tiler.heap_templ, TILER_HEAP, cfg) {
+#if PAN_ARCH == 9
+      /* Each overlap half gets its own heap. Top is the end of the first
+       * 2 MiB chunk, not of the region: the tiler takes chunks from both
+       * Bottom and Top, and kbase GROW_ON_GPF commits every page up to the
+       * faulting one, so a Top at the region end committed all of it on the
+       * first top-side allocation (bmdhacks/malisx2, MIT). */
+      if (panvk_overlap_enabled()) { /* v67b */
+         static unsigned next_half;
+         batch->heap_half = __atomic_fetch_add(&next_half, 1, __ATOMIC_RELAXED) & 1;
+      }
+      const struct panvk_priv_bo *heap =
+         batch->heap_half ? dev->tiler_heap2 : dev->tiler_heap;
+      cfg.size = pan_kmod_bo_size(heap->bo);
+      cfg.base = heap->addr.dev;
+      cfg.bottom = heap->addr.dev;
+      cfg.top = cfg.base + MIN2(cfg.size, 2 * 1024 * 1024);
+#else
       cfg.size = pan_kmod_bo_size(dev->tiler_heap->bo);
       cfg.base = dev->tiler_heap->addr.dev;
       cfg.bottom = dev->tiler_heap->addr.dev;
       cfg.top = cfg.base + cfg.size;
+      if (dev->tiler_heap2) {
+         /* jm-v7 099: one BO per overlap half (panvk_v7_split_heap()). */
+         static unsigned next_half;
+         batch->heap_half =
+            __atomic_fetch_add(&next_half, 1, __ATOMIC_RELAXED) & 1;
+         const struct panvk_priv_bo *heap =
+            batch->heap_half ? dev->tiler_heap2 : dev->tiler_heap;
+         cfg.size = pan_kmod_bo_size(heap->bo);
+         cfg.base = heap->addr.dev;
+         cfg.bottom = cfg.base;
+         cfg.top = cfg.base + cfg.size;
+      } else if (panvk_overlap_enabled()) { /* v67b */
+         static unsigned next_half;
+         batch->heap_half = __atomic_fetch_add(&next_half, 1, __ATOMIC_RELAXED) & 1;
+         const uint64_t half = (uint64_t)cfg.size / 2;
+         cfg.size = half;
+         cfg.base += batch->heap_half * half;
+         cfg.bottom = cfg.base;
+         cfg.top = cfg.base + half;
+      }
+#endif
    }
 
    pan_pack(&batch->tiler.ctx_templ, TILER_CONTEXT, cfg) {
+      /* jm-v7 099: with a split heap on v6/v7 this is the size of one
+       * half's BO, the heap the batch really has.
+       */
       cfg.hierarchy_mask = panvk_select_tiler_hierarchy_mask(
          phys_dev, &cmdbuf->state.gfx, pan_kmod_bo_size(dev->tiler_heap->bo));
       cfg.fb_width = fb->width_px;
       cfg.fb_height = fb->height_px;
       cfg.heap = batch->tiler.heap_desc.gpu;
       cfg.sample_pattern = pan_sample_pattern(fb->sample_count);
+#if PAN_ARCH >= 9
+      cfg.first_provoking_vertex =
+         cmdbuf->state.gfx.render.first_provoking_vertex != U_TRISTATE_NO;
+#endif
    }
 
    memcpy(batch->tiler.heap_desc.cpu, &batch->tiler.heap_templ,
@@ -309,10 +486,16 @@ panvk_per_arch(cmd_prepare_tiler_context)(struct panvk_cmd_buffer *cmdbuf,
    }
 
 out_set_layer_ctx:
-   if (PAN_ARCH >= 9)
+   if (PAN_ARCH >= 9) {
       batch->tiler.ctx.valhall.desc = tiler_desc;
-   else
+      /* One tiler context per layer, primitives land in internal layer 0
+       * of their own context (the VS drops the hardware layer write), so
+       * the FBD of layer N must select list N - N = 0. */
+      assert(layer_idx <= UINT8_MAX);
+      batch->tiler.ctx.valhall.layer_offset = layer_idx;
+   } else {
       batch->tiler.ctx.bifrost.desc = tiler_desc;
+   }
 
    return VK_SUCCESS;
 }
@@ -325,7 +508,17 @@ panvk_per_arch(cmd_open_batch)(struct panvk_cmd_buffer *cmdbuf)
       vk_zalloc(&cmdbuf->vk.pool->alloc, sizeof(*cmdbuf->cur_batch), 8,
                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    cmdbuf->cur_batch->jobs = UTIL_DYNARRAY_INIT;
+#if PAN_ARCH == 9
+   cmdbuf->cur_batch->malloc_vertex_jobs = UTIL_DYNARRAY_INIT;
+#endif
    cmdbuf->cur_batch->event_ops = UTIL_DYNARRAY_INIT;
+   cmdbuf->cur_batch->vary_infos = UTIL_DYNARRAY_INIT;
+   /* jm-v7 106: with per-half indirect varying buffers, every batch takes
+    * its own allocator, in the buffer of its heap half. */
+#if PAN_ARCH < 9
+   if (to_panvk_device(cmdbuf->vk.base.device)->indirect_varying_buffer2)
+      cmdbuf->state.gfx.vs.indirect_varying_bufs_infos = 0;
+#endif
    assert(cmdbuf->cur_batch);
    return cmdbuf->cur_batch;
 }
@@ -395,6 +588,13 @@ panvk_per_arch(CmdPipelineBarrier2)(VkCommandBuffer commandBuffer,
       panvk_per_arch(cmd_close_batch)(cmdbuf);
       panvk_per_arch(cmd_open_batch)(cmdbuf);
    }
+
+   /* BC emulation: an image leaving VK_IMAGE_LAYOUT_ZERO_INITIALIZED_EXT
+    * has zero blocks, whose decoded texels are not zero (BC1 decodes them
+    * to opaque black). Decode them as CSF does. The internal barriers it
+    * records have no image barriers, so this does not recurse.
+    */
+   panvk_per_arch(cmd_bc_decode_zero_initialized)(cmdbuf, pDependencyInfo);
 }
 
 static void
@@ -409,14 +609,20 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
    list_for_each_entry_safe(struct panvk_batch, batch, &cmdbuf->batches, node) {
       list_del(&batch->node);
       util_dynarray_fini(&batch->jobs);
+#if PAN_ARCH == 9
+      util_dynarray_fini(&batch->malloc_vertex_jobs);
+#endif
       util_dynarray_fini(&batch->event_ops);
+      util_dynarray_fini(&batch->vary_infos);
 
       vk_free(&cmdbuf->vk.pool->alloc, batch);
    }
 
    panvk_pool_reset(&cmdbuf->desc_pool);
    panvk_pool_reset(&cmdbuf->tls_pool);
+   memset(cmdbuf->tls_half, 0, sizeof(cmdbuf->tls_half));
    panvk_pool_reset(&cmdbuf->varying_pool);
+   panvk_pool_reset(&cmdbuf->gs_pool);
    panvk_cmd_buffer_obj_list_reset(cmdbuf, push_sets);
 
    memset(&cmdbuf->state, 0, sizeof(cmdbuf->state));
@@ -432,7 +638,11 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
    list_for_each_entry_safe(struct panvk_batch, batch, &cmdbuf->batches, node) {
       list_del(&batch->node);
       util_dynarray_fini(&batch->jobs);
+#if PAN_ARCH == 9
+      util_dynarray_fini(&batch->malloc_vertex_jobs);
+#endif
       util_dynarray_fini(&batch->event_ops);
+      util_dynarray_fini(&batch->vary_infos);
 
       vk_free(&cmdbuf->vk.pool->alloc, batch);
    }
@@ -444,6 +654,7 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
    panvk_pool_cleanup(&cmdbuf->desc_pool);
    panvk_pool_cleanup(&cmdbuf->tls_pool);
    panvk_pool_cleanup(&cmdbuf->varying_pool);
+   panvk_pool_cleanup(&cmdbuf->gs_pool);
    panvk_cmd_buffer_obj_list_cleanup(cmdbuf, push_sets);
    vk_command_buffer_finish(&cmdbuf->vk);
    vk_free(&dev->vk.alloc, cmdbuf);
@@ -494,9 +705,15 @@ panvk_create_cmdbuf(struct vk_command_pool *vk_pool, VkCommandBufferLevel level,
    panvk_pool_init(&cmdbuf->desc_pool, device, &pool->desc_bo_pool, NULL,
                    &desc_pool_props);
 
+   /* Only TLS (stacks, written before they are read) and WLS (undefined
+    * at dispatch start, zero-init is lowered in the shader) come from this
+    * pool, and pooled BOs are reused uncleared anyway: no kbase clear, as
+    * the CSF TLS does (perf review 2026-10-26 D2; up to 2 x 47 MiB of
+    * memset per command buffer on the S9). PANVK_KBASE_ZERO_ALL=1 clears
+    * them again. */
    struct panvk_pool_properties tls_pool_props = {
-      .create_flags =
-         panvk_device_adjust_bo_flags(device, PAN_KMOD_BO_FLAG_NO_MMAP),
+      .create_flags = panvk_device_adjust_bo_flags(
+         device, PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_NO_ZERO),
       .slab_size = 64 * 1024,
       .label = "TLS pool",
       .prealloc = false,
@@ -518,6 +735,22 @@ panvk_create_cmdbuf(struct vk_command_pool *vk_pool, VkCommandBufferLevel level,
    panvk_pool_init(&cmdbuf->varying_pool, device, &pool->varying_bo_pool, NULL,
                    &var_pool_props);
 
+   /* jm-v7 033: the geometry emulation of a large tessellated draw is sized
+    * for millions of primitives it rarely all emits. Growable GPU-only BOs:
+    * pages are committed when the GPU first touches them.
+    */
+   struct panvk_pool_properties gs_pool_props = {
+      .create_flags = panvk_device_adjust_bo_flags(
+         device, PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT),
+      .slab_size = 2 * 1024 * 1024,
+      .label = "GS emulation pool",
+      .prealloc = false,
+      .owns_bos = true,
+      .needs_locking = false,
+   };
+   panvk_pool_init(&cmdbuf->gs_pool, device, &pool->gs_bo_pool, NULL,
+                   &gs_pool_props);
+
    list_inithead(&cmdbuf->batches);
    *cmdbuf_out = &cmdbuf->vk;
    return VK_SUCCESS;
@@ -536,6 +769,9 @@ panvk_per_arch(BeginCommandBuffer)(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
 
    vk_command_buffer_begin(&cmdbuf->vk, pBeginInfo);
+   cmdbuf->one_time_submit =
+      cmdbuf->vk.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY &&
+      (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
    return VK_SUCCESS;
 }

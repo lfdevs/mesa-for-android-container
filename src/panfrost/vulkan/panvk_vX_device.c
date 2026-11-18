@@ -20,6 +20,9 @@
 #include "panvk_cmd_alloc.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_device.h"
+#if PAN_ARCH >= 9
+#include "panvk_gpu_prerast.h"
+#endif
 #include "panvk_cmd_draw.h"
 #include "panvk_entrypoints.h"
 #include "panvk_instance.h"
@@ -27,6 +30,8 @@
 #include "panvk_physical_device.h"
 #include "panvk_precomp_cache.h"
 #include "panvk_priv_bo.h"
+#include "panvk_v7_knobs.h"
+#include "panvk_image_view.h"
 #include "panvk_queue.h"
 #include "panvk_utrace.h"
 #include "panvk_utrace_perfetto.h"
@@ -34,12 +39,22 @@
 #include "genxml/decode.h"
 #include "genxml/gen_macros.h"
 
+#ifdef HAVE_PAN_KMOD_KBASE
+#include <fcntl.h>
+#endif
+
 #include "kmod/pan_kmod.h"
 #include "util/os_file.h"
+#include "util/log.h"
+#include "util/os_misc.h"
+#include "util/u_debug.h"
 #include "util/u_printf.h"
 #include "pan_props.h"
 #include "pan_samples.h"
 #include "poly/geometry.h"
+#if PAN_ARCH < 9
+#include "pan_buffer.h"
+#endif
 
 static void *
 panvk_kmod_zalloc(const struct pan_kmod_allocator *allocator, size_t size,
@@ -194,6 +209,117 @@ panvk_per_arch(device_init_poly_heap)(struct panvk_device *dev)
    return result;
 #endif
 }
+static void
+panvk_device_cleanup_tls(struct panvk_device *dev)
+{
+   util_dynarray_foreach(&dev->tls.bos, struct panvk_priv_bo *, bo)
+      panvk_priv_bo_unref(*bo);
+   util_dynarray_fini(&dev->tls.bos);
+   simple_mtx_destroy(&dev->tls.lock);
+}
+
+#if PAN_ARCH >= 9
+/* Commit the gpu_prerast arenas at creation.  On MediaTek kbase (CSF 1.21),
+ * GPU-fault growth loses the first gpu_prerast draw's output: PanProbe
+ * gs_viewport_depth case A drew nothing on every run; without alloc-on-fault,
+ * 6/6 runs pass.
+ *
+ * csf-v11/205: "creation" is no longer the VkDevice's, which committed and
+ * CPU-cleared 64 + 96 MiB in every VkDevice that enables GS, XFB,
+ * tessellation, non-solid fill, viewport index or vertex stores (every
+ * DXVK device), used or not. On CSF (v10+) each arena is created at the
+ * first draw that records a gpu_prerast or tessellation pass, still fully
+ * committed before any GPU access (the record happens before the submit),
+ * so the fault growth problem above does not come back. The v9 JM
+ * gpu_prerast paths (v9_prerast_draw_one(), v9_tess_draw()) take the
+ * arenas through panvk_per_arch(device_gpu_prerast_arena)() at record time
+ * too, so v9 is lazy as well (perf review 2026-10-26 D7: it committed and
+ * CPU-cleared 160 MiB in every such VkDevice).
+ * PANVK_GPU_PRERAST_ARENA=eager restores the creation-time commit;
+ * PANVK_V9_PRERAST_ARENA_LAZY=0 restores it on v9 only (the 114 behaviour,
+ * CSF stays lazy). */
+static bool
+gpu_prerast_arena_eager(void)
+{
+   const char *v = os_get_option("PANVK_GPU_PRERAST_ARENA");
+
+   if (v && !strcmp(v, "eager"))
+      return true;
+
+   return PAN_ARCH < 10 &&
+          !debug_get_bool_option("PANVK_V9_PRERAST_ARENA_LAZY", true);
+}
+
+static struct panvk_priv_mem
+alloc_gpu_prerast_arena(struct panvk_device *dev, uint64_t size)
+{
+   uint32_t flags =
+      panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP);
+   struct panvk_priv_bo *bo;
+
+   if (panvk_priv_bo_create(dev, size, flags, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE,
+                            &bo) != VK_SUCCESS)
+      return (struct panvk_priv_mem){0};
+
+   struct panvk_priv_mem mem = {.bo = (uintptr_t)bo};
+   panvk_priv_mem_write(mem, 0, struct panvk_gpu_prerast_arena, arena) {
+      memset(arena, 0, sizeof(*arena));
+   }
+   return mem;
+}
+
+struct panvk_priv_mem
+panvk_per_arch(device_gpu_prerast_arena)(struct panvk_device *dev, bool tess)
+{
+   struct panvk_priv_mem *mem =
+      tess ? &dev->gpu_prerast_tess_arena : &dev->gpu_prerast_arena;
+
+   if (!(tess ? dev->gpu_prerast_tess_wanted : dev->gpu_prerast_wanted))
+      return (struct panvk_priv_mem){0};
+
+   simple_mtx_lock(&dev->gpu_prerast_lock);
+   if (!panvk_priv_mem_check_alloc(*mem)) {
+      const uint64_t size =
+         tess ? panvk_gpu_prerast_tess_arena_size(dev->tess_opt.vs_region_end)
+              : PANVK_GPU_PRERAST_ARENA_SIZE;
+
+      *mem = alloc_gpu_prerast_arena(dev, size);
+      if (panvk_priv_mem_check_alloc(*mem))
+         mesa_logi("panvk: gpu_prerast %s arena committed (%llu MiB)",
+                   tess ? "tessellation" : "draw",
+                   (unsigned long long)(size >> 20));
+   }
+   struct panvk_priv_mem ret = *mem;
+   simple_mtx_unlock(&dev->gpu_prerast_lock);
+   return ret;
+}
+
+struct panvk_priv_mem
+panvk_per_arch(device_gpu_prerast_tess_arena2)(struct panvk_device *dev)
+{
+   struct panvk_priv_mem *mem = &dev->gpu_prerast_tess_arena2;
+
+   if (!dev->gpu_prerast_tess_wanted || dev->tess_opt.arenas < 2)
+      return (struct panvk_priv_mem){0};
+
+   simple_mtx_lock(&dev->gpu_prerast_lock);
+   if (!panvk_priv_mem_check_alloc(*mem)) {
+      const uint64_t size =
+         panvk_gpu_prerast_tess_arena_size(dev->tess_opt.vs_region_end);
+
+      *mem = alloc_gpu_prerast_arena(dev, size);
+      if (panvk_priv_mem_check_alloc(*mem))
+         mesa_logi("panvk: gpu_prerast second tessellation arena committed "
+                   "(%llu MiB)",
+                   (unsigned long long)(size >> 20));
+      else
+         dev->tess_opt.arenas = 1; /* Do not retry on every draw. */
+   }
+   struct panvk_priv_mem ret = *mem;
+   simple_mtx_unlock(&dev->gpu_prerast_lock);
+   return ret;
+}
+#endif
 
 static VkResult
 panvk_meta_cmd_bind_map_buffer(struct vk_command_buffer *cmd,
@@ -224,6 +350,7 @@ panvk_meta_init(struct panvk_device *device)
    if (result != VK_SUCCESS)
       return result;
 
+   device->bc.prewarm = panvk_per_arch(bc_xcode_prewarm);
    device->meta.use_stencil_export = true;
    device->meta.use_rect_list_pipeline = true;
    device->meta.max_bind_map_buffer_size_B = 64 * 1024;
@@ -375,12 +502,73 @@ panvk_device_get_timestamp(struct vk_device *vk_dev, uint64_t *timestamp)
    return VK_SUCCESS;
 }
 
+#ifdef HAVE_PAN_KMOD_KBASE
+/* Sparse binding over kbase (which has no DRM syncobjs and no explicit-VA
+ * vm_bind) is not implemented yet: the BIND queue family is created as a
+ * stub that fails at submit time with a clear message.  The GPU queue
+ * family uses the real kbase CSF submission path. */
+static bool
+panvk_kbase_stub_queues(const struct panvk_device *dev)
+{
+   const struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(dev->vk.physical);
+
+   return phys_dev->kbase_node_path[0] != '\0';
+}
+
+static VkResult
+panvk_kbase_stub_queue_submit(struct vk_queue *queue,
+                              struct vk_queue_submit *submit)
+{
+   return vk_queue_set_lost(
+      queue, "kbase: sparse binding queues are not implemented yet");
+}
+
+static VkResult
+panvk_kbase_stub_queue_create(struct panvk_device *dev,
+                              const VkDeviceQueueCreateInfo *create_info,
+                              uint32_t queue_idx,
+                              struct vk_queue **out_queue)
+{
+   struct vk_queue *queue = vk_zalloc(&dev->vk.alloc, sizeof(*queue), 8,
+                                      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!queue)
+      return panvk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   VkResult result = vk_queue_init(queue, &dev->vk, create_info, queue_idx);
+   if (result != VK_SUCCESS) {
+      vk_free(&dev->vk.alloc, queue);
+      return result;
+   }
+
+   queue->driver_submit = panvk_kbase_stub_queue_submit;
+   *out_queue = queue;
+   return VK_SUCCESS;
+}
+
+static void
+panvk_kbase_stub_queue_destroy(struct vk_queue *queue)
+{
+   struct vk_device *vk_dev = queue->base.device;
+
+   vk_queue_finish(queue);
+   vk_free(&vk_dev->alloc, queue);
+}
+#endif /* HAVE_PAN_KMOD_KBASE */
+
 static VkResult
 panvk_queue_create(struct panvk_device *dev,
                    const VkDeviceQueueCreateInfo *create_info,
                    uint32_t queue_idx,
                    struct vk_queue **out_queue)
 {
+#ifdef HAVE_PAN_KMOD_KBASE
+   if (panvk_kbase_stub_queues(dev) &&
+       create_info->queueFamilyIndex == PANVK_QUEUE_FAMILY_BIND)
+      return panvk_kbase_stub_queue_create(dev, create_info, queue_idx,
+                                           out_queue);
+#endif
+
    switch (create_info->queueFamilyIndex) {
    case PANVK_QUEUE_FAMILY_GPU:
       return panvk_per_arch(create_gpu_queue)(
@@ -395,6 +583,16 @@ panvk_queue_create(struct panvk_device *dev,
 static void
 panvk_queue_destroy(struct vk_queue *queue)
 {
+#ifdef HAVE_PAN_KMOD_KBASE
+   struct panvk_device *dev = to_panvk_device(queue->base.device);
+
+   if (panvk_kbase_stub_queues(dev) &&
+       queue->queue_family_index == PANVK_QUEUE_FAMILY_BIND) {
+      panvk_kbase_stub_queue_destroy(queue);
+      return;
+   }
+#endif
+
    switch (queue->queue_family_index) {
    case PANVK_QUEUE_FAMILY_GPU:
       panvk_per_arch(destroy_gpu_queue)(queue);
@@ -446,6 +644,177 @@ cleanup_va_heaps(struct panvk_device *device)
    for (uint32_t i = 0; i < ARRAY_SIZE(device->as.heaps); i++)
       util_vma_heap_finish(&device->as.heaps[i].heap);
 }
+#if PAN_ARCH < 9
+#define PANVK_NULL_ZERO_SIZE (PANVK_NULL_UBO_ENTRIES * 16)
+#define PANVK_NULL_SCRATCH_SIZE 256
+#define PANVK_NULL_SAMPLER_OFFSET (PANVK_NULL_ZERO_SIZE + PANVK_NULL_SCRATCH_SIZE)
+#define PANVK_NULL_BO_SIZE (PANVK_NULL_SAMPLER_OFFSET + PANVK_DESCRIPTOR_SIZE)
+
+/* See panvk_device::null_descs. The texture and storage image descriptors
+ * come from the device's own entry points, so they are exactly what an
+ * application's 1x1 image view would get. Nothing ever writes through them:
+ * a null storage image or texel buffer has a 0-byte range, so its stores are
+ * dropped.
+ * Ported from JimVulkan/mesa-unified-drivers (MIT, Copyright 2026
+ * XclipseTools).
+ */
+static VkResult
+panvk_init_null_descs(struct panvk_device *dev)
+{
+   const struct vk_device_dispatch_table *t = &dev->vk.dispatch_table;
+   VkDevice h = panvk_device_to_handle(dev);
+   VkResult result;
+
+   /* The zero page, then PANVK_NULL_SCRATCH_SIZE bytes for the
+    * PANVK_NULLIMG_INBOUNDS null storage image (see below). */
+   result = panvk_priv_bo_create(
+      dev, PANVK_NULL_BO_SIZE,
+      panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP),
+      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &dev->null_descs.zero_bo);
+   if (result != VK_SUCCESS)
+      return result;
+   memset(dev->null_descs.zero_bo->addr.host, 0, PANVK_NULL_BO_SIZE);
+   static_assert(PANVK_NULL_SAMPLER_OFFSET % PANVK_DESCRIPTOR_SIZE == 0,
+                 "dummy sampler alignment");
+   static_assert(pan_size(SAMPLER) <= PANVK_DESCRIPTOR_SIZE,
+                 "dummy sampler size");
+   pan_cast_and_pack(dev->null_descs.zero_bo->addr.host +
+                        PANVK_NULL_SAMPLER_OFFSET,
+                     SAMPLER, cfg) {
+      cfg.clamp_integer_array_indices = false;
+   }
+   panvk_priv_bo_flush(dev->null_descs.zero_bo, 0, PANVK_NULL_BO_SIZE);
+   dev->null_descs.zero_addr = dev->null_descs.zero_bo->addr.dev;
+   dev->null_descs.dummy_sampler_addr =
+      dev->null_descs.zero_addr + PANVK_NULL_SAMPLER_OFFSET;
+
+   const VkImageCreateInfo ici = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
+      .extent = {1, 1, 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_LINEAR,
+      .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+   };
+   result = t->CreateImage(h, &ici, NULL, &dev->null_descs.image);
+   if (result != VK_SUCCESS)
+      return result;
+
+   VkMemoryRequirements mr;
+   t->GetImageMemoryRequirements(h, dev->null_descs.image, &mr);
+   /* Reads go through ZERO swizzles, but keep the texel zero anyway. */
+   const VkMemoryAllocateFlagsInfo mafi = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+      .flags = VK_MEMORY_ALLOCATE_ZERO_INITIALIZE_BIT_EXT,
+   };
+   const VkMemoryAllocateInfo mai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &mafi,
+      .allocationSize = mr.size,
+      .memoryTypeIndex = ffs(mr.memoryTypeBits) - 1,
+   };
+   result = t->AllocateMemory(h, &mai, NULL, &dev->null_descs.image_mem);
+   if (result != VK_SUCCESS)
+      return result;
+   result = t->BindImageMemory(h, dev->null_descs.image,
+                               dev->null_descs.image_mem, 0);
+   if (result != VK_SUCCESS)
+      return result;
+
+   const VkImageViewCreateInfo vci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = dev->null_descs.image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
+      .components = {VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO,
+                     VK_COMPONENT_SWIZZLE_ZERO, VK_COMPONENT_SWIZZLE_ZERO},
+      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+   };
+   result = t->CreateImageView(h, &vci, NULL, &dev->null_descs.view);
+   if (result != VK_SUCCESS)
+      return result;
+
+   VK_FROM_HANDLE(panvk_image_view, view, dev->null_descs.view);
+   static_assert(sizeof(view->descs.tex[0]) == sizeof(dev->null_descs.tex),
+                 "texture descriptor size");
+   static_assert(sizeof(view->descs.img_attrib_buf) ==
+                    sizeof(dev->null_descs.img),
+                 "storage image descriptor size");
+   memcpy(dev->null_descs.tex, &view->descs.tex[0],
+          sizeof(dev->null_descs.tex));
+
+   struct mali_attribute_buffer_packed img[2];
+   memcpy(img, view->descs.img_attrib_buf, sizeof(img));
+   pan_unpack(&img[0], ATTRIBUTE_BUFFER, img_cfg);
+   pan_pack(&img[0], ATTRIBUTE_BUFFER, cfg) {
+      cfg = img_cfg;
+      cfg.size = 0;
+      /* robustness2: a null storage image reads (0, 0, 0, 0). With the
+       * view's RGBA order an imageLoad returned alpha 1.0 on G52 (PanProbe
+       * robustness2 null_descriptors), so give the attribute format the
+       * 0000 component order (jm-v7 043). The format is packed above the
+       * texel stride and log2(samples), see prepare_attr_buf_descs(). */
+      uint32_t hw_fmt = cfg.stride >> 10;
+#if PAN_ARCH == 6
+      /* v6 formats carry a swizzle (3 bits per channel): 0, 0, 0, 0. */
+      const uint32_t zero_order =
+         MALI_CHANNEL_0 | (MALI_CHANNEL_0 << 3) | (MALI_CHANNEL_0 << 6) |
+         (MALI_CHANNEL_0 << 9);
+#else
+      const uint32_t zero_order = MALI_RGB_COMPONENT_ORDER_0000;
+#endif
+      hw_fmt = (hw_fmt & ~BITFIELD_MASK(12)) | zero_order;
+      cfg.stride = (cfg.stride & BITFIELD_MASK(10)) | (hw_fmt << 10);
+      /* The null image is a real 1x1 texel in a scratch area after the
+       * zero page (stores land there, loads go through the 0000 order)
+       * rather than a 0-byte buffer: the hardware out-of-bounds value
+       * ignores the component order (A06 robustness2, jm-v7 048).
+       * PANVK_NULLIMG_INBOUNDS=0 restores the 0-byte buffer. */
+      if (debug_get_bool_option("PANVK_NULLIMG_INBOUNDS", true)) {
+         cfg.pointer = dev->null_descs.zero_addr + PANVK_NULL_ZERO_SIZE;
+         cfg.size = PANVK_NULL_SCRATCH_SIZE;
+      }
+   }
+   memcpy(dev->null_descs.img, img, sizeof(img));
+
+   struct {
+      struct mali_attribute_buffer_packed buf;
+      struct mali_attribute_packed attr;
+      uint32_t pad[2];
+   } texel = {0};
+   static_assert(sizeof(texel) == sizeof(dev->null_descs.texel),
+                 "texel buffer descriptor size");
+   const struct pan_buffer_view bview = {
+      .format = PIPE_FORMAT_R32_UINT,
+      .width_el = 0,
+      .base = dev->null_descs.zero_addr,
+   };
+   GENX(pan_buffer_texture_emit)(&bview, &texel.buf, &texel.attr);
+   memcpy(dev->null_descs.texel, &texel, sizeof(texel));
+
+   dev->null_descs.valid = true;
+   return VK_SUCCESS;
+}
+
+static void
+panvk_finish_null_descs(struct panvk_device *dev)
+{
+   const struct vk_device_dispatch_table *t = &dev->vk.dispatch_table;
+   VkDevice h = panvk_device_to_handle(dev);
+
+   if (dev->null_descs.view)
+      t->DestroyImageView(h, dev->null_descs.view, NULL);
+   if (dev->null_descs.image)
+      t->DestroyImage(h, dev->null_descs.image, NULL);
+   if (dev->null_descs.image_mem)
+      t->FreeMemory(h, dev->null_descs.image_mem, NULL);
+   panvk_priv_bo_unref(dev->null_descs.zero_bo);
+   memset(&dev->null_descs, 0, sizeof(dev->null_descs));
+}
+#endif
 
 VkResult
 panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
@@ -513,9 +882,30 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       .free = panvk_kmod_free,
       .priv = &device->vk.alloc,
    };
-   device->kmod.dev = pan_kmod_dev_create(
-      os_dupfd_cloexec(physical_device->kmod.dev->fd),
-      physical_device->kmod.dev->flags, &device->kmod.allocator);
+
+#ifdef HAVE_PAN_KMOD_KBASE
+   if (physical_device->kbase_node_path[0]) {
+      /* dup()ing a kbase fd would share the physical device's kbase
+       * context, whose version handshake can only be done once; open a
+       * fresh context instead.  A separate context also means a separate
+       * GPU address space, which matches the per-logical-device VM
+       * semantics of the DRM backends. */
+      int kbase_fd =
+         open(physical_device->kbase_node_path, O_RDWR | O_CLOEXEC);
+      if (kbase_fd >= 0) {
+         device->kmod.dev = pan_kmod_dev_create_with_driver(
+            kbase_fd, physical_device->kmod.dev->flags, "kbase", NULL,
+            &device->kmod.allocator);
+         if (!device->kmod.dev)
+            close(kbase_fd);
+      }
+   } else
+#endif
+   {
+      device->kmod.dev = pan_kmod_dev_create(
+         os_dupfd_cloexec(physical_device->kmod.dev->fd),
+         physical_device->kmod.dev->flags, &device->kmod.allocator);
+   }
 
    if (!device->kmod.dev) {
       result = panvk_errorf(instance, VK_ERROR_OUT_OF_HOST_MEMORY,
@@ -523,7 +913,7 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       goto err_finish_dev;
    }
 
-   if (PANVK_DEBUG(TRACE) || PANVK_DEBUG(SYNC) || PANVK_DEBUG(DUMP)) {
+   if (PANVK_DEBUG(TRACE) || PANVK_DEBUG(SYNC) || PANVK_DEBUG(DUMP) || PANVK_DEBUG(KBASE_DIAG)) {
       device->debug.decode_ctx = pandecode_create_context(false);
       pandecode_set_disassemble(device->debug.decode_ctx, pan_disassemble);
    }
@@ -534,6 +924,14 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       device->kmod.dev, PANVK_VA_RESERVE_BOTTOM);
    uint64_t user_va_end = physical_device->memory.max_supported_va;
    uint32_t vm_flags = PAN_ARCH < 10 ? PAN_KMOD_VM_FLAG_AUTO_VA : 0;
+
+#ifdef HAVE_PAN_KMOD_KBASE
+   /* kbase assigns all GPU VAs itself (SAME_VA memory model); mapping at a
+    * caller-chosen address is not possible, so use AUTO_VA regardless of
+    * the architecture. */
+   if (physical_device->kbase_node_path[0])
+      vm_flags = PAN_KMOD_VM_FLAG_AUTO_VA;
+#endif
 
    device->kmod.vm =
       pan_kmod_vm_create(device->kmod.dev, vm_flags,
@@ -548,7 +946,7 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
 
 #if PAN_ARCH >= 10
    const struct drm_panthor_csif_info *csif_info =
-      panthor_kmod_get_csif_props(device->kmod.dev);
+      panvk_get_csif_props(device);
 
    assert(csif_info->scoreboard_slot_count <= 16);
    device->csf.sb.count = csif_info->scoreboard_slot_count;
@@ -569,6 +967,111 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    simple_mtx_init(&device->as.lock, mtx_plain);
 
    panvk_device_init_mempools(device);
+   simple_mtx_init(&device->tls.lock, mtx_plain);
+   util_dynarray_init(&device->tls.bos, NULL);
+   device->cmdbuf_opt.cs_flush_used =
+      debug_get_bool_option("PANVK_CS_FLUSH_USED", true);
+   device->cmdbuf_opt.jm_pool_autotrim =
+      debug_get_bool_option("PANVK_JM_CMD_POOL_AUTOTRIM", true);
+   device->cmdbuf_opt.cs_chunk_min_B =
+      util_next_power_of_two(
+         CLAMP(debug_get_num_option("PANVK_CS_CHUNK_KB", 4), 1, 64)) *
+      1024;
+   device->cmdbuf_opt.slab_cache =
+      PAN_ARCH >= 10 && debug_get_bool_option("PANVK_CMD_SLAB_CACHE", true);
+   const uint64_t slab_cache_window_ns =
+      CLAMP(debug_get_num_option("PANVK_CMD_SLAB_CACHE_MS", 2000), 100,
+            600000) *
+      1000000ull;
+   /* Opt-in: evictable slabs need a kernel that clears DONT_NEED as
+    * expected (MTK kbase 1.21 untested), and pandecode reads every BO. */
+   const uint32_t slab_evict_windows =
+      physical_device->kbase_node_path[0] && !device->debug.decode_ctx
+         ? CLAMP(debug_get_num_option("PANVK_KBASE_EVICTABLE", 0), 0, 64)
+         : 0;
+   for (unsigned i = 0; i < PANVK_SLAB_CACHE_COUNT; i++)
+      panvk_slab_cache_init(&device->slab_cache[i], slab_cache_window_ns,
+                            slab_evict_windows);
+
+#if PAN_ARCH <= 9
+   device->jm_opt.fs_copy_once =
+      debug_get_bool_option("PANVK_V7_FS_COPY_ONCE", true);
+   const char *reset_flush = os_get_option("PANVK_JM_RESET_FLUSH");
+   device->jm_opt.reset_flush_once =
+      !reset_flush ||
+      (strcmp(reset_flush, "batch") && strcmp(reset_flush, "0"));
+#endif
+#if PAN_ARCH < 9
+   /* v6/v7 panvk_tess_draw() reads it per draw (v9+ sets it below). */
+   device->tess_opt.winding_inline =
+      debug_get_num_option("PANVK_TESS_WINDING_INLINE", 1) != 0;
+   device->jm_opt.tess_batch_draws =
+      CLAMP(debug_get_num_option("PANVK_V7_TESS_BATCH_DRAWS", 4), 0, 64);
+#endif
+
+#if PAN_ARCH >= 9
+   if (PANVK_DEBUG(GPU_PRERAST) || device->vk.enabled_features.fillModeNonSolid ||
+       device->vk.enabled_features.geometryShader ||
+       device->vk.enabled_features.transformFeedback ||
+       device->vk.enabled_features.shaderOutputViewportIndex ||
+       device->vk.enabled_features.vertexPipelineStoresAndAtomics)
+      device->gpu_prerast_wanted = true;
+   device->gpu_prerast_tess_wanted =
+      device->vk.enabled_features.tessellationShader;
+   simple_mtx_init(&device->gpu_prerast_lock, mtx_plain);
+   device->tess_opt.fuse = debug_get_num_option("PANVK_TESS_FUSE", 1) != 0;
+   device->tess_opt.fuse_gen_max =
+      debug_get_num_option("PANVK_TESS_FUSE_GEN_MAX", 64);
+   device->tess_opt.setup_in_step =
+      debug_get_num_option("PANVK_TESS_SETUP_STEP", 1) != 0;
+   device->tess_opt.arenas =
+      debug_get_num_option("PANVK_TESS_ARENAS", 2) >= 2 ? 2 : 1;
+   device->tess_opt.winding_inline =
+      debug_get_num_option("PANVK_TESS_WINDING_INLINE", 1) != 0;
+   /* A tessellation chunk needs max_patches x patch size VS records, about
+    * 0.25 MiB for 4 control points x 128 B and 8 MiB only for 32 control
+    * points x 512 B records (then fewer patches per chunk). v9 JM computes
+    * its layout from the 32 MiB constants.
+    */
+   device->tess_opt.vs_region_end = PANVK_GPU_PRERAST_VS_REGION_END;
+   if (PAN_ARCH >= 10) {
+      const uint64_t mb =
+         CLAMP(debug_get_num_option("PANVK_TESS_VS_REGION_MB", 8), 2,
+               PANVK_GPU_PRERAST_VS_REGION_END >> 20);
+      device->tess_opt.vs_region_end = mb << 20;
+   }
+
+   /* v9, or PANVK_GPU_PRERAST_ARENA=eager: commit both arenas here, as
+    * before csf-v11/205 (64 + 96 MiB per VkDevice with the features). */
+   if (gpu_prerast_arena_eager()) {
+      if ((device->gpu_prerast_wanted &&
+           !panvk_priv_mem_check_alloc(
+              panvk_per_arch(device_gpu_prerast_arena)(device, false))) ||
+          (device->gpu_prerast_tess_wanted &&
+           !panvk_priv_mem_check_alloc(
+              panvk_per_arch(device_gpu_prerast_arena)(device, true)))) {
+         result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         goto err_free_priv_bos;
+      }
+   }
+   if (device->gpu_prerast_wanted || device->gpu_prerast_tess_wanted) {
+      result = panvk_priv_bo_create(
+         device, sizeof(struct panvk_gpu_prerast_syncs),
+         device->kmod.dev->props.supported_bo_flags &
+            PAN_KMOD_BO_FLAG_CSF_EVENT,
+         VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &device->gpu_prerast_syncs);
+      if (result != VK_SUCCESS)
+         goto err_free_priv_bos;
+
+      struct panvk_gpu_prerast_syncs *syncs =
+         device->gpu_prerast_syncs->addr.host;
+      *syncs = (struct panvk_gpu_prerast_syncs){
+         .arena = {1},
+         .tess_arena = {1},
+         .tess_arena2 = {1},
+      };
+   }
+#endif
 
 #if PAN_ARCH >= 10
    /* The only reason this is a heap allocation is that PANVK_SUBQUEUE_COUNT
@@ -583,12 +1086,110 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
 #endif
 
 #if PAN_ARCH <= 9
+#if PAN_ARCH < 9
+   /* jm-v7 099: with PANVK_OVERLAP each overlap half gets its own 64 MiB
+    * GROW_ON_GPF heap, as v9 does. Both halves in one 128 MiB BO meant the
+    * first fault of half 1 (at +64 MiB) committed every page below it, for
+    * the life of the device. PANVK_V7_SPLIT_HEAP=0 = one BO (old).
+    */
+   const bool split_heap = panvk_v7_split_heap();
+   const size_t heap_size = (split_heap ? 64 : 128) * 1024 * 1024;
+#else
+   /* jm-v7 117: on Valhall JM the MALLOC_VERTEX jobs take every vertex
+    * packet (position + varyings) of a batch from the tiler heap, next to
+    * the polygon lists, and JM has no incremental rendering: a batch that
+    * needs more than the heap fails with OUT_OF_MEMORY (kbase event 0x60).
+    * 128 MiB was too small for the GS-expanded geometry of PanProbe
+    * tess_perf gs=1 L=16 (Pixel 6, Mali-G78: about 7M unshared GS output
+    * vertices per frame). The heaps are GROW_ON_GPF and grow in 2 MiB steps
+    * (jm-v9 023), so the size is a VA reservation and a ceiling; pages are
+    * committed only as a batch uses them. PANVK_V9_TILER_HEAP_MB = size of
+    * each heap (64-1024, default 512; 128 = old).
+    */
+   size_t heap_size = 512ull * 1024 * 1024;
+   const char *heap_mb = getenv("PANVK_V9_TILER_HEAP_MB");
+   if (heap_mb && atoi(heap_mb) > 0)
+      heap_size = (size_t)CLAMP(atoi(heap_mb), 64, 1024) * 1024 * 1024;
+   mesa_logi("panvk: v9 tiler heaps 2 x %u MiB (GROW_ON_GPF)",
+             (unsigned)(heap_size >> 20));
+#endif
    result = panvk_priv_bo_create(
-      device, 128 * 1024 * 1024,
+      device, heap_size,
       PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT,
       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &device->tiler_heap);
    if (result != VK_SUCCESS)
       goto err_free_priv_bos;
+
+#if PAN_ARCH == 9
+   result = panvk_priv_bo_create(
+      device, heap_size,
+      PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT,
+      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &device->tiler_heap2);
+   if (result != VK_SUCCESS)
+      goto err_free_priv_bos;
+#else
+   if (split_heap) {
+      result = panvk_priv_bo_create(
+         device, heap_size,
+         PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT,
+         VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &device->tiler_heap2);
+      if (result != VK_SUCCESS)
+         goto err_free_priv_bos;
+   }
+#endif
+
+   result = panvk_priv_bo_create(
+      device,
+      PANVK_JM_MAX_VERTICES_INDIRECT * PANVK_JM_MAX_PER_VTX_ATTRIBUTES_INDIRECT_SIZE,
+      PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT,
+      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &device->indirect_varying_buffer);
+   if (result != VK_SUCCESS)
+      goto err_free_priv_bos;
+
+#if PAN_ARCH < 9
+   /* Tessellation (jm-v7 014): tess control output, per-patch counts and
+    * tessellator output, reused by every tessellated draw (panvk_gs.h).
+    */
+   if (device->vk.enabled_features.tessellationShader) {
+      result = panvk_priv_bo_create(
+         device, PANVK_TESS_HEAP_SIZE,
+         PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT,
+         VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &device->tess_arena);
+      if (result != VK_SUCCESS)
+         goto err_free_priv_bos;
+
+      /* jm-v7 106: per heap half, so a batch may reuse what the batch
+       * before it in the same half used (panvk_tess_draw()). Growable:
+       * each commits only up to the highest offset one batch reaches.
+       */
+      if (panvk_v7_tess_batch_budget()) {
+         if (device->tiler_heap2 || panvk_v7_overlap_on()) {
+            result = panvk_priv_bo_create(
+               device,
+               PANVK_JM_MAX_VERTICES_INDIRECT *
+                  PANVK_JM_MAX_PER_VTX_ATTRIBUTES_INDIRECT_SIZE,
+               PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT,
+               VK_SYSTEM_ALLOCATION_SCOPE_DEVICE,
+               &device->indirect_varying_buffer2);
+            if (result != VK_SUCCESS)
+               goto err_free_priv_bos;
+         }
+         if (device->vk.enabled_features.geometryShader ||
+             device->vk.enabled_features.transformFeedback ||
+             device->vk.enabled_features.fillModeNonSolid) {
+            for (unsigned h = 0; h < 2; h++) {
+               result = panvk_priv_bo_create(
+                  device, PANVK_TESS_GS_SCRATCH_SIZE,
+                  PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT,
+                  VK_SYSTEM_ALLOCATION_SCOPE_DEVICE,
+                  &device->tess_gs_scratch[h]);
+               if (result != VK_SUCCESS)
+                  goto err_free_priv_bos;
+            }
+         }
+      }
+   }
+#endif
 #endif
 
    result = panvk_priv_bo_create(
@@ -651,6 +1252,19 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    if (result != VK_SUCCESS)
       goto err_free_draw_ctx;
 
+   result = panvk_per_arch(create_depth_bounds_fs)(device);
+   if (result != VK_SUCCESS)
+      goto err_finish_queues;
+
+#if PAN_ARCH < 9
+   /* Always, not only with nullDescriptor: a few KB, and an application
+    * binding null without the feature reads zeros instead of faulting.
+    */
+   result = panvk_init_null_descs(device);
+   if (result != VK_SUCCESS)
+      goto err_finish_queues;
+#endif
+
    for (unsigned i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
       const VkDeviceQueueCreateInfo *queue_create =
          &pCreateInfo->pQueueCreateInfos[i];
@@ -684,6 +1298,12 @@ err_finish_queues:
    vk_foreach_queue_safe(queue, &device->vk)
       panvk_queue_destroy(queue);
 
+#if PAN_ARCH < 9
+   panvk_finish_null_descs(device);
+#endif
+
+   if (device->depth_bounds_fs)
+      vk_shader_destroy(&device->vk, &device->depth_bounds_fs->vk, NULL);
    panvk_meta_cleanup(device);
 
 err_free_draw_ctx:
@@ -695,6 +1315,11 @@ err_free_mem_cache:
 err_free_precomp:
    panvk_precomp_cleanup(device);
 err_free_priv_bos:
+   panvk_device_cleanup_tls(device);
+   panvk_priv_bo_unref(device->gpu_prerast_syncs);
+   panvk_pool_free_mem(&device->gpu_prerast_tess_arena2);
+   panvk_pool_free_mem(&device->gpu_prerast_tess_arena);
+   panvk_pool_free_mem(&device->gpu_prerast_arena);
    if (device->printf.bo)
       u_printf_destroy(&device->printf.ctx);
    panvk_priv_bo_unref(device->printf.bo);
@@ -705,7 +1330,15 @@ err_free_priv_bos:
 #if PAN_ARCH >= 10
    simple_mtx_destroy(&device->poly_heap.init_lock);
 #endif
+   panvk_priv_bo_unref(device->indirect_varying_buffer);
+   panvk_priv_bo_unref(device->tess_arena);
+   panvk_priv_bo_unref(device->indirect_varying_buffer2);
+   panvk_priv_bo_unref(device->tess_gs_scratch[0]);
+   panvk_priv_bo_unref(device->tess_gs_scratch[1]);
    panvk_priv_bo_unref(device->tiler_heap);
+   panvk_priv_bo_unref(device->tiler_heap2);
+   for (unsigned i = 0; i < PANVK_SLAB_CACHE_COUNT; i++)
+      panvk_slab_cache_finish(&device->slab_cache[i]);
    panvk_device_cleanup_mempools(device);
    vk_free(&device->vk.alloc, device->dump_region_size);
    pan_kmod_vm_destroy(device->kmod.vm);
@@ -742,7 +1375,12 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
 #if PAN_ARCH >= 10 && PAN_ARCH < 14
    panvk_per_arch(device_draw_context_cleanup)(device);
 #endif
-   panvk_meta_cleanup(device);
+#if PAN_ARCH < 9
+   panvk_finish_null_descs(device);
+#endif
+   if (device->depth_bounds_fs)
+      vk_shader_destroy(&device->vk, &device->depth_bounds_fs->vk, NULL);
+   panvk_per_arch(device_bc_finish)(device);
    vk_pipeline_cache_destroy(device->vk.mem_cache, NULL);
    pan_kmod_bo_put(device->sparse_mem.blackhole);
    u_printf_destroy(&device->printf.ctx);
@@ -755,6 +1393,22 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
 #endif
    panvk_priv_bo_unref(device->tiler_heap);
    panvk_priv_bo_unref(device->sample_positions);
+   panvk_priv_bo_unref(device->tiler_heap2);
+   panvk_priv_bo_unref(device->indirect_varying_buffer);
+   panvk_priv_bo_unref(device->tess_arena);
+   panvk_device_cleanup_tls(device);
+   panvk_priv_bo_unref(device->indirect_varying_buffer2);
+   panvk_priv_bo_unref(device->tess_gs_scratch[0]);
+   panvk_priv_bo_unref(device->tess_gs_scratch[1]);
+   panvk_priv_bo_unref(device->gpu_prerast_syncs);
+   panvk_pool_free_mem(&device->gpu_prerast_tess_arena2);
+   panvk_pool_free_mem(&device->gpu_prerast_tess_arena);
+   panvk_pool_free_mem(&device->gpu_prerast_arena);
+#if PAN_ARCH >= 10
+   simple_mtx_destroy(&device->gpu_prerast_lock);
+#endif
+   for (unsigned i = 0; i < PANVK_SLAB_CACHE_COUNT; i++)
+      panvk_slab_cache_finish(&device->slab_cache[i]);
    panvk_device_cleanup_mempools(device);
    vk_free(&device->vk.alloc, device->dump_region_size);
    pan_kmod_vm_destroy(device->kmod.vm);

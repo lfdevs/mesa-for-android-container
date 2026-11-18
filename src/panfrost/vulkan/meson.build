@@ -60,6 +60,7 @@ libpanvk_files = files(
   'panvk_instance.c',
   'panvk_mempool.c',
   'panvk_nir_lower_cooperative_matrix.c',
+  'panvk_nir_lower_gs.c',
   'panvk_nir_lower_tile_image.c',
   'panvk_physical_device.c',
   'panvk_priv_bo.c',
@@ -86,7 +87,7 @@ fifthgen_archs = [12, 13, 14]
 fifthgen_inc_dir = ['fifthgen']
 fifthgen_files = []
 
-jm_archs = [6, 7]
+jm_archs = [6, 7, 9]
 jm_inc_dir = ['jm']
 jm_files = [
   'jm/panvk_vX_cmd_buffer.c',
@@ -102,6 +103,7 @@ jm_files = [
 csf_archs = [10, 11, 12, 13, 14]
 csf_inc_dir = ['csf']
 csf_files = [
+  'csf/panvk_gpu_prerast.c',
   'csf/panvk_vX_cmd_buffer.c',
   'csf/panvk_vX_cmd_cond_render.c',
   'csf/panvk_vX_cmd_dispatch.c',
@@ -142,7 +144,7 @@ common_per_arch_files = [
   sha1_h,
 ]
 
-foreach arch : [6, 7, 10, 11, 12, 13, 14]
+foreach arch : [6, 7, 9, 10, 11, 12, 13, 14]
   per_arch_files = common_per_arch_files
   inc_panvk_per_arch = []
 
@@ -160,6 +162,10 @@ foreach arch : [6, 7, 10, 11, 12, 13, 14]
   if arch in jm_archs
     inc_panvk_per_arch += jm_inc_dir
     per_arch_files += jm_files
+    if arch == 9
+      # v9 JM runs the shared gpu_prerast path (GS, tess, XFB)
+      per_arch_files += 'csf/panvk_gpu_prerast.c'
+    endif
   elif arch in csf_archs
     inc_panvk_per_arch += csf_inc_dir
     per_arch_files += csf_files
@@ -167,12 +173,13 @@ foreach arch : [6, 7, 10, 11, 12, 13, 14]
 
   panvk_per_arch_libs += static_library(
     'panvk_v@0@'.format(arch),
-    per_arch_files,
+    [per_arch_files, libpoly_shaders[1]],
     include_directories : [
       inc_include,
       inc_src,
       inc_panfrost,
       inc_panvk_per_arch,
+      include_directories('../../poly/cl'),
     ],
     dependencies : [
       idep_nir_headers,
@@ -217,6 +224,7 @@ libvulkan_panfrost = shared_library(
     libpanfrost_decode,
     libpanfrost_lib,
     libpanfrost_compiler,
+    libpoly_nir,
   ],
   dependencies : [
     dep_dl,

@@ -79,6 +79,22 @@ VkResult panvk_per_arch(cmd_prepare_shader_desc_tables)(
    const struct panvk_shader_desc_info *desc_info,
    bool fill_image_table,
    struct panvk_shader_desc_state *shader_desc_state);
+
+/* Bindless textures/samplers (jm-v7 050): the direct texture and sampler
+ * tables point at a device-constant base 64 GiB below the device dummy
+ * sampler, and shaders index set memory as (set - base) / 32 + descriptor
+ * (desc.direct_idx sysvals). kbase maps GPU memory at its CPU address
+ * (SAME_VA), so descriptor pools land within the +-64 GiB a 32-bit index
+ * covers. A constant base keeps the textures pointer and the sysvals in
+ * sync whatever is bound.
+ */
+#define PANVK_DIRECT_BASE_SPAN (64ull << 30)
+
+static inline uint32_t
+panvk_desc_direct_idx(uint64_t base, uint64_t addr)
+{
+   return addr >= base ? (uint32_t)((addr - base) / PANVK_DESCRIPTOR_SIZE) : 0;
+}
 #else
 void panvk_per_arch(cmd_fill_dyn_bufs)(
    const struct panvk_descriptor_state *desc_state,

@@ -37,6 +37,7 @@
 #include "util/u_debug.h"
 #include "util/disk_cache.h"
 #include "util/disk_cache_os.h"
+#include "util/u_android_app_dir.h"
 
 #if DETECT_OS_WINDOWS
 
@@ -1009,10 +1010,31 @@ disk_cache_generate_cache_dir(void *mem_ctx, const char *gpu_name,
       if (xdg_cache_home) {
          path = concatenate_and_mkdir(mem_ctx, xdg_cache_home, cache_dir_name,
                                       mkdir);
+#if !DETECT_OS_ANDROID
+         /* On Android an unwritable XDG_CACHE_HOME falls back to the app
+          * cache directory below. */
          if (!path)
             return NULL;
+#endif
       }
    }
+
+#if DETECT_OS_ANDROID
+   /* Android app processes usually have no writable $HOME/.cache (HOME is
+    * often /data), so the cache stayed off and every process compiled its
+    * pipelines again (panvk's BC transcoders cost seconds each). Use the
+    * app's cache directory, /data/user/<user>/<package>/cache or
+    * /data/data/<package>/cache. The package comes from the process name,
+    * the parent's (for a helper the app execve()d, whose cmdline is its
+    * path), the /data/app path of the binary or an app directory in
+    * TMPDIR/cwd/HOME (u_android_app_dir.h). Falls through to $HOME. */
+   if (!path) {
+      char dir[512];
+
+      if (u_android_app_cache_dir(dir, sizeof(dir)))
+         path = concatenate_and_mkdir(mem_ctx, dir, cache_dir_name, mkdir);
+   }
+#endif
 
    if (!path) {
       const char *home = os_get_option("HOME");
@@ -1084,14 +1106,13 @@ disk_cache_enabled()
       return false;
 
    /* At user request, disable shader cache entirely.
-    * Disk cache is not enabled by default for android, for most
-    * applications the EGL layer uses EGL_ANDROID_blob_cache to manage
-    * the cache itself, however those that wish to use the cache directly
-    * can set `mesa.shader.cache.disable=false` property.
-    * Don't forget to also set the shader cache path to something readable
-    * and writable by the application via `mesa.shader.cache.dir`.
+    * Upstream disables the disk cache by default on Android because the EGL
+    * layer manages its own blob cache. This build is a Vulkan-only driver
+    * that mostly runs under Wine/DXVK, where nothing else caches shaders:
+    * keep it on. Without a writable $MESA_SHADER_CACHE_DIR, $XDG_CACHE_HOME
+    * or $HOME/.cache the path init fails and the cache stays inert.
     */
-#if defined(SHADER_CACHE_DISABLE_BY_DEFAULT) || DETECT_OS_ANDROID
+#if defined(SHADER_CACHE_DISABLE_BY_DEFAULT)
    bool disable_by_default = true;
 #else
    bool disable_by_default = false;

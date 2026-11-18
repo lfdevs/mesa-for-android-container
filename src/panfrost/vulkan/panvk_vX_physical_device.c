@@ -12,6 +12,7 @@
 #include <sys/sysmacros.h>
 
 #include "git_sha1.h"
+#include "util/u_debug.h"
 
 #include "vk_android.h"
 #include "vk_device.h"
@@ -22,6 +23,7 @@
 #include "panvk_buffer.h"
 #include "panvk_cmd_draw.h"
 #include "panvk_descriptor_set_layout.h"
+#include "panvk_perf_knobs.h"
 #include "panvk_physical_device.h"
 #include "panvk_wsi.h"
 
@@ -44,7 +46,7 @@ panvk_per_arch(get_physical_device_extensions)(
    *ext = (struct vk_device_extension_table){
       .KHR_8bit_storage = true,
       .KHR_16bit_storage = true,
-      .KHR_shader_atomic_int64 = PAN_ARCH >= 9,
+      .KHR_shader_atomic_int64 = true,
       .KHR_bind_memory2 = true,
       .KHR_buffer_device_address = true,
       .KHR_calibrated_timestamps =
@@ -56,10 +58,10 @@ panvk_per_arch(get_physical_device_extensions)(
       .KHR_create_renderpass2 = true,
       .KHR_dedicated_allocation = true,
       .KHR_descriptor_update_template = true,
-      .KHR_depth_clamp_zero_one = true,
+      .KHR_depth_clamp_zero_one = false,
       .KHR_depth_stencil_resolve = true,
       .KHR_device_group = true,
-      .KHR_draw_indirect_count = PAN_ARCH >= 10,
+      .KHR_draw_indirect_count = PAN_ARCH >= 9,
       .KHR_driver_properties = true,
       .KHR_dynamic_rendering = true,
       .KHR_dynamic_rendering_local_read = true,
@@ -92,12 +94,12 @@ panvk_per_arch(get_physical_device_extensions)(
       .KHR_maintenance11 = true,
       .KHR_map_memory2 = true,
       .KHR_multiview = true,
-      .KHR_pipeline_binary = true,
+      .KHR_pipeline_binary = false,
       .KHR_pipeline_executable_properties = true,
       .KHR_pipeline_library = true,
       .KHR_push_descriptor = true,
       .KHR_relaxed_block_layout = true,
-      .KHR_robustness2 = PAN_ARCH >= 10,
+      .KHR_robustness2 = false,
       .KHR_sampler_mirror_clamp_to_edge = true,
       .KHR_sampler_ycbcr_conversion = true,
       .KHR_separate_depth_stencil_layouts = true,
@@ -147,7 +149,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_buffer_device_address = true,
       .EXT_calibrated_timestamps =
          device->kmod.dev->props.gpu_can_query_timestamp,
-      .EXT_conditional_rendering = PAN_ARCH >= 10,
+      .EXT_conditional_rendering = true,
       .EXT_color_write_enable = true,
       .EXT_conservative_rasterization = PAN_ARCH >= 11,
       .EXT_custom_border_color = true,
@@ -162,7 +164,7 @@ panvk_per_arch(get_physical_device_extensions)(
 #ifdef VK_USE_PLATFORM_DISPLAY_KHR
       .EXT_display_control = true,
 #endif
-      .EXT_descriptor_indexing = PAN_ARCH >= 9,
+      .EXT_descriptor_indexing = true,
       .EXT_dynamic_rendering_unused_attachments = true,
       .EXT_extended_dynamic_state = true,
       .EXT_extended_dynamic_state2 = true,
@@ -189,9 +191,12 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_map_memory_placed = true,
       .EXT_nested_command_buffer = PAN_ARCH >= 10,
       .EXT_memory_budget = true,
+      .EXT_memory_priority = PAN_ARCH >= 10,
+      .EXT_pageable_device_local_memory = PAN_ARCH >= 10,
       .EXT_non_seamless_cube_map = true,
-      .EXT_mutable_descriptor_type = PAN_ARCH >= 9,
+      .EXT_mutable_descriptor_type = true,
       .EXT_multisampled_render_to_single_sampled = true,
+      .EXT_multi_draw = PAN_ARCH >= 10,
       .EXT_physical_device_drm = true,
       .EXT_pipeline_creation_cache_control = true,
       .EXT_pipeline_creation_feedback = true,
@@ -202,15 +207,17 @@ panvk_per_arch(get_physical_device_extensions)(
 #endif
       .EXT_private_data = true,
       .EXT_primitive_topology_list_restart = true,
+      .EXT_primitives_generated_query = PAN_ARCH >= 9,
       .EXT_provoking_vertex = true,
       .EXT_queue_family_foreign = true,
       .EXT_rasterization_order_attachment_access = PAN_ARCH >= 10,
       .EXT_rgba10x6_formats = PAN_ARCH >= 11,
-      .EXT_robustness2 = PAN_ARCH >= 10,
+      .EXT_robustness2 = true,
       .EXT_sampler_filter_minmax = PAN_ARCH >= 10,
       .EXT_scalar_block_layout = true,
       .EXT_separate_stencil_usage = true,
       .EXT_shader_atomic_float = true,
+      .EXT_transform_feedback = true,
       .EXT_shader_demote_to_helper_invocation = true,
       .EXT_shader_image_atomic_int64 = PAN_ARCH >= 9,
       .EXT_shader_module_identifier = true,
@@ -246,7 +253,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .GOOGLE_user_type = true,
       .INTEL_shader_integer_functions2 = true,
 
-      .VALVE_mutable_descriptor_type = PAN_ARCH >= 9,
+      .VALVE_mutable_descriptor_type = true,
 
       .ARM_shader_core_builtins = true,
       .ARM_shader_core_properties = true,
@@ -304,7 +311,10 @@ panvk_per_arch(get_physical_device_features)(
    const struct panvk_physical_device *device, struct vk_features *features)
 {
    const bool has_gralloc = vk_android_get_ugralloc() != NULL;
-   bool has_sparse = PAN_ARCH >= 10;
+   /* The kbase backend does not have a sparse bind queue implementation yet.
+    * Do not advertise sparse support there, otherwise CTS will exercise sparse
+    * binding paths that can only fail at submit time. */
+   bool has_sparse = PAN_ARCH >= 10 && !device->kbase_node_path[0];
 
    *features = (struct vk_features){
       /* Vulkan 1.0 */
@@ -312,34 +322,55 @@ panvk_per_arch(get_physical_device_features)(
       .fullDrawIndexUint32 = true,
       .imageCubeArray = true,
       .independentBlend = true,
-      .geometryShader = false,
-      .tessellationShader = false,
+      /* v6/v7: emulated by a compute job (panvk_nir_lower_gs.c). */
+      .geometryShader = !PANVK_DEBUG(NO_GS),
+      /* v6/v7: the tess control shader runs as compute, the libpoly
+       * tessellator as compute kernels, the tess eval shader as the vertex
+       * shader of a second draw (jm-v7 014).
+       */
+      .tessellationShader = PAN_ARCH >= 9 || !PANVK_DEBUG(NO_TESS),
       .sampleRateShading = true,
       .dualSrcBlend = true,
       .logicOp = true,
-      .multiDrawIndirect = PAN_ARCH >= 10,
+      /* JM (v6/v7/v9) unrolls multi-draws on the CPU. */
+      .multiDrawIndirect = true,
       .drawIndirectFirstInstance = true,
       .depthClamp = true,
       .depthBiasClamp = true,
-      .fillModeNonSolid = false,
-      .depthBounds = false,
+      /* v6/v7: a passthrough GS emits edges or vertices (jm-v7 018). */
+      .fillModeNonSolid = true,
+      /* v6/v7: emulated in the FS with LD_TILE of the depth (jm-v7 015).
+       * PANVK_DEPTH_BOUNDS=0 hides it for A/B runs (C1, 115): DXVK then
+       * declares no depth bounds state, as before csf-v11 092 on v10/v11.
+       */
+      .depthBounds = PANVK_PERF(DEPTH_BOUNDS),
       .wideLines = true,
       .largePoints = true,
-      .alphaToOne = false,
-      .multiViewport = false,
+      .alphaToOne = PAN_ARCH >= 10,
+      /* v6/v7: a geometry shader selects the viewport in the emulation
+       * (jm-v7 017). */
+      .multiViewport = true,
       .samplerAnisotropy = true,
       .textureCompressionETC2 = has_texture_compression_etc2(device),
       .textureCompressionASTC_LDR = has_texture_compression_astc_ldr(device),
-      .textureCompressionBC = has_texture_compression_bc(device),
+      .textureCompressionBC = has_texture_compression_bc(device) ||
+                              panvk_bc_emul_enabled(device),
       .occlusionQueryPrecise = true,
-      .pipelineStatisticsQuery = false,
+      /* v6/v7: GPU-counted as on v9 JM (jm-v7 016). */
+      .pipelineStatisticsQuery = true,
       /* On v13+, the hardware isn't speculatively referencing to invalid
-         indices anymore. */
+         indices anymore. On v9-v12, pre-rasterization stages that write
+         memory run through gpu_prerast compute instead of IDVS. On by default
+         on v9+ (DXVK FL11_1); pan_enable_vertex_pipeline_stores_atomics=false
+         turns it off. On v6/v7 there is no IDVS (jm-v7 006): the vertex job
+         runs the VS once per vertex of the draw's index range and instance
+         (jm-v7 045). */
       .vertexPipelineStoresAndAtomics =
-         (PAN_ARCH >= 13 && instance->drirc.misc.enable_vertex_pipeline_stores_atomics) ||
+         instance->drirc.misc.enable_vertex_pipeline_stores_atomics ||
          instance->drirc.misc.force_enable_shader_atomics,
       .fragmentStoresAndAtomics = true,
-      .shaderTessellationAndGeometryPointSize = false,
+      /* v6/v7: jm-v7 033 (TES point size, GS point output size). */
+      .shaderTessellationAndGeometryPointSize = PAN_ARCH < 9 || PAN_ARCH >= 10,
       .shaderImageGatherExtended = true,
       .shaderStorageImageExtendedFormats = true,
       .shaderStorageImageMultisample = false,
@@ -349,8 +380,8 @@ panvk_per_arch(get_physical_device_features)(
       .shaderSampledImageArrayDynamicIndexing = true,
       .shaderStorageBufferArrayDynamicIndexing = true,
       .shaderStorageImageArrayDynamicIndexing = true,
-      .shaderClipDistance = false,
-      .shaderCullDistance = false,
+      .shaderClipDistance = true,
+      .shaderCullDistance = true,
       .shaderFloat64 = false,
       .shaderInt64 = true,
       .shaderInt16 = true,
@@ -365,7 +396,8 @@ panvk_per_arch(get_physical_device_features)(
       .sparseResidency8Samples = false,
       .sparseResidency16Samples = false,
       .sparseResidencyAliased = false, /* https://gitlab.freedesktop.org/panfrost/mesa/-/issues/237 */
-      .variableMultisampleRate = false,
+      /* v6/v7: a sample count change splits the batch (jm-v7 042). */
+      .variableMultisampleRate = true,
       .inheritedQueries = false,
 
       /* Vulkan 1.1 */
@@ -384,18 +416,19 @@ panvk_per_arch(get_physical_device_features)(
 
       /* Vulkan 1.2 */
       .samplerMirrorClampToEdge = true,
-      .drawIndirectCount = PAN_ARCH >= 10,
+      .drawIndirectCount = PAN_ARCH >= 9,
       .storageBuffer8BitAccess = true,
       .uniformAndStorageBuffer8BitAccess = true,
       .storagePushConstant8 = true,
-      .shaderBufferInt64Atomics = PAN_ARCH >= 9,
-      .shaderSharedInt64Atomics = PAN_ARCH >= 9,
+      /* Bifrost has ATOM_C.i64 (jm-v7 041). */
+      .shaderBufferInt64Atomics = true,
+      .shaderSharedInt64Atomics = true,
       .shaderFloat16 = PAN_ARCH >= 10,
       .shaderInt8 = true,
-      /* In theory, update-after-bind is supported on bifrost, but the
-       * descriptor limits would be too low for the descriptorIndexing feature.
+      /* v6/v7: update-after-bind and mutable bindings are bindless, see
+       * panvk_binding_is_bindless() (jm-v7 050).
        */
-      .descriptorIndexing = PAN_ARCH >= 9,
+      .descriptorIndexing = true,
       .shaderInputAttachmentArrayDynamicIndexing = true,
       .shaderUniformTexelBufferArrayDynamicIndexing = true,
       .shaderStorageTexelBufferArrayDynamicIndexing = true,
@@ -406,14 +439,14 @@ panvk_per_arch(get_physical_device_features)(
       .shaderInputAttachmentArrayNonUniformIndexing = true,
       .shaderUniformTexelBufferArrayNonUniformIndexing = true,
       .shaderStorageTexelBufferArrayNonUniformIndexing = true,
-      .descriptorBindingUniformBufferUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingSampledImageUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingStorageImageUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingStorageBufferUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingUniformTexelBufferUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingStorageTexelBufferUpdateAfterBind = PAN_ARCH >= 9,
-      .descriptorBindingUpdateUnusedWhilePending = PAN_ARCH >= 9,
-      .descriptorBindingPartiallyBound = PAN_ARCH >= 9,
+      .descriptorBindingUniformBufferUpdateAfterBind = true,
+      .descriptorBindingSampledImageUpdateAfterBind = true,
+      .descriptorBindingStorageImageUpdateAfterBind = true,
+      .descriptorBindingStorageBufferUpdateAfterBind = true,
+      .descriptorBindingUniformTexelBufferUpdateAfterBind = true,
+      .descriptorBindingStorageTexelBufferUpdateAfterBind = true,
+      .descriptorBindingUpdateUnusedWhilePending = true,
+      .descriptorBindingPartiallyBound = true,
       .descriptorBindingVariableDescriptorCount = true,
       .runtimeDescriptorArray = true,
       .samplerFilterMinmax = PAN_ARCH >= 10,
@@ -432,7 +465,8 @@ panvk_per_arch(get_physical_device_features)(
       .vulkanMemoryModel = true,
       .vulkanMemoryModelDeviceScope = true,
       .vulkanMemoryModelAvailabilityVisibilityChains = true,
-      .shaderOutputViewportIndex = false,
+      /* v6/v7: through the geometry emulation (jm-v7 032). */
+      .shaderOutputViewportIndex = true,
       .shaderOutputLayer = PAN_ARCH >= 10,
       .subgroupBroadcastDynamicId = true,
 
@@ -542,7 +576,8 @@ panvk_per_arch(get_physical_device_features)(
       /* VK_EXT_extended_dynamic_state2 */
       .extendedDynamicState2 = true,
       .extendedDynamicState2LogicOp = true,
-      .extendedDynamicState2PatchControlPoints = false,
+      .extendedDynamicState2PatchControlPoints =
+         PAN_ARCH >= 9 || !PANVK_DEBUG(NO_TESS),
 
       /* VK_EXT_extended_dynamic_state3 */
       .extendedDynamicState3TessellationDomainOrigin = false,
@@ -551,7 +586,7 @@ panvk_per_arch(get_physical_device_features)(
       .extendedDynamicState3RasterizationSamples = true,
       .extendedDynamicState3SampleMask = true,
       .extendedDynamicState3AlphaToCoverageEnable = true,
-      .extendedDynamicState3AlphaToOneEnable = false,
+      .extendedDynamicState3AlphaToOneEnable = PAN_ARCH >= 10,
       .extendedDynamicState3LogicOpEnable = true,
       .extendedDynamicState3ColorBlendEnable = true,
       .extendedDynamicState3ColorBlendEquation = true,
@@ -594,8 +629,8 @@ panvk_per_arch(get_physical_device_features)(
       .indirectMemoryCopy = PAN_ARCH >= 10,
 
       /* VK_EXT_conditional_rendering */
-      .conditionalRendering = PAN_ARCH >= 10,
-      .inheritedConditionalRendering = PAN_ARCH >= 10,
+      .conditionalRendering = true,
+      .inheritedConditionalRendering = true,
 
       /* VK_EXT_custom_border_color */
       .customBorderColors = true,
@@ -621,16 +656,29 @@ panvk_per_arch(get_physical_device_features)(
       .primitiveTopologyListRestart = true,
       .primitiveTopologyPatchListRestart = false,
 
+      /* VK_EXT_primitives_generated_query */
+      .primitivesGeneratedQuery = PAN_ARCH >= 9,
+      .primitivesGeneratedQueryWithRasterizerDiscard = PAN_ARCH >= 9,
+      .primitivesGeneratedQueryWithNonZeroStreams = false,
+
       /* VK_EXT_provoking_vertex */
       .provokingVertexLast = true,
       .transformFeedbackPreservesProvokingVertex = false,
 
+      /* VK_EXT_transform_feedback */
+      /* v6/v7: captured from the geometry shader emulation, a vertex shader
+       * without a geometry shader through a passthrough one.
+       */
+      .transformFeedback = true,
+      .geometryStreams = !PANVK_DEBUG(NO_GS),
+
       /* v7 doesn't support AFBC(BGR). We need to tweak the texture swizzle to
        * make it work, which forces us to apply the same swizzle on the border
        * color, meaning we need to know the format when preparing the border
-       * color.
+       * color. When the feature is enabled, R/B-swapped formats skip AFBC
+       * instead and keep their native order (jm-v7 044).
        */
-      .customBorderColorWithoutFormat = PAN_ARCH != 7,
+      .customBorderColorWithoutFormat = true,
 
       /* VK_KHR_pipeline_binary */
       .pipelineBinaries = true,
@@ -639,9 +687,26 @@ panvk_per_arch(get_physical_device_features)(
       .pipelineExecutableInfo = true,
 
       /* VK_KHR_robustness2 */
-      .robustBufferAccess2 = PAN_ARCH >= 11,
-      .robustImageAccess2 = false,
-      .nullDescriptor = PAN_ARCH >= 10,
+      /* v9/v10 texel buffers get software bounds checks
+       * (bi_lower_robust_texel_buf) and OOB storage image loads a GPU alpha
+       * fix-up (bi_lower_robust_image_alpha_v10), the rest is the same
+       * Valhall path.
+       * v6/v7: SSBOs use the bounds-checked address format, UBOs, texel
+       * buffers, storage images and vertex attributes the hardware bounds
+       * of their descriptors, and null descriptors are emulated
+       * (panvk_device::null_descs), as in JimVulkan. robustImageAccess2
+       * stays off: storage image loads are LD_ATTR_TEX/LEA_ATTR_TEX on
+       * attribute descriptors and texelFetch is TEX, and what Bifrost
+       * returns out of bounds (zero? the alpha of formats without one?)
+       * has not been measured. A fix-up like v10's needs the view format,
+       * which a Bifrost shader cannot read from its descriptor.
+       * PANVK_DEBUG=ria2 advertises it as is, to run the PanProbe/CTS
+       * checks on a device (jm-v7 020).
+       */
+      .robustBufferAccess2 = true,
+      .robustImageAccess2 = PAN_ARCH >= 9 || PANVK_DEBUG(RIA2) ||
+                            debug_get_bool_option("PANVK_V7_RIA2", true),
+      .nullDescriptor = true,
 
       /* VK_EXT_shader_tile_image */
       .shaderTileImageColorReadAccess = PAN_ARCH >= 9,
@@ -727,6 +792,8 @@ panvk_per_arch(get_physical_device_features)(
       .memoryMapPlaced = true,
       .memoryMapRangePlaced = false,
       .memoryUnmapReserve = true,
+      .memoryPriority = PAN_ARCH >= 10,
+      .pageableDeviceLocalMemory = PAN_ARCH >= 10,
 
       /* VK_EXT_non_seamless_cube_map */
       .nonSeamlessCubeMap = true,
@@ -740,7 +807,7 @@ panvk_per_arch(get_physical_device_features)(
       .zeroInitializeDeviceMemory = true,
 
       /* VK_EXT_mutable_descriptor_type */
-      .mutableDescriptorType = PAN_ARCH >= 9,
+      .mutableDescriptorType = true,
 
       /* VK_KHR_shader_fma */
       .shaderFmaFloat16 = PAN_ARCH >= 10,
@@ -801,6 +868,7 @@ panvk_per_arch(get_physical_device_features)(
 
       /* VK_KHR_extended_flags */
       .extendedFlags = true,
+      .multiDraw = PAN_ARCH >= 10,
    };
 }
 
@@ -843,6 +911,23 @@ panvk_per_arch(get_physical_device_properties)(
    os_get_page_size(&os_page_size);
 
    const bool has_disk_cache = device->vk.disk_cache != NULL;
+   /* v6/v7: tessellation emulation (jm-v7 014), same limits as v9+. */
+   const bool tess = PAN_ARCH >= 9 || !PANVK_DEBUG(NO_TESS);
+
+   /* v6/v7 update-after-bind limits (jm-v7 050): update-after-bind bindings
+    * are bindless. SSBOs and storage images/texel buffers are addressed from
+    * the set memory, textures and samplers are indexed relative to the
+    * lowest bound set (panvk_per_arch(cmd_desc_direct_base)). The texture
+    * index register is 32-bit; whether the hardware honours indices above
+    * the 16-bit RSD texture count is a device question, so
+    * PANVK_DI_TEX_MAX caps the sampled image/sampler limits.
+    */
+#define PANVK_V7_UAB_MAX (1u << 20)
+#define PANVK_V7_UAB_RESOURCES (4u << 20)
+   const uint32_t v7_uab_tex =
+      MIN2(debug_get_num_option("PANVK_DI_TEX_MAX", PANVK_V7_UAB_MAX),
+           PANVK_V7_UAB_MAX);
+   (void)v7_uab_tex;
 
    /* Ensure that the max threads count per workgroup is valid for Bifrost */
    assert(PAN_ARCH > 8 || device->kmod.dev->props.max_threads_per_wg <= 1024);
@@ -937,26 +1022,28 @@ panvk_per_arch(get_physical_device_properties)(
       .maxVertexInputBindingStride = MESA_VK_MAX_VERTEX_BINDING_STRIDE,
       /* 32 vec4 varyings. */
       .maxVertexOutputComponents = 128,
-      /* Tesselation shaders not supported. */
-      .maxTessellationGenerationLevel = 0,
-      .maxTessellationPatchSize = 0,
-      .maxTessellationControlPerVertexInputComponents = 0,
-      .maxTessellationControlPerVertexOutputComponents = 0,
-      .maxTessellationControlPerPatchOutputComponents = 0,
-      .maxTessellationControlTotalOutputComponents = 0,
-      .maxTessellationEvaluationInputComponents = 0,
-      .maxTessellationEvaluationOutputComponents = 0,
-      /* Geometry shaders not supported. */
-      .maxGeometryShaderInvocations = 0,
-      .maxGeometryInputComponents = 0,
-      .maxGeometryOutputComponents = 0,
-      .maxGeometryOutputVertices = 0,
-      .maxGeometryTotalOutputComponents = 0,
+      .maxTessellationGenerationLevel = tess ? 64 : 0,
+      .maxTessellationPatchSize = tess ? 32 : 0,
+      .maxTessellationControlPerVertexInputComponents = tess ? 128 : 0,
+      .maxTessellationControlPerVertexOutputComponents = tess ? 128 : 0,
+      .maxTessellationControlPerPatchOutputComponents = tess ? 120 : 0,
+      .maxTessellationControlTotalOutputComponents = tess ? 4096 : 0,
+      .maxTessellationEvaluationInputComponents = tess ? 128 : 0,
+      .maxTessellationEvaluationOutputComponents = tess ? 128 : 0,
+      .maxGeometryShaderInvocations = PAN_ARCH >= 9 ? 64 : 32,
+      .maxGeometryInputComponents = 64,
+      .maxGeometryOutputComponents = 128,
+      .maxGeometryOutputVertices = 256,
+      .maxGeometryTotalOutputComponents = 1024,
       /* 32 vec4 varyings. */
       .maxFragmentInputComponents = 128,
       /* 8 render targets. */
       .maxFragmentOutputAttachments = MAX_RTS,
-      .maxFragmentDualSrcAttachments = max_cbuf_atts,
+      /* Only render target 0 is validated for dual-source blending: the
+       * compiler keeps one SRC1 type per shader (blend_src1_type, asserted
+       * to be set once) and the blend shader is built from that single type
+       * for every render target. Gallium panfrost reports 1 as well. */
+      .maxFragmentDualSrcAttachments = 1,
       /* 8 render targets, 2^12 storage buffers and 2^8 storage images (see
        * above).
        */
@@ -985,10 +1072,12 @@ panvk_per_arch(get_physical_device_properties)(
       .mipmapPrecisionBits = 8,
       /* Software limit. */
       .maxDrawIndexedIndexValue = UINT32_MAX,
-      .maxDrawIndirectCount = PAN_ARCH >= 10 ? UINT32_MAX : 1,
+      /* JM (v6/v7/v9) unrolls multi-draws on the CPU, one job per draw:
+       * keep the multiDrawIndirect minimum. */
+      .maxDrawIndirectCount = PAN_ARCH >= 10 ? UINT32_MAX : UINT16_MAX,
       .maxSamplerLodBias = (float)INT16_MAX / 256.0f,
       .maxSamplerAnisotropy = 16,
-      .maxViewports = 1,
+      .maxViewports = 16,
       .maxViewportDimensions = {MAX_FRAMEBUFFER_DIMENSION, MAX_FRAMEBUFFER_DIMENSION},
       .viewportBoundsRange = {-2.0f * MAX_FRAMEBUFFER_DIMENSION, 2.0f * MAX_FRAMEBUFFER_DIMENSION - 1.0f},
       .viewportSubPixelBits = 0,
@@ -998,8 +1087,7 @@ panvk_per_arch(get_physical_device_properties)(
       .minTexelBufferOffsetAlignment = 16,
       /* Always aligned on a uniform slot (vec4). */
       .minUniformBufferOffsetAlignment = 16,
-      /* LOAD.i128 and LD_PKA.i128 which require 16B alignment */
-      .minStorageBufferOffsetAlignment = 16,
+      .minStorageBufferOffsetAlignment = PAN_ARCH >= 9 ? 4 : 16,
       /* Signed 4-bit value. */
       .minTexelOffset = -8,
       .maxTexelOffset = 7,
@@ -1022,13 +1110,13 @@ panvk_per_arch(get_physical_device_properties)(
       .sampledImageStencilSampleCounts = sample_counts,
       .storageImageSampleCounts = VK_SAMPLE_COUNT_1_BIT,
       .maxSampleMaskWords = 1,
+      /* v6/v7: WRITE_VALUE SYSTEM_TIMESTAMP jobs, as v9 JM (jm-v7 021). */
       .timestampComputeAndGraphics =
-         PAN_ARCH >= 10 && device->kmod.dev->props.gpu_can_query_timestamp,
-      .timestampPeriod =
-         PAN_ARCH >= 10 ? panvk_get_gpu_system_timestamp_period(device) : 0,
-      .maxClipDistances = 0,
-      .maxCullDistances = 0,
-      .maxCombinedClipAndCullDistances = 0,
+         device->kmod.dev->props.gpu_can_query_timestamp,
+      .timestampPeriod = panvk_get_gpu_system_timestamp_period(device),
+      .maxClipDistances = 8,
+      .maxCullDistances = 8,
+      .maxCombinedClipAndCullDistances = 8,
       .discreteQueuePriorities = 2,
       .pointSizeRange = {pointSizeRangeMin, pointSizeRangeMax},
       .lineWidthRange = {0.0, 7.9921875},
@@ -1073,7 +1161,7 @@ panvk_per_arch(get_physical_device_properties)(
       .maxMultiviewViewCount = pan_max_multiview_view_count(PAN_ARCH),
       .maxMultiviewInstanceIndex = UINT32_MAX,
       .protectedNoFault = false,
-      .maxPerSetDescriptors = UINT16_MAX,
+      .maxPerSetDescriptors = PAN_ARCH >= 9 ? UINT16_MAX : (1 << 22),
       /* Our buffer size fields allow only this much */
       .maxMemoryAllocationSize = UINT32_MAX,
 
@@ -1089,8 +1177,14 @@ panvk_per_arch(get_physical_device_properties)(
       /* VK_KHR_driver_properties */
       .driverID = VK_DRIVER_ID_MESA_PANVK,
       .conformanceVersion = get_conformance_version(),
+      /* Valhall has one 2-bit flush-to-zero mode per shader (Preserve, DX11
+       * = FP32 flushed and FP16 preserved, Always = both flushed) and no
+       * per-instruction override, so only FP32 can differ from the 16/64-bit
+       * types, and "flush FP16, preserve FP32" does not exist.
+       * shaderDenormFlushToZeroFloat16/64 are therefore not reported.
+       */
       .denormBehaviorIndependence =
-         PAN_ARCH >= 9 ? VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE
+         PAN_ARCH >= 9 ? VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY
                        : VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL,
       .roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL,
       .shaderSignedZeroInfNanPreserveFloat16 = true,
@@ -1099,56 +1193,55 @@ panvk_per_arch(get_physical_device_properties)(
       .shaderDenormPreserveFloat16 = true,
       .shaderDenormPreserveFloat32 = true,
       .shaderDenormPreserveFloat64 = true,
-      .shaderDenormFlushToZeroFloat16 = true,
+      .shaderDenormFlushToZeroFloat16 = PAN_ARCH < 9,
       .shaderDenormFlushToZeroFloat32 = true,
-      .shaderDenormFlushToZeroFloat64 = true,
+      .shaderDenormFlushToZeroFloat64 = PAN_ARCH < 9,
       .shaderRoundingModeRTEFloat16 = true,
       .shaderRoundingModeRTEFloat32 = true,
       .shaderRoundingModeRTEFloat64 = false,
       .shaderRoundingModeRTZFloat16 = true,
       .shaderRoundingModeRTZFloat32 = true,
       .shaderRoundingModeRTZFloat64 = false,
-      .maxUpdateAfterBindDescriptorsInAllPools =
-         PAN_ARCH >= 9 ? UINT32_MAX : 0,
+      .maxUpdateAfterBindDescriptorsInAllPools = UINT32_MAX,
       /* VK_EXT_descriptor_indexing */
-      .maxUpdateAfterBindDescriptorsInAllPools = PAN_ARCH >= 9 ? UINT32_MAX : 0,
+      .maxUpdateAfterBindDescriptorsInAllPools = UINT32_MAX,
       .shaderUniformBufferArrayNonUniformIndexingNative = false,
       .shaderSampledImageArrayNonUniformIndexingNative = false,
       .shaderStorageBufferArrayNonUniformIndexingNative = false,
       .shaderStorageImageArrayNonUniformIndexingNative = false,
       .shaderInputAttachmentArrayNonUniformIndexingNative = false,
-      .robustBufferAccessUpdateAfterBind = PAN_ARCH >= 9,
+      .robustBufferAccessUpdateAfterBind = true,
       .quadDivergentImplicitLod = false,
       .maxPerStageDescriptorUpdateAfterBindSamplers =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_SAMPLERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_SAMPLERS : v7_uab_tex,
       .maxPerStageDescriptorUpdateAfterBindUniformBuffers =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_UNIFORM_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_UNIFORM_BUFFERS : MAX_PER_STAGE_UNIFORM_BUFFERS,
       .maxPerStageDescriptorUpdateAfterBindStorageBuffers =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_STORAGE_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_STORAGE_BUFFERS : PANVK_V7_UAB_MAX,
       .maxPerStageDescriptorUpdateAfterBindSampledImages =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_SAMPLED_IMAGES : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_SAMPLED_IMAGES : v7_uab_tex,
       .maxPerStageDescriptorUpdateAfterBindStorageImages =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_STORAGE_IMAGES : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_STORAGE_IMAGES : PANVK_V7_UAB_MAX,
       .maxPerStageDescriptorUpdateAfterBindInputAttachments =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_INPUT_ATTACHMENTS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_INPUT_ATTACHMENTS : MAX_PER_STAGE_INPUT_ATTACHMENTS,
       .maxPerStageUpdateAfterBindResources =
-         PAN_ARCH >= 9 ? MAX_PER_STAGE_RESOURCES : 0,
+         PAN_ARCH >= 9 ? MAX_PER_STAGE_RESOURCES : PANVK_V7_UAB_RESOURCES,
       .maxDescriptorSetUpdateAfterBindSamplers =
-         PAN_ARCH >= 9 ? MAX_PER_SET_SAMPLERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_SAMPLERS : v7_uab_tex,
       .maxDescriptorSetUpdateAfterBindUniformBuffers =
-         PAN_ARCH >= 9 ? MAX_PER_SET_UNIFORM_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_UNIFORM_BUFFERS : MAX_PER_SET_UNIFORM_BUFFERS,
       .maxDescriptorSetUpdateAfterBindUniformBuffersDynamic =
-         PAN_ARCH >= 9 ? MAX_DYNAMIC_UNIFORM_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_DYNAMIC_UNIFORM_BUFFERS : MAX_DYNAMIC_UNIFORM_BUFFERS,
       .maxDescriptorSetUpdateAfterBindStorageBuffers =
-         PAN_ARCH >= 9 ? MAX_PER_SET_STORAGE_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_STORAGE_BUFFERS : PANVK_V7_UAB_MAX,
       .maxDescriptorSetUpdateAfterBindStorageBuffersDynamic =
-         PAN_ARCH >= 9 ? MAX_DYNAMIC_STORAGE_BUFFERS : 0,
+         PAN_ARCH >= 9 ? MAX_DYNAMIC_STORAGE_BUFFERS : MAX_DYNAMIC_STORAGE_BUFFERS,
       .maxDescriptorSetUpdateAfterBindSampledImages =
-         PAN_ARCH >= 9 ? MAX_PER_SET_SAMPLED_IMAGES : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_SAMPLED_IMAGES : v7_uab_tex,
       .maxDescriptorSetUpdateAfterBindStorageImages =
-         PAN_ARCH >= 9 ? MAX_PER_SET_STORAGE_IMAGES : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_STORAGE_IMAGES : PANVK_V7_UAB_MAX,
       .maxDescriptorSetUpdateAfterBindInputAttachments =
-         PAN_ARCH >= 9 ? MAX_PER_SET_INPUT_ATTACHMENTS : 0,
+         PAN_ARCH >= 9 ? MAX_PER_SET_INPUT_ATTACHMENTS : MAX_PER_SET_INPUT_ATTACHMENTS,
       .supportedDepthResolveModes = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT |
                                     VK_RESOLVE_MODE_AVERAGE_BIT |
                                     VK_RESOLVE_MODE_MIN_BIT |
@@ -1318,6 +1411,26 @@ panvk_per_arch(get_physical_device_properties)(
       /* VK_EXT_provoking_vertex */
       .provokingVertexModePerPipeline = false,
       .transformFeedbackPreservesTriangleFanProvokingVertex = false,
+
+      /* VK_EXT_multi_draw */
+      .maxMultiDrawCount = 2048,
+
+      /* VK_EXT_transform_feedback */
+      /* Streams come from a GS (v9: one without it). */
+      .maxTransformFeedbackStreams =
+         PAN_ARCH >= 10  ? 4
+                         : (PANVK_DEBUG(NO_GS) ? 1 : 4),
+      .maxTransformFeedbackBuffers = 4,
+      .maxTransformFeedbackBufferSize = UINT32_MAX,
+      .maxTransformFeedbackStreamDataSize = 512,
+      .maxTransformFeedbackBufferDataSize = 512,
+      .maxTransformFeedbackBufferDataStride = 2048,
+      /* v6/v7: from the capture scan (jm-v7 016). */
+      .transformFeedbackQueries = true,
+      .transformFeedbackStreamsLinesTriangles = PAN_ARCH >= 9,
+      .transformFeedbackRasterizationStreamSelect =
+         PAN_ARCH >= 10 || (PAN_ARCH == 9 && !PANVK_DEBUG(NO_GS)),
+      .transformFeedbackDraw = true,
 
       /* VK_EXT_shader_tile_image */
       .shaderTileImageCoherentReadAccelerated = PAN_ARCH >= 9,

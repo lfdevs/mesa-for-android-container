@@ -15,7 +15,10 @@
 #include "panvk_cmd_alloc.h"
 #include "panvk_cmd_buffer.h"
 #include "panvk_cmd_desc_state.h"
+#include "panvk_device.h"
 #include "panvk_entrypoints.h"
+#include "panvk_perf_knobs.h"
+#include "panvk_v7_knobs.h"
 
 #include "pan_pool.h"
 
@@ -25,14 +28,20 @@
 #include "vk_command_buffer.h"
 #include "vk_command_pool.h"
 
-static void
+/* Returns the mask of the sets whose binding (handle or dynamic offsets)
+ * changed.
+ */
+static uint32_t
 cmd_desc_state_bind_sets(struct panvk_descriptor_state *desc_state,
                          const VkBindDescriptorSetsInfoKHR *info)
 {
+   uint32_t changed = 0;
    unsigned dynoffset_idx = 0;
    for (unsigned i = 0; i < info->descriptorSetCount; ++i) {
       unsigned set_idx = i + info->firstSet;
       VK_FROM_HANDLE(panvk_descriptor_set, set, info->pDescriptorSets[i]);
+
+      bool same = desc_state->sets[set_idx] == set;
 
       /* Invalidate the push set. */
       if (desc_state->sets[set_idx] &&
@@ -43,15 +52,77 @@ cmd_desc_state_bind_sets(struct panvk_descriptor_state *desc_state,
 
       if (set) {
          for (unsigned b = 0; b < set->layout->dyn_buf_count; b++) {
-            desc_state->dyn_buf_offsets[set_idx][b] =
-               info->pDynamicOffsets[dynoffset_idx++];
+            const uint32_t off = info->pDynamicOffsets[dynoffset_idx++];
+            if (desc_state->dyn_buf_offsets[set_idx][b] != off)
+               same = false;
+            desc_state->dyn_buf_offsets[set_idx][b] = off;
          }
          desc_state->dyn_ssbos[set_idx] = set->layout->dyn_ssbos;
       }
+
+      if (!same)
+         changed |= BITFIELD_BIT(set_idx);
    }
 
    assert(dynoffset_idx == info->dynamicOffsetCount);
+   return changed;
 }
+
+#if PAN_ARCH < 9
+/* jm-v7 097: DESC_STATE for the graphics sets in @sets only. The mask stays
+ * exact while every DESC_STATE dirtying since the last draw came through
+ * here; any other one (meta restore, ...) makes DESC_STATE mean every set,
+ * and those also dirty VS and FS, which rebuild both sides anyway.
+ */
+static void
+v7_gfx_desc_dirty_sets(struct panvk_cmd_buffer *cmdbuf, uint32_t sets)
+{
+   if (!panvk_v7_knob_desc_dirty()) {
+      gfx_state_set_dirty(cmdbuf, DESC_STATE);
+      return;
+   }
+
+   if (!sets)
+      return;
+
+   if (!gfx_state_dirty(cmdbuf, DESC_STATE)) {
+      cmdbuf->state.gfx.v7_dirty_sets = 0;
+      cmdbuf->state.gfx.v7_dirty_sets_valid = true;
+   }
+   cmdbuf->state.gfx.v7_dirty_sets |= sets;
+   gfx_state_set_dirty(cmdbuf, DESC_STATE);
+}
+#endif
+
+#if PAN_ARCH >= 10
+/* A2 (115): the CSF form of jm-v7 097. DESC_STATE for the graphics sets in
+ * @sets only: a draw rebuilds the tables of the stages that use one of them
+ * (vs_desc_dirty(), fs_desc_dirty()), and an identical rebind dirties
+ * nothing. The mask stays exact while every DESC_STATE dirtying since the
+ * last draw came through here; any other one (meta restore, secondaries)
+ * makes DESC_STATE mean every set, and those also dirty VS and FS, which
+ * rebuild both stages anyway. PANVK_CSF_DESC_DIRTY=0 = 114 (any bind or
+ * push rebuilds both).
+ */
+static void
+csf_gfx_desc_dirty_sets(struct panvk_cmd_buffer *cmdbuf, uint32_t sets)
+{
+   if (!PANVK_PERF(CSF_DESC_DIRTY)) {
+      gfx_state_set_dirty(cmdbuf, DESC_STATE);
+      return;
+   }
+
+   if (!sets)
+      return;
+
+   if (!gfx_state_dirty(cmdbuf, DESC_STATE)) {
+      cmdbuf->state.gfx.csf_dirty_sets = 0;
+      cmdbuf->state.gfx.csf_dirty_sets_valid = true;
+   }
+   cmdbuf->state.gfx.csf_dirty_sets |= sets;
+   gfx_state_set_dirty(cmdbuf, DESC_STATE);
+}
+#endif
 
 static struct panvk_descriptor_set *
 cmd_get_push_desc_set(struct vk_command_buffer *vk_cmdbuf,
@@ -211,6 +282,20 @@ panvk_per_arch(cmd_prepare_shader_desc_tables)(
    uint32_t sampler_count =
       desc_info->others.count[PANVK_BIFROST_DESC_TABLE_SAMPLER];
 
+   if (desc_info->direct_mask) {
+      const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+      uint64_t base = panvk_desc_direct_base(dev);
+
+      if (desc_info->direct_mask & PANVK_DIRECT_TEX) {
+         shader_desc_state->tables[PANVK_BIFROST_DESC_TABLE_TEXTURE] = base;
+         tex_count = 1;
+      }
+      if (desc_info->direct_mask & PANVK_DIRECT_SAMPLER) {
+         shader_desc_state->tables[PANVK_BIFROST_DESC_TABLE_SAMPLER] = base;
+         sampler_count = 1;
+      }
+   }
+
    if (tex_count && !sampler_count) {
       struct pan_ptr sampler = panvk_cmd_alloc_desc(cmdbuf, SAMPLER);
       if (!sampler.gpu)
@@ -351,10 +436,17 @@ panvk_per_arch(CmdBindDescriptorSets2KHR)(
 
    /* TODO: Invalidate only if the shader tables are disturbed */
    if (pBindDescriptorSetsInfo->stageFlags & VK_SHADER_STAGE_ALL_GRAPHICS) {
-      cmd_desc_state_bind_sets(&cmdbuf->state.gfx.desc_state,
-                               pBindDescriptorSetsInfo);
+      const uint32_t changed = cmd_desc_state_bind_sets(
+         &cmdbuf->state.gfx.desc_state, pBindDescriptorSetsInfo);
 
+#if PAN_ARCH < 9
+      v7_gfx_desc_dirty_sets(cmdbuf, changed);
+#elif PAN_ARCH >= 10
+      csf_gfx_desc_dirty_sets(cmdbuf, changed);
+#else
+      (void)changed;
       gfx_state_set_dirty(cmdbuf, DESC_STATE);
+#endif
    }
 
    if (pBindDescriptorSetsInfo->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) {
@@ -402,7 +494,15 @@ panvk_per_arch(CmdPushDescriptorSet2KHR)(
       push_desc_set_write(cmdbuf, &cmdbuf->state.gfx.desc_state,
                           pPushDescriptorSetInfo);
 
+#if PAN_ARCH < 9
+      v7_gfx_desc_dirty_sets(cmdbuf,
+                             BITFIELD_BIT(pPushDescriptorSetInfo->set));
+#elif PAN_ARCH >= 10
+      csf_gfx_desc_dirty_sets(cmdbuf,
+                              BITFIELD_BIT(pPushDescriptorSetInfo->set));
+#else
       gfx_state_set_dirty(cmdbuf, DESC_STATE);
+#endif
    }
 
    if (pPushDescriptorSetInfo->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) {
@@ -443,7 +543,13 @@ panvk_per_arch(CmdPushDescriptorSetWithTemplate2KHR)(
    push_set->layout = NULL;
 
    if (template->bind_point == VK_PIPELINE_BIND_POINT_GRAPHICS)
+#if PAN_ARCH < 9
+      v7_gfx_desc_dirty_sets(cmdbuf, BITFIELD_BIT(set));
+#elif PAN_ARCH >= 10
+      csf_gfx_desc_dirty_sets(cmdbuf, BITFIELD_BIT(set));
+#else
       gfx_state_set_dirty(cmdbuf, DESC_STATE);
+#endif
    else
       compute_state_set_dirty(cmdbuf, DESC_STATE);
 }

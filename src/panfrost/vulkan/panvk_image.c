@@ -158,6 +158,17 @@ select_plane_pfmt(struct panvk_image *image, uint64_t mod, unsigned plane)
 }
 
 static bool
+panvk_v7_cbc_afbc(void)
+{
+   static int on = -1;
+   if (on < 0) {
+      const char *e = getenv("PANVK_V7_CBC_AFBC");
+      on = !(e && e[0] == '0');
+   }
+   return on;
+}
+
+static bool
 panvk_image_can_use_mod(struct panvk_image *image,
                         const struct pan_image_usage *iusage, uint64_t mod,
                         bool optimal_only)
@@ -190,6 +201,33 @@ panvk_image_can_use_mod(struct panvk_image *image,
       if ((image->vk.usage | image->vk.stencil_usage) &
           (VK_IMAGE_USAGE_2_STORAGE_BIT_KHR | VK_IMAGE_USAGE_2_HOST_TRANSFER_BIT_KHR))
          return false;
+
+      /* customBorderColorWithoutFormat on v7 (jm-v7 044): AFBC needs an
+       * RGB component order on v7, so an R/B-swapped format is sampled
+       * through a swizzle, which the hardware does not apply to the border
+       * color. A sampler without a format cannot pre-swizzle it, so keep
+       * these formats uncompressed when the feature is enabled.
+       */
+      /* jm-v7 089 (review M11): the border color only matters when the
+       * image is sampled, so an image without SAMPLED/INPUT_ATTACHMENT usage
+       * (render targets, backbuffers, transfer-only images) keeps AFBC; its
+       * views get the AFBC reswizzle from the image modifier. View usage
+       * can only be a subset of the image usage.
+       * PANVK_V7_CBC_AFBC=0 restores the old rule (no AFBC for any
+       * R/B-swapped image).
+       */
+      const VkImageUsageFlags cbc_sampled =
+         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+      if (arch == 7 &&
+          image->vk.base.device->enabled_features
+             .customBorderColorWithoutFormat &&
+          ((image->vk.usage & cbc_sampled) || !panvk_v7_cbc_afbc())) {
+         const struct util_format_description *fdesc =
+            util_format_description(vk_format_to_pipe_format(image->vk.format));
+         if (fdesc && fdesc->swizzle[0] == PIPE_SWIZZLE_Z &&
+             fdesc->swizzle[2] == PIPE_SWIZZLE_X)
+            return false;
+      }
 
       /* Can't do AFBC on v7- if mutable format is requested. */
       if ((image->vk.create_flags & VK_IMAGE_CREATE_2_MUTABLE_FORMAT_BIT_KHR) &&
@@ -347,7 +385,7 @@ panvk_image_get_mod(struct panvk_image *image,
    }
 
    /* legacy scanout (images without any external modifier info) should default to LINEAR. */
-   if (iusage.legacy_scanout)
+   if (iusage.legacy_scanout || image->bc_emul)
       return DRM_FORMAT_MOD_LINEAR;
 
    /* Without external dependencies, pick the best modifier that supports the image. */
@@ -443,6 +481,94 @@ panvk_should_checksum(struct panvk_image *image,
    return bytes_per_pixel <= 4;
 }
 
+/* Internal colour image holding the decoded texels of a bc_gfx image. It is
+ * only ever a fragment-decode render target and a texture through
+ * bc_decoded. MUTABLE keeps CRC off: the decode never redraws a tile with
+ * the same content, so CRC tracking would be pure overhead. */
+static void
+panvk_bc_shadow_info(const struct panvk_image *image, VkImageCreateInfo *info,
+                     VkImageDrmFormatModifierListCreateInfoEXT *afrc)
+{
+   *info = (VkImageCreateInfo){
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT |
+               (image->vk.create_flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT),
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = image->bc_format,
+      .extent = image->vk.extent,
+      .mipLevels = image->vk.mip_levels,
+      .arrayLayers = image->vk.array_layers,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage =
+         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+   };
+
+   /* Fixed-rate AFRC on RGBA8 shadows (BC1/2/3/7) where the GPU has it.
+    * PANVK_BC_AFRC is the coding-unit size in bytes: 32 (4 bits per
+    * component, max 4-5 LSB error on real pictures), 24 or 16 (3 or 2 bits,
+    * lossier), 0 = off. Unset, BC1/BC2 take 24 (12 bpp): their colour is a
+    * 4-entry 565 palette and BC2 alpha is 4-bit, so 3 bits per component
+    * leave the error against the source picture unchanged (35.03 vs 35.05
+    * dB colour, BC2 alpha 31.35 vs 31.33 dB). BC1 punch-through blocks
+    * are the weak spot (alpha max 34 LSB at 32, 70 at 24, no texel crosses
+    * the 0.5 alpha-test threshold at either). BC3/BC7 keep 32: at 24 the
+    * BC3 alpha loses 0.7 dB (max 46 LSB). R8/RG8 (BC4/BC5) stay
+    * uncompressed: at the same rate their error is 25-50 LSB, too much for
+    * normal and height maps. Cube-compatible images keep AFBC: AFRC cube
+    * sampling is untested. */
+   static const uint64_t afrc_mods[] = {
+      DRM_FORMAT_MOD_ARM_AFRC(AFRC_FORMAT_MOD_CU_SIZE_P0(AFRC_FORMAT_MOD_CU_SIZE_16)),
+      DRM_FORMAT_MOD_ARM_AFRC(AFRC_FORMAT_MOD_CU_SIZE_P0(AFRC_FORMAT_MOD_CU_SIZE_24)),
+      DRM_FORMAT_MOD_ARM_AFRC(AFRC_FORMAT_MOD_CU_SIZE_P0(AFRC_FORMAT_MOD_CU_SIZE_32)),
+   };
+   const struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(image->vk.base.device->physical);
+
+   /* Lowmem ETC2/EAC shadow: only sampled, written by the transcoder in the
+    * U-interleaved layout it computes itself. */
+   static const uint64_t u_interleaved_mod =
+      DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED;
+   if (panvk_bc_xcoded(image)) {
+      info->usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+      *afrc = (VkImageDrmFormatModifierListCreateInfoEXT){
+         .sType =
+            VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
+         .drmFormatModifierCount = 1,
+         .pDrmFormatModifiers = &u_interleaved_mod,
+      };
+      info->tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+      info->pNext = afrc;
+      return;
+   }
+
+   const bool bc12 = image->vk.format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK &&
+                     image->vk.format <= VK_FORMAT_BC2_SRGB_BLOCK;
+   /* BC1 RGB (no alpha) and BC7: 16 (8 bpp), sampling cost unchanged. */
+   const bool bc8 = image->vk.format == VK_FORMAT_BC1_RGB_UNORM_BLOCK ||
+                    image->vk.format == VK_FORMAT_BC1_RGB_SRGB_BLOCK ||
+                    image->vk.format == VK_FORMAT_BC7_UNORM_BLOCK ||
+                    image->vk.format == VK_FORMAT_BC7_SRGB_BLOCK;
+   const unsigned cu =
+      debug_get_num_option("PANVK_BC_AFRC", bc8 ? 16 : bc12 ? 24 : 32);
+
+   if ((cu == 16 || cu == 24 || cu == 32) &&
+       image->bc_format == VK_FORMAT_R8G8B8A8_UNORM &&
+       !(image->vk.create_flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) &&
+       pan_query_afrc(&phys_dev->kmod.dev->props)) {
+      *afrc = (VkImageDrmFormatModifierListCreateInfoEXT){
+         .sType =
+            VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
+         .drmFormatModifierCount = 1,
+         .pDrmFormatModifiers = &afrc_mods[cu / 8 - 2],
+      };
+      info->tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+      info->pNext = afrc;
+   }
+}
+
 static VkResult
 panvk_image_init_layouts(struct panvk_image *image,
                          const VkImageCreateInfo *pCreateInfo)
@@ -518,6 +644,42 @@ panvk_image_init_layouts(struct panvk_image *image,
 
       if (!is_disjoint(image) && !explicit_info)
          plane_layout.offset_B += image->planes[plane].plane.layout.data_size_B;
+   }
+
+   if (image->bc_gfx) {
+      /* Lay the decoded plane out exactly as the bc_shadow image created in
+       * panvk_CreateImage() will be, after the raw blocks. */
+      VkImageCreateInfo sci;
+      VkImageDrmFormatModifierListCreateInfoEXT afrc;
+      struct panvk_image tmp = {0};
+
+      panvk_bc_shadow_info(image, &sci, &afrc);
+      vk_image_init(&dev->vk, &tmp.vk, &sci);
+      VkResult result = panvk_image_init(&tmp, &sci);
+      vk_image_finish(&tmp.vk);
+      if (result != VK_SUCCESS)
+         return result;
+
+      image->bc_decoded = tmp.planes[0];
+      image->bc_decoded.image.planes[0] = &image->bc_decoded.plane;
+      /* Without a raw plane the shadow is all the memory the image has. */
+      image->bc_decoded_offset =
+         (image->bc_no_raw || image->bc_raw_store)
+         ? 0
+         : ALIGN_POT(plane_layout.offset_B, 4096);
+   } else if (image->bc_emul) {
+      struct pan_image *dec = &image->bc_decoded.image;
+      enum pipe_format dec_pfmt = vk_format_to_pipe_format(image->bc_format);
+
+      *dec = (struct pan_image){
+         .props = get_pan_image_props(&image->vk, dec_pfmt, 0, false),
+         .mod_handler = mod_handler,
+      };
+      dec->planes[0] = &image->bc_decoded.plane;
+      plane_layout.offset_B = ALIGN_POT(plane_layout.offset_B, 4096);
+      if (!pan_image_layout_init(arch, dec, 0, &plane_layout))
+         return panvk_error(image->vk.base.device,
+                            VK_ERROR_INITIALIZATION_FAILED);
    }
 
    return VK_SUCCESS;
@@ -607,8 +769,19 @@ static uint64_t
 panvk_image_get_total_size(const struct panvk_image *image)
 {
    uint64_t size = 0;
-   for (uint8_t plane = 0; plane < image->plane_count; plane++)
+   /* bc_no_raw: planes[0] (raw blocks) is never accessed, so it gets no
+    * memory of its own and only aliases the start of the shadow.
+    * bc_raw_store: the raw blocks live in the raw store (csf-v11/201). */
+   for (uint8_t plane = 0;
+        plane < image->plane_count && !image->bc_no_raw &&
+        !image->bc_raw_store;
+        plane++)
       size = MAX2(size, panvk_image_plane_size(image, plane));
+   if (image->bc_emul) {
+      const struct pan_image_layout *l = &image->bc_decoded.plane.layout;
+      size = MAX2(size, image->bc_decoded_offset + l->slices[0].offset_B +
+                           l->data_size_B);
+   }
    return size;
 }
 
@@ -629,6 +802,13 @@ panvk_image_report_binding(struct panvk_device *dev, struct panvk_image *image,
                                       panvk_image_plane_size(image, plane),
                                       type);
       }
+   } else if (image->bc_raw_store) {
+      /* planes[0] points at the raw store: the memory starts with the
+       * shadow. */
+      if (image->bc_decoded.plane.base)
+         panvk_address_binding_report(dev, &image->vk.base,
+                                      image->bc_decoded.plane.base,
+                                      panvk_image_get_total_size(image), type);
    } else if (image->planes[0].plane.base) {
       panvk_address_binding_report(dev, &image->vk.base,
                                    image->planes[0].plane.base,
@@ -645,12 +825,232 @@ panvk_image_get_sparse_size(const struct panvk_image *image)
    return ALIGN_POT(image_size, page_size);
 }
 
+/* Images the lowmem path may take: plain optimal-tiled 2D images whose
+ * memory nothing but panvk touches. Sparse, aliased, disjoint, external and
+ * host-transfer images, images with uncompressed (block-texel) views, and
+ * BC4/BC5 images that may be viewed with the other signedness keep the
+ * exact path. */
+static bool
+panvk_bc_lowmem_allowed(const struct panvk_image *image,
+                        const VkImageCreateInfo *info)
+{
+   const VkImageCreateFlags reject =
+      VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+      VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT |
+      VK_IMAGE_CREATE_SPARSE_ALIASED_BIT |
+      VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT |
+      VK_IMAGE_CREATE_DISJOINT_BIT | VK_IMAGE_CREATE_ALIAS_BIT;
+
+   /* Host image copies only see the raw plane. */
+   if (image->vk.tiling != VK_IMAGE_TILING_OPTIMAL ||
+       (image->vk.create_flags & reject) ||
+       (image->vk.usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT) ||
+       vk_find_struct_const(info->pNext,
+                            EXTERNAL_MEMORY_IMAGE_CREATE_INFO))
+      return false;
+
+   if ((image->vk.create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) &&
+       image->vk.format >= VK_FORMAT_BC4_UNORM_BLOCK &&
+       image->vk.format <= VK_FORMAT_BC5_SNORM_BLOCK) {
+      const VkImageFormatListCreateInfo *list =
+         vk_find_struct_const(info->pNext, IMAGE_FORMAT_LIST_CREATE_INFO);
+
+      if (!list || !list->viewFormatCount)
+         return false;
+      for (uint32_t i = 0; i < list->viewFormatCount; i++) {
+         if (list->pViewFormats[i] != image->vk.format)
+            return false;
+      }
+   }
+
+   return true;
+}
+
+static VkResult panvk_bc_raw_create(struct panvk_device *dev,
+                                    struct panvk_image *image);
+static void panvk_bc_raw_destroy(struct panvk_image *image);
+static void panvk_bc_raw_rebind(struct panvk_image *image);
+
+/* csf-v11/202: BC6H UF16 lowmem shadows can be ASTC 4x4 HDR when the GPU
+ * samples that natively. PANVK_BC_BC6H=exact (default) | astc: the ASTC
+ * shadow is 4x smaller but filters at half rate (64 bpp decode, 2x the
+ * sampling cost of B10G11R11) and is lossier, so it is opt-in. */
+/* PANVK_BC_BC6H=exact (default) | astc (UF16 -> ASTC 4x4 HDR) | astc_sf
+ * (UF16 and SF16 -> ASTC 4x4 HDR, SF16 negatives become 0, csf-v11/208). */
+/* csf-v11/210: PANVK_BC_BC6H_DECODE=block (default) decodes the exact BC6H
+ * shadow with one compute invocation per 4x4 block, written straight into
+ * a U-interleaved shadow; fragment keeps the per-texel fragment decode of
+ * csf-v11/150 (bc5). */
+static bool
+panvk_bc_bc6h_block_decode(void)
+{
+   static int on = -1;
+
+   if (p_atomic_read(&on) < 0) {
+      const char *mode = os_get_option("PANVK_BC_BC6H_DECODE");
+
+      if (mode && strcmp(mode, "block") && strcmp(mode, "fragment"))
+         mesa_logw("panvk: unknown PANVK_BC_BC6H_DECODE=%s, using block",
+                   mode);
+      p_atomic_set(&on, !mode || strcmp(mode, "fragment") != 0);
+   }
+   return p_atomic_read(&on);
+}
+
+static bool
+panvk_bc_lowmem_astc(const struct panvk_physical_device *phys_dev,
+                     VkFormat format)
+{
+   static int on = -1;
+
+   if (p_atomic_read(&on) < 0) {
+      const char *mode = os_get_option("PANVK_BC_BC6H");
+
+      if (mode && strcmp(mode, "astc") && strcmp(mode, "astc_sf") &&
+          strcmp(mode, "exact"))
+         mesa_logw("panvk: unknown PANVK_BC_BC6H=%s, using exact", mode);
+      p_atomic_set(&on, !mode ? 0 : !strcmp(mode, "astc_sf") ? 2
+                                    : !strcmp(mode, "astc") ? 1 : 0);
+   }
+   if (p_atomic_read(&on) < (format == VK_FORMAT_BC6H_SFLOAT_BLOCK ? 2 : 1))
+      return false;
+
+   const struct pan_format fmt =
+      phys_dev->formats.all[PIPE_FORMAT_ASTC_4x4_FLOAT];
+   return fmt.hw &&
+          (BITFIELD_BIT(fmt.texfeat_bit) &
+           pan_query_compressed_formats(&phys_dev->kmod.dev->props));
+}
+
+/* PANVK_BC_RAW=lazy (default since csf-v11/207) | store | plane: lazy
+ * gives readable BC1-BC5 images no raw blocks until the device first
+ * reads a BC image back (bc_raw_lazy), store keeps a raw store for every
+ * readable image (csf-v11/201-206), plane keeps the raw blocks in the
+ * image memory. */
+static bool
+panvk_bc_raw_lazy_mode(void)
+{
+   static int lazy = -1;
+
+   if (p_atomic_read(&lazy) < 0) {
+      const char *mode = os_get_option("PANVK_BC_RAW");
+      p_atomic_set(&lazy, !mode || !strcmp(mode, "lazy"));
+   }
+   return p_atomic_read(&lazy);
+}
+
+/* PANVK_BC_RAW_MIN (bytes, default 64 KiB): raw block planes at least that
+ * big go to the raw store. */
+static bool
+panvk_bc_raw_store_wanted(const struct panvk_image *image)
+{
+   static int64_t min_B = -1;
+
+   if (min_B < 0) {
+      const char *mode = os_get_option("PANVK_BC_RAW");
+      int64_t v = debug_get_num_option("PANVK_BC_RAW_MIN", 64 * 1024);
+
+      if (mode && strcmp(mode, "store") && strcmp(mode, "plane") &&
+          strcmp(mode, "lazy"))
+         mesa_logw("panvk: unknown PANVK_BC_RAW=%s, using lazy", mode);
+      p_atomic_set(&min_B,
+                   (mode && !strcmp(mode, "plane")) ? INT64_MAX : MAX2(v, 0));
+   }
+
+   const uint32_t blk_B = vk_format_get_blocksize(image->vk.format);
+   uint64_t size = 0;
+   for (uint32_t l = 0; l < image->vk.mip_levels; l++) {
+      const VkExtent3D e = vk_image_mip_level_extent(&image->vk, l);
+      size += (uint64_t)DIV_ROUND_UP(e.width, 4) * DIV_ROUND_UP(e.height, 4) *
+              blk_B;
+   }
+   size *= image->vk.array_layers;
+   return size >= (uint64_t)p_atomic_read(&min_B);
+}
+
 VkResult
 panvk_image_init(struct panvk_image *image,
                  const VkImageCreateInfo *pCreateInfo)
 {
    /* Needs to happen early for some panvk_image_ helpers to work. */
    image->plane_count = get_plane_count(image);
+   struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(image->vk.base.device->physical);
+   image->bc_emul = panvk_format_is_bc(image->vk.format) &&
+                    panvk_bc_emul_enabled(phys_dev);
+   /* Fragment decode needs layered rendering with gl_Layer in the FS
+    * (geometryShader, v10+) and 2D layers; 3D images stay on compute. */
+   image->bc_gfx = image->bc_emul &&
+                   pan_arch(phys_dev->kmod.dev->props.gpu_id) >= 10 &&
+                   image->vk.image_type == VK_IMAGE_TYPE_2D &&
+                   !PANVK_DEBUG(BC_COMPUTE) && !PANVK_DEBUG(NO_GS);
+   if (image->bc_emul) {
+      image->bc_format =
+         image->bc_gfx
+            ? panvk_bc_compact_format(image->vk.format, PANVK_DEBUG(BC_WIDE))
+            : panvk_bc_decoded_format(image->vk.format);
+   }
+
+   /* BC lowmem. Decided on the application's flags and usage, before the
+    * meta adjustments below add MUTABLE/BLOCK_TEXEL_VIEW_COMPATIBLE. */
+   image->bc_lowmem = 0;
+   image->bc_no_raw = false;
+   image->bc_raw_store = false;
+   image->bc_raw_lazy = false;
+   image->bc_raw_stale = false;
+   if (image->bc_gfx && panvk_bc_lowmem_enabled(phys_dev) &&
+       panvk_bc_lowmem_allowed(image, pCreateInfo)) {
+      const VkFormat lm_format = panvk_bc_lowmem_format(image->vk.format);
+      const bool no_raw =
+         !(image->vk.usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+      /* csf-v11/201: images that can be read back keep their raw blocks
+       * in the raw store instead of the image memory. */
+      const bool raw_store = !no_raw && panvk_bc_raw_store_wanted(image);
+
+      if ((image->vk.format == VK_FORMAT_BC6H_UFLOAT_BLOCK ||
+           image->vk.format == VK_FORMAT_BC6H_SFLOAT_BLOCK) &&
+          !(image->vk.create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) &&
+          panvk_bc_lowmem_astc(phys_dev, image->vk.format)) {
+         /* csf-v11/202: BC6H UF16 -> ASTC 4x4 HDR (8 bpp). MUTABLE images
+          * stay exact: an SFLOAT view of the UF16 data would sample the
+          * ASTC shadow as signed. */
+         image->bc_lowmem = 3;
+         image->bc_format = VK_FORMAT_ASTC_4x4_SFLOAT_BLOCK;
+         image->bc_no_raw = no_raw;
+         image->bc_raw_store = raw_store;
+      } else if (lm_format != VK_FORMAT_UNDEFINED) {
+         struct panvk_device *dev = to_panvk_device(image->vk.base.device);
+         /* csf-v11/207: no raw blocks until the device reads one back. */
+         const bool lazy = raw_store &&
+                           image->vk.image_type != VK_IMAGE_TYPE_3D &&
+                           panvk_bc_raw_lazy_mode() &&
+                           !p_atomic_read(&dev->bc_raw.needed);
+
+         image->bc_lowmem = 1;
+         image->bc_format = lm_format;
+         image->bc_no_raw = no_raw || lazy;
+         image->bc_raw_store = raw_store && !lazy;
+         image->bc_raw_lazy = lazy;
+      } else if ((image->vk.format == VK_FORMAT_BC6H_UFLOAT_BLOCK ||
+                  image->vk.format == VK_FORMAT_BC6H_SFLOAT_BLOCK) &&
+                 panvk_bc_bc6h_block_decode()) {
+         /* csf-v11/210: BC6H decoded once per block by a compute shader
+          * into the same B10G11R11 / RGBA16F shadow, U-interleaved. */
+         image->bc_lowmem = 4;
+         image->bc_no_raw = no_raw;
+         image->bc_raw_store = raw_store;
+      } else if (no_raw || raw_store) {
+         image->bc_lowmem = 2;
+         image->bc_no_raw = no_raw;
+         image->bc_raw_store = raw_store;
+      }
+   }
+   if (panvk_bc_xcoded(image)) {
+      struct panvk_device *dev = to_panvk_device(image->vk.base.device);
+
+      if (dev->bc.prewarm)
+         dev->bc.prewarm(dev, image);
+   }
 
    /* Add any create/usage flags that might be needed for meta operations.
     * This is run before the modifier selection because some
@@ -700,7 +1100,8 @@ panvk_image_plane_bind_mem(struct panvk_device *dev,
                                  crc_size, PAN_KMOD_BO_SYNC_CPU_CACHE_FLUSH);
 
       if (temporary_map) {
-         int ret = os_munmap(cpu_map, pan_kmod_bo_size(mem->bo));
+         int ret =
+            pan_kmod_bo_munmap(mem->bo, cpu_map, pan_kmod_bo_size(mem->bo));
          assert(!ret);
       }
    }
@@ -885,6 +1286,24 @@ panvk_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
        VK_IMAGE_CREATE_2_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT)
       create_ms_images(dev, image, pCreateInfo, pAllocator);
 
+   if (image->bc_gfx) {
+      VkImageCreateInfo sci;
+      VkImageDrmFormatModifierListCreateInfoEXT afrc;
+
+      panvk_bc_shadow_info(image, &sci, &afrc);
+      result = panvk_CreateImage(device, &sci, pAllocator, &image->bc_shadow);
+      if (result != VK_SUCCESS)
+         goto err_destroy_image;
+   }
+
+   if (image->bc_raw_store) {
+      result = panvk_bc_raw_create(dev, image);
+      if (result != VK_SUCCESS) {
+         panvk_DestroyImage(device, image->bc_shadow, pAllocator);
+         goto err_destroy_image;
+      }
+   }
+
    *pImage = panvk_image_to_handle(image);
    return VK_SUCCESS;
 
@@ -907,6 +1326,9 @@ panvk_DestroyImage(VkDevice _device, VkImage _image,
 
    if (!image)
       return;
+
+   panvk_DestroyImage(_device, image->bc_shadow, pAllocator);
+   panvk_bc_raw_destroy(image);
 
    if (image->vk.create_flags &
        VK_IMAGE_CREATE_2_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT) {
@@ -1441,6 +1863,18 @@ panvk_image_bind(struct panvk_device *dev,
    } else {
       for (unsigned plane = 0; plane < image->plane_count; plane++)
          panvk_image_plane_bind_mem(dev, &image->planes[plane], mem, offset);
+      if (image->bc_raw)
+         panvk_bc_raw_rebind(image);
+      if (image->bc_emul) {
+         const uint64_t dec_offset = offset + image->bc_decoded_offset;
+
+         panvk_image_plane_bind_mem(dev, &image->bc_decoded, mem, dec_offset);
+         if (image->bc_shadow) {
+            panvk_image_plane_bind_mem(
+               dev, &panvk_image_from_handle(image->bc_shadow)->planes[0], mem,
+               dec_offset);
+         }
+      }
       panvk_image_report_binding(dev, image,
                                  VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
    }
@@ -1470,4 +1904,425 @@ panvk_BindImageMemory2(VkDevice device, uint32_t bindInfoCount,
    }
 
    return result;
+}
+
+/* ---- BC raw store (csf-v11/201) ----
+ *
+ * Vulkan requires the raw BC blocks back from image -> buffer copies and
+ * from BC-source image copies, so a BC image with TRANSFER_SRC can not
+ * just drop them (DXVK sets TRANSFER_SRC on every texture). Instead of a
+ * plane in the image memory, such an image gets a panvk_bc_raw:
+ *
+ *  - the blocks live in a driver BO (CPU-cached mapping) while command
+ *    buffers that touch the raw blocks exist. Every such command buffer
+ *    takes a reference at record time (panvk_bc_raw_acquire()) and drops it
+ *    when it is reset or freed, i.e. when it can no longer be pending, so
+ *    the BO is never freed under queued GPU work;
+ *  - once no command buffer references it, a worker thread writes the
+ *    blocks to an unlinked spill file and frees the BO. A later raw access
+ *    reads them back at record time into a new BO (an image that never got
+ *    blocks gets a zeroed one). The GPU always sees one BO per image, so
+ *    raw reads and writes keep Vulkan's ordering whatever the submission
+ *    order of the command buffers.
+ *
+ * The spill copy is only committed if no acquire happened while the file
+ * was written (generation count), and a store read back from the file
+ * twice stays resident from then on (no ping-pong for images that are
+ * updated or copied from all the time). Without a usable spill directory
+ * ($PANVK_BC_RAW_DIR, $TMPDIR, the Android app cache directory,
+ * /data/local/tmp, /tmp; the one used is logged) stores stay resident,
+ * which costs what the in-image raw plane did.
+ */
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include "util/detect_os.h"
+#include "util/u_android_app_dir.h"
+#include "bc/panvk_bc_eac_lut.h"
+
+/* csf-v11/206: the EAC endpoint pair table data lives in this one
+ * (non-per-arch) object. */
+void
+panvk_bc_eac_expand_table(int kind, uint32_t *out)
+{
+   panvk_bc_eac_expand(kind, out);
+}
+#include "util/u_queue.h"
+#include "panvk_priv_bo.h"
+
+struct panvk_bc_raw {
+   struct panvk_device *dev;
+   struct panvk_image *image; /* NULL once the image is destroyed */
+   uint64_t size;
+   struct panvk_priv_bo *bo;
+   uint32_t refs;     /* image + command buffers + a queued spill job */
+   uint32_t cmd_refs; /* command buffers that reference bo */
+   uint32_t gen;      /* bumped by every acquire */
+   uint32_t remat;    /* times read back from the spill file */
+   bool written;      /* blocks were ever written (else all zero) */
+   bool on_disk;      /* the spill file holds the blocks */
+   bool pinned;       /* never spilled again */
+   bool spill_queued;
+   int64_t file_off;  /* -1: no space in the spill file yet */
+};
+
+static simple_mtx_t bc_raw_lock = SIMPLE_MTX_INITIALIZER;
+
+static uint64_t
+bc_raw_plane_size(const struct panvk_image *image)
+{
+   const struct pan_image_layout *l = &image->planes[0].plane.layout;
+   return l->slices[0].offset_B + l->data_size_B;
+}
+
+static VkResult
+panvk_bc_raw_create(struct panvk_device *dev, struct panvk_image *image)
+{
+   struct panvk_bc_raw *raw =
+      vk_zalloc(&dev->vk.alloc, sizeof(*raw), 8,
+                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!raw)
+      return panvk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   raw->dev = dev;
+   raw->image = image;
+   raw->size = bc_raw_plane_size(image);
+   raw->refs = 1;
+   raw->file_off = -1;
+   image->bc_raw = raw;
+   /* Nothing resident until the first raw access. */
+   image->planes[0].plane.base = 0;
+   return VK_SUCCESS;
+}
+
+/* Called with bc_raw_lock held, when refs drops to 0. */
+static void
+bc_raw_free(struct panvk_bc_raw *raw)
+{
+   struct panvk_device *dev = raw->dev;
+
+   if (raw->bo) {
+      dev->bc_raw.resident_B -= raw->size;
+      panvk_priv_bo_unref(raw->bo);
+   }
+   if (raw->file_off >= 0 && dev->bc_raw.fd_plus1 > 0) {
+#ifdef FALLOC_FL_PUNCH_HOLE
+      fallocate(dev->bc_raw.fd_plus1 - 1,
+                FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, raw->file_off,
+                raw->size);
+#endif
+      if (raw->on_disk)
+         dev->bc_raw.spilled_B -= raw->size;
+   }
+   vk_free(&dev->vk.alloc, raw);
+}
+
+static void
+panvk_bc_raw_destroy(struct panvk_image *image)
+{
+   struct panvk_bc_raw *raw = image->bc_raw;
+
+   if (!raw)
+      return;
+
+   simple_mtx_lock(&bc_raw_lock);
+   raw->image = NULL;
+   if (!--raw->refs)
+      bc_raw_free(raw);
+   simple_mtx_unlock(&bc_raw_lock);
+   image->bc_raw = NULL;
+}
+
+/* vkBindImageMemory set planes[0] to the image memory: point it back at the
+ * store (or at nothing). */
+static void
+panvk_bc_raw_rebind(struct panvk_image *image)
+{
+   simple_mtx_lock(&bc_raw_lock);
+   image->planes[0].plane.base =
+      image->bc_raw->bo ? image->bc_raw->bo->addr.dev : 0;
+   simple_mtx_unlock(&bc_raw_lock);
+}
+
+/* The Android app's cache directory (u_android_app_dir.h). Android app
+ * processes cannot write /data/local/tmp. */
+static const char *
+bc_raw_app_cache(char *buf, size_t size)
+{
+#if DETECT_OS_ANDROID
+   return u_android_app_cache_dir(buf, size);
+#else
+   return NULL;
+#endif
+}
+
+/* Spill file: one unlinked file per device, opened at the first spill.
+ * Called with bc_raw_lock held. */
+static int
+bc_raw_file(struct panvk_device *dev)
+{
+   if (dev->bc_raw.fd_plus1)
+      return dev->bc_raw.fd_plus1 - 1;
+
+   char app_cache[512];
+   const char *dirs[] = {
+      os_get_option("PANVK_BC_RAW_DIR"),
+      getenv("TMPDIR"),
+      bc_raw_app_cache(app_cache, sizeof(app_cache)),
+      "/data/local/tmp",
+      "/tmp",
+   };
+   int fd = -1;
+
+   for (unsigned i = 0; i < ARRAY_SIZE(dirs) && fd < 0; i++) {
+      if (!dirs[i] || !dirs[i][0])
+         continue;
+#ifdef O_TMPFILE
+      fd = open(dirs[i], O_TMPFILE | O_RDWR | O_CLOEXEC, 0600);
+#endif
+      if (fd < 0) {
+         char path[4096];
+         snprintf(path, sizeof(path), "%s/panvk-bc-raw-XXXXXX", dirs[i]);
+         fd = mkostemp(path, O_CLOEXEC);
+         if (fd >= 0)
+            unlink(path);
+      }
+      if (fd >= 0)
+         mesa_logi("panvk: BC raw store spills to %s", dirs[i]);
+   }
+   if (fd < 0)
+      mesa_logw("panvk: no BC raw store spill directory, raw blocks stay "
+                "resident");
+   dev->bc_raw.fd_plus1 = fd < 0 ? -1 : fd + 1;
+   return fd;
+}
+
+static void
+bc_raw_spill_job(void *data, void *gdata, int thread_index)
+{
+   struct panvk_bc_raw *raw = data;
+   struct panvk_device *dev = raw->dev;
+   struct panvk_priv_bo *bo = NULL;
+   bool ok = false;
+   int fd = -1;
+
+   simple_mtx_lock(&bc_raw_lock);
+   raw->spill_queued = false;
+   if (raw->cmd_refs || !raw->bo || !raw->image || raw->pinned)
+      goto out;
+
+   const uint32_t gen = raw->gen;
+   const bool written = raw->written;
+   bo = raw->bo;
+   if (written) {
+      fd = bc_raw_file(dev);
+      if (fd < 0) {
+         raw->pinned = true;
+         p_atomic_inc(&panvk_mem_stats.bc_pins);
+         goto out;
+      }
+      if (raw->file_off < 0) {
+         raw->file_off = dev->bc_raw.file_end;
+         dev->bc_raw.file_end += ALIGN_POT(raw->size, 4096);
+      }
+   }
+   const int64_t off = raw->file_off;
+   panvk_priv_bo_ref(bo);
+   simple_mtx_unlock(&bc_raw_lock);
+
+   /* GPU writes are complete (no command buffer references the BO). */
+   ok = true;
+   if (written) {
+      pan_kmod_queue_bo_map_sync(bo->bo, 0, bo->addr.host, raw->size,
+                                 PAN_KMOD_BO_SYNC_CPU_CACHE_FLUSH_AND_INVALIDATE);
+      pan_kmod_flush_bo_map_syncs(dev->kmod.dev);
+      ok = pwrite(fd, bo->addr.host, raw->size, off) == (ssize_t)raw->size;
+#ifdef SYNC_FILE_RANGE_WRITE
+      /* Start the writeback and drop the page cache copy: the point is to
+       * get the blocks out of RAM. */
+      if (ok)
+         sync_file_range(fd, off, raw->size,
+                         SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE |
+                            SYNC_FILE_RANGE_WAIT_AFTER);
+#endif
+      if (ok)
+         posix_fadvise(fd, off, raw->size, POSIX_FADV_DONTNEED);
+   }
+
+   simple_mtx_lock(&bc_raw_lock);
+   panvk_priv_bo_unref(bo);
+   if (!ok) {
+      mesa_logw("panvk: BC raw store spill failed (%s), keeping it resident",
+                strerror(errno));
+      raw->pinned = true;
+      p_atomic_inc(&panvk_mem_stats.bc_pins);
+   } else if (raw->gen == gen && !raw->cmd_refs && raw->image &&
+              raw->bo == bo) {
+      raw->bo = NULL;
+      raw->image->planes[0].plane.base = 0;
+      dev->bc_raw.resident_B -= raw->size;
+      if (written && !raw->on_disk)
+         dev->bc_raw.spilled_B += raw->size;
+      if (!written && raw->on_disk)
+         dev->bc_raw.spilled_B -= raw->size;
+      raw->on_disk = written;
+      panvk_priv_bo_unref(bo);
+      p_atomic_inc(&panvk_mem_stats.bc_spills);
+   }
+out:
+   if (!--raw->refs)
+      bc_raw_free(raw);
+   simple_mtx_unlock(&bc_raw_lock);
+}
+
+/* csf-v11 225: a store read back from the spill file this many times stays
+ * resident for good. DXVK touches streamed textures (uploads per mip,
+ * relocation copies) in several command lists, so the old limit of 2
+ * pinned most raw stores of a long session in memory.
+ * PANVK_BC_RAW_PIN=<n> (default 0 = never pin; 2 = old). */
+static uint32_t
+bc_raw_pin_after(void)
+{
+   static int64_t v = -1;
+
+   if (p_atomic_read(&v) < 0) {
+      int64_t n = debug_get_num_option("PANVK_BC_RAW_PIN", 0);
+      p_atomic_set(&v, n <= 0 ? (int64_t)UINT32_MAX : MIN2(n, UINT32_MAX));
+   }
+   return (uint32_t)p_atomic_read(&v);
+}
+
+/* Called with bc_raw_lock held. full: the caller overwrites every block,
+ * so the old contents are neither read back nor zeroed. */
+static VkResult
+bc_raw_materialize(struct panvk_bc_raw *raw, bool full)
+{
+   struct panvk_device *dev = raw->dev;
+   struct panvk_priv_bo *bo;
+   VkResult result = panvk_priv_bo_create_kind(
+      dev, raw->size, panvk_device_adjust_bo_flags(dev, PAN_KMOD_BO_FLAG_WB_MMAP),
+      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo, PANVK_MEM_BC_RAW);
+
+   if (result != VK_SUCCESS)
+      return result;
+
+   bool from_file = false;
+   if (full) {
+      /* The GPU copy writes every block: no CPU write to flush. */
+      raw->bo = bo;
+      dev->bc_raw.resident_B += raw->size;
+      return VK_SUCCESS;
+   }
+   if (raw->on_disk && dev->bc_raw.fd_plus1 > 0) {
+      from_file = pread(dev->bc_raw.fd_plus1 - 1, bo->addr.host, raw->size,
+                        raw->file_off) == (ssize_t)raw->size;
+      if (!from_file) {
+         mesa_loge("panvk: BC raw store read-back failed (%s)",
+                   strerror(errno));
+      } else {
+         p_atomic_inc(&panvk_mem_stats.bc_remats);
+         if (++raw->remat >= bc_raw_pin_after()) {
+            raw->pinned = true;
+            p_atomic_inc(&panvk_mem_stats.bc_pins);
+         }
+      }
+   }
+   if (!from_file)
+      memset(bo->addr.host, 0, raw->size);
+   pan_kmod_queue_bo_map_sync(bo->bo, 0, bo->addr.host, raw->size,
+                              PAN_KMOD_BO_SYNC_CPU_CACHE_FLUSH);
+   pan_kmod_flush_bo_map_syncs(dev->kmod.dev);
+
+   raw->bo = bo;
+   dev->bc_raw.resident_B += raw->size;
+   return VK_SUCCESS;
+}
+
+VkResult
+panvk_bc_raw_acquire(struct panvk_image *image, struct util_dynarray *refs,
+                     bool write, bool full)
+{
+   struct panvk_bc_raw *raw = image->bc_raw;
+   VkResult result = VK_SUCCESS;
+
+   simple_mtx_lock(&bc_raw_lock);
+   if (!raw->bo) {
+      result = bc_raw_materialize(raw, write && full);
+      if (result != VK_SUCCESS)
+         goto out;
+   }
+   raw->gen++;
+   if (write)
+      raw->written = true;
+
+   bool found = false;
+   util_dynarray_foreach(refs, struct panvk_bc_raw *, r)
+      found = found || *r == raw;
+   if (!found) {
+      util_dynarray_append_typed(refs, struct panvk_bc_raw *, raw);
+      raw->cmd_refs++;
+      raw->refs++;
+   }
+   image->planes[0].plane.base = raw->bo->addr.dev;
+out:
+   simple_mtx_unlock(&bc_raw_lock);
+   return result;
+}
+
+void
+panvk_bc_raw_release(struct util_dynarray *refs)
+{
+   if (!util_dynarray_num_elements(refs, struct panvk_bc_raw *))
+      return;
+
+   simple_mtx_lock(&bc_raw_lock);
+   util_dynarray_foreach(refs, struct panvk_bc_raw *, r) {
+      struct panvk_bc_raw *raw = *r;
+      struct panvk_device *dev = raw->dev;
+
+      raw->cmd_refs--;
+      if (!--raw->refs) {
+         bc_raw_free(raw);
+         continue;
+      }
+      if (raw->cmd_refs || !raw->image || !raw->bo || raw->pinned ||
+          raw->spill_queued)
+         continue;
+
+      if (!dev->bc_raw.queue) {
+         struct util_queue *q =
+            vk_zalloc(&dev->vk.alloc, sizeof(*q), 8,
+                      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+         if (!q || !util_queue_init(q, "panvk_bcraw", 256, 1,
+                                    UTIL_QUEUE_INIT_RESIZE_IF_FULL |
+                                       UTIL_QUEUE_INIT_USE_MINIMUM_PRIORITY,
+                                    NULL)) {
+            vk_free(&dev->vk.alloc, q);
+            raw->pinned = true;
+            p_atomic_inc(&panvk_mem_stats.bc_pins);
+            continue;
+         }
+         dev->bc_raw.queue = q;
+      }
+      raw->spill_queued = true;
+      raw->refs++;
+      util_queue_add_job(dev->bc_raw.queue, raw, NULL,
+                         bc_raw_spill_job, NULL, 0);
+   }
+   simple_mtx_unlock(&bc_raw_lock);
+   util_dynarray_clear(refs);
+}
+
+void
+panvk_bc_raw_device_finish(struct panvk_device *dev)
+{
+   if (dev->bc_raw.queue) {
+      util_queue_finish(dev->bc_raw.queue);
+      util_queue_destroy(dev->bc_raw.queue);
+      vk_free(&dev->vk.alloc, dev->bc_raw.queue);
+      dev->bc_raw.queue = NULL;
+   }
+   if (dev->bc_raw.fd_plus1 > 0)
+      close(dev->bc_raw.fd_plus1 - 1);
+   dev->bc_raw.fd_plus1 = 0;
 }

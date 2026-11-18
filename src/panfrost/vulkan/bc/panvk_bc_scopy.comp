@@ -1,0 +1,85 @@
+#version 450
+/*
+ * Copyright 2026 PanVK-kbase contributors
+ * SPDX-License-Identifier: MIT
+ *
+ * BC lowmem shadow -> shadow block copy (csf-v11/207). A BC -> BC
+ * vkCmdCopyImage from an image that keeps no raw blocks (PANVK_BC_RAW=lazy)
+ * copies the transcoded ETC2/EAC blocks of the source shadow into the
+ * destination shadow: exact with respect to what is sampled. Both shadows
+ * are U-interleaved planes of 4x4-block tiles (see panvk_bc_etc2.comp),
+ * one invocation per block, 8 (WIDE = 0) or 16 bytes per block.
+ */
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference_uvec2 : require
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(constant_id = 0) const uint WIDE = 0u;
+
+layout(buffer_reference, std430, buffer_reference_align = 8) buffer B2 {
+    uvec2 data[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) buffer B4 {
+    uvec4 data[];
+};
+
+layout(push_constant) uniform Registers
+{
+    uvec2 src;        /* shadow level base, first layer of the region */
+    uvec2 dst;
+    uint src_row_B;   /* bytes per row of 4x4-block tiles */
+    uint src_slice_B; /* array stride */
+    uint dst_row_B;
+    uint dst_slice_B;
+    uint sbx0;        /* region origins in blocks */
+    uint sby0;
+    uint dbx0;
+    uint dby0;
+    uint bw;          /* region size in blocks */
+    uint bh;
+} registers;
+
+uvec2
+addr_mad(uvec2 a, uint m0, uint m1)
+{
+   uint hi, lo, c;
+   umulExtended(m0, m1, hi, lo);
+   a.x = uaddCarry(a.x, lo, c);
+   a.y += hi + c;
+   return a;
+}
+
+/* Element index of block (bx, by) inside its tile row. */
+uint
+tiled_elem(uint bx, uint by)
+{
+   uint ix = bx & 3u, iy = by & 3u;
+   uint in_tile = ((iy >> 1) << 3) | (((ix ^ iy) >> 1) << 2) |
+                  ((iy & 1u) << 1) | ((ix ^ iy) & 1u);
+   return (bx >> 2) * 16u + in_tile;
+}
+
+void
+main()
+{
+   uint x = gl_GlobalInvocationID.x;
+   uint y = gl_GlobalInvocationID.y;
+   uint z = gl_GlobalInvocationID.z;
+
+   if (x >= registers.bw || y >= registers.bh)
+      return;
+
+   uint sbx = registers.sbx0 + x, sby = registers.sby0 + y;
+   uint dbx = registers.dbx0 + x, dby = registers.dby0 + y;
+   uvec2 sa = addr_mad(addr_mad(registers.src, z, registers.src_slice_B),
+                       sby >> 2, registers.src_row_B);
+   uvec2 da = addr_mad(addr_mad(registers.dst, z, registers.dst_slice_B),
+                       dby >> 2, registers.dst_row_B);
+
+   if (WIDE != 0u)
+      B4(da).data[tiled_elem(dbx, dby)] = B4(sa).data[tiled_elem(sbx, sby)];
+   else
+      B2(da).data[tiled_elem(dbx, dby)] = B2(sa).data[tiled_elem(sbx, sby)];
+}

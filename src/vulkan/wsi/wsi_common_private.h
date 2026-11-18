@@ -191,6 +191,9 @@ struct wsi_image {
    int dma_buf_fd;
 #endif
    void *cpu_map;
+   /* The memory behind cpu_map is not HOST_COHERENT: invalidate it before
+    * the CPU reads what the GPU wrote (wsi_image_invalidate_cpu_map()). */
+   bool cpu_map_noncoherent;
 
    VkQueryPool query_pool;
    VkCommandBuffer *timestamp_cmd_buffers;
@@ -238,6 +241,10 @@ struct wsi_swapchain {
     */
    VkSemaphore present_id_timeline;
    bool present_wait_enabled;
+
+   /* sw (CPU-presented) images: the platform's present thread waits for
+    * the per-image fence itself, so vkQueuePresentKHR need not block. */
+   bool sw_fence_wait_in_present_thread;
 
    int signal_dma_buf_from_semaphore;
    /**
@@ -458,6 +465,14 @@ void
 wsi_destroy_image(const struct wsi_swapchain *chain,
                   struct wsi_image *image);
 
+void
+wsi_image_invalidate_cpu_map(const struct wsi_swapchain *chain,
+                             const struct wsi_image *image);
+
+VkResult
+wsi_image_set_cpu_readback_cached(const struct wsi_swapchain *chain,
+                                  struct wsi_image *image, bool cached);
+
 VkResult
 wsi_swapchain_wait_for_present_semaphore(const struct wsi_swapchain *chain,
                                          uint64_t present_id, uint64_t timeout);
@@ -549,6 +564,11 @@ VkResult wsi_x11_init_wsi(struct wsi_device *wsi_device,
                           const struct driOptionCache *dri_options);
 void wsi_x11_finish_wsi(struct wsi_device *wsi_device,
                         const VkAllocationCallbacks *alloc);
+#ifdef WSI_X11_DLOPEN
+bool wsi_x11_dlopen(void);
+#else
+static inline bool wsi_x11_dlopen(void) { return true; }
+#endif
 VkResult wsi_wl_init_wsi(struct wsi_device *wsi_device,
                          const VkAllocationCallbacks *alloc,
                          VkPhysicalDevice physical_device);

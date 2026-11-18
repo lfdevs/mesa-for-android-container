@@ -168,8 +168,7 @@ panvk_per_arch(cmd_dispatch_prepare_tls)(
        * instance count) might differ significantly between dispatch commands,
        * rather than track a single maximum size, we might want to consider
        * multiple allocations for different size buckets. */
-      tlsinfo.wls.ptr =
-         panvk_cmd_alloc_dev_mem(cmdbuf, tls, wls_total_size, 4096).gpu;
+      tlsinfo.wls.ptr = panvk_cmd_alloc_tls_mem(cmdbuf, wls_total_size);
       if (!tlsinfo.wls.ptr)
          return 0;
    }
@@ -216,6 +215,9 @@ panvk_per_arch(cmd_dispatch_shader)(
 
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_COMPUTE);
 
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+      PANVK_KBASE_PROGRESS_COMPUTE_ENTER);
    cs_update_compute_ctx(b) {
       if (compute_state_dirty(cmdbuf, CS) ||
           compute_state_dirty(cmdbuf, DESC_STATE))
@@ -300,8 +302,15 @@ panvk_per_arch(cmd_dispatch_shader)(
       }
    }
 
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+      PANVK_KBASE_PROGRESS_COMPUTE_BEFORE_ITER);
    cs_next_iter_sb(cmdbuf, PANVK_SUBQUEUE_COMPUTE,
                    cs_scratch_reg_tuple(b, 0, 2));
+
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+      PANVK_KBASE_PROGRESS_COMPUTE_BEFORE_RUN);
 
    panvk_cond_render(cmdbuf, b)
    {
@@ -329,7 +338,14 @@ panvk_per_arch(cmd_dispatch_shader)(
       }
    }
 
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+      PANVK_KBASE_PROGRESS_COMPUTE_AFTER_RUN);
    panvk_per_arch(cmd_signal_barrier)(cmdbuf, info->barrier);
+
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, PANVK_SUBQUEUE_COMPUTE,
+      PANVK_KBASE_PROGRESS_COMPUTE_AFTER_SIGNAL);
 
    clear_dirty_after_dispatch(cmdbuf);
 }
@@ -340,6 +356,8 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
    const struct panvk_shader_variant *cs =
       panvk_shader_only_variant(cmdbuf->state.compute.shader);
    VkResult result;
+
+   panvk_per_arch(cmd_pstats_dispatch)(cmdbuf, cs, info);
 
    /* If there's no compute shader, we can skip the dispatch. */
    if (!panvk_priv_mem_check_alloc(cs->spd))
@@ -397,13 +415,7 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
 
    /* Copy the global TLS pointer and size to the per-job TSD. */
    if (cs->info.tls_size) {
-      cs_move64_to(b, cs_scratch_reg64(b, 0), cmdbuf->state.tls.desc.gpu);
-      cs_load32_to(b, cs_scratch_reg32(b, 4), cs_scratch_reg64(b, 0), 0);
-      cs_load64_to(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
-      cs_move64_to(b, cs_scratch_reg64(b, 0), tsd);
-      cs_store32(b, cs_scratch_reg32(b, 4), cs_scratch_reg64(b, 0), 0);
-      cs_store64(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
-      cs_flush_stores(b);
+      panvk_per_arch(cmd_copy_tls_to_tsd)(cmdbuf, b, tsd);
    }
 
    panvk_per_arch(cmd_dispatch_shader)(cmdbuf, cs, cs_desc_state,

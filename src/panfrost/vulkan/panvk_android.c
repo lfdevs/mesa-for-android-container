@@ -3,6 +3,9 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "panvk_android.h"
 
 #include "panvk_device.h"
@@ -248,6 +251,44 @@ panvk_android_ahb_image_init(struct AHardwareBuffer *ahb,
    return VK_SUCCESS;
 }
 
+int
+panvk_android_find_dma_buf_fd(VkDevice device,
+                              const native_handle_t *handle,
+                              uint64_t *size_out)
+{
+   if (!handle || handle->numFds <= 0)
+      return -1;
+
+   VK_FROM_HANDLE(vk_device, dev, device);
+
+   for (int i = 0; i < handle->numFds; i++) {
+      int fd = handle->data[i];
+      if (fd < 0)
+         continue;
+
+      struct stat st;
+      if (fstat(fd, &st) < 0)
+         continue;
+
+      off_t size = lseek(fd, 0, SEEK_END);
+      if (size <= 0)
+         continue;
+
+      VkMemoryFdPropertiesKHR fd_props = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
+      };
+      if (dev->dispatch_table.GetMemoryFdPropertiesKHR(
+             device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd,
+             &fd_props) == VK_SUCCESS) {
+         if (size_out)
+            *size_out = (uint64_t)size;
+         return fd;
+      }
+   }
+
+   return -1;
+}
+
 static VkResult
 panvk_android_import_ahb_memory(VkDevice device,
                                 const VkMemoryAllocateInfo *pAllocateInfo,
@@ -258,7 +299,10 @@ panvk_android_import_ahb_memory(VkDevice device,
    VK_FROM_HANDLE(vk_device, dev, device);
    const native_handle_t *handle = AHardwareBuffer_getNativeHandle(ahb);
    assert(handle && handle->numFds > 0);
-   int dma_buf_fd = handle->data[0];
+   uint64_t dma_buf_size = 0;
+   int dma_buf_fd = panvk_android_find_dma_buf_fd(device, handle, &dma_buf_size);
+   if (dma_buf_fd < 0)
+      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
    VkResult result;
 
    VkImage img_handle = VK_NULL_HANDLE;
@@ -389,5 +433,25 @@ panvk_android_allocate_ahb_memory(VkDevice device,
    assert(!mem->ahardware_buffer);
    mem->ahardware_buffer = ahb;
 
+   return VK_SUCCESS;
+}
+
+VkResult
+panvk_GetAndroidHardwareBufferPropertiesANDROID(
+   VkDevice device_h, const struct AHardwareBuffer *buffer,
+   VkAndroidHardwareBufferPropertiesANDROID *pProperties)
+{
+   VkResult result =
+      vk_common_GetAndroidHardwareBufferPropertiesANDROID(device_h, buffer, pProperties);
+   if (result != VK_SUCCESS)
+      return result;
+
+   const native_handle_t *handle = AHardwareBuffer_getNativeHandle(buffer);
+   uint64_t real_size = 0;
+   int fd = panvk_android_find_dma_buf_fd(device_h, handle, &real_size);
+   if (fd < 0 || real_size == 0)
+      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+
+   pProperties->allocationSize = real_size;
    return VK_SUCCESS;
 }

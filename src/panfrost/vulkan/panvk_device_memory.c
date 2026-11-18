@@ -115,9 +115,28 @@ panvk_AllocateMemory(VkDevice _device,
           (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT))
          bo_flags |= PAN_KMOD_BO_FLAG_WB_MMAP;
 
+      /* A placed map aliases the BO at a caller-chosen address; on kbase
+       * only shareable (dma-buf backed) BOs can be mapped twice. */
+      bool shareable =
+         can_be_exported ||
+         (device->vk.enabled_features.memoryMapPlaced &&
+          (type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT));
+
+      /* Vulkan leaves new memory undefined unless the application asks
+       * for VK_MEMORY_ALLOCATE_ZERO_INITIALIZE_BIT_EXT, so skip the kbase
+       * clear (041: about 1 GiB of memset at a Fallout 4 load, 40-80 ms
+       * per 256 MiB DXVK chunk). Only on v9+, whose AFBC plane descriptors
+       * carry the plane size: an AFBC header that was never written holds
+       * an arbitrary payload offset, while a zero one is a solid-colour
+       * block, and v6/v7 surfaces have no size to bound the fetch.
+       */
+      if (pan_arch(device->kmod.dev->props.gpu_id) >= 9 &&
+          !(mem->vk.alloc_flags & VK_MEMORY_ALLOCATE_ZERO_INITIALIZE_BIT_EXT))
+         bo_flags |= PAN_KMOD_BO_FLAG_NO_ZERO;
+
       bo_flags = panvk_device_adjust_bo_flags(device, bo_flags);
       mem->bo = pan_kmod_bo_alloc(device->kmod.dev,
-                                  can_be_exported ? NULL : device->kmod.vm,
+                                  shareable ? NULL : device->kmod.vm,
                                   pAllocateInfo->allocationSize, bo_flags);
       if (!mem->bo) {
          result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
@@ -258,11 +277,13 @@ panvk_FreeMemory(VkDevice _device, VkDeviceMemory _mem,
                             pan_kmod_bo_size(mem->bo));
 
       if (mem->debug.host_mapping)
-         os_munmap(mem->debug.host_mapping, pan_kmod_bo_size(mem->bo));
+         pan_kmod_bo_munmap(mem->bo, mem->debug.host_mapping,
+                            pan_kmod_bo_size(mem->bo));
    }
 
    if (mem->addr.host) {
-      ASSERTED int ret = os_munmap(mem->addr.host, pan_kmod_bo_size(mem->bo));
+      ASSERTED int ret = pan_kmod_bo_munmap(mem->bo, mem->addr.host,
+                                            pan_kmod_bo_size(mem->bo));
       assert(!ret);
    }
 
@@ -372,7 +393,8 @@ panvk_UnmapMemory2KHR(VkDevice _device,
          return panvk_errorf(device, VK_ERROR_MEMORY_MAP_FAILED,
                              "Failed to reserve VA on unmap.");
    } else {
-      ASSERTED int ret = os_munmap(mem->addr.host, pan_kmod_bo_size(mem->bo));
+      ASSERTED int ret = pan_kmod_bo_munmap(mem->bo, mem->addr.host,
+                                            pan_kmod_bo_size(mem->bo));
       assert(!ret);
    }
 
@@ -460,6 +482,38 @@ panvk_GetMemoryFdPropertiesKHR(VkDevice _device,
 
    assert(handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
 
+#if defined(HAVE_PAN_KMOD_KBASE)
+   /* On kbase, a full transient import per query is not free: repeated
+    * import/free cycles of one dma-buf alias to a single GPU VA, and the
+    * frees can tear down GPU PTEs that re-import does not restore,
+    * breaking the later real import (GPU TRANSLATION_FAULT). Answer from
+    * the same assumptions the fd-import path uses instead.
+    */
+   if (phys_dev->kbase_node_path[0]) {
+      if (fd < 0 || lseek(fd, 0, SEEK_END) < 0)
+         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+
+      /* Matches kbase_kmod_bo_import_fd(..., kmod_flags=0, external): */
+      const bool can_do_host_visible = true;
+      const bool can_do_host_coherent = true;
+      const bool can_do_host_cached = false;
+      pMemoryFdProperties->memoryTypeBits = 0;
+      for (uint32_t i = 0; i < phys_dev->memory.type_count; i++) {
+         if (!can_do_host_visible && (phys_dev->memory.types[i].propertyFlags &
+                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
+            continue;
+         if (!can_do_host_coherent && (phys_dev->memory.types[i].propertyFlags &
+                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+            continue;
+         if (!can_do_host_cached && (phys_dev->memory.types[i].propertyFlags &
+                                     VK_MEMORY_PROPERTY_HOST_CACHED_BIT))
+            continue;
+         pMemoryFdProperties->memoryTypeBits |= BITFIELD_BIT(i);
+      }
+      return VK_SUCCESS;
+   }
+#endif
+
    struct pan_kmod_bo *bo = pan_kmod_bo_import(device->kmod.dev, fd);
    if (!bo)
       return VK_ERROR_INVALID_EXTERNAL_HANDLE;
@@ -508,4 +562,10 @@ panvk_GetDeviceMemoryOpaqueCaptureAddress(
    VK_FROM_HANDLE(panvk_device_memory, memory, pInfo->memory);
 
    return memory->addr.dev;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+panvk_SetDeviceMemoryPriorityEXT(VkDevice device, VkDeviceMemory memory,
+                                 float priority)
+{
 }

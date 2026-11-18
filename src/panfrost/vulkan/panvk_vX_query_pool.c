@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <stdlib.h>
+
 #include "util/macros.h"
+#include "util/os_time.h"
 #include "vk_log.h"
 
 #include "pan_props.h"
@@ -66,11 +69,30 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       reports_per_query = PANVK_SUBQUEUE_COUNT + 1;
       break;
    }
+#else
+   case VK_QUERY_TYPE_TIMESTAMP: {
+      /* One WRITE_VALUE SYSTEM_TIMESTAMP report (JM: v9, v6/v7 since
+       * jm-v7 021). */
+      reports_per_query = 1;
+      break;
+   }
+#endif
+#if PAN_ARCH >= 9
    case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
       reports_per_query = 1;
       break;
    }
 #endif
+   case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+      /* See panvk_pstats_query_state. */
+      reports_per_query =
+         MAX2(2 * util_bitcount(pCreateInfo->pipelineStatistics), 1);
+      break;
+   }
+   case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
+      reports_per_query = 4;
+      break;
+   }
    default:
       UNREACHABLE("Unsupported query type");
    }
@@ -95,8 +117,46 @@ panvk_per_arch(CreateQueryPool)(VkDevice _device,
       .size = sizeof(struct panvk_query_available_obj) * pool->vk.query_count,
       .alignment = 64,
    };
+#if PAN_ARCH < 9
+   /* Bifrost JM (jm-v7 021): GPU writes to a kbase BASE_MEM_UNCACHED_GPU
+    * region fault on Mali-G52 (the clear_query_result compute job is
+    * hard-stopped, event TERMINATED, and the context's later chains get
+    * JOB_READ_FAULT). Keep the availability words in the cached pool, as
+    * the reports already are; the CPU reads both through
+    * panvk_priv_mem_readback(). PANVK_QUERY_UNCACHED=1 restores the old
+    * placement for A/B testing.
+    */
+   static int query_nc = -1;
+   if (query_nc < 0) {
+      const char *e = getenv("PANVK_QUERY_UNCACHED");
+      query_nc = e && e[0] == '1';
+   }
+   if (query_nc) {
+      pool->available_mem =
+         panvk_pool_alloc_mem(&device->mempools.rw_nc, syncobjs_alloc_info);
+   } else {
+      /* Not from mempools.rw: with a WB (cached CPU) mapping, the host
+       * reset memsets and cleans whole cache lines, and 16 queries share
+       * one. A GPU availability write to a neighbouring query between the
+       * line fill and the clean would be overwritten, and a later WAIT
+       * spins into DEVICE_LOST (perf review H4). Use a BO of the pool's
+       * own, GPU-cached but write-combined on the CPU, so host writes only
+       * touch the words they store.
+       */
+      struct panvk_priv_bo *avail_bo = NULL;
+      if (panvk_priv_bo_create(device, syncobjs_alloc_info.size,
+                               panvk_device_adjust_bo_flags(device, 0),
+                               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
+                               &avail_bo) == VK_SUCCESS)
+         pool->available_mem = (struct panvk_priv_mem){
+            .bo = (uintptr_t)avail_bo,
+            .offset = 0,
+         };
+   }
+#else
    pool->available_mem =
       panvk_pool_alloc_mem(&device->mempools.rw_nc, syncobjs_alloc_info);
+#endif
    if (!pool->available_mem.bo) {
       panvk_pool_free_mem(&pool->mem);
       vk_query_pool_destroy(&device->vk, pAllocator, &pool->vk);
@@ -157,14 +217,31 @@ panvk_query_wait_for_available(struct panvk_device *dev,
                                struct panvk_query_pool *pool, uint32_t query)
 {
    int64_t abs_timeout_ns = os_time_get_absolute_timeout(PANVK_QUERY_TIMEOUT);
+   int64_t now;
 
-   while (os_time_get_nano() < abs_timeout_ns) {
+   while ((now = os_time_get_nano()) < abs_timeout_ns) {
       if (panvk_query_is_available(pool, query))
          return VK_SUCCESS;
 
       VkResult status = vk_device_check_status(&dev->vk);
       if (status != VK_SUCCESS)
          return status;
+
+      /* The availability object is written by the GPU with a CSG-scoped
+       * sync, which never wakes the host, so block on the kernel instead of
+       * spinning. On kbase, spinning also starves the CSF event path the
+       * submitted work may depend on (tiler heap growth, scheduling).
+       */
+      int64_t step_ns = MIN2(abs_timeout_ns - now, 1000000);
+#if PAN_ARCH >= 10 && defined(HAVE_PAN_KMOD_KBASE)
+      const struct panvk_physical_device *phys_dev =
+         to_panvk_physical_device(dev->vk.physical);
+
+      if (phys_dev->kbase_node_path[0] &&
+          kbase_kmod_csf_wait_event(dev->kmod.dev, step_ns) == 0)
+         continue;
+#endif
+      os_time_sleep(MAX2(step_ns / 1000, 1));
    }
 
    return vk_device_set_lost(&dev->vk, "query timeout");
@@ -244,6 +321,12 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
       return VK_ERROR_DEVICE_LOST;
 
    VkResult status = VK_SUCCESS;
+   const uint32_t result_count =
+      pool->vk.query_type == VK_QUERY_TYPE_PIPELINE_STATISTICS
+         ? util_bitcount(pool->vk.pipeline_statistics)
+      : pool->vk.query_type == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT
+         ? 2
+         : 1;
    for (uint32_t i = 0; i < queryCount; i++) {
       const uint32_t query = firstQuery + i;
 
@@ -262,8 +345,9 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
       assert(i * stride < dataSize);
       void *dst = (char *)pData + i * stride;
 
-      panvk_priv_mem_readback(pool->mem, panvk_query_offset(pool, query),
-                              struct panvk_query_report, src) {
+      panvk_priv_mem_readback_array(pool->mem, panvk_query_offset(pool, query),
+                                    struct panvk_query_report,
+                                    pool->reports_per_query, src) {
          switch (pool->vk.query_type) {
          case VK_QUERY_TYPE_OCCLUSION: {
             if (write_results)
@@ -278,12 +362,27 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
                                                 pool->reports_per_query);
             break;
          }
-         case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT: {
+#endif
+#if PAN_ARCH < 10
+         case VK_QUERY_TYPE_TIMESTAMP:
+#endif
+#if PAN_ARCH >= 9
+         case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+#endif
+         {
             if (write_results)
                cpu_write_query_result(dst, 0, flags, src[0].value);
             break;
          }
-#endif
+         case VK_QUERY_TYPE_PIPELINE_STATISTICS:
+         case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
+            for (uint32_t s = 0; write_results && s < result_count; s++) {
+               cpu_write_query_result(dst, s, flags,
+                                      src[s].value +
+                                         src[result_count + s].value);
+            }
+            break;
+         }
          default:
             UNREACHABLE("Unsupported query type");
          }
@@ -293,7 +392,7 @@ panvk_per_arch(GetQueryPoolResults)(VkDevice _device, VkQueryPool queryPool,
          status = VK_NOT_READY;
 
       if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
-         cpu_write_query_result(dst, 1, flags, available);
+         cpu_write_query_result(dst, result_count, flags, available);
    }
 
    return status;

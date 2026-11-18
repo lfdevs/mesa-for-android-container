@@ -338,6 +338,21 @@ if freedreno_kmds.length() != 0 and freedreno_kmds != [ 'msm' ] and with_freedre
   endif
 endif
 
+panfrost_kmds = get_option('panfrost-kmds')
+if (with_gallium_panfrost or with_panfrost_vk) and panfrost_kmds.length() == 0
+  error('At least one Panfrost KMD must be enabled when building Panfrost.')
+endif
+
+if panfrost_kmds.contains('panfrost')
+  pre_args += '-DHAVE_PAN_KMOD_PANFROST'
+endif
+if panfrost_kmds.contains('panthor')
+  pre_args += '-DHAVE_PAN_KMOD_PANTHOR'
+endif
+if panfrost_kmds.contains('kbase')
+  pre_args += '-DHAVE_PAN_KMOD_KBASE'
+endif
+
 # This has to be below the freedreno_kmds check since that can change system_has_kms_drm
 with_gallium_kmsro = with_gallium_drm or (system_has_kms_drm and with_gallium_zink)
 
@@ -1066,7 +1081,7 @@ with_llvm = with_llvm \
 
 with_poly = [
   with_gallium_asahi, with_asahi_vk, with_tools.contains('asahi'),
-  with_kosmickrisp_vk,
+  with_kosmickrisp_vk, with_panfrost_vk,
 ].contains(true)
 
 dep_clc = null_dep
@@ -2392,6 +2407,18 @@ if with_platform_x11
   endif
   if with_xlib_lease
     dep_xlib_xrandr = dependency('xrandr', version : dep_xlib_xrandr_version)
+  endif
+  if with_platform_android and with_any_vk
+    dep_xcb = dep_xcb.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_xrandr = dep_xcb_xrandr.partial_dependency(compile_args : true, includes : true)
+    dep_x11_xcb = dep_x11_xcb.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_dri3 = dep_xcb_dri3.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_present = dep_xcb_present.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_shm = dep_xcb_shm.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_sync = dep_xcb_sync.partial_dependency(compile_args : true, includes : true)
+    dep_xcb_xfixes = dep_xcb_xfixes.partial_dependency(compile_args : true, includes : true)
+    dep_xshmfence = dep_xshmfence.partial_dependency(compile_args : true, includes : true)
+    pre_args += '-DWSI_X11_DLOPEN'
   endif
 endif
 

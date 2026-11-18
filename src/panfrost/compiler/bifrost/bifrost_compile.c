@@ -1497,7 +1497,7 @@ bi_emit_intrinsic(bi_builder *b, nir_intrinsic_instr *instr)
       break;
 
    case nir_intrinsic_load_attr_pan:
-      assert(stage == MESA_SHADER_VERTEX);
+      assert(stage == MESA_SHADER_VERTEX || stage == MESA_SHADER_COMPUTE);
       bi_emit_load_attr(b, instr);
       break;
 
@@ -1985,6 +1985,35 @@ bi_emit_intrinsic(bi_builder *b, nir_intrinsic_instr *instr)
    case nir_intrinsic_ballot:
    case nir_intrinsic_ballot_relaxed: {
       assert(instr->src[0].ssa->bit_size == 32);
+      /* jm-v7 103: WMASK is not a v6 instruction. On the FTL Galaxy S9
+       * (Mali-G72) every compute shader with a WMASK (subgroupAdd's
+       * active-lane mask, the 085 texture waterfall, the nir_lower_shuffle
+       * waterfall) ended with INSTR_INVALID_ENC (event 0x51); the same
+       * CLPER_OLD/CLZ/MUX code without WMASK runs. Like the full CLPER, WMASK
+       * (with its subgroup2/4/8 modifier) came with v7.
+       *
+       * Build the ballot of the 4-wide v6 warp from CLPER_OLD instead, which
+       * reads another lane and returns zero for an inactive one: each lane
+       * contributes (src & (1 << lane_id)), and the OR of the four lanes'
+       * values is the ballot of the active lanes.
+       */
+      if (b->shader->arch == 6) {
+         bi_index src = bi_src_index(&instr->src[0]);
+         bi_index lane = bi_mov_i32(b, bi_fau(BIR_FAU_LANE_ID, false));
+         bi_index bit =
+            bi_lshift_or_i32(b, bi_imm_u32(1), bi_zero(), bi_byte(lane, 0));
+         bi_index mine = bi_lshift_and_i32(b, bit, src, bi_imm_u8(0));
+         bi_index acc = bi_clper_old_i32(b, mine, bi_imm_u8(0));
+         unsigned lanes = pan_subgroup_size(b->shader->arch);
+         for (unsigned i = 1; i < lanes; i++) {
+            bi_index other = bi_clper_old_i32(b, mine, bi_imm_u8(i));
+            if (i + 1 < lanes)
+               acc = bi_lshift_or_i32(b, other, acc, bi_imm_u8(0));
+            else
+               bi_lshift_or_i32_to(b, dst, other, acc, bi_imm_u8(0));
+         }
+         break;
+      }
       enum bi_subgroup subgroup =
          bi_subgroup_from_cluster_size(pan_subgroup_size(b->shader->arch));
       bi_wmask_to(b, dst, bi_src_index(&instr->src[0]), subgroup, 0);
@@ -1997,6 +2026,16 @@ bi_emit_intrinsic(bi_builder *b, nir_intrinsic_instr *instr)
       enum bi_lane_op lane_op = BI_LANE_OP_NONE;
       enum bi_subgroup subgroup =
          bi_subgroup_from_cluster_size(pan_subgroup_size(b->shader->arch));
+      /* jm-v7 095: G71/G72/G31 only have the old CLPER encoding (the
+       * packer asserts on CLPER.i32 there). It is fixed to inactive=zero,
+       * subgroup4, no lane op, which is exactly read_invocation for the
+       * 4-wide v6 subgroup.
+       */
+      if (b->shader->quirks & BIFROST_LIMITED_CLPER) {
+         bi_clper_old_i32_to(b, dst, bi_src_index(&instr->src[0]),
+                             bi_src_index(&instr->src[1]));
+         break;
+      }
       bi_clper_i32_to(b, dst,
                       bi_src_index(&instr->src[0]),
                       bi_byte(bi_src_index(&instr->src[1]), 0),

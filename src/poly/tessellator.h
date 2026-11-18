@@ -97,9 +97,15 @@ struct poly_tess_params {
 
    /* When fed into a geometry shader, triangles should be counter-clockwise.
     * The tessellator always produces clockwise triangles, but we can swap
-    * dynamically in the TES.
+    * dynamically in the TES. POLY_TESS_CCW_INLINE instead makes the
+    * tessellator write them counter-clockwise.
     */
    uint32_t ccw;
 } PACKED;
 static_assert(sizeof(struct poly_tess_params) == 34 * 4,
               "struct poly_tess_params must be 34 words");
+
+/* poly_tess_params::ccw bit: DefineTriangle() swaps the second and third
+ * index of every triangle as it writes it. Unset by the asahi users, which
+ * keep the 0/1 TES-side swap. */
+#define POLY_TESS_CCW_INLINE 2u

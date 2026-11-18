@@ -19,12 +19,20 @@
 #include "panvk_descriptor_set.h"
 #include "panvk_macros.h"
 #include "panvk_mempool.h"
+#if PAN_ARCH >= 9
+#include "panvk_gpu_prerast.h"
+#else
+#include "panvk_gs.h"
+#endif
 
 #include "vk_pipeline_layout.h"
 
 #include "vk_shader.h"
 
 extern const struct vk_device_shader_ops panvk_per_arch(device_shader_ops);
+
+struct panvk_device;
+VkResult panvk_per_arch(create_depth_bounds_fs)(struct panvk_device *dev);
 
 #define MAX_RTS 8
 #define MAX_VS_ATTRIBS 16
@@ -34,12 +42,27 @@ extern const struct vk_device_shader_ops panvk_per_arch(device_shader_ops);
 /* We could theoretically use the MAX_PER_SET values here (except for UBOs
  * where we're really limited to 256 on the shader side), but on Bifrost we
  * have to copy some tables around, which comes at an extra memory/processing
- * cost, so let's pick something smaller. */
-#define MAX_PER_STAGE_SAMPLED_IMAGES 256
+ * cost, so let's pick something smaller.
+ *
+ * Storage images, storage texel buffers and uniform texel buffers that are
+ * not update-after-bind all live in the image attribute table, two
+ * ATTRIBUTE_BUFFER entries each, and the ATTRIBUTE "Buffer index" field is
+ * 9 bits wide (512 entries). A vertex shader puts its vertex buffers (up to
+ * 16, two entries each) first, so a stage has room for 240 image table
+ * entries. Uniform texel buffers count against the sampled image limit and
+ * storage texel buffers against the storage image limit, so their sum must
+ * stay within 240: 64 storage images (D3D11/D3D12 FL 11_1 UAV slots) and
+ * 176 sampled images (D3D has 128 SRV slots). Update-after-bind bindings
+ * are bindless (jm-v7 050) and do not use the table. */
+#define MAX_PER_STAGE_IMG_TABLE_ENTRIES 240
+#define MAX_PER_STAGE_SAMPLED_IMAGES 176
 #define MAX_PER_STAGE_SAMPLERS 128
 #define MAX_PER_STAGE_UNIFORM_BUFFERS MAX_PER_SET_UNIFORM_BUFFERS
 #define MAX_PER_STAGE_STORAGE_BUFFERS 64
-#define MAX_PER_STAGE_STORAGE_IMAGES 32
+#define MAX_PER_STAGE_STORAGE_IMAGES 64
+static_assert(MAX_PER_STAGE_SAMPLED_IMAGES + MAX_PER_STAGE_STORAGE_IMAGES <=
+                 MAX_PER_STAGE_IMG_TABLE_ENTRIES,
+              "image attribute table overflows the 9-bit buffer index");
 #define MAX_PER_STAGE_INPUT_ATTACHMENTS MAX_PER_SET_INPUT_ATTACHMENTS
 
 #else
@@ -150,6 +173,19 @@ struct panvk_graphics_sysvals {
       } scale, offset;
    } viewport;
 
+   /* Depth bounds test, read by the FS lowering in panvk_vX_shader.c. */
+   struct {
+      float bounds[2];
+      uint32_t enable;
+      uint32_t samples;
+#if PAN_ARCH < 9
+      /* INTERNAL_CONVERSION of the depth attachment for the LD_TILE of the
+       * depth: Bifrost faults on a zero conversion (jm-v7 022). */
+      uint32_t z_conv;
+      uint32_t _pad;
+#endif
+   } ds;
+
    struct {
 #if PAN_ARCH < 9
       int32_t raw_vertex_offset;
@@ -157,7 +193,14 @@ struct panvk_graphics_sysvals {
       int32_t first_vertex;
       int32_t base_instance;
       uint32_t noperspective_varyings;
-   } vs;
+    } vs;
+
+#if PAN_ARCH >= 9
+   aligned_u64 gpu_prerast_params;
+   aligned_u64 gpu_prerast_records;
+   aligned_u64 gpu_prerast_tess;
+   aligned_u64 gpu_prerast_viewports;
+#endif
 
    struct {
       aligned_u64 blend_descs[MAX_RTS];
@@ -165,15 +208,39 @@ struct panvk_graphics_sysvals {
 
    struct panvk_input_attachment_info iam[INPUT_ATTACHMENT_MAP_SIZE];
 
-#if PAN_ARCH < 9
-   /* gl_Layer on Bifrost is a bit of hack. We have to issue one draw per
-    * layer, and filter primitives at the VS level.
+#if PAN_ARCH <= 9
+   /* gl_Layer on Bifrost and v9 JM is a bit of hack. We have to issue one
+    * draw per layer, and filter primitives at the VS level.
     */
    int32_t layer_id;
+#endif
 
+#if PAN_ARCH == 9
+   /* gl_DrawID: v9 JM unrolls multi-draws into one job per draw. */
+   int32_t draw_id;
+#endif
+
+#if PAN_ARCH < 9
    struct {
       aligned_u64 sets[PANVK_DESC_TABLE_GFX_COUNT];
+      /* Bindless textures/samplers (jm-v7 050): index of each set's
+       * first descriptor relative to the direct base, the index of
+       * the device dummy sampler, and the zeroed page that
+       * out-of-bounds bindless image loads read. */
+      uint32_t direct_idx[MAX_SETS];
+      uint32_t dummy_sampler_idx;
+      aligned_u64 zero_addr;
    } desc;
+
+   /* Tessellation: the draw's struct poly_tess_params, read by the tess eval
+    * shader running as the vertex shader.
+    */
+   aligned_u64 tess_params;
+
+   /* Referenced-vertex bitmap of an indexed draw whose vertex shader writes
+    * memory, 0 otherwise (jm-v7 046, panvk_v7_lower_vs_ref_guard()).
+    */
+   aligned_u64 vs_ref_bitmap;
 #endif
 } __attribute__((aligned(FAU_WORD_SIZE)));
 
@@ -210,7 +277,20 @@ struct panvk_compute_sysvals {
 #if PAN_ARCH < 9
    struct {
       aligned_u64 sets[PANVK_DESC_TABLE_COMPUTE_COUNT];
+      /* Bindless textures/samplers (jm-v7 050): index of each set's
+       * first descriptor relative to the direct base, the index of
+       * the device dummy sampler, and the zeroed page that
+       * out-of-bounds bindless image loads read. */
+      uint32_t direct_idx[MAX_SETS];
+      uint32_t dummy_sampler_idx;
+      aligned_u64 zero_addr;
    } desc;
+
+   /* Geometry shader emulation: a lowered geometry shader runs as compute
+    * and reads its buffer addresses from here (panvk_nir_lower_gs.c
+    * addresses struct panvk_gs_push with offsetof()).
+    */
+   struct panvk_gs_push gs;
 #endif
 } __attribute__((aligned(FAU_WORD_SIZE)));
 
@@ -223,6 +303,9 @@ static_assert((sizeof(struct panvk_compute_sysvals) % FAU_WORD_SIZE) == 0,
 static_assert((offsetof(struct panvk_compute_sysvals, desc) % FAU_WORD_SIZE) ==
                  0,
               "panvk_compute_sysvals::desc must be 8-byte aligned");
+static_assert((offsetof(struct panvk_compute_sysvals, gs) % FAU_WORD_SIZE) ==
+                 0,
+              "panvk_compute_sysvals::gs must be 8-byte aligned");
 #endif
 
 /* This is not the final offset in the push constant buffer (AKA FAU), but
@@ -339,6 +422,9 @@ enum panvk_bifrost_desc_table_type {
 
    PANVK_BIFROST_DESC_TABLE_COUNT,
 };
+
+#define PANVK_DIRECT_TEX     BITFIELD_BIT(0)
+#define PANVK_DIRECT_SAMPLER BITFIELD_BIT(1)
 #endif
 
 #define COPY_DESC_HANDLE(table, idx)           ((table << 28) | (idx))
@@ -375,6 +461,9 @@ struct panvk_shader_desc_info {
       struct panvk_priv_mem map;
       uint32_t count[PANVK_BIFROST_DESC_TABLE_COUNT];
    } others;
+   /* PANVK_DIRECT_TEX/SAMPLER: texture/sampler accesses index the set
+    * memory directly, the table points at the direct base (jm-v7 050). */
+   uint32_t direct_mask;
 #else
    struct {
       uint32_t map[MAX_DYNAMIC_BUFFERS];
@@ -398,8 +487,71 @@ struct panvk_shader_variant {
          uint32_t tile_image_color_read;
          bool tile_image_z_read;
          bool tile_image_s_read;
+         bool depth_bounds;
+         /* The app FS wrote SampleMask itself (before the depth bounds lowering). */
+         bool depth_bounds_app_mask;
+         /* device->depth_bounds_fs: only needed while the test is on. */
+         bool depth_bounds_only;
       } fs;
    };
+
+#if PAN_ARCH < 9
+   /* Geometry shaders are compiled as compute (panvk_nir_lower_gs.c), so
+    * this sits outside the stage union. The draw path reads it to size the
+    * output buffers and the dispatch.
+    */
+   struct {
+      uint32_t input_verts_per_prim;
+      uint32_t output_verts_per_prim;
+      uint32_t max_output_verts;
+      uint32_t max_output_prims;
+      uint32_t invocations;
+      uint64_t outputs_written;
+      enum mesa_prim output_prim;
+      /* Writes gl_ViewportIndex. */
+      bool writes_viewport;
+      /* A polygon-mode passthrough (jm-v7 018): it culls faces itself from
+       * panvk_gs_push::polygon_cull.
+       */
+      bool polygon;
+      /* multiViewport (jm-v7 017): the generic slot the emulation writes the
+       * four scissor edge distances of the selected viewport to, for the
+       * FS clip-distance kill. 0 when none.
+       */
+      uint8_t scissor_slot;
+      /* Transform feedback, see panvk_gs_xfb_table(): the staging record
+       * size in dwords (0 = captures nothing), each xfb buffer's stride in
+       * bytes (0 = not captured to), and where every record dword goes.
+       */
+      uint32_t xfb_dwords;
+      uint32_t xfb_strides[4];
+      uint32_t xfb_table[PANVK_XFB_MAX_RECORD_DWORDS];
+      /* geometryStreams: the streams the shader emits on, and the stream
+       * each xfb buffer captures.
+       */
+      uint8_t stream_mask;
+      uint8_t xfb_buffer_stream[4];
+      /* Vertex shader variants: compiled to feed the emulation, so
+       * gl_Position stays in clip space (skip_viewport_transform) and is
+       * stored unsnapped.
+       */
+      bool vs_clip_space;
+      /* Vertex shader with xfb outputs and no geometry stage after it: every
+       * draw goes through a passthrough geometry shader built from these
+       * (panvk_passthrough_gs()), which captures.
+       */
+      bool xfb_passthrough;
+      uint8_t xfb_buffers_written;
+      uint8_t xfb_streams_written;
+      uint8_t xfb_output_count;
+      struct panvk_xfb_output xfb_outputs[PANVK_XFB_MAX_RECORD_DWORDS];
+      /* Tessellation: a tess control shader (compiled as compute, see
+       * panvk_nir_lower_tcs_inputs()) or a tess eval shader (compiled as the
+       * vertex shader of a draw over the tessellator indices).
+       */
+      struct panvk_tess_info tess;
+   } gs;
+#endif
 
    struct panvk_shader_fau_info fau;
 
@@ -441,13 +593,61 @@ enum panvk_vs_variant {
    /* Hardware vertex shader, when next stage is fragment */
    PANVK_VS_VARIANT_HW,
 
+#if PAN_ARCH >= 9
+   PANVK_VS_VARIANT_GPU_LOWERED,
+   PANVK_VS_VARIANT_GPU_PASSTHROUGH,
+   PANVK_VS_VARIANT_GPU_POLYGON,
+#endif
+
    PANVK_VS_VARIANTS,
 };
+
+#if PAN_ARCH >= 9
+enum panvk_gs_variant {
+   PANVK_GS_VARIANT_PASSTHROUGH,
+   PANVK_GS_VARIANT_KERNEL,
+   PANVK_GS_VARIANTS,
+};
+#endif
 
 struct panvk_shader {
    struct vk_shader vk;
 
    struct panvk_shader_desc_info desc_info;
+
+#if PAN_ARCH >= 9
+   struct panvk_gpu_prerast_shader gpu_prerast;
+#endif
+
+#if PAN_ARCH == 9
+   /* The shader writes gl_Layer. Without it a layered draw only renders
+    * layer 0, so v9 JM does not replicate the draw. */
+   bool writes_layer;
+#endif
+
+#if PAN_ARCH < 9
+   /* Vertex shaders with gs.vs_clip_space drawn without a geometry shader:
+    * the passthrough geometry shaders, created on first use by input
+    * primitive class.
+    */
+   struct panvk_shader *passthrough_gs[PANVK_XFB_GS_CLASS_COUNT];
+   /* fillModeNonSolid (jm-v7 018): the polygon-mode passthroughs, by mode
+    * (line, point) and class (triangles, triangles with adjacency).
+    */
+   struct panvk_shader *polygon_gs[2][2];
+#endif
+
+   /* jm-v7 076: another compile of the same shader, which the draw picks
+    * instead while its state allows (panvk_v7_select_alt_shaders(), and
+    * cmd_select_db_alt_fs() on v9+ since 115). A fragment shader with the
+    * depth bounds lowering has the unlowered one, used while the test is
+    * off (it keeps FPK and early ZS). On v6/v7, a vertex shader with xfb
+    * has a screen-space one without xfb, used while xfb is inactive and no
+    * geometry shader is bound (jm-v7 077). Owned by the shader; alt_parent
+    * points back from the alternate.
+    */
+   struct panvk_shader *alt;
+   const struct panvk_shader *alt_parent;
 
    struct panvk_shader_variant variants[];
 };
@@ -457,12 +657,23 @@ panvk_shader_num_variants(mesa_shader_stage stage)
 {
    if (stage == MESA_SHADER_VERTEX)
       return PANVK_VS_VARIANTS;
+#if PAN_ARCH >= 9
+   if (stage == MESA_SHADER_GEOMETRY)
+      return PANVK_GS_VARIANTS;
+   if (stage == MESA_SHADER_TESS_EVAL)
+      return PANVK_VS_VARIANTS;
+#endif
 
    return 1;
 }
 
 static const char *panvk_vs_shader_variant_name[] = {
    [PANVK_VS_VARIANT_HW] = NULL,
+#if PAN_ARCH >= 9
+   [PANVK_VS_VARIANT_GPU_LOWERED] = "GPU_LOWERED",
+   [PANVK_VS_VARIANT_GPU_PASSTHROUGH] = "GPU_PASSTHROUGH",
+   [PANVK_VS_VARIANT_GPU_POLYGON] = "GPU_POLYGON",
+#endif
 };
 
 static const char *
@@ -472,10 +683,16 @@ panvk_shader_variant_name(const struct panvk_shader *shader,
    unsigned i = variant - shader->variants;
    assert(i < panvk_shader_num_variants(shader->vk.stage));
 
-   if (shader->vk.stage == MESA_SHADER_VERTEX) {
+   if (shader->vk.stage == MESA_SHADER_VERTEX ||
+       shader->vk.stage == MESA_SHADER_TESS_EVAL) {
       assert(i < ARRAY_SIZE(panvk_vs_shader_variant_name));
       return panvk_vs_shader_variant_name[i];
    }
+
+#if PAN_ARCH >= 9
+   if (shader->vk.stage == MESA_SHADER_GEOMETRY)
+      return i == PANVK_GS_VARIANT_KERNEL ? "GS_KERNEL" : "GS_PASSTHROUGH";
+#endif
 
    assert(panvk_shader_num_variants(shader->vk.stage) == 1);
 
@@ -499,6 +716,14 @@ panvk_shader_hw_variant(const struct panvk_shader *shader)
       return NULL;
 
    return &shader->variants[0];
+}
+
+static inline const struct panvk_shader_variant *
+panvk_shader_gpu_prerast_variant(const struct panvk_shader *shader,
+                                 enum panvk_vs_variant variant)
+{
+   assert(shader && variant < PANVK_VS_VARIANTS);
+   return &shader->variants[variant];
 }
 
 static inline uint64_t
@@ -525,10 +750,24 @@ struct panvk_shader_link {
       struct panvk_priv_mem attribs;
    } vs, fs;
    unsigned buf_strides[PANVK_VARY_BUF_MAX];
+
+   /* Byte offset of each varying slot in the vertex shader's generic buffer,
+    * PANVK_GS_SLOT_UNUSED for a slot nothing reads. The geometry shader
+    * emulation reads them at draw time.
+    */
+   uint32_t buf_offsets[VARYING_SLOT_MAX];
+
+   /* With a geometry shader, the fragment shader reads the emulation's own
+    * generic buffer: one 16-byte slot per location the geometry shader writes
+    * and the fragment shader reads.
+    */
+   uint32_t gs_out_offsets[VARYING_SLOT_MAX];
+   uint32_t gs_out_stride;
 };
 
 VkResult panvk_per_arch(link_shaders)(struct panvk_pool *desc_pool,
                                       const struct panvk_shader_variant *vs,
+                                      const struct panvk_shader_variant *gs,
                                       const struct panvk_shader_variant *fs,
                                       struct panvk_shader_link *link);
 
@@ -572,6 +811,7 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(panvk_internal_shader, vk.base, VkShaderEXT,
 
 void panvk_per_arch(compiler_lock)(void);
 void panvk_per_arch(compiler_unlock)(void);
+uint32_t panvk_per_arch(thread_compile_count)(void);
 
 VkResult panvk_per_arch(create_internal_shader)(
    struct panvk_device *dev, nir_shader *nir,
@@ -585,5 +825,25 @@ VkResult panvk_per_arch(create_shader_from_binary)(
 
 VkResult panvk_per_arch(create_shader)(
    struct panvk_device *dev, nir_shader *nir, struct panvk_shader **shader_out);
+
+#if PAN_ARCH < 9
+/* The passthrough geometry shader a vertex shader with gs.vs_clip_space
+ * draws prim through when no geometry shader is bound (it captures the
+ * vertex shader's transform feedback), NULL when it cannot be made.
+ */
+const struct panvk_shader *panvk_per_arch(passthrough_gs)(
+   struct panvk_device *dev, const struct panvk_shader *vs,
+   enum mesa_prim prim);
+
+/* fillModeNonSolid (jm-v7 018): the geometry shader a vertex shader draws a
+ * triangle topology through in VK_POLYGON_MODE_LINE or _POINT when no
+ * geometry shader is bound: it emits the edges or the vertices of every
+ * triangle it does not cull. NULL when prim is no triangle topology or it
+ * cannot be made.
+ */
+const struct panvk_shader *panvk_per_arch(polygon_gs)(
+   struct panvk_device *dev, const struct panvk_shader *vs,
+   enum mesa_prim prim, VkPolygonMode mode);
+#endif
 
 #endif

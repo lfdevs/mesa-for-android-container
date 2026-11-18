@@ -12,6 +12,17 @@
 
 #include "drm-uapi/panthor_drm.h"
 
+#include <inttypes.h>
+
+#ifdef HAVE_PAN_KMOD_KBASE
+#include <errno.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include "drm-uapi/mali_kbase_ioctl.h"
+#endif
+
 #include "genxml/gen_macros.h"
 
 #include "panvk_buffer.h"
@@ -38,9 +49,395 @@
 
 #include "util/bitscan.h"
 #include "poly/geometry.h"
+#include "util/os_time.h"
+#include "util/u_debug.h"
 #include "vk_descriptor_update_template.h"
 #include "vk_format.h"
 #include "vk_synchronization.h"
+
+void
+panvk_per_arch(kbase_mark_progress)(
+   struct panvk_cmd_buffer *cmdbuf, enum panvk_subqueue_id subqueue,
+   enum panvk_kbase_progress_marker marker)
+{
+   /* These stores are breadcrumbs for queue-hang diagnosis, not part of the
+    * queue ABI.  Keeping them in every draw/dispatch stream adds several LS
+    * instructions and a store flush at each marker, which is particularly
+    * costly for draw-heavy applications.  Keep the instrumentation opt-in. */
+   if (!PANVK_DEBUG(KBASE_DIAG))
+      return;
+
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(dev->vk.physical);
+
+   if (!phys_dev->kbase_node_path[0])
+      return;
+
+   enum {
+      KBASE_MARK_ADDR_REG = 14,
+      KBASE_MARK_VALUE_REG = 16,
+   };
+   STATIC_ASSERT(KBASE_MARK_ADDR_REG + 2 <= CS_REG_SCRATCH_COUNT);
+   STATIC_ASSERT(KBASE_MARK_VALUE_REG + 1 <= CS_REG_SCRATCH_COUNT);
+
+   struct cs_builder *b = panvk_get_cs_builder(cmdbuf, subqueue);
+   struct cs_index addr = cs_scratch_reg64(b, KBASE_MARK_ADDR_REG);
+   struct cs_index value = cs_scratch_reg32(b, KBASE_MARK_VALUE_REG);
+
+   cs_load64_to(b, addr, cs_subqueue_ctx_reg(b),
+                offsetof(struct panvk_cs_subqueue_context,
+                         debug.kbase_progress_addr));
+   cs_move32_to(b, value, marker);
+   // cs_store32(b, value, addr, 0);
+   cs_sync32_add(b, true, MALI_CS_SYNC_SCOPE_CSG, value, addr, cs_now());
+   cs_flush_stores(b);
+}
+
+/* Mali indexes TLS by (core, thread slot), so concurrent jobs from any
+ * command buffer can share one region sized for the largest per-thread
+ * stack, exactly like the subqueues of one command buffer already do.
+ * Per-command-buffer TLS kept ~84 MiB per DXVK command list alive in Need
+ * for Speed Most Wanted (1.7 GiB, then Android killed apps).
+ * ponytail: outgrown BOs live until device destroy (<= 2x the peak size);
+ * refcount them per command buffer if that ever matters. */
+/* csf-v11 227: PANVK_TLS_FREE_OLD=0 keeps every outgrown device TLS BO
+ * until device destroy (old). By default each command buffer holds a
+ * reference on the device TLS BO it uses, and the device keeps only the
+ * largest one, so an outgrown BO goes when the last command buffer that
+ * used it is reset or freed (it can no longer be pending then). */
+static bool
+dev_tls_free_old(void)
+{
+   static int v = -1;
+   if (p_atomic_read(&v) < 0)
+      p_atomic_set(&v, debug_get_bool_option("PANVK_TLS_FREE_OLD", true));
+   return p_atomic_read(&v);
+}
+
+static void
+dev_tls_release(struct panvk_cmd_buffer *cmdbuf)
+{
+   util_dynarray_foreach(&cmdbuf->dev_tls_refs, struct panvk_priv_bo *, bo)
+      panvk_priv_bo_unref(*bo);
+   util_dynarray_clear(&cmdbuf->dev_tls_refs);
+}
+
+/* csf-v11 230: device TLS sized for the cores that exist.
+ *
+ * The TLS size is pow2(stack per thread) x THREAD_TLS_ALLOC x core-ID
+ * range, because a thread's stack is found from its raw core ID: core c
+ * owns the slab [c, c + 1) x pow2(stack) x THREAD_TLS_ALLOC (the layout the
+ * core_id_range sizing already assumes). Valhall CSF parts have sparse core
+ * masks: the 336 MiB device TLS of Fallout 4 on the G615 MC6 is 21 x 16 MiB,
+ * a 21-ID range for 6 cores, so 15 of 21 slabs belong to cores that do not
+ * exist, and kbase commits and zeroes all of them. The "device TLS" log
+ * line prints the real numbers.
+ *
+ * PANVK_TLS_SPARSE=1 (default on kbase before v14): one BO holds a slab per present
+ * core, and a KBASE_IOCTL_MEM_ALIAS region spans the whole core-ID range
+ * with each present core's slot mapped to its own slab. The slots of absent
+ * cores alias the first slab (no extra pages; nothing runs there), so the
+ * GPU address layout is exactly the old one and no address faults. Any
+ * failure falls back to the full BO. PANVK_TLS_SPARSE=0 = old.
+ *
+ * PANVK_TLS_SHRINK_MS=<ms> (default 10000, 0 = old): when no command buffer
+ * needed more than half of the current device TLS for that long, a command
+ * buffer that needs a quarter or less gets a new, smaller BO and the device
+ * drops its reference on the big one (command buffers still holding it keep
+ * it alive, 227). Needs PANVK_TLS_FREE_OLD (default on). */
+static int
+dev_tls_knob(int *v, const char *name, int def)
+{
+   if (p_atomic_read(v) < 0)
+      p_atomic_set(v, (int)debug_get_num_option(name, def));
+   return p_atomic_read(v);
+}
+
+static bool
+dev_tls_sparse(void)
+{
+   static int v = -1;
+   /* v14 (Mali-G1-Ultra, mask 0x3300ff): with the alias region, shaders
+    * that spill read back garbage pointers (GPU read faults at 0x0,
+    * 0x3f800000, 0x144xxxxxxxx; DXVK D3D9 cube DEVICE_LOST in most 15 s
+    * runs), never with the full BO. The v14 stack placement does not match
+    * the per-core slots the alias assumes. Full BO by default there;
+    * PANVK_TLS_SPARSE=1 still forces the alias.
+    * ponytail: off for all of v14; re-enable once the v14 core-to-slot
+    * mapping is known. */
+   return dev_tls_knob(&v, "PANVK_TLS_SPARSE", PAN_ARCH < 14) != 0;
+}
+
+static uint64_t
+dev_tls_shrink_ns(void)
+{
+   static int v = -1;
+   return (uint64_t)MAX2(dev_tls_knob(&v, "PANVK_TLS_SHRINK_MS", 10000), 0) *
+          1000000ull;
+}
+
+/* Bytes of GPU address space a device TLS BO covers. */
+static uint64_t
+dev_tls_span(const struct panvk_priv_bo *bo)
+{
+   return bo->alias_size ? bo->alias_size : pan_kmod_bo_size(bo->bo);
+}
+
+struct dev_tls_layout {
+   uint64_t span;      /* pan_get_total_stack_size() */
+   uint64_t per_core;  /* bytes per core-ID slot */
+   uint64_t present;   /* shader_present */
+   unsigned range;     /* core-ID range */
+   unsigned thread_size, threads;
+};
+
+/* jm-v7 0145: the TLS region must not cross a 4 GiB boundary (see
+ * panvk_cmd_alloc_tls_mem()). Callers retry while holding the rejects, so the
+ * next region gets another address. */
+#define DEV_TLS_MAX_REJECTS 8
+
+static bool
+dev_tls_crosses_4g(uint64_t va, uint64_t size)
+{
+   return (va >> 32) != ((va + size - 1) >> 32);
+}
+
+#ifdef HAVE_PAN_KMOD_KBASE
+static uint64_t
+dev_tls_page(void)
+{
+   const long p = sysconf(_SC_PAGESIZE);
+   return p > 0 ? (uint64_t)p : 4096;
+}
+
+/* Returns the alias region VA, or 0. */
+static uint64_t
+dev_tls_alias(struct panvk_device *dev, const struct panvk_priv_bo *backing,
+              const struct dev_tls_layout *l)
+{
+   const uint64_t page = dev_tls_page();
+   const uint64_t stride = l->per_core / page;
+   struct base_mem_aliasing_info ai[64];
+   unsigned idx = 0;
+
+   for (unsigned c = 0; c < l->range; c++) {
+      const bool present = (l->present >> c) & 1;
+      ai[c] = (struct base_mem_aliasing_info){
+         .handle = backing->addr.dev,
+         .offset = present ? (uint64_t)idx * stride : 0,
+         .length = stride,
+      };
+      if (present)
+         idx++;
+   }
+
+   void *rejects[DEV_TLS_MAX_REJECTS];
+   unsigned n_rejects = 0;
+   uint64_t va = 0;
+
+   for (;;) {
+      union kbase_ioctl_mem_alias req = {
+         .in = {
+            .flags = BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR |
+                     BASE_MEM_PROT_CPU_RD,
+            .stride = stride,
+            .nents = l->range,
+            .aliasing_info = (uintptr_t)ai,
+         },
+      };
+
+      if (ioctl(dev->kmod.dev->fd, KBASE_IOCTL_MEM_ALIAS, &req)) {
+         mesa_logw("panvk: device TLS: KBASE_IOCTL_MEM_ALIAS failed (%s), "
+                   "using a full BO", strerror(errno));
+         break;
+      }
+
+      /* 64-bit clients get a SAME_VA cookie; mmap() places the region, and
+       * the address is both the CPU and the GPU VA (as for the ring buffer).
+       */
+      void *ptr = mmap(NULL, l->span, PROT_READ, MAP_SHARED,
+                       dev->kmod.dev->fd, req.out.gpu_va);
+      if (ptr == MAP_FAILED) {
+         mesa_logw("panvk: device TLS: alias mmap failed (%s), using a full "
+                   "BO", strerror(errno));
+         struct kbase_ioctl_mem_free free_req = {.gpu_addr = req.out.gpu_va};
+         ioctl(dev->kmod.dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+         break;
+      }
+
+      if (!dev_tls_crosses_4g((uintptr_t)ptr, l->span)) {
+         va = (uintptr_t)ptr;
+         break;
+      }
+
+      if (n_rejects == DEV_TLS_MAX_REJECTS) {
+         munmap(ptr, l->span);
+         mesa_logw("panvk: device TLS: no alias region inside a 4 GiB "
+                   "window, using a full BO");
+         break;
+      }
+      rejects[n_rejects++] = ptr;
+   }
+
+   /* munmap() of a SAME_VA alias region frees it. */
+   for (unsigned i = 0; i < n_rejects; i++)
+      munmap(rejects[i], l->span);
+
+   return va;
+}
+#endif
+
+static struct panvk_priv_bo *
+dev_tls_create(struct panvk_device *dev, const struct dev_tls_layout *l)
+{
+   /* Stacks are written before they are read, and a reused BO holds old
+    * stacks anyway: no clear (it was up to 336 MiB of memset in 112). */
+   const uint32_t flags = panvk_device_adjust_bo_flags(
+      dev, PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_NO_ZERO);
+   struct panvk_priv_bo *bo = NULL;
+
+#ifdef HAVE_PAN_KMOD_KBASE
+   static int sparse_broken;
+   const struct panvk_physical_device *pdev =
+      to_panvk_physical_device(dev->vk.physical);
+   const unsigned cores = util_bitcount64(l->present);
+
+   if (pdev->kbase_node_path[0] && dev_tls_sparse() &&
+       !p_atomic_read(&sparse_broken) && !dev->debug.decode_ctx &&
+       cores && cores < l->range && l->range <= 64 &&
+       l->per_core * l->range == l->span && !(l->per_core % dev_tls_page()) &&
+       !(flags & PAN_KMOD_BO_FLAG_GPU_UNCACHED)) {
+      if (panvk_priv_bo_create_kind(dev, l->per_core * cores, flags,
+                                    VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo,
+                                    PANVK_MEM_DEV_TLS) == VK_SUCCESS) {
+         const uint64_t va = dev_tls_alias(dev, bo, l);
+         if (va) {
+            bo->addr.dev = va;
+            bo->alias_size = l->span;
+            mesa_logi("panvk: device TLS %u B/thread x %u threads x %u core "
+                      "IDs (%u cores, mask 0x%" PRIx64 ") = %" PRIu64
+                      " MiB of VA, %" PRIu64 " MiB backed",
+                      l->thread_size, l->threads, l->range, cores, l->present,
+                      l->span >> 20, pan_kmod_bo_size(bo->bo) >> 20);
+            return bo;
+         }
+         panvk_priv_bo_unref(bo);
+         bo = NULL;
+         p_atomic_set(&sparse_broken, 1);
+      }
+   }
+#endif
+
+   struct panvk_priv_bo *rejects[DEV_TLS_MAX_REJECTS];
+   unsigned n_rejects = 0;
+
+   for (;;) {
+      if (panvk_priv_bo_create_kind(dev, l->span, flags,
+                                    VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo,
+                                    PANVK_MEM_DEV_TLS) != VK_SUCCESS) {
+         bo = NULL;
+         break;
+      }
+      if (!dev_tls_crosses_4g(bo->addr.dev, l->span))
+         break;
+      if (n_rejects == DEV_TLS_MAX_REJECTS) {
+         mesa_loge("panvk: device TLS: no BO inside a 4 GiB window");
+         panvk_priv_bo_unref(bo);
+         bo = NULL;
+         break;
+      }
+      rejects[n_rejects++] = bo;
+   }
+
+   for (unsigned i = 0; i < n_rejects; i++)
+      panvk_priv_bo_unref(rejects[i]);
+
+   if (!bo)
+      return NULL;
+
+   mesa_logi("panvk: device TLS %u B/thread x %u threads x %u core IDs "
+             "(mask 0x%" PRIx64 ") = %" PRIu64 " MiB",
+             l->thread_size, l->threads, l->range, l->present,
+             pan_kmod_bo_size(bo->bo) >> 20);
+   return bo;
+}
+
+static uint64_t
+get_device_tls(struct panvk_cmd_buffer *cmdbuf, const struct dev_tls_layout *l,
+               unsigned *sparse_thread_size)
+{
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const bool free_old = dev_tls_free_old();
+   const uint64_t size = l->span;
+   uint64_t addr = 0;
+
+   /* csf-v11 230: last time a command buffer needed more than half of the
+    * current device TLS. Process-wide; a stale value only delays or
+    * advances a shrink, which is always safe. */
+   static uint64_t last_big_ns;
+   const uint64_t shrink_ns = free_old ? dev_tls_shrink_ns() : 0;
+   const uint64_t now = shrink_ns ? os_time_get_nano() : 0;
+
+   simple_mtx_lock(&dev->tls.lock);
+   struct panvk_priv_bo *cur =
+      util_dynarray_num_elements(&dev->tls.bos, struct panvk_priv_bo *)
+         ? util_dynarray_top(&dev->tls.bos, struct panvk_priv_bo *)
+         : NULL;
+
+   bool replace = !cur || dev_tls_span(cur) < size;
+   if (cur && !replace && shrink_ns) {
+      if (size > dev_tls_span(cur) / 2 || !last_big_ns)
+         last_big_ns = now;
+      else if (size <= dev_tls_span(cur) / 4 &&
+               now - last_big_ns > shrink_ns)
+         replace = true;
+   }
+
+   if (replace) {
+      struct panvk_priv_bo *bo = dev_tls_create(dev, l);
+      if (bo) {
+         if (free_old) {
+            /* Drop the device's references on the outgrown BOs; command
+             * buffers that use them hold their own. */
+            util_dynarray_foreach(&dev->tls.bos, struct panvk_priv_bo *, old) {
+               p_atomic_add(&panvk_mem_stats.dev_tls_freed_B,
+                            pan_kmod_bo_size((*old)->bo));
+               panvk_priv_bo_unref(*old);
+            }
+            util_dynarray_clear(&dev->tls.bos);
+         }
+         util_dynarray_append(&dev->tls.bos, bo);
+         cur = bo;
+         last_big_ns = now;
+      } else if (cur && dev_tls_span(cur) < size) {
+         cur = NULL;
+      }
+   }
+
+   if (cur) {
+      addr = cur->addr.dev;
+      /* csf-v11 232: the stride the alias slots of a sparse BO assume. */
+      if (cur->alias_size)
+         *sparse_thread_size =
+            cur->alias_size / ((uint64_t)l->threads * MAX2(l->range, 1));
+      if (free_old) {
+         bool held = false;
+         util_dynarray_foreach(&cmdbuf->dev_tls_refs, struct panvk_priv_bo *,
+                               r)
+            held = held || *r == cur;
+         if (!held)
+            util_dynarray_append(&cmdbuf->dev_tls_refs,
+                                 panvk_priv_bo_ref(cur));
+      }
+   }
+   simple_mtx_unlock(&dev->tls.lock);
+
+   if (!addr)
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+
+   return addr;
+}
 
 static void
 emit_tls(struct panvk_cmd_buffer *cmdbuf)
@@ -49,22 +446,63 @@ emit_tls(struct panvk_cmd_buffer *cmdbuf)
    struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(dev->vk.physical);
    unsigned core_id_range = pan_query_core_id_range(&phys_dev->kmod.dev->props);
+   unsigned sparse_thread_size = 0;
 
    if (cmdbuf->state.tls.info.tls.size) {
       unsigned thread_tls_alloc =
          pan_query_thread_tls_alloc(&phys_dev->kmod.dev->props);
       unsigned size = pan_get_total_stack_size(cmdbuf->state.tls.info.tls.size,
                                                thread_tls_alloc, core_id_range);
+      const struct dev_tls_layout layout = {
+         .span = size,
+         .per_core = size / MAX2(core_id_range, 1),
+         .present = phys_dev->kmod.dev->props.shader_present,
+         .range = core_id_range,
+         .thread_size = size / MAX2(thread_tls_alloc * core_id_range, 1),
+         .threads = thread_tls_alloc,
+      };
 
       cmdbuf->state.tls.info.tls.ptr =
-         panvk_cmd_alloc_dev_mem(cmdbuf, tls, size, 4096).gpu;
+         get_device_tls(cmdbuf, &layout, &sparse_thread_size);
    }
 
    assert(!cmdbuf->state.tls.info.wls.size);
 
    if (cmdbuf->state.tls.desc.cpu) {
-      GENX(pan_emit_tls)(&cmdbuf->state.tls.info, cmdbuf->state.tls.desc.cpu);
+      /* csf-v11 232: a sparse BO's alias slots are THREAD_TLS_ALLOC x its own
+       * per-thread size apart, and the hardware places core c's stacks at
+       * c x THREAD_TLS_ALLOC x (stack size in the TSD). A smaller stack size
+       * in the TSD puts present cores in the slots of absent ones, which all
+       * alias slab 0, so their threads share stacks (113: gs_tess_primitive_id
+       * chunk cases on v10/v11). Program the BO's per-thread size. */
+      struct pan_tls_info info = cmdbuf->state.tls.info;
+      if (sparse_thread_size > info.tls.size)
+         info.tls.size = sparse_thread_size;
+      GENX(pan_emit_tls)(&info, cmdbuf->state.tls.desc.cpu);
    }
+}
+
+/* csf-v11 232: per-job TSDs (dispatch, precomp, the gpu_prerast and
+ * tessellation compute jobs) were written with their own shader's stack size
+ * and only took the TLS pointer from the command buffer's descriptor, which
+ * is filled at EndCommandBuffer. With PANVK_TLS_SPARSE the stack size (word
+ * 0, nothing else lives there) is copied too, so every job uses the stride
+ * the sparse BO was built for. PANVK_TLS_SPARSE=0 = the 112 copy. */
+void
+panvk_per_arch(cmd_copy_tls_to_tsd)(struct panvk_cmd_buffer *cmdbuf,
+                                    struct cs_builder *b, uint64_t tsd)
+{
+   const bool stride = dev_tls_sparse();
+
+   cs_move64_to(b, cs_scratch_reg64(b, 0), cmdbuf->state.tls.desc.gpu);
+   cs_load64_to(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
+   if (stride)
+      cs_load32_to(b, cs_scratch_reg32(b, 4), cs_scratch_reg64(b, 0), 0);
+   cs_move64_to(b, cs_scratch_reg64(b, 0), tsd);
+   cs_store64(b, cs_scratch_reg64(b, 2), cs_scratch_reg64(b, 0), 8);
+   if (stride)
+      cs_store32(b, cs_scratch_reg32(b, 4), cs_scratch_reg64(b, 0), 0);
+   cs_flush_stores(b);
 }
 
 /**
@@ -100,13 +538,62 @@ flush_sync_points(struct panvk_cmd_buffer *cmdbuf)
       cmdbuf->state.cs[i].relative_sync_point = 0;
 }
 
+/* Records how much of the builder's current chunk is written before
+ * cs_end() forgets it, so that EndCommandBuffer flushes only that. Later
+ * patches (cs_maybe, chunk links) land inside written ranges.
+ */
+static void
+cs_chunk_note_end(struct panvk_cmd_buffer *cmdbuf, struct cs_builder *b)
+{
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+
+   if (!dev->cmdbuf_opt.cs_flush_used || !cs_is_valid(b) ||
+       !b->cur_chunk.buffer.cpu)
+      return;
+
+   /* cs_end() first emits the instructions of a pending cs_if(). */
+   cs_flush_pending_if(b);
+
+   util_dynarray_foreach_reverse(&cmdbuf->cs_chunks, struct panvk_cs_chunk,
+                                 c) {
+      if (c->gpu == b->cur_chunk.buffer.gpu) {
+         c->size = MIN2(ALIGN_POT(b->cur_chunk.pos * sizeof(uint64_t), 64),
+                        c->size);
+         return;
+      }
+   }
+}
+
+static void
+flush_cs_maps(struct panvk_cmd_buffer *cmdbuf)
+{
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+
+   if (!dev->cmdbuf_opt.cs_flush_used) {
+      panvk_pool_flush_maps(&cmdbuf->cs_pool);
+      return;
+   }
+
+   if (!(cmdbuf->cs_pool.props.create_flags & PAN_KMOD_BO_FLAG_WB_MMAP))
+      return;
+
+   util_dynarray_foreach(&cmdbuf->cs_chunks, struct panvk_cs_chunk, c) {
+      if (c->size)
+         panvk_priv_bo_flush(c->bo, c->offset, c->size);
+   }
+}
+
 static void
 finish_cs(struct panvk_cmd_buffer *cmdbuf, uint32_t subqueue)
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, subqueue);
 
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, subqueue, PANVK_KBASE_PROGRESS_FINISH_BEFORE_WAIT);
    cs_wait_slots(b, dev->csf.sb.all_mask);
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, subqueue, PANVK_KBASE_PROGRESS_FINISH_AFTER_WAIT);
 
    /* save CS error if non-zero */
    if (cmdbuf->vk.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY) {
@@ -189,6 +676,9 @@ finish_cs(struct panvk_cmd_buffer *cmdbuf, uint32_t subqueue)
    panvk_per_arch(panvk_instr_end_work)(
       subqueue, cmdbuf, PANVK_INSTR_WORK_TYPE_CMDBUF, &instr_info_cmdbuf);
 
+   panvk_per_arch(kbase_mark_progress)(
+      cmdbuf, subqueue, PANVK_KBASE_PROGRESS_CMDBUF_DONE);
+   cs_chunk_note_end(cmdbuf, b);
    cs_end(&cmdbuf->state.cs[subqueue].builder);
 }
 
@@ -269,7 +759,7 @@ panvk_per_arch(EndCommandBuffer)(VkCommandBuffer commandBuffer)
       }
    }
 
-   panvk_pool_flush_maps(&cmdbuf->cs_pool);
+   flush_cs_maps(cmdbuf);
    panvk_pool_flush_maps(&cmdbuf->desc_pool);
 
    return vk_command_buffer_end(&cmdbuf->vk);
@@ -278,7 +768,7 @@ panvk_per_arch(EndCommandBuffer)(VkCommandBuffer commandBuffer)
 static void
 add_execution_dependency(uint32_t wait_masks[static PANVK_SUBQUEUE_COUNT],
                          VkPipelineStageFlags2 src_stages,
-                         VkPipelineStageFlags2 dst_stages)
+                         VkPipelineStageFlags2 dst_stages, bool gpu_prerast)
 {
    /* convert stages to subqueues */
    uint32_t src_subqueues = 0;
@@ -290,6 +780,22 @@ add_execution_dependency(uint32_t wait_masks[static PANVK_SUBQUEUE_COUNT],
       if (dst_stages & subqueue_stages)
          dst_subqueues |= BITFIELD_BIT(i);
    }
+
+   /* gpu_prerast runs the lowered VS on the COMPUTE subqueue, which reads
+    * indirect params, vertex inputs and VS resources.  Make it a consumer of
+    * those stages so GPU-written inputs are visible before the dispatch. */
+   if (gpu_prerast &&
+       (dst_stages & (VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT |
+                      VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT |
+                      VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT |
+                      VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT |
+                      VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT |
+                      VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT |
+                      VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT |
+                      VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT |
+                      VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT |
+                      VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT)))
+      dst_subqueues |= BITFIELD_BIT(PANVK_SUBQUEUE_COMPUTE);
 
    const bool dst_host = dst_stages & VK_PIPELINE_STAGE_2_HOST_BIT;
 
@@ -409,7 +915,9 @@ collect_cs_deps(struct panvk_cmd_buffer *cmdbuf, const VkDependencyInfo *info,
 {
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    uint32_t wait_masks[PANVK_SUBQUEUE_COUNT] = {0};
-   add_execution_dependency(wait_masks, src.stages, dst.stages);
+   add_execution_dependency(
+      wait_masks, src.stages, dst.stages,
+      dev->gpu_prerast_wanted || dev->gpu_prerast_tess_wanted);
 
    if (cmdbuf->state.gfx.render.tiler || inherits_render_ctx(cmdbuf)) {
       if (info->dependencyFlags & VK_DEPENDENCY_BY_REGION_BIT) {
@@ -535,10 +1043,15 @@ panvk_per_arch(add_cs_deps)(struct panvk_cmd_buffer *cmdbuf,
 
    for (uint32_t i = 0; i < in->bufferMemoryBarrierCount; i++) {
       const VkBufferMemoryBarrier2 *barrier = &in->pBufferMemoryBarriers[i];
+      VK_FROM_HANDLE(panvk_buffer, buffer, barrier->buffer);
       struct panvk_sync_scope src = {barrier->srcStageMask, barrier->srcAccessMask};
       struct panvk_sync_scope dst = {barrier->dstStageMask, barrier->dstAccessMask};
       normalize_dependency(&src, &dst, barrier->srcQueueFamilyIndex,
                            barrier->dstQueueFamilyIndex);
+
+      if (!(buffer->vk.usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT))
+         dst.access &= ~(VK_ACCESS_2_SHADER_READ_BIT |
+                         VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
 
       collect_cs_deps(cmdbuf, in, src, dst, out);
    }
@@ -580,6 +1093,7 @@ emit_barrier_insert_waits(struct cs_builder *b, struct panvk_cmd_buffer *cmdbuf,
 static void
 emit_barrier_csf(struct panvk_cmd_buffer *cmdbuf, struct panvk_cs_deps deps)
 {
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    uint32_t wait_subqueue_mask = 0;
    uint32_t utrace_subqueue_mask = 0;
    for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++) {
@@ -603,8 +1117,19 @@ emit_barrier_csf(struct panvk_cmd_buffer *cmdbuf, struct panvk_cs_deps deps)
       struct cs_builder *b = panvk_get_cs_builder(cmdbuf, i);
       struct panvk_cs_state *cs_state = &cmdbuf->state.cs[i];
 
-      if (deps.src[i].wait_sb_mask)
+      if (deps.src[i].wait_sb_mask) {
          cs_wait_slots(b, deps.src[i].wait_sb_mask);
+
+         /* C4 (115): every fragment job issued so far is done, see
+          * struct panvk_frag_written.
+          */
+         if (i == PANVK_SUBQUEUE_FRAGMENT &&
+             (deps.src[i].wait_sb_mask & dev->csf.sb.all_iters_mask) ==
+                dev->csf.sb.all_iters_mask) {
+            cmdbuf->state.gfx.frag_written =
+               (struct panvk_frag_written){.valid = true};
+         }
+      }
 
       struct panvk_cache_flush_info cache_flush = deps.src[i].cache_flush;
       if (!panvk_cache_flush_is_nop(&cache_flush)) {
@@ -743,6 +1268,8 @@ panvk_per_arch(CmdPipelineBarrier2)(VkCommandBuffer commandBuffer,
    panvk_per_arch(emit_barrier)(cmdbuf, deps);
 
    STACK_ARRAY_FINISH(crc_addrs);
+
+   panvk_per_arch(cmd_bc_decode_zero_initialized)(cmdbuf, pDependencyInfo);
 }
 
 VkResult
@@ -784,18 +1311,83 @@ panvk_per_arch(cmd_init_poly_heap)(struct panvk_cmd_buffer *cmdbuf)
 }
 
 static struct cs_buffer
-alloc_cs_buffer(void *cookie)
+alloc_cs_chunk(struct panvk_cmd_buffer *cmdbuf, uint32_t capacity)
 {
-   struct panvk_cmd_buffer *cmdbuf = cookie;
-   const unsigned capacity = 64 * 1024 / sizeof(uint64_t);
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
 
-   struct pan_ptr ptr = panvk_cmd_alloc_dev_mem(cmdbuf, cs, capacity * 8, 64);
+   if (!dev->cmdbuf_opt.cs_flush_used) {
+      struct pan_ptr ptr =
+         panvk_cmd_alloc_dev_mem(cmdbuf, cs, capacity * 8, 64);
+
+      return (struct cs_buffer){
+         .cpu = ptr.cpu,
+         .gpu = ptr.gpu,
+         .capacity = capacity,
+      };
+   }
+
+   struct panvk_cs_chunk *chunk =
+      util_dynarray_grow(&cmdbuf->cs_chunks, struct panvk_cs_chunk, 1);
+   if (!chunk) {
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return (struct cs_buffer){0};
+   }
+
+   struct panvk_priv_mem mem = panvk_pool_alloc_mem(
+      &cmdbuf->cs_pool, (struct panvk_pool_alloc_info){
+                           .size = capacity * sizeof(uint64_t),
+                           .alignment = 64,
+                        });
+   struct panvk_priv_bo *bo = panvk_priv_mem_bo(mem);
+   if (!bo) {
+      (void)util_dynarray_pop_ptr(&cmdbuf->cs_chunks, struct panvk_cs_chunk);
+      vk_command_buffer_set_error(
+         &cmdbuf->vk,
+         panvk_catch_indirect_alloc_failure(VK_ERROR_OUT_OF_DEVICE_MEMORY));
+      return (struct cs_buffer){0};
+   }
+
+   *chunk = (struct panvk_cs_chunk){
+      .bo = bo,
+      .gpu = panvk_priv_mem_dev_addr(mem),
+      .offset = mem.offset,
+      .size = capacity * sizeof(uint64_t),
+   };
 
    return (struct cs_buffer){
-      .cpu = ptr.cpu,
-      .gpu = ptr.gpu,
+      .cpu = panvk_priv_mem_host_addr(mem),
+      .gpu = chunk->gpu,
       .capacity = capacity,
    };
+}
+
+static struct cs_buffer
+alloc_cs_buffer(void *cookie)
+{
+   return alloc_cs_chunk(cookie, 64 * 1024 / sizeof(uint64_t));
+}
+
+/* Every chunk was 64 KiB, so each subqueue a command buffer touched cost a
+ * 64 KiB slab however little it recorded. The first chunk of a stream is
+ * cmdbuf_opt.cs_chunk_min_B and each next one twice the chunk it follows,
+ * up to 64 KiB, always big enough for the sequence that needs it. Small
+ * chunks share the CS pool's 64 KiB slabs.
+ */
+static struct cs_buffer
+alloc_cs_buffer_sized(struct cs_builder *b, void *cookie, uint32_t min_instrs)
+{
+   struct panvk_cmd_buffer *cmdbuf = cookie;
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const uint32_t max_B = 64 * 1024;
+   uint32_t size_B = dev->cmdbuf_opt.cs_chunk_min_B;
+
+   if (b->cur_chunk.buffer.cpu)
+      size_B = MAX2(size_B, MIN2(max_B, b->cur_chunk.buffer.capacity * 2 *
+                                           (uint32_t)sizeof(uint64_t)));
+   size_B =
+      MAX2(size_B, ALIGN_POT(min_instrs * (uint32_t)sizeof(uint64_t), 64));
+
+   return alloc_cs_chunk(cmdbuf, size_B / sizeof(uint64_t));
 }
 
 static enum cs_reg_perm
@@ -815,7 +1407,7 @@ cs_reg_perm(struct cs_builder *b, unsigned reg)
 }
 
 static void
-init_cs_builders(struct panvk_cmd_buffer *cmdbuf)
+init_cs_builder(struct panvk_cmd_buffer *cmdbuf, uint32_t i)
 {
    struct panvk_physical_device *phys_dev =
       to_panvk_physical_device(cmdbuf->vk.base.device->physical);
@@ -827,9 +1419,9 @@ init_cs_builders(struct panvk_cmd_buffer *cmdbuf)
    };
 
    const struct drm_panthor_csif_info *csif_info =
-      panthor_kmod_get_csif_props(dev->kmod.dev);
+      panvk_get_csif_props(dev);
 
-   for (uint32_t i = 0; i < ARRAY_SIZE(cmdbuf->state.cs); i++) {
+   {
       struct cs_builder *b = &cmdbuf->state.cs[i].builder;
       /* Lazy allocation of the root CS. */
       struct cs_buffer root_cs = {0};
@@ -840,6 +1432,9 @@ init_cs_builders(struct panvk_cmd_buffer *cmdbuf)
          .compute_ep_limit =
             PAN_ARCH >= 12 ? phys_dev->kmod.dev->props.max_tasks_per_core : 0,
          .alloc_buffer = alloc_cs_buffer,
+         .alloc_buffer_sized = dev->cmdbuf_opt.cs_chunk_min_B < 64 * 1024
+                                  ? alloc_cs_buffer_sized
+                                  : NULL,
          .cookie = cmdbuf,
          .ls_sb_slot = SB_ID(LS),
       };
@@ -864,6 +1459,71 @@ init_cs_builders(struct panvk_cmd_buffer *cmdbuf)
 }
 
 static void
+init_cs_builders(struct panvk_cmd_buffer *cmdbuf)
+{
+   for (uint32_t i = 0; i < ARRAY_SIZE(cmdbuf->state.cs); i++)
+      init_cs_builder(cmdbuf, i);
+}
+
+/* A secondary cannot split the render context it inherits. An
+ * attachment-less one whose rasterizationSamples changes ends its CS segment
+ * here and the primary splits the context between the segments
+ * (CmdExecuteCommands). Must not be called inside a CS block.
+ */
+void
+panvk_per_arch(cmd_cut_vmr_segment)(struct panvk_cmd_buffer *cmdbuf)
+{
+   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+
+   /* The primary's context split between segments moves its sync points:
+    * the next segment must not carry relative ones across it.
+    */
+   flush_sync_points(cmdbuf);
+
+   struct panvk_vmr_segment *seg =
+      util_dynarray_grow(&cmdbuf->vmr_segs, struct panvk_vmr_segment, 1);
+   if (!seg) {
+      vk_command_buffer_set_error(&cmdbuf->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
+      return;
+   }
+   memset(seg, 0, sizeof(*seg));
+   seg->samples = cmdbuf->state.gfx.render.vmr_samples;
+
+   for (uint32_t i = 0; i < ARRAY_SIZE(cmdbuf->state.cs); i++) {
+      struct cs_builder *b = panvk_get_cs_builder(cmdbuf, i);
+
+      assert(!b->blocks.stack);
+      /* An empty stream just carries over to the next segment. */
+      if (cs_is_empty(b))
+         continue;
+
+      /* Like finish_cs(): the primary's code after the call does not know
+       * this stream's pending loads.
+       */
+      cs_wait_slots(b, dev->csf.sb.all_mask);
+      cs_chunk_note_end(cmdbuf, b);
+      cs_end(b);
+      if (!cs_is_valid(b)) {
+         vk_command_buffer_set_error(&cmdbuf->vk,
+                                     VK_ERROR_OUT_OF_DEVICE_MEMORY);
+         return;
+      }
+
+      seg->addr[i] = cs_root_chunk_gpu_addr(b);
+      seg->size[i] = cs_root_chunk_size(b);
+      seg->req_resource_mask[i] = b->req_resource_mask;
+      cs_builder_fini(b);
+      init_cs_builder(cmdbuf, i);
+   }
+
+   /* The primary's context emission runs between the segments: re-emit
+    * all the draw state in the next one.
+    */
+   vk_dynamic_graphics_state_dirty_all(&cmdbuf->vk.dynamic_graphics_state);
+   gfx_state_set_all_dirty(cmdbuf);
+}
+
+static void
 panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
                    VkCommandBufferResetFlags flags)
 {
@@ -874,6 +1534,10 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
 
    vk_command_buffer_reset(&cmdbuf->vk);
+
+   /* Not pending any more: BC timestamps are final. */
+   panvk_per_arch(cmd_bc_release)(cmdbuf);
+   dev_tls_release(cmdbuf);
 
    panvk_pool_reset(&cmdbuf->cs_pool);
    panvk_pool_reset(&cmdbuf->desc_pool);
@@ -891,6 +1555,8 @@ panvk_reset_cmdbuf(struct vk_command_buffer *vk_cmdbuf,
       cs_builder_fini(&cmdbuf->state.cs[i].builder);
 
    memset(&cmdbuf->state, 0, sizeof(cmdbuf->state));
+   util_dynarray_clear(&cmdbuf->vmr_segs);
+   util_dynarray_clear(&cmdbuf->cs_chunks);
    init_cs_builders(cmdbuf);
 }
 
@@ -909,6 +1575,13 @@ panvk_destroy_cmdbuf(struct vk_command_buffer *vk_cmdbuf)
    for (uint32_t i = 0; i < ARRAY_SIZE(cmdbuf->state.cs); i++)
       cs_builder_fini(&cmdbuf->state.cs[i].builder);
 
+   panvk_per_arch(cmd_bc_release)(cmdbuf);
+   dev_tls_release(cmdbuf);
+   util_dynarray_fini(&cmdbuf->dev_tls_refs);
+   util_dynarray_fini(&cmdbuf->bc_timing);
+   util_dynarray_fini(&cmdbuf->bc_raw_refs);
+   util_dynarray_fini(&cmdbuf->vmr_segs);
+   util_dynarray_fini(&cmdbuf->cs_chunks);
    panvk_pool_cleanup(&cmdbuf->cs_pool);
    panvk_pool_cleanup(&cmdbuf->desc_pool);
    panvk_pool_cleanup(&cmdbuf->tls_pool);
@@ -967,9 +1640,11 @@ panvk_create_cmdbuf(struct vk_command_pool *vk_pool, VkCommandBufferLevel level,
    panvk_pool_init(&cmdbuf->desc_pool, device, &pool->desc_bo_pool, NULL,
                    &desc_pool_props);
 
+   /* WLS: workgroup memory is undefined at dispatch start (zero-init is
+    * lowered in the shader), and pooled slabs are reused uncleared. */
    struct panvk_pool_properties tls_pool_props = {
-      .create_flags =
-         panvk_device_adjust_bo_flags(device, PAN_KMOD_BO_FLAG_NO_MMAP),
+      .create_flags = panvk_device_adjust_bo_flags(
+         device, PAN_KMOD_BO_FLAG_NO_MMAP | PAN_KMOD_BO_FLAG_NO_ZERO),
       .slab_size = 64 * 1024,
       .label = "TLS pool",
       .prealloc = false,
@@ -1070,6 +1745,12 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
             break;
          }
       }
+      if (UINT64_MAX - primary->state.tiler_work_estimate <
+          secondary->state.tiler_work_estimate)
+         primary->state.tiler_work_estimate = UINT64_MAX;
+      else
+         primary->state.tiler_work_estimate +=
+            secondary->state.tiler_work_estimate;
 
       /* make sure the CS context is setup properly
        * to inherit the primary command buffer state
@@ -1077,7 +1758,12 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
       primary->state.tls.info.tls.size =
          MAX2(primary->state.tls.info.tls.size,
               secondary->state.tls.info.tls.size);
-      panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(primary, secondary);
+      const struct panvk_vmr_segment *segs = secondary->vmr_segs.data;
+      const uint32_t seg_count = util_dynarray_num_elements(
+         &secondary->vmr_segs, struct panvk_vmr_segment);
+      panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(
+         primary, secondary,
+         seg_count ? segs[0].samples : secondary->state.gfx.render.vmr_samples);
 
       /* Write the conditional rendering flag into the subqueue context
        * for inherited secondaries. The secondary's draws load from this
@@ -1086,7 +1772,7 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
       if (secondary->state.cond_render.inherited) {
          for (uint32_t j = 0; j < ARRAY_SIZE(primary->state.cs); j++) {
             struct cs_builder *sec_b = panvk_get_cs_builder(secondary, j);
-            if (cs_is_empty(sec_b))
+            if (cs_is_empty(sec_b) && !seg_count)
                continue;
 
             struct cs_builder *prim_b = panvk_get_cs_builder(primary, j);
@@ -1128,6 +1814,35 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
          }
       }
 
+      /* Segments of an attachment-less secondary, each run in a context
+       * with its sample count (cmd_cut_vmr_segment). The context work
+       * moves the primary's sync points: flush them before each call.
+       */
+      for (uint32_t s = 0; s < seg_count; s++) {
+         const struct panvk_vmr_segment *seg = segs + s;
+
+         if (s > 0)
+            panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(primary, secondary,
+                                                           seg->samples);
+         flush_sync_points(primary);
+         for (uint32_t j = 0; j < ARRAY_SIZE(primary->state.cs); j++) {
+            if (!seg->size[j])
+               continue;
+
+            struct cs_builder *prim_b = panvk_get_cs_builder(primary, j);
+            struct cs_index addr = cs_scratch_reg64(prim_b, 0);
+            struct cs_index size = cs_scratch_reg32(prim_b, 2);
+            cs_move64_to(prim_b, addr, seg->addr[j]);
+            cs_move32_to(prim_b, size, seg->size[j]);
+            cs_call(prim_b, addr, size);
+            prim_b->req_resource_mask |= seg->req_resource_mask[j];
+         }
+      }
+      if (seg_count)
+         panvk_per_arch(cmd_prepare_exec_cmd_for_draws)(
+            primary, secondary, secondary->state.gfx.render.vmr_samples);
+      flush_sync_points(primary);
+
       for (uint32_t j = 0; j < ARRAY_SIZE(primary->state.cs); j++) {
          struct cs_builder *sec_b = panvk_get_cs_builder(secondary, j);
          assert(cs_is_valid(sec_b));
@@ -1139,7 +1854,17 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
             cs_move32_to(prim_b, size, cs_root_chunk_size(sec_b));
             cs_call(prim_b, addr, size);
             prim_b->req_resource_mask |= sec_b->req_resource_mask;
+         }
 
+         /* The secondary's u_trace covers every segment (cmd_cut_vmr_segment
+          * does not cut it): append it once, after the last call into this
+          * subqueue, also when the last segment is empty and only the
+          * earlier ones were called. */
+         bool called = !cs_is_empty(sec_b);
+         for (uint32_t s = 0; s < seg_count && !called; s++)
+            called = segs[s].size[j] != 0;
+         if (called) {
+            struct cs_builder *prim_b = panvk_get_cs_builder(primary, j);
             struct u_trace *prim_ut = &primary->utrace.uts[j];
             struct u_trace *sec_ut = &secondary->utrace.uts[j];
             u_trace_clone_append(u_trace_begin_iterator(sec_ut),
@@ -1158,6 +1883,18 @@ panvk_per_arch(CmdExecuteCommands)(VkCommandBuffer commandBuffer,
        * begin/end, but the renderpass ends in the primary, the primary can
        * correctly detect that an oq has ended in EndRendering. */
       primary->state.gfx.render.oq = secondary->state.gfx.render.oq;
+
+      /* Same for pipeline statistics queries ended in the secondary. */
+      for (uint32_t p = 0; p < secondary->state.gfx.render.pstats_pending_count;
+           p++) {
+         if (primary->state.gfx.render.pstats_pending_count ==
+             PANVK_PSTATS_MAX_PENDING)
+            panvk_per_arch(cmd_pstats_flush_pending)(primary);
+
+         primary->state.gfx.render.pstats_pending
+            [primary->state.gfx.render.pstats_pending_count++] =
+            secondary->state.gfx.render.pstats_pending[p];
+      }
 
       /* If the render context we passed to the secondary command buffer got
        * invalidated, reset the FB/tiler descs and treat things as if we

@@ -1,0 +1,207 @@
+/*
+ * Copyright © 2026 Collabora, Ltd.
+ * SPDX-License-Identifier: MIT
+ */
+
+#pragma once
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
+struct drm_panthor_csif_info;
+
+struct pan_kmod_dev;
+struct pan_kmod_bo;
+
+struct base_external_resource {
+   uint64_t ext_resource;
+};
+
+#define BASE_JD_DEP_TYPE_DATA 1
+#define BASE_JD_DEP_TYPE_ORDER 2
+
+#define BASE_JD_REQ_FS                 (1u << 0)
+#define BASE_JD_REQ_CS                 (1u << 1)
+#define BASE_JD_REQ_T                  (1u << 2)
+#define BASE_JD_REQ_CF                 (1u << 3)
+#define BASE_JD_REQ_V                  (1u << 4)
+/* Keeps the GPU timestamp counter running while the atom runs (JM). */
+#define BASE_JD_REQ_PERMON             (1u << 7)
+#define BASE_JD_REQ_EXTERNAL_RESOURCES (1u << 8)
+#define BASE_JD_REQ_ONLY_COMPUTE       (1u << 10)
+
+uint64_t kbase_kmod_job_submit(struct pan_kmod_dev *dev, uint64_t jc,
+                              uint32_t core_req, struct pan_kmod_bo **bos,
+                              uint32_t nbo,
+                              struct base_external_resource *ext_res,
+                              uint32_t next_res);
+uint64_t kbase_kmod_job_submit_dep(struct pan_kmod_dev *dev, uint64_t jc,
+                                  uint32_t core_req, struct pan_kmod_bo **bos,
+                                  uint32_t nbo, uint64_t dep0, uint8_t dep0_type,
+                                  uint64_t dep1, uint8_t dep1_type,
+                                  bool no_waiter);
+bool kbase_kmod_job_submit_retry(struct pan_kmod_dev *dev, uint64_t jc,
+                                uint32_t core_req, struct pan_kmod_bo **bos,
+                                uint32_t nbo,
+                                struct base_external_resource *ext_res,
+                                uint32_t next_res, int max_attempts);
+bool kbase_kmod_wait_atom(struct pan_kmod_dev *dev, uint64_t atom_number,
+                         int64_t timeout_ns);
+void kbase_kmod_atom_release(struct pan_kmod_dev *dev, uint64_t atom_num);
+void kbase_kmod_jm_clean_imports(struct pan_kmod_dev *dev);
+/* JM only: track the time with atoms in flight (enable once, for
+ * PANVK_GPU_STATS), and read it in ns. */
+void kbase_kmod_jm_busy_track(struct pan_kmod_dev *dev);
+uint64_t kbase_kmod_jm_busy_ns(struct pan_kmod_dev *dev);
+/* Bytes of the BO backed by pages (a GROW_ON_GPF region commits on GPU page
+ * faults), one KBASE_IOCTL_MEM_QUERY; the BO size off kbase or on error. */
+uint64_t kbase_kmod_bo_committed_size(struct pan_kmod_dev *dev,
+                                      struct pan_kmod_bo *bo);
+struct pan_kmod_bo *kbase_kmod_bo_import_host(struct pan_kmod_dev *dev,
+                                            void *host_ptr, uint64_t size);
+
+/* CSF interface information for a kbase CSF device, presented in the
+ * panthor uAPI layout so CSF-generic code can consume either backend.
+ * Filled from KBASE_IOCTL_CS_GET_GLB_IFACE at device-create time.
+ * Only valid for CSF (arch >= 10) kbase devices.
+ */
+const struct drm_panthor_csif_info *
+kbase_kmod_get_csif_props(const struct pan_kmod_dev *dev);
+
+/* Current LATEST_FLUSH value from the CSF USER register page (the kbase
+ * equivalent of panthor_kmod_get_flush_id()). */
+uint32_t kbase_kmod_get_flush_id(const struct pan_kmod_dev *dev);
+
+/* True when this kbase context can allocate dma-bufs for sharing with WSI. */
+bool kbase_kmod_supports_dmabuf(const struct pan_kmod_dev *dev);
+
+/* CSF queue group / queue / tiler heap primitives (CSF only).
+ *
+ * A queue is a ring buffer in a GPU BO: bind it to a group at a CS index,
+ * mmap the returned USER_IO pages (doorbell / input / output), write CS
+ * instructions into the ring, publish the new insert offset in the input
+ * page and kick.  Progress is visible through CS_EXTRACT / CS_ACTIVE in
+ * the output page.
+ */
+/* tiler_oom_handler: request BASE_CSF_TILER_OOM_EXCEPTION_FLAG (uAPI 1.12+;
+ * ignored on older kernels). */
+int kbase_kmod_csf_group_create(struct pan_kmod_dev *dev,
+                                uint32_t cs_queue_count, bool tiler_oom_handler,
+                                uint32_t *group_handle);
+
+/* kbase counts va_pages, alias lengths and mmap handle offsets in kernel
+ * (CPU) pages: 4 KiB or 16 KiB.  Cached sysconf(_SC_PAGESIZE). */
+uint64_t kbase_kmod_page_size(void);
+
+/* CSF uAPI layouts, named by ioctl size in bytes (public
+ * mali_kbase_csf_ioctl.h, r3x-r5x):
+ *  CS_QUEUE_GROUP_CREATE: 32 = _1_6 (nr 42, all CSF uAPIs),
+ *    40 = _1_18 (nr 58, 1.7+; csi_handlers 1.12+), 112 = current (nr 58,
+ *    1.19+; cs_fault_report_enable 1.25+).
+ *  CS_TILER_HEAP_INIT: 16 = _1_13 (all), 24 = + buf_desc_va (1.14+).
+ * Newer kernels keep the older layouts as compat cases, so the
+ * device-proven layout goes first and the others are tried on
+ * EINVAL/ENOTTY in the order returned. */
+static inline unsigned
+kbase_csf_group_create_layouts(unsigned major, unsigned minor,
+                               unsigned out[3])
+{
+   const unsigned v = major * 1000 + minor;
+   unsigned n = 0;
+
+   if (v >= 1025)
+      out[n++] = 112;
+   out[n++] = 32;
+   if (v >= 1019 && v < 1025)
+      out[n++] = 112;
+   if (v >= 1007)
+      out[n++] = 40;
+   return n;
+}
+
+static inline unsigned
+kbase_csf_tiler_heap_init_layouts(unsigned major, unsigned minor,
+                                  unsigned out[2])
+{
+   unsigned n = 0;
+
+   out[n++] = 16;
+   if (major * 1000 + minor >= 1014)
+      out[n++] = 24;
+   return n;
+}
+void kbase_kmod_csf_group_destroy(struct pan_kmod_dev *dev,
+                                  uint32_t group_handle);
+
+/* Registers and binds the ring buffer at ringbuf_va; returns the mmap()ed
+ * USER_IO pages (BASEP_QUEUE_NR_MMAP_USER_PAGES) or NULL on failure. */
+void *kbase_kmod_csf_queue_bind(struct pan_kmod_dev *dev,
+                                uint32_t group_handle, uint32_t csi_index,
+                                uint64_t ringbuf_va, uint32_t ringbuf_size);
+void kbase_kmod_csf_queue_term(struct pan_kmod_dev *dev, uint64_t ringbuf_va,
+                               void *user_io);
+int kbase_kmod_csf_queue_kick(struct pan_kmod_dev *dev, uint64_t ringbuf_va);
+
+/* Block (up to timeout_ns) until the kernel has a CSF notification, then
+ * consume one notification with read().  Lets the kernel event/OOM/
+ * scheduler path make progress while userspace waits for completion.
+ * Returns 0 on success (event consumed or timeout), -1 on error. */
+int kbase_kmod_csf_wait_event(struct pan_kmod_dev *dev, int64_t timeout_ns);
+
+/* Wait for a 64-bit CSF event object to become greater than target_minus_one
+ * using a kernel CPU queue and a sync_file fence.  The event address must
+ * refer to a 16-byte-aligned BASE_MEM_CSF_EVENT allocation.  Returns 1 when
+ * satisfied, 0 on timeout, and -1 when the path is unavailable so callers can
+ * retain their notification/read fallback. */
+int kbase_kmod_csf_wait_cqs64(struct pan_kmod_dev *dev, uint64_t addr,
+                              uint64_t target_minus_one,
+                              int64_t timeout_ns);
+
+int kbase_kmod_csf_export_cqs64_fence(struct pan_kmod_dev *dev,
+                                      const uint64_t *addrs,
+                                      const uint64_t *targets_minus_one,
+                                      unsigned count);
+
+/* Report whether this kbase context has seen a queue-group error.  The error
+ * state is latched while completion waits consume the notification stream. */
+bool kbase_kmod_csf_has_error(const struct pan_kmod_dev *dev);
+
+int kbase_kmod_csf_tiler_heap_create(struct pan_kmod_dev *dev,
+                                     uint32_t chunk_size,
+                                     uint32_t initial_chunks,
+                                     uint32_t max_chunks,
+                                     uint32_t target_in_flight,
+                                     uint32_t mem_group_id,
+                                     uint64_t *heap_ctx_va,
+                                     uint64_t *first_chunk_va);
+void kbase_kmod_csf_tiler_heap_destroy(struct pan_kmod_dev *dev,
+                                       uint64_t heap_ctx_va);
+
+/* Map a (GPU-cached, SAME_VA) BO `nents` times back-to-back at a single
+ * VA using KBASE_IOCTL_MEM_ALIAS — the kbase substitute for mapping one
+ * BO at several chosen addresses (used for wraparound ring buffers).
+ * The kernel picks the address (kbase rejects address hints); the
+ * mapping is guaranteed not to cross a 4G boundary.  Returns the base VA
+ * of the repeated mapping (CPU == GPU), or 0 on failure.  Release with
+ * kbase_kmod_alias_destroy(). */
+uint64_t kbase_kmod_alias_create(struct pan_kmod_dev *dev, uint64_t bo_va,
+                                 uint64_t size, uint32_t nents);
+void kbase_kmod_alias_destroy(struct pan_kmod_dev *dev, uint64_t va,
+                              uint64_t size, uint32_t nents);
+
+/* Marks a native, fully committed BO evictable (BASE_MEM_DONT_NEED): under
+ * memory pressure the kernel may take its pages. Neither the CPU nor the GPU
+ * may touch it until kbase_kmod_bo_set_evictable(bo, false) returns 0, which
+ * means the region is needed again and every page is backed (the contents
+ * are undefined if the pages were taken). Returns 0 or a negative errno;
+ * on failure to clear the flag, free the BO. Not for imported or aliased
+ * BOs. */
+int kbase_kmod_bo_set_evictable(struct pan_kmod_bo *bo, bool evictable);
+
+#if defined(__cplusplus)
+} // extern "C"
+#endif

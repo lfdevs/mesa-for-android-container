@@ -44,6 +44,11 @@
 #include "pan_trace.h"
 #include "perf/mali_perf.h"
 
+/* Maximum number of /dev/mali* device nodes to probe. */
+#if defined(HAVE_PAN_KMOD_KBASE)
+#define PAN_KBASE_MAX_NODES 8
+#endif
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -130,6 +135,16 @@ enum pan_kmod_bo_flags {
     * the KMD to force non-coherent mappings on IO coherent setup.
     */
    PAN_KMOD_BO_FLAG_IO_COHERENT = BITFIELD_BIT(7),
+
+   /* kbase CSF event memory monitored for cross-CSG synchronization. */
+   PAN_KMOD_BO_FLAG_CSF_EVENT = BITFIELD_BIT(8),
+
+   /* kbase: leave the committed pages as the kernel hands them out instead
+    * of clearing them in user space. Pages come zeroed from the kernel and
+    * the device pool; only pages this context freed come back with their
+    * old contents, so a BO never sees another process's data.
+    */
+   PAN_KMOD_BO_FLAG_NO_ZERO = BITFIELD_BIT(9),
 };
 
 /* Allowed group priority flags. */
@@ -454,6 +469,9 @@ struct pan_kmod_perf_session {
  * optional.
  */
 struct pan_kmod_ops {
+   /* The backend uses synchronization outside the syncobj provider API. */
+   bool no_syncobj;
+
    /* Create a pan_kmod_dev object.
     * Return NULL if the creation fails for any reason.
     */
@@ -492,8 +510,22 @@ struct pan_kmod_ops {
    /* Map the buffer object to device memory. */
    void *(*bo_mmap)(struct pan_kmod_bo *bo, int prot, int flags, void *host_addr);
 
+   /* Unmap a CPU mapping previously returned by pan_kmod_bo_mmap().
+    * This method is optional. When missing, munmap() is called directly.
+    * Backends where the CPU mapping is owned by the BO (kbase SAME_VA)
+    * implement this as a no-op and tear the mapping down at bo_free time.
+    * Returns 0 on success, -1 otherwise.
+    */
+   int (*bo_munmap)(struct pan_kmod_bo *bo, void *host_addr, size_t size);
+
    /* Flush the pending BO map syncs. */
    int (*flush_bo_map_syncs)(struct pan_kmod_dev *dev);
+
+   /* Tell the kernel a CPU-side CSF event word changed, so a CSG evicted
+    * while waiting on it gets re-evaluated. Optional: NULL on backends that
+    * share one CSG and do not need the notification. Returns 0 or -1.
+    */
+   int (*cs_event_signal)(struct pan_kmod_dev *dev);
 
    /* Wait for a buffer object to be ready for read or read/write accesses. */
    bool (*bo_wait)(struct pan_kmod_bo *bo, int64_t timeout_ns,
@@ -633,6 +665,12 @@ struct pan_kmod_dev *
 pan_kmod_dev_create(int fd, uint32_t flags,
                     const struct pan_kmod_allocator *allocator);
 
+struct pan_kmod_dev *
+pan_kmod_dev_create_with_driver(int fd, uint32_t flags,
+                                const char *driver_name,
+                                const struct pan_kmod_driver *driver,
+                                const struct pan_kmod_allocator *allocator);
+
 void pan_kmod_dev_destroy(struct pan_kmod_dev *dev);
 
 static inline struct pan_kmod_va_range
@@ -749,6 +787,20 @@ pan_kmod_bo_mmap(struct pan_kmod_bo *bo, int prot, int flags, void *host_addr)
    return host_addr;
 }
 
+/* Unmap a CPU mapping obtained from pan_kmod_bo_mmap(). Callers must use
+ * this instead of munmap()/os_munmap(): on some backends (kbase SAME_VA)
+ * unmapping would destroy the GPU mapping too, so the backend keeps the
+ * mapping alive until the BO is freed.
+ */
+static inline int
+pan_kmod_bo_munmap(struct pan_kmod_bo *bo, void *host_addr, size_t size)
+{
+   if (bo->dev->ops->bo_munmap)
+      return bo->dev->ops->bo_munmap(bo, host_addr, size);
+
+   return os_munmap(host_addr, size);
+}
+
 static inline bool
 pan_kmod_can_sync_bo_map_from_userland(struct pan_kmod_dev *dev)
 {
@@ -761,6 +813,15 @@ void pan_kmod_queue_bo_map_sync(struct pan_kmod_bo *bo, uint64_t bo_offset,
                                 enum pan_kmod_bo_sync_type type);
 
 void pan_kmod_flush_bo_map_syncs(struct pan_kmod_dev *dev);
+
+/* Notify the kernel that a CPU write to CSF event memory may have satisfied
+ * a SYNC_WAIT. Returns 0 when the backend has nothing to do or the signal
+ * was delivered, -1 when the backend reports a failure.
+ *
+ * Not inline: at -O3 a static inline sees a NULL slot on every backend the
+ * compiler can prove and deletes the call, so kbase never gets the ioctl.
+ */
+int pan_kmod_cs_event_signal(struct pan_kmod_dev *dev);
 
 static inline void
 pan_kmod_set_bo_label(struct pan_kmod_dev *dev, struct pan_kmod_bo *bo, const char *label)
@@ -835,7 +896,7 @@ pan_kmod_get_dummy_object(struct pan_kmod_vm *vm)
    simple_mtx_lock(&vm->sparse_dummy.lock);
 
    if (!vm->sparse_dummy.bo) {
-      struct pan_kmod_bo *bo = pan_kmod_bo_alloc(vm->dev, vm, PAN_PGSIZE_2M,
+      struct pan_kmod_bo *bo = pan_kmod_bo_alloc(vm->dev, NULL, PAN_PGSIZE_2M,
                                                  PAN_KMOD_BO_FLAG_NO_MMAP);
       if (!bo)
          goto dummy_exit;
@@ -1132,7 +1193,7 @@ pan_kmod_sync_clone(const struct pan_kmod_dev *dev)
 {
    struct util_sync_provider *sync_ops = dev->sync_ops;
 
-   return sync_ops->clone(sync_ops);
+   return sync_ops ? sync_ops->clone(sync_ops) : NULL;
 }
 
 #if defined(__cplusplus)

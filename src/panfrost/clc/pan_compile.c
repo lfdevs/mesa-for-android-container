@@ -61,7 +61,8 @@ optimize(nir_shader *nir)
       progress = false;
 
       NIR_PASS(progress, nir, nir_split_var_copies);
-      NIR_PASS(progress, nir, nir_split_struct_vars, nir_var_function_temp);
+      if (nir->info.stage == MESA_SHADER_KERNEL)
+         NIR_PASS(progress, nir, nir_split_struct_vars, nir_var_function_temp);
       NIR_PASS(progress, nir, nir_lower_var_copies);
       NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
 

@@ -780,8 +780,10 @@ bi_reads_t(bi_instr *ins, unsigned src)
    case BI_OPCODE_ST_TILE:
    case BI_OPCODE_TEXC:
    case BI_OPCODE_TEXC_DUAL:
-      return src != 2;
    case BI_OPCODE_BLEND:
+      /* The descriptor is src 3 behind a staging source (ST_CVT, ST_TILE,
+       * TEXC): a same-tuple FMA result there is an invalid encoding
+       * (INSTR_INVALID_ENC). src 2 stays excluded as before. */
       return src != 2 && src != 3;
 
    /* +JUMP can't read the offset from T */

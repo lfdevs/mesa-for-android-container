@@ -257,9 +257,12 @@ is_supported_mutable_type(VkDescriptorType t)
       case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
       case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
       case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
          return true;
+      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+         /* v6/v7: UBOs go through the per-draw UBO table, a mutable binding
+          * is bindless (jm-v7 050). */
+         return PAN_ARCH >= 9;
       default:
          return false;
    }

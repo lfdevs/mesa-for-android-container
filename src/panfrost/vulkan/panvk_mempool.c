@@ -10,11 +10,233 @@
 
 #include "kmod/pan_kmod.h"
 
+#include "util/log.h"
+#include "util/os_time.h"
+
+#include <string.h>
+
 void
 panvk_bo_pool_cleanup(struct panvk_bo_pool *bo_pool)
 {
    list_for_each_entry_safe(struct panvk_priv_bo, bo, &bo_pool->free_bos,
                             node) {
+      list_del(&bo->node);
+      panvk_priv_bo_unref(bo);
+   }
+}
+
+void
+panvk_slab_cache_init(struct panvk_slab_cache *cache, uint64_t window_ns,
+                      uint32_t evict_windows)
+{
+   memset(cache, 0, sizeof(*cache));
+   simple_mtx_init(&cache->lock, mtx_plain);
+   list_inithead(&cache->bos);
+   list_inithead(&cache->evict_bos);
+   cache->window_ns = window_ns;
+   cache->window_start_ns = os_time_get_nano();
+#ifdef HAVE_PAN_KMOD_KBASE
+   cache->evict_windows = evict_windows;
+#endif
+}
+
+void
+panvk_slab_cache_finish(struct panvk_slab_cache *cache)
+{
+   list_for_each_entry_safe(struct panvk_priv_bo, bo, &cache->bos, node) {
+      list_del(&bo->node);
+      p_atomic_dec(&panvk_mem_stats.slab_cache_count);
+      p_atomic_add(&panvk_mem_stats.slab_cache_B,
+                   -(int64_t)pan_kmod_bo_size(bo->bo));
+      panvk_priv_bo_unref(bo);
+   }
+   /* kbase frees evictable regions like any other. */
+   list_for_each_entry_safe(struct panvk_priv_bo, bo, &cache->evict_bos,
+                            node) {
+      list_del(&bo->node);
+      p_atomic_dec(&panvk_mem_stats.slab_evict_count);
+      p_atomic_add(&panvk_mem_stats.slab_evict_B,
+                   -(int64_t)pan_kmod_bo_size(bo->bo));
+      panvk_priv_bo_unref(bo);
+   }
+   simple_mtx_destroy(&cache->lock);
+}
+
+static struct panvk_priv_bo *
+panvk_slab_cache_take(struct panvk_slab_cache *cache)
+{
+   struct panvk_priv_bo *bo = NULL;
+   bool evictable = false;
+
+   simple_mtx_lock(&cache->lock);
+   if (cache->count) {
+      bo = list_last_entry(&cache->bos, struct panvk_priv_bo, node);
+      list_del(&bo->node);
+      cache->count--;
+      cache->low = MIN2(cache->low, cache->count);
+   } else if (cache->evict_count) {
+      bo = list_last_entry(&cache->evict_bos, struct panvk_priv_bo, node);
+      list_del(&bo->node);
+      cache->evict_count--;
+      evictable = true;
+   }
+   simple_mtx_unlock(&cache->lock);
+
+   if (!bo)
+      return NULL;
+
+   const int64_t size = pan_kmod_bo_size(bo->bo);
+
+   if (evictable) {
+      p_atomic_dec(&panvk_mem_stats.slab_evict_count);
+      p_atomic_add(&panvk_mem_stats.slab_evict_B, -size);
+#ifdef HAVE_PAN_KMOD_KBASE
+      /* Needed again and fully backed, or freed. */
+      if (kbase_kmod_bo_set_evictable(bo->bo, false)) {
+         p_atomic_inc(&panvk_mem_stats.slab_evict_lost);
+         panvk_priv_bo_unref(bo);
+         return NULL;
+      }
+#endif
+      p_atomic_inc(&panvk_mem_stats.slab_evict_reused);
+   } else {
+      p_atomic_dec(&panvk_mem_stats.slab_cache_count);
+      p_atomic_add(&panvk_mem_stats.slab_cache_B, -size);
+   }
+
+   p_atomic_inc(&panvk_mem_stats.slab_cache_hits);
+   return bo;
+}
+
+#ifdef HAVE_PAN_KMOD_KBASE
+/* Marks the slabs on drop evictable and moves them to the cache's evict
+ * list, outside the cache lock (FLAGS_CHANGE takes the mm write lock). The
+ * first refusal turns marking off for the cache. Returns the slabs moved.
+ */
+static unsigned
+panvk_slab_cache_mark(struct panvk_slab_cache *cache, struct list_head *drop,
+                      uint32_t window)
+{
+   struct list_head marked;
+   unsigned n = 0;
+   uint64_t n_B = 0;
+   int ret = 0;
+
+   list_inithead(&marked);
+   list_for_each_entry_safe(struct panvk_priv_bo, bo, drop, node) {
+      ret = kbase_kmod_bo_set_evictable(bo->bo, true);
+      if (ret)
+         break;
+
+      list_del(&bo->node);
+      list_addtail(&bo->node, &marked);
+      bo->cache_window = window;
+      n_B += pan_kmod_bo_size(bo->bo);
+      n++;
+   }
+
+   simple_mtx_lock(&cache->lock);
+   list_splicetail(&marked, &cache->evict_bos);
+   cache->evict_count += n;
+   if (ret)
+      cache->evict_windows = 0;
+   simple_mtx_unlock(&cache->lock);
+
+   if (ret) {
+      mesa_logw("panvk: BASE_MEM_DONT_NEED refused (%s), command buffer "
+                "slabs are freed instead",
+                strerror(-ret));
+   }
+
+   p_atomic_add(&panvk_mem_stats.slab_evict_count, n);
+   p_atomic_add(&panvk_mem_stats.slab_evict_B, n_B);
+   return n;
+}
+#endif
+
+void
+panvk_bo_pool_give_to_cache(struct panvk_bo_pool *bo_pool, unsigned keep)
+{
+   struct panvk_slab_cache *cache = bo_pool->cache;
+   struct list_head give, drop, expired;
+   unsigned have = list_length(&bo_pool->free_bos), given = 0, dropped = 0;
+   uint64_t given_B = 0, dropped_B = 0;
+   uint32_t window = 0, evict_windows = 0;
+
+   list_inithead(&give);
+   list_inithead(&drop);
+   list_inithead(&expired);
+   for (; have > keep; have--, given++) {
+      struct panvk_priv_bo *bo =
+         list_first_entry(&bo_pool->free_bos, struct panvk_priv_bo, node);
+      list_del(&bo->node);
+      list_addtail(&bo->node, &give);
+      given_B += pan_kmod_bo_size(bo->bo);
+   }
+
+   const uint64_t now = os_time_get_nano();
+
+   simple_mtx_lock(&cache->lock);
+   list_splicetail(&give, &cache->bos);
+   cache->count += given;
+   cache->high = MAX2(cache->high, cache->count);
+
+   if (now - cache->window_start_ns >= cache->window_ns) {
+      /* With takes from the tail, the low oldest slabs were not used in
+       * this window. */
+      const uint32_t margin = MAX2((cache->high - cache->low) / 4, 2);
+      uint32_t idle = MIN2(cache->low, cache->count);
+
+      for (; idle > margin; idle--, dropped++) {
+         struct panvk_priv_bo *bo =
+            list_first_entry(&cache->bos, struct panvk_priv_bo, node);
+         list_del(&bo->node);
+         list_addtail(&bo->node, &drop);
+         dropped_B += pan_kmod_bo_size(bo->bo);
+      }
+
+      cache->count -= dropped;
+      cache->low = cache->high = cache->count;
+      cache->window_start_ns = now;
+      window = ++cache->window_seq;
+      evict_windows = cache->evict_windows;
+
+      /* Evictable slabs nobody took in evict_windows windows; the list is
+       * in marking order. */
+      list_for_each_entry_safe(struct panvk_priv_bo, bo, &cache->evict_bos,
+                               node) {
+         if (window - bo->cache_window < cache->evict_windows)
+            break;
+
+         list_del(&bo->node);
+         list_addtail(&bo->node, &expired);
+         cache->evict_count--;
+      }
+   }
+   simple_mtx_unlock(&cache->lock);
+
+   p_atomic_add(&panvk_mem_stats.slab_cache_count,
+                (int64_t)given - (int64_t)dropped);
+   p_atomic_add(&panvk_mem_stats.slab_cache_B,
+                (int64_t)given_B - (int64_t)dropped_B);
+
+#ifdef HAVE_PAN_KMOD_KBASE
+   if (evict_windows && dropped)
+      panvk_slab_cache_mark(cache, &drop, window);
+#endif
+
+   list_for_each_entry_safe(struct panvk_priv_bo, bo, &expired, node) {
+      p_atomic_dec(&panvk_mem_stats.slab_evict_count);
+      p_atomic_add(&panvk_mem_stats.slab_evict_B,
+                   -(int64_t)pan_kmod_bo_size(bo->bo));
+      list_del(&bo->node);
+      list_addtail(&bo->node, &drop);
+   }
+
+   list_for_each_entry_safe(struct panvk_priv_bo, bo, &drop, node) {
+      p_atomic_inc(&panvk_mem_stats.slab_cache_freed_bos);
+      p_atomic_add(&panvk_mem_stats.slab_cache_freed_B,
+                   pan_kmod_bo_size(bo->bo));
       list_del(&bo->node);
       panvk_priv_bo_unref(bo);
    }
@@ -48,7 +270,12 @@ panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
          list_first_entry(&pool->bo_pool->free_bos, struct panvk_priv_bo, node);
       list_del(&bo->node);
    } else {
-      if (pool->big_bo_pool) {
+      /* Else an idle slab of the same kind from the device cache. */
+      if (pool->bo_pool && pool->bo_pool->cache &&
+          bo_sz == pool->base.slab_size)
+         bo = panvk_slab_cache_take(pool->bo_pool->cache);
+
+      if (bo == NULL && pool->big_bo_pool) {
          list_for_each_entry_safe(struct panvk_priv_bo, pooled_bo,
                                   &pool->big_bo_pool->free_bos, node) {
             const size_t picked_bo_sz = pan_kmod_bo_size(pooled_bo->bo);
@@ -69,8 +296,8 @@ panvk_pool_alloc_backing(struct panvk_pool *pool, size_t sz)
           * fragment/vertex+tiler pools separate.
           */
          VkResult result =
-            panvk_priv_bo_create(pool->dev, bo_sz, pool->props.create_flags,
-                                 VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo);
+            panvk_priv_bo_create_pool(pool, bo_sz, pool->props.create_flags,
+                                      VK_SYSTEM_ALLOCATION_SCOPE_DEVICE, &bo);
 
          /* Pool allocations are indirect, meaning there's no VkResult returned
           * and no way for the caller to know why the device memory allocation
@@ -262,17 +489,49 @@ panvk_pool_get_bo_handles(struct panvk_pool *pool, uint32_t *handles)
 }
 
 void
+panvk_pool_get_bos(struct panvk_pool *pool, struct pan_kmod_bo **bos)
+{
+   unsigned idx = 0;
+
+   list_for_each_entry(struct panvk_priv_bo, bo, &pool->bos, node)
+      bos[idx++] = bo->bo;
+
+   list_for_each_entry(struct panvk_priv_bo, bo, &pool->big_bos, node)
+      bos[idx++] = bo->bo;
+}
+
+void
 panvk_pool_flush_maps(struct panvk_pool *pool)
 {
    /* Don't walk the buffers if we know the synchronization is not needed. */
    if (!(pool->props.create_flags & PAN_KMOD_BO_FLAG_WB_MMAP))
       return;
 
-   list_for_each_entry(struct panvk_priv_bo, bo, &pool->bos, node)
-      panvk_priv_bo_flush(bo, 0, bo->bo->size);
+   /* csf-v11 221: the transient BO is used only up to transient_offset,
+    * so its unused tail is not flushed. Other BOs have no used-size record
+    * and are flushed whole. PANVK_POOL_FLUSH_FULL=1 flushes everything.
+    */
+   static int full = -1;
+   if (full < 0) {
+      const char *e = getenv("PANVK_POOL_FLUSH_FULL");
+      full = e && e[0] == '1';
+   }
 
-   list_for_each_entry(struct panvk_priv_bo, bo, &pool->big_bos, node)
-      panvk_priv_bo_flush(bo, 0, bo->bo->size);
+   list_for_each_entry(struct panvk_priv_bo, bo, &pool->bos, node) {
+      size_t size = bo->bo->size;
+      if (!full && bo == pool->transient_bo)
+         size = MIN2(ALIGN_POT((size_t)pool->transient_offset, 64), size);
+      if (size)
+         panvk_priv_bo_flush(bo, 0, size);
+   }
+
+   list_for_each_entry(struct panvk_priv_bo, bo, &pool->big_bos, node) {
+      size_t size = bo->bo->size;
+      if (!full && bo == pool->transient_bo)
+         size = MIN2(ALIGN_POT((size_t)pool->transient_offset, 64), size);
+      if (size)
+         panvk_priv_bo_flush(bo, 0, size);
+   }
 }
 
 void

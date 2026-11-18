@@ -35,6 +35,20 @@ enum panvk_debug_flags {
    PANVK_DEBUG_NO_EXTENDED_VA_RANGE = 1 << 17,
    PANVK_DEBUG_HSR_PREPASS = 1 << 18,
    PANVK_DEBUG_NO_CRC = 1 << 19,
+   PANVK_DEBUG_KBASE_DIAG = 1 << 20,
+   PANVK_DEBUG_GPU_PRERAST = 1 << 21,
+   PANVK_DEBUG_NO_BC_EMUL = 1 << 22,
+   PANVK_DEBUG_NO_GS = 1 << 23,
+   PANVK_DEBUG_ROBUST_SSBO_VEC = 1 << 24,
+   PANVK_DEBUG_BC_COMPUTE = 1 << 26,
+   PANVK_DEBUG_BC_WIDE = 1 << 27,
+   PANVK_DEBUG_BC_TIMING = 1 << 29,
+   /* v6/v7: do not expose the tessellation emulation (jm-v7 014). */
+   PANVK_DEBUG_NO_TESS = 1 << 28,
+   /* v6/v7: advertise robustImageAccess2 with no emulation, to measure
+    * what the hardware returns out of bounds (jm-v7 020).
+    */
+   PANVK_DEBUG_RIA2 = 1 << 30,
 };
 
 extern uint64_t panvk_debug;
@@ -42,7 +56,8 @@ extern uint64_t panvk_debug;
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR) || \
     defined(VK_USE_PLATFORM_XCB_KHR) || \
     defined(VK_USE_PLATFORM_XLIB_KHR) || \
-    defined(VK_USE_PLATFORM_DISPLAY_KHR)
+    defined(VK_USE_PLATFORM_DISPLAY_KHR) || \
+    defined(VK_USE_PLATFORM_ANDROID_KHR)
 #define PANVK_USE_WSI_PLATFORM
 #endif
 

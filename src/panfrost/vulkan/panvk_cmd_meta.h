@@ -62,6 +62,15 @@ struct panvk_cmd_meta_graphics_save_ctx {
       struct panvk_shader_desc_state desc;
    } vs;
 
+#if PAN_ARCH >= 9
+   const struct panvk_shader *gs, *tcs, *tes;
+#else
+   /* The emulated geometry shader (jm-v7 007) and the tessellation shaders
+    * (jm-v7 014): meta pipelines bind none.
+    */
+   const struct panvk_shader *gs, *tcs, *tes;
+#endif
+
    struct panvk_occlusion_query_state occlusion_query;
    bool cond_render_enabled;
    bool cond_render_inherited;

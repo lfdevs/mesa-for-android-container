@@ -16,6 +16,8 @@
 #include "pan_shader.h"
 #include "pan_nir.h"
 
+#include "util/u_debug.h"
+
 PRAGMA_DIAGNOSTIC_PUSH
 PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 struct panvk_frame_shader_key {
@@ -365,6 +367,8 @@ fill_textures(struct panvk_cmd_buffer *cmdbuf,
       }
 
       struct pan_image_view pview = *iview;
+      if (pview.dim == MALI_TEXTURE_DIMENSION_CUBE)
+         pview.dim = MALI_TEXTURE_DIMENSION_2D;
       if (loc == FRAG_RESULT_DEPTH)
          pview.format = util_format_get_depth_only(pview.format);
       else if (loc == FRAG_RESULT_STENCIL)
@@ -757,12 +761,20 @@ cmd_emit_dcd(struct panvk_cmd_buffer *cmdbuf,
       cfg.maximum_z = 1.0;
       cfg.shader.resources = res_table.gpu | res_table_size;
       cfg.shader.shader = panvk_priv_mem_dev_addr(shader->spd);
+#if PAN_ARCH >= 10
       cfg.shader.thread_storage = cmdbuf->state.gfx.tsd;
+#else
+      cfg.shader.thread_storage = 0;
+#endif
       cfg.shader.fau_count = sizeof(struct panvk_fb_sysvals) / FAU_WORD_SIZE;
       cfg.shader.fau = faus.gpu;
 #endif
+#if PAN_ARCH >= 10
       cfg.flags_2.write_mask = rt_written;
       cfg.flags_2.read_mask = rt_read;
+#else
+      cfg.flags_1.render_target_mask |= rt_written | rt_read;
+#endif
 #if PAN_ARCH >= 11
       cfg.flags_2.no_shader_depth_read =
          !(locations_read & BITFIELD_BIT(FRAG_RESULT_DEPTH));
@@ -789,6 +801,10 @@ always_load(const struct pan_fb_load *load,
           (pan_fb_shader_key_target_written(&key->key.s) && load->s.always);
 }
 
+#if PAN_ARCH >= 9 && PAN_ARCH <= 11
+DEBUG_GET_ONCE_BOOL_OPTION(zs_preload_always, "PANVK_ZS_PRELOAD_ALWAYS", false)
+#endif
+
 static VkResult
 cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
                            const struct pan_fb_layout *fb,
@@ -813,17 +829,22 @@ cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
    if (result != VK_SUCCESS)
       return result;
 
-   /* We could use INTERSECT on Valhall too, but EARLY_ZS_ALWAYS has the
-    * advantage of reloading the ZS tile buffer one or more tiles ahead,
-    * making ZS data immediately available for any ZS tests taking place in
-    * other shaders.  Thing's haven't been benchmarked to determine what's
-    * preferable (saving bandwidth vs having ZS preloaded earlier), so let's
-    * leave it like that for now.
+   /* EARLY_ZS_ALWAYS reloads the ZS tile buffer one or more tiles ahead,
+    * making ZS data immediately available for ZS tests in other shaders,
+    * but it reads Z/S for every tile, including tiles no primitive touches.
+    * On v9-v11 use INTERSECT, like the colour preload, unless the target
+    * has to be written for empty tiles too (always_load()).
+    * PANVK_ZS_PRELOAD_ALWAYS=1 restores EARLY_ZS_ALWAYS.
     *
     * On v13+, we don't have EARLY_ZS_ALWAYS instead we use PREPASS_ALWAYS.
     */
 #if PAN_ARCH >= 13
    fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_PREPASS_ALWAYS;
+#elif PAN_ARCH >= 9 && PAN_ARCH <= 11
+   fs->modes[dcd_idx] = (always_load(load, &key) ||
+                         debug_get_option_zs_preload_always())
+                        ? MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS
+                        : MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT;
 #elif PAN_ARCH >= 9
    fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
 #else

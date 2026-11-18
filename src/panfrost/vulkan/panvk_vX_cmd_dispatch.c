@@ -64,6 +64,25 @@ panvk_per_arch(cmd_prepare_dispatch_sysvals)(
                             desc_state->sets[i]->descs.dev);
       }
    }
+
+   /* Bindless textures/samplers (jm-v7 050). */
+   {
+      const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+      uint64_t base = panvk_desc_direct_base(dev);
+
+      u_foreach_bit(i, cs_desc_info->used_set_mask) {
+         const struct panvk_descriptor_set *set = desc_state->sets[i];
+
+         set_compute_sysval(cmdbuf, dirty_sysvals, desc.direct_idx[i],
+                            set ? panvk_desc_direct_idx(base, set->descs.dev)
+                                : 0);
+      }
+      set_compute_sysval(cmdbuf, dirty_sysvals, desc.dummy_sampler_idx,
+                         panvk_desc_direct_idx(
+                            base, dev->null_descs.dummy_sampler_addr));
+      set_compute_sysval(cmdbuf, dirty_sysvals, desc.zero_addr,
+                         dev->null_descs.zero_addr);
+   }
 #endif
 
    /* Dirty push_uniforms if the used_sysvals/dirty_sysvals overlap. */

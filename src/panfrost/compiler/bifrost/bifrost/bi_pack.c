@@ -615,6 +615,9 @@ bi_pack_clause(bi_context *ctx, bi_clause *clause, bi_clause *next_1,
          assert(ctx->quirks & BIFROST_LIMITED_CLPER);
       else if (add && add->op == BI_OPCODE_CLPER_I32)
          assert(!(ctx->quirks & BIFROST_LIMITED_CLPER));
+
+      /* jm-v7 103: v6 has no WMASK (INSTR_INVALID_ENC on Mali-G72). */
+      assert(!(add && add->op == BI_OPCODE_WMASK && ctx->arch == 6));
    }
 
    bool ec0_packed = bi_ec0_packed(clause->tuple_count);

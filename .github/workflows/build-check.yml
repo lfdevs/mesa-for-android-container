@@ -69,7 +69,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -81,6 +81,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -175,7 +177,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -187,6 +189,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -279,7 +283,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -291,6 +295,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -388,7 +394,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -400,6 +406,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -495,7 +503,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -507,6 +515,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -605,7 +615,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -617,6 +627,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -727,7 +739,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -739,6 +751,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -834,7 +848,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -846,6 +860,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -941,7 +957,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -953,6 +969,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -1048,7 +1066,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -1060,6 +1078,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -1168,7 +1188,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -1180,6 +1200,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -1276,7 +1298,7 @@ jobs:
                 -Dtermux-va-wayland-shim=enabled \
                 -Dvideo-codecs=all \
                 -Dgallium-mediafoundation=disabled \
-                -Dvulkan-drivers=freedreno \
+                -Dvulkan-drivers=freedreno,panfrost \
                 -Dvulkan-layers= \
                 -Degl=enabled \
                 -Dgles2=enabled \
@@ -1288,6 +1310,8 @@ jobs:
                 -Dvalgrind=disabled \
                 -Dgles1=disabled \
                 -Dfreedreno-kmds=kgsl \
+                -Dpanfrost-kmds=kbase \
+                -Dpanfrost-rust=false \
                 -Dbuildtype=release && \
               ninja -C build/ && \
               ccache --show-stats && \
@@ -1380,7 +1404,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -1392,6 +1416,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -1487,7 +1513,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -1499,6 +1525,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -1592,7 +1620,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -1604,6 +1632,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"
@@ -1686,8 +1716,14 @@ jobs:
           recipe = mesa / "default.nix"
           text = recipe.read_text()
           text = replace(text, r'  patches = \[.*?\n  \];', '  patches = [];')
-          # The separate nixpkgs header package tracks a different Mesa release.
-          text = replace(text, r"  postPatch = ''.*?\n  '';", "  postPatch = ''patchShebangs .'';")
+          # Adapt nixpkgs' clang library path fix to this Mesa baseline.
+          post_patch = """  postPatch = ''
+              patchShebangs .
+              substituteInPlace meson.build \\
+                --replace-fail "llvm_libdir = dep_llvm.get_variable(cmake : 'LLVM_LIBRARY_DIR', configtool: 'libdir')" \\
+                "llvm_libdir = '${lib.getLib llvmPackages.clang-unwrapped}/lib'"
+            '';"""
+          text = replace(text, r"  postPatch = ''.*?\n  '';", post_patch)
           text = replace(text, r'  outputs = \[.*?\n  \];', '  outputs = [ "out" ];')
           text = replace(text, r'  mesonFlags = \[', '  mesonBuildType = "release";\n\n  mesonFlags = [')
           flags = [
@@ -1699,7 +1735,7 @@ jobs:
               "-Dvideo-codecs=all",
               "-Dgallium-mediafoundation=disabled",
               "-Dandroid-libbacktrace=disabled",
-              "-Dvulkan-drivers=freedreno",
+              "-Dvulkan-drivers=freedreno,panfrost",
               "-Dvulkan-layers=",
               "-Degl=enabled",
               "-Dgles2=enabled",
@@ -1711,6 +1747,8 @@ jobs:
               "-Dvalgrind=disabled",
               "-Dgles1=disabled",
               "-Dfreedreno-kmds=kgsl",
+              "-Dpanfrost-kmds=kbase",
+              "-Dpanfrost-rust=false",
               "-Dlibgbm-external=false",
               "-Dgallium-rusticl=false",
               "-Dteflon=false",
@@ -1938,7 +1976,7 @@ jobs:
             -Dtermux-va-wayland-shim=enabled \
             -Dvideo-codecs=all \
             -Dgallium-mediafoundation=disabled \
-            -Dvulkan-drivers=freedreno \
+            -Dvulkan-drivers=freedreno,panfrost \
             -Dvulkan-layers= \
             -Degl=enabled \
             -Dgles2=enabled \
@@ -1950,6 +1988,8 @@ jobs:
             -Dvalgrind=disabled \
             -Dgles1=disabled \
             -Dfreedreno-kmds=kgsl \
+            -Dpanfrost-kmds=kbase \
+            -Dpanfrost-rust=false \
             -Dbuildtype=release
           ninja -C build/
           echo "Mesa build completed successfully!"

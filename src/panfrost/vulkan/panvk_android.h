@@ -27,9 +27,19 @@ VkResult panvk_android_get_wsi_memory(struct panvk_device *dev,
 
 bool panvk_android_is_ahb_memory(const VkMemoryAllocateInfo *pAllocateInfo);
 
+struct native_handle;
+struct AHardwareBuffer;
+
+int panvk_android_find_dma_buf_fd(
+   VkDevice device, const struct native_handle *handle, uint64_t *size_out);
+
 VkResult panvk_android_allocate_ahb_memory(
    VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
    const VkAllocationCallbacks *pAllocator, VkDeviceMemory *pMemory);
+
+VkResult panvk_GetAndroidHardwareBufferPropertiesANDROID(
+   VkDevice device_h, const struct AHardwareBuffer *buffer,
+   VkAndroidHardwareBufferPropertiesANDROID *pProperties);
 
 #else /* VK_USE_PLATFORM_ANDROID_KHR */
 

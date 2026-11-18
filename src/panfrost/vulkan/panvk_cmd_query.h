@@ -10,6 +10,8 @@
 #error "PAN_ARCH must be defined"
 #endif
 
+#include "util/bitscan.h"
+
 #include "genxml/gen_macros.h"
 
 struct panvk_occlusion_query_state {
@@ -20,11 +22,52 @@ struct panvk_occlusion_query_state {
    enum mali_occlusion_mode mode;
 };
 
-#if PAN_ARCH >= 10
 struct panvk_prims_generated_query_state {
    uint64_t syncobj;
    uint64_t ptr;
+   /* v9 JM: primitives of direct draws counted on the CPU, added to ptr by
+    * one job at the end of the query. */
+   uint64_t cpu_count;
 };
+
+/* A pipeline statistics query has two u64 per enabled statistic, in bit
+ * order: the first half is only written by the command stream, the second
+ * half only by shader atomics and the occlusion counter, so neither needs to
+ * wait on the other. Results are the sum of both halves.
+ */
+struct panvk_pstats_query_state {
+   uint64_t report;
+   uint32_t mask;
+   /* Stand-in occlusion query syncobj while the FS invocation counter
+    * borrows the hardware occlusion counter. */
+   uint64_t oq_sync;
+#if PAN_ARCH < 9
+   /* Bifrost: the occlusion counter writes one u64 per core, so the FS
+    * invocation counter borrows it into this per-query scratch, summed into
+    * the report when the query ends (jm-v7 016).
+    */
+   uint64_t oq_cores;
+   uint32_t oq_core_count;
 #endif
+};
+
+#define PANVK_PSTATS_MAX_PENDING 8
+
+struct panvk_pstats_pending {
+   uint64_t avail;
+   uint32_t view_count;
+};
+
+static inline uint64_t
+panvk_pstats_counter_addr(const struct panvk_pstats_query_state *q,
+                          uint32_t bit, bool kernel_half)
+{
+   if (!q->report || !(q->mask & bit))
+      return 0;
+
+   uint32_t slot = util_bitcount(q->mask & (bit - 1)) +
+                   (kernel_half ? util_bitcount(q->mask) : 0);
+   return q->report + slot * sizeof(uint64_t);
+}
 
 #endif

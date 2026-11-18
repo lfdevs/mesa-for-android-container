@@ -8,10 +8,13 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <stdlib.h>
+
 #include "panvk_device.h"
 #include "panvk_image.h"
 #include "panvk_sampler.h"
 #include "panvk_shader.h"
+#include "panvk_v7_knobs.h"
 
 #include "vk_format.h"
 #include "vk_graphics_state.h"
@@ -60,6 +63,10 @@ struct lower_desc_ctx {
    bool null_descriptor_support;
    nir_address_format ubo_addr_format;
    nir_address_format ssbo_addr_format;
+#if PAN_ARCH < 9
+   /* PANVK_DIRECT_TEX/SAMPLER (jm-v7 050). */
+   uint32_t direct_mask;
+#endif
 };
 
 static nir_address_format
@@ -148,8 +155,10 @@ shader_desc_idx(uint32_t set, uint32_t binding,
    if (PAN_ARCH >= 9 && !vk_descriptor_type_is_dynamic(bind_layout->type))
       return pan_res_handle(set + 1, bind_layout->desc_idx + subdesc_idx);
 
-   /* On Bifrost, the SSBO descriptors are read directly from the set. */
-   if (PAN_ARCH < 9 && bind_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+   /* On Bifrost, the SSBO descriptors are read directly from the set, and so
+    * are the bindless (update-after-bind and mutable) ones. */
+   if (PAN_ARCH < 9 && (bind_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
+                        panvk_binding_is_bindless(bind_layout)))
       return bind_layout->desc_idx;
 
    struct desc_id src = {
@@ -253,7 +262,8 @@ shader_ssbo_table(nir_builder *b, unsigned set, unsigned binding,
       &set_layout->bindings[binding];
 
    assert(bind_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
-          bind_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC);
+          bind_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC ||
+          bind_layout->type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT);
    bool is_dyn = bind_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
 
    if (!is_dyn)
@@ -303,7 +313,12 @@ build_res_index(nir_builder *b, uint32_t set, uint32_t binding,
    const struct panvk_descriptor_set_binding_layout *bind_layout =
       &set_layout->bindings[binding];
    uint32_t array_size = bind_layout->desc_count;
-   nir_address_format addr_fmt = addr_format_for_type(bind_layout->type, ctx);
+   /* A mutable binding takes the format of the access (jm-v7 050: v6/v7
+    * mutable bindings hold no UBOs, the UBO and SSBO formats differ). */
+   nir_address_format addr_fmt =
+      bind_layout->type == VK_DESCRIPTOR_TYPE_MUTABLE_EXT
+         ? addr_format
+         : addr_format_for_type(bind_layout->type, ctx);
    uint32_t desc_idx = shader_desc_idx(set, binding, NO_SUBDESC, ctx);
 
    switch (addr_fmt) {
@@ -513,6 +528,14 @@ get_resource_deref_binding(nir_deref_instr *deref, uint32_t *set,
    *binding = var->data.binding;
 }
 
+#if PAN_ARCH < 9
+static bool
+panvk_v7_desc_reorder(void)
+{
+   return panvk_v7_knob_desc_reorder();
+}
+#endif
+
 static nir_def *
 load_resource_deref_desc(nir_builder *b, nir_deref_instr *deref,
                          VkDescriptorType subdesc_type, unsigned desc_offset,
@@ -538,6 +561,9 @@ load_resource_deref_desc(nir_builder *b, nir_deref_instr *deref,
    unsigned subdesc_idx = get_subdesc_idx(bind_layout, subdesc);
 
    assert(index_ssa == NULL || index_imm == 0);
+#if PAN_ARCH < 9
+   const bool const_index = index_ssa == NULL;
+#endif
    if (index_ssa == NULL)
       index_ssa = nir_imm_int(b, index_imm);
 
@@ -558,9 +584,22 @@ load_resource_deref_desc(nir_builder *b, nir_deref_instr *deref,
 
    unsigned desc_align = 1 << (ffs(PANVK_DESCRIPTOR_SIZE + desc_offset) - 1);
 
+   /* jm-v7 086: descriptor set memory does not change while a shader runs,
+    * so a load at a constant offset (a descriptor of a bound set, valid even
+    * when hoisted) can be CSE'd and hoisted. Without this every
+    * robustImageAccess2 image access (jm-v7 048) and every textureSize /
+    * imageSize re-read the descriptor from memory, one more clause each
+    * (PanProbe robust_image_access2 bench: 16 loads, +199 instructions,
+    * 75 vs 28 clauses). Dynamic indices stay pinned: a hoisted load could
+    * leave the array. PANVK_V7_DESC_REORDER=0 restores the old loads.
+    */
+   enum gl_access_qualifier access = 0;
+   if (const_index && panvk_v7_desc_reorder())
+      access = ACCESS_NON_WRITEABLE | ACCESS_CAN_REORDER;
+
    return nir_load_global(b, num_components, bit_size,
                           nir_iadd(b, set_base_addr, nir_u2u64(b, set_offset)),
-                          .align_mul = desc_align);
+                          .align_mul = desc_align, .access = access);
 #else
    /* note that user sets start from index 1 */
    return nir_load_ubo(
@@ -604,8 +643,9 @@ load_tex_size(nir_builder *b, nir_deref_instr *deref, enum glsl_sampler_dim dim,
       loaded_size = nir_iadd_imm(b, nir_u2u32(b, tex_sz), 1);
    }
 
-   /* TODO/Bifrost: Null descriptors */
-   assert(PAN_ARCH < 9 && !ctx->null_descriptor_support);
+   /* Bifrost null descriptors are a 1x1 image (panvk_device::null_descs),
+    * so a query through one reports that image, not zero.
+    */
 
    return loaded_size;
 }
@@ -674,8 +714,9 @@ load_tex_levels(nir_builder *b, nir_deref_instr *deref,
    nir_def *lod_count = nir_iand_imm(b, nir_ushr_imm(b, tex_word2, 16), 0x1f);
    nir_def *loaded_levels = nir_iadd_imm(b, lod_count, 1);
 
-   /* TODO/Bifrost: Null descriptors */
-   assert(PAN_ARCH < 9 && !ctx->null_descriptor_support);
+   /* Bifrost null descriptors are a 1x1 image (panvk_device::null_descs),
+    * so a query through one reports that image, not zero.
+    */
 
    return loaded_levels;
 }
@@ -692,8 +733,9 @@ load_tex_samples(nir_builder *b, nir_deref_instr *deref,
    nir_def *sample_count = nir_iand_imm(b, nir_ushr_imm(b, tex_word3, 13), 0x7);
    nir_def *loaded_samples = nir_ishl(b, nir_imm_int(b, 1), sample_count);
 
-   /* TODO/Bifrost: Null descriptors */
-   assert(PAN_ARCH < 9 && !ctx->null_descriptor_support);
+   /* Bifrost null descriptors are a 1x1 image (panvk_device::null_descs),
+    * so a query through one reports that image, not zero.
+    */
 
    return loaded_samples;
 }
@@ -717,6 +759,318 @@ load_img_samples(nir_builder *b, nir_deref_instr *deref,
    sample_count = nir_iand_imm(b, nir_ushr_imm(b, sample_count, 7),
                                BITFIELD_MASK(3));
    return nir_ishl(b, one, sample_count);
+}
+
+/* Bindless descriptors on v6/v7 (jm-v7 050), see panvk_binding_is_bindless().
+ */
+static bool
+is_bindless_deref(nir_deref_instr *deref, const struct lower_desc_ctx *ctx)
+{
+   uint32_t set, binding, index_imm, max_idx;
+   nir_def *index_ssa;
+   get_resource_deref_binding(deref, &set, &binding, &index_imm, &index_ssa,
+                              &max_idx);
+   return panvk_binding_is_bindless(get_binding_layout(set, binding, ctx));
+}
+
+#define load_desc_sysval_entry(__b, __bitsz, __name, __idx)                   \
+   ((__b)->shader->info.stage == MESA_SHADER_COMPUTE                         \
+       ? load_sysval_entry(__b, compute, __bitsz, __name, __idx)             \
+       : load_sysval_entry(__b, graphics, __bitsz, __name, __idx))
+
+#define load_desc_sysval(__b, __bitsz, __name)                                \
+   ((__b)->shader->info.stage == MESA_SHADER_COMPUTE                         \
+       ? load_sysval(__b, compute, __bitsz, __name)                          \
+       : load_sysval(__b, graphics, __bitsz, __name))
+
+/* Index of a texture or sampler in the direct table: the set's first
+ * descriptor relative to the direct base, plus the descriptor index in the
+ * set (the set memory stride, not the copy table one).
+ */
+static nir_def *
+build_direct_index(nir_builder *b, nir_deref_instr *deref,
+                   struct panvk_subdesc_info subdesc,
+                   const struct lower_desc_ctx *ctx)
+{
+   uint32_t set, binding, index_imm, max_idx;
+   nir_def *index_ssa;
+   get_resource_deref_binding(deref, &set, &binding, &index_imm, &index_ssa,
+                              &max_idx);
+
+   const struct panvk_descriptor_set_binding_layout *bind_layout =
+      get_binding_layout(set, binding, ctx);
+   uint32_t stride = panvk_get_desc_stride(bind_layout);
+   uint32_t first = bind_layout->desc_idx +
+                    get_subdesc_idx(bind_layout, subdesc) + index_imm * stride;
+
+   nir_def *idx = nir_iadd_imm(
+      b, load_desc_sysval_entry(b, 32, desc.direct_idx, nir_imm_int(b, set)),
+      first);
+   if (index_ssa != NULL)
+      idx = nir_iadd(b, idx, nir_imul_imm(b, index_ssa, stride));
+
+   return idx;
+}
+
+struct bindless_texel {
+   nir_def *addr;
+   nir_def *fmt;
+   nir_def *in_bounds;
+};
+
+static nir_def *
+load_bindless_desc(nir_builder *b, nir_deref_instr *deref, unsigned offset,
+                   const struct lower_desc_ctx *ctx)
+{
+   return load_resource_deref_desc(b, deref, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                   offset, 4, 32, ctx);
+}
+
+/* MALI_ATTRIBUTE_BUFFER::pointer, shr(6) in bits 6..55. */
+static nir_def *
+bindless_desc_pointer(nir_builder *b, nir_def *words)
+{
+   return nir_pack_64_2x32_split(
+      b, nir_iand_imm(b, nir_channel(b, words, 0), ~BITFIELD_MASK(6)),
+      nir_iand_imm(b, nir_channel(b, words, 1), BITFIELD_MASK(24)));
+}
+
+/* Texel buffer: {ATTRIBUTE_BUFFER, ATTRIBUTE, pad}, see
+ * pan_buffer_texture_emit(). */
+static void
+build_bindless_buf_texel(nir_builder *b, nir_deref_instr *deref, nir_def *x,
+                         const struct lower_desc_ctx *ctx,
+                         struct bindless_texel *t)
+{
+   nir_def *buf = load_bindless_desc(b, deref, 0, ctx);
+   nir_def *attr = load_bindless_desc(b, deref, 16, ctx);
+   nir_def *base = bindless_desc_pointer(b, buf);
+   nir_def *stride = nir_channel(b, buf, 2);
+   nir_def *size = nir_channel(b, buf, 3);
+   nir_def *offset = nir_channel(b, attr, 1);
+
+   nir_def *width;
+   if (panvk_v7_knob_texel_width()) {
+      /* jm-v7 116: the element count, written by write_buffer_view_desc()
+       * into the descriptor's first pad word (0 for null and unwritten
+       * descriptors). Saves the Bifrost software udiv on every access.
+       */
+      width = nir_channel(b, attr, 2);
+   } else {
+      nir_def *avail = nir_bcsel(b, nir_uge(b, size, offset),
+                                 nir_isub(b, size, offset), nir_imm_int(b, 0));
+      width = nir_udiv(b, avail, nir_umax(b, stride, nir_imm_int(b, 1)));
+   }
+
+   t->fmt = nir_ushr_imm(b, nir_channel(b, attr, 0), 10);
+   t->in_bounds = nir_ult(b, x, width);
+   t->addr = nir_iadd(b, base,
+                      nir_u2u64(b, nir_iadd(b, offset, nir_imul(b, x, stride))));
+}
+
+/* Spread the 4 low bits of v to the even bits. */
+static nir_def *
+spread4(nir_builder *b, nir_def *v)
+{
+   nir_def *r = nir_iand_imm(b, v, 1);
+   for (unsigned i = 1; i < 4; i++)
+      r = nir_ior(b, r, nir_ishl_imm(b, nir_iand_imm(b, v, 1 << i), i));
+   return r;
+}
+
+/* Storage image: {ATTRIBUTE_BUFFER, ATTRIBUTE_BUFFER_CONTINUATION_3D}, see
+ * prepare_attr_buf_descs(). Linear or 16x16 u-interleaved
+ * (pan_access_tiled_image_unaligned()). */
+static void
+build_bindless_img_texel(nir_builder *b, nir_deref_instr *deref,
+                         enum glsl_sampler_dim dim, bool is_array,
+                         nir_def *coords, const struct lower_desc_ctx *ctx,
+                         struct bindless_texel *t)
+{
+   nir_def *buf = load_bindless_desc(b, deref, 0, ctx);
+   nir_def *cont = load_bindless_desc(b, deref, 16, ctx);
+   nir_def *base = bindless_desc_pointer(b, buf);
+   nir_def *w2 = nir_channel(b, buf, 2);
+   nir_def *blk = nir_iand_imm(b, w2, BITFIELD_MASK(7));
+   nir_def *interleaved =
+      nir_ieq_imm(b, nir_iand_imm(b, nir_channel(b, buf, 0), BITFIELD_MASK(6)),
+                  MALI_ATTRIBUTE_TYPE_3D_INTERLEAVED);
+   nir_def *width = nir_iadd_imm(b, nir_ushr_imm(b, nir_channel(b, cont, 0), 16), 1);
+   nir_def *height = nir_iadd_imm(
+      b, nir_iand_imm(b, nir_channel(b, cont, 1), BITFIELD_MASK(16)), 1);
+   nir_def *depth = nir_iadd_imm(b, nir_ushr_imm(b, nir_channel(b, cont, 1), 16), 1);
+   nir_def *row = nir_channel(b, cont, 2);
+   nir_def *slice = nir_channel(b, cont, 3);
+
+   nir_def *zero = nir_imm_int(b, 0);
+   nir_def *x = nir_channel(b, coords, 0);
+   nir_def *y = zero, *z = zero;
+   switch (dim) {
+   case GLSL_SAMPLER_DIM_1D:
+      if (is_array)
+         z = nir_channel(b, coords, 1);
+      break;
+   case GLSL_SAMPLER_DIM_2D:
+   case GLSL_SAMPLER_DIM_RECT:
+      y = nir_channel(b, coords, 1);
+      if (is_array)
+         z = nir_channel(b, coords, 2);
+      break;
+   default:
+      /* 3D, cube (z = layer * 6 + face) and multisampled (lowered to 3D by
+       * pan_nir_lower_image_ms()). */
+      y = nir_channel(b, coords, 1);
+      z = nir_channel(b, coords, 2);
+      break;
+   }
+
+   t->fmt = nir_ushr_imm(b, w2, 10);
+   t->in_bounds = nir_iand(b, nir_ult(b, x, width),
+                           nir_iand(b, nir_ult(b, y, height),
+                                    nir_ult(b, z, depth)));
+
+   nir_def *lin = nir_iadd(b, nir_imul(b, x, blk), nir_imul(b, y, row));
+   nir_def *in_tile =
+      nir_ixor(b, nir_imul_imm(b, spread4(b, y), 3), spread4(b, x));
+   nir_def *tiled = nir_iadd(
+      b, nir_imul(b, nir_ushr_imm(b, y, 4), row),
+      nir_imul(b, nir_iadd(b, nir_ishl_imm(b, nir_ushr_imm(b, x, 4), 8), in_tile),
+               blk));
+   nir_def *off = nir_iadd(b, nir_bcsel(b, interleaved, tiled, lin),
+                           nir_imul(b, z, slice));
+   t->addr = nir_iadd(b, base, nir_u2u64(b, off));
+}
+
+static uint32_t
+bindless_reg_fmt(nir_alu_type type)
+{
+   switch (type) {
+   case nir_type_float16:
+      return MALI_REGISTER_FILE_FORMAT_F16;
+   case nir_type_int32:
+      return MALI_REGISTER_FILE_FORMAT_I32;
+   case nir_type_uint32:
+      return MALI_REGISTER_FILE_FORMAT_U32;
+   case nir_type_int16:
+      return MALI_REGISTER_FILE_FORMAT_I16;
+   case nir_type_uint16:
+      return MALI_REGISTER_FILE_FORMAT_U16;
+   default:
+      return MALI_REGISTER_FILE_FORMAT_F32;
+   }
+}
+
+/* MALI_INTERNAL_CONVERSION: LD_CVT/ST_CVT take the register format from it.
+ */
+static nir_def *
+bindless_icd(nir_builder *b, nir_def *fmt, nir_alu_type type)
+{
+   return nir_ior_imm(b, fmt, bindless_reg_fmt(type) << 24);
+}
+
+/* Out of bounds loads read the zeroed page through the view format, which
+ * gives the robustImageAccess2 (0, 0, 0, 0 or 1) without knowing the
+ * format; null descriptors are out of bounds or zero-swizzled.
+ */
+static nir_def *
+bindless_load(nir_builder *b, struct bindless_texel *t, unsigned num_comps,
+              unsigned bit_size, nir_alu_type dest_type)
+{
+   nir_def *addr = nir_bcsel(b, t->in_bounds, t->addr,
+                             load_desc_sysval(b, 64, desc.zero_addr));
+
+   if (bit_size == 64) {
+      nir_def *v = nir_load_global(b, 1, 64, addr, .align_mul = 8);
+      nir_def *comps[4] = {v, nir_imm_int64(b, 0), nir_imm_int64(b, 0),
+                           nir_imm_int64(b, 1)};
+      return nir_vec(b, comps, num_comps);
+   }
+
+   return nir_load_global_cvt_pan(b, num_comps, bit_size, addr,
+                                  bindless_icd(b, t->fmt, dest_type),
+                                  .dest_type = dest_type);
+}
+
+static bool
+lower_bindless_img_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
+                             const struct lower_desc_ctx *ctx)
+{
+   nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+   const enum glsl_sampler_dim dim = nir_intrinsic_image_dim(intr);
+   const bool is_array = nir_intrinsic_image_array(intr);
+   nir_def *coords = intr->src[1].ssa;
+   struct bindless_texel t;
+
+   if (dim == GLSL_SAMPLER_DIM_BUF)
+      build_bindless_buf_texel(b, deref, nir_channel(b, coords, 0), ctx, &t);
+   else
+      build_bindless_img_texel(b, deref, dim, is_array, coords, ctx, &t);
+
+   switch (intr->intrinsic) {
+   case nir_intrinsic_image_deref_load: {
+      nir_def *res = bindless_load(b, &t, intr->def.num_components,
+                                   intr->def.bit_size,
+                                   nir_intrinsic_dest_type(intr));
+      nir_def_replace(&intr->def, res);
+      return true;
+   }
+
+   case nir_intrinsic_image_deref_store: {
+      nir_def *data = intr->src[3].ssa;
+      nir_push_if(b, t.in_bounds);
+      if (data->bit_size == 64) {
+         nir_store_global(b, nir_channel(b, data, 0), t.addr, .align_mul = 8);
+      } else {
+         nir_alu_type src_type = nir_intrinsic_src_type(intr);
+         nir_store_global_cvt_pan(
+            b, data, t.addr, bindless_icd(b, t.fmt, src_type),
+            .src_type = data->bit_size == 32 ? 32 : src_type);
+      }
+      nir_pop_if(b, NULL);
+      nir_instr_remove(&intr->instr);
+      return true;
+   }
+
+   case nir_intrinsic_image_deref_atomic:
+   case nir_intrinsic_image_deref_atomic_swap: {
+      const unsigned bit_size = intr->def.bit_size;
+      nir_atomic_op op = nir_intrinsic_atomic_op(intr);
+      /* jm-v7 081: before the if, so the phi leads the merge block. */
+      nir_def *zero = nir_imm_intN_t(b, 0, bit_size);
+      nir_push_if(b, t.in_bounds);
+      nir_def *res;
+      if (intr->intrinsic == nir_intrinsic_image_deref_atomic_swap)
+         res = nir_global_atomic_swap(b, bit_size, t.addr, intr->src[3].ssa,
+                                      intr->src[4].ssa, .atomic_op = op);
+      else
+         res = nir_global_atomic(b, bit_size, t.addr, intr->src[3].ssa,
+                                 .atomic_op = op);
+      nir_pop_if(b, NULL);
+      res = nir_if_phi(b, res, zero);
+      nir_def_replace(&intr->def, res);
+      return true;
+   }
+
+   default:
+      UNREACHABLE("Unsupported bindless image op");
+   }
+}
+
+/* texelFetch on a bindless uniform texel buffer. */
+static void
+lower_bindless_txf_buf(nir_builder *b, nir_tex_instr *tex,
+                       nir_deref_instr *deref,
+                       const struct lower_desc_ctx *ctx)
+{
+   int coord_idx = nir_tex_instr_src_index(tex, nir_tex_src_coord);
+   assert(coord_idx >= 0 && tex->op == nir_texop_txf);
+   nir_def *x = nir_channel(b, tex->src[coord_idx].src.ssa, 0);
+   struct bindless_texel t;
+
+   build_bindless_buf_texel(b, deref, x, ctx, &t);
+   nir_def *res = bindless_load(b, &t, tex->def.num_components,
+                                tex->def.bit_size, tex->dest_type);
+   nir_def_replace(&tex->def, res);
 }
 #endif /* PAN_ARCH < 9 */
 
@@ -871,9 +1225,51 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const struct lower_desc_ctx *ctx)
    }
 #endif
 
+#if PAN_ARCH < 9
+   {
+      int idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_deref);
+      if (idx >= 0 && tex->sampler_dim == GLSL_SAMPLER_DIM_BUF) {
+         nir_deref_instr *deref = nir_src_as_deref(tex->src[idx].src);
+         if (is_bindless_deref(deref, ctx)) {
+            lower_bindless_txf_buf(b, tex, deref, ctx);
+            return true;
+         }
+      }
+   }
+#endif
+
    uint32_t plane = 0;
    int sampler_src_idx =
       nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
+#if PAN_ARCH < 9
+   if (sampler_src_idx >= 0 && (ctx->direct_mask & PANVK_DIRECT_SAMPLER)) {
+      nir_def *plane_ssa = nir_steal_tex_src(tex, nir_tex_src_plane);
+      plane = plane_ssa ? nir_src_as_uint(nir_src_for_ssa(plane_ssa)) : 0;
+
+      sampler_src_idx = nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
+      nir_deref_instr *deref = nir_src_as_deref(tex->src[sampler_src_idx].src);
+      nir_tex_instr_remove_src(tex, sampler_src_idx);
+
+      uint32_t set, binding, index_imm, max_idx;
+      nir_def *index_ssa;
+      get_resource_deref_binding(deref, &set, &binding, &index_imm, &index_ssa,
+                                 &max_idx);
+      struct panvk_subdesc_info subdesc = get_sampler_subdesc_info(
+         get_binding_layout(set, binding, ctx)->type, plane);
+
+      tex->sampler_index = 0;
+      nir_tex_instr_add_src(tex, nir_tex_src_sampler_offset,
+                            build_direct_index(b, deref, subdesc, ctx));
+      progress = true;
+   } else if (sampler_src_idx < 0 &&
+              (ctx->direct_mask & PANVK_DIRECT_SAMPLER)) {
+      /* Samplerless ops still need a valid sampler. */
+      tex->sampler_index = 0;
+      nir_tex_instr_add_src(tex, nir_tex_src_sampler_offset,
+                            load_desc_sysval(b, 32, desc.dummy_sampler_idx));
+      progress = true;
+   } else
+#endif
    if (sampler_src_idx >= 0) {
       nir_def *plane_ssa = nir_steal_tex_src(tex, nir_tex_src_plane);
       plane =
@@ -919,6 +1315,25 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const struct lower_desc_ctx *ctx)
    }
 
    int tex_src_idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_deref);
+#if PAN_ARCH < 9
+   if (tex_src_idx >= 0 && tex->sampler_dim != GLSL_SAMPLER_DIM_BUF &&
+       (ctx->direct_mask & PANVK_DIRECT_TEX)) {
+      nir_deref_instr *deref = nir_src_as_deref(tex->src[tex_src_idx].src);
+      nir_tex_instr_remove_src(tex, tex_src_idx);
+
+      uint32_t set, binding, index_imm, max_idx;
+      nir_def *index_ssa;
+      get_resource_deref_binding(deref, &set, &binding, &index_imm, &index_ssa,
+                                 &max_idx);
+      struct panvk_subdesc_info subdesc = get_tex_subdesc_info(
+         get_binding_layout(set, binding, ctx)->type, plane);
+
+      tex->texture_index = 0;
+      nir_tex_instr_add_src(tex, nir_tex_src_texture_offset,
+                            build_direct_index(b, deref, subdesc, ctx));
+      return true;
+   }
+#endif
    if (tex_src_idx >= 0) {
       nir_deref_instr *deref = nir_src_as_deref(tex->src[tex_src_idx].src);
       nir_tex_instr_remove_src(tex, tex_src_idx);
@@ -992,6 +1407,22 @@ lower_img_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
    nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
 
 #if PAN_ARCH < 9
+   /* jm-v7 101: the 22-bit hardware format of a storage image or texel
+    * buffer, read from the set. Images pack it above the texel stride in
+    * word 2 (panvk_vX_image_view.c), texel buffers have it in their
+    * ATTRIBUTE word (word 4, bits 10..31).
+    */
+   if (intr->intrinsic == nir_intrinsic_image_deref_format) {
+      const bool buf = nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_BUF;
+      nir_def *w = load_resource_deref_desc(
+         b, deref,
+         buf ? VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER
+             : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+         buf ? 16 : 8, 1, 32, ctx);
+      nir_def_replace(&intr->def, nir_ushr_imm(b, w, 10));
+      return true;
+   }
+
    if (intr->intrinsic == nir_intrinsic_image_deref_size ||
        intr->intrinsic == nir_intrinsic_image_deref_samples) {
       const enum glsl_sampler_dim dim = nir_intrinsic_image_dim(intr);
@@ -1013,6 +1444,9 @@ lower_img_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
       nir_def_replace(&intr->def, res);
       return true;
    }
+
+   if (is_bindless_deref(deref, ctx))
+      return lower_bindless_img_intrinsic(b, intr, ctx);
 #endif
 
    nir_rewrite_image_intrinsic(intr, get_img_index(b, deref, ctx),
@@ -1066,6 +1500,9 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
    case nir_intrinsic_image_deref_atomic_swap:
    case nir_intrinsic_image_deref_size:
    case nir_intrinsic_image_deref_samples:
+#if PAN_ARCH < 9
+   case nir_intrinsic_image_deref_format:
+#endif
       return lower_img_intrinsic(b, intr, ctx);
    default:
       return false;
@@ -1108,9 +1545,10 @@ record_binding(struct lower_desc_ctx *ctx, unsigned set, unsigned binding,
       return;
 
    /* SSBOs are accessed directly from the sets, no need to record accesses
-    * to such resources. */
+    * to such resources. Same for bindless bindings (jm-v7 050). */
    if (PAN_ARCH < 9 &&
-       binding_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+       (binding_layout->type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
+        panvk_binding_is_bindless(binding_layout)))
       return;
 
    assert(subdesc_idx < desc_stride);
@@ -1228,6 +1666,8 @@ create_copy_table(nir_shader *nir, struct lower_desc_ctx *ctx)
       dummy_sampler_idx = desc_info->num_varying_attr_descs;
       break;
    case MESA_SHADER_COMPUTE:
+   case MESA_SHADER_GEOMETRY:
+   case MESA_SHADER_TESS_CTRL:
       dummy_sampler_idx = 0;
       break;
    default:
@@ -1310,7 +1750,12 @@ collect_tex_desc_access(nir_builder *b, nir_tex_instr *tex,
       struct panvk_subdesc_info subdesc =
          get_sampler_subdesc_info(binding_layout->type, plane);
 
-      record_binding(ctx, set, binding, subdesc, max_idx);
+#if PAN_ARCH < 9
+      if (ctx->direct_mask & PANVK_DIRECT_SAMPLER)
+         ctx->desc_info.used_set_mask |= BITFIELD_BIT(set);
+      else
+#endif
+         record_binding(ctx, set, binding, subdesc, max_idx);
       recorded = true;
    }
 
@@ -1329,12 +1774,43 @@ collect_tex_desc_access(nir_builder *b, nir_tex_instr *tex,
       struct panvk_subdesc_info subdesc =
          get_tex_subdesc_info(binding_layout->type, plane);
 
-      record_binding(ctx, set, binding, subdesc, max_idx);
+#if PAN_ARCH < 9
+      if ((ctx->direct_mask & PANVK_DIRECT_TEX) &&
+          tex->sampler_dim != GLSL_SAMPLER_DIM_BUF)
+         ctx->desc_info.used_set_mask |= BITFIELD_BIT(set);
+      else
+#endif
+         record_binding(ctx, set, binding, subdesc, max_idx);
       recorded = true;
    }
 
    return recorded;
 }
+
+#if PAN_ARCH < 9
+/* Texture/sampler accesses to bindless bindings switch the whole shader's
+ * texture/sampler table to direct indexing (jm-v7 050). */
+static bool
+scan_direct_tex_access(nir_builder *b, nir_instr *instr, void *data)
+{
+   struct lower_desc_ctx *ctx = data;
+
+   if (instr->type != nir_instr_type_tex)
+      return false;
+
+   nir_tex_instr *tex = nir_instr_as_tex(instr);
+   int idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_deref);
+   if (idx >= 0 && tex->sampler_dim != GLSL_SAMPLER_DIM_BUF &&
+       is_bindless_deref(nir_src_as_deref(tex->src[idx].src), ctx))
+      ctx->direct_mask |= PANVK_DIRECT_TEX;
+
+   idx = nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
+   if (idx >= 0 && is_bindless_deref(nir_src_as_deref(tex->src[idx].src), ctx))
+      ctx->direct_mask |= PANVK_DIRECT_SAMPLER;
+
+   return false;
+}
+#endif
 
 static bool
 collect_intr_desc_access(nir_builder *b, nir_intrinsic_instr *intrin,
@@ -1467,6 +1943,12 @@ panvk_per_arch(nir_lower_descriptors)(
 
    for (uint32_t i = 0; i < set_layout_count; i++)
       ctx.set_layouts[i] = to_panvk_descriptor_set_layout(set_layouts[i]);
+
+#if PAN_ARCH < 9
+   nir_shader_instructions_pass(nir, scan_direct_tex_access, nir_metadata_all,
+                                &ctx);
+   desc_info->direct_mask = ctx.direct_mask;
+#endif
 
    NIR_PASS(progress, nir, nir_shader_instructions_pass,
             collect_instr_desc_access, nir_metadata_all, &ctx);

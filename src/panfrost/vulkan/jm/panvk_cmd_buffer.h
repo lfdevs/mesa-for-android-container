@@ -34,6 +34,17 @@
 struct panvk_batch {
    struct list_head node;
    struct util_dynarray jobs;
+#if PAN_ARCH == 9
+   /* MALLOC_VERTEX jobs, the GPU writes their vertex array pointer. */
+   struct util_dynarray malloc_vertex_jobs;
+#endif
+   /* The vertex/tiler chain writes SYSTEM_TIMESTAMP values (v9, and v6/v7
+    * since jm-v7 021). */
+   bool timestamps;
+   /* The vertex/tiler chain reads or writes query memory the fragment jobs
+    * of earlier batches count into (occlusion, pipeline statistics): it
+    * never takes the PANVK_OVERLAP path (jm-v7 023). */
+   bool after_frag;
    struct util_dynarray event_ops;
    struct pan_jc vtc_jc;
    struct pan_jc frag_jc;
@@ -60,6 +71,20 @@ struct panvk_batch {
    struct pan_tls_info tlsinfo;
    unsigned wls_total_size;
    bool issued;
+   /* libpoly heap bottom reset already queued in this batch */
+   bool poly_heap_reset;
+   /* v67b: tiler heap half used by this batch */
+   unsigned heap_half;
+   /* jm-v7 106: worst-case indirect varying bytes of the tess draws in this
+    * batch, and the next free byte of tess_gs_scratch[heap_half].
+    */
+   uint64_t tess_vary_w;
+   uint64_t tess_gs_off;
+   /* jm-v7 106: the offset words (uint32_t *, CPU side) of the indirect
+    * varying allocators created in this batch, reset to 0 when the batch
+    * is issued again.
+    */
+   struct util_dynarray vary_infos;
 };
 
 enum panvk_cmd_event_op_type {
@@ -78,18 +103,67 @@ struct panvk_cmd_buffer {
 
    struct panvk_pool desc_pool;
    struct panvk_pool varying_pool;
+   /* Growable GPU-only memory: geometry emulation of large tess draws. */
+   struct panvk_pool gs_pool;
    struct panvk_pool tls_pool;
+   /* jm-v7 107: the TLS and WLS buffers of this command buffer, one per
+    * PANVK_OVERLAP heap half, reused by every batch of that half that
+    * fits (a batch runs after the previous batch of its half completed).
+    * Before, every batch allocated its own, so splitting a frame into
+    * many batches multiplied them.
+    */
+   struct {
+      uint64_t tls_ptr, wls_ptr;
+      uint64_t tls_size, wls_size;
+   } tls_half[2];
    struct list_head batches;
    struct list_head push_sets;
    struct panvk_batch *cur_batch;
+   /* VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: record-time CPU clears of
+    * GPU-written scratch are safe (jm-v7 080).
+    */
+   bool one_time_submit;
 
    struct {
       struct panvk_cmd_graphics_state gfx;
       struct panvk_cmd_compute_state compute;
       struct panvk_push_constant_state push_constants;
       bool uses_poly_heap;
+#if PAN_ARCH <= 9
+      struct {
+         bool enabled;
+         /* Saved by meta, secondaries replay into the primary on JM. */
+         bool inherited;
+         bool inverted;
+         uint64_t addr;
+         /* Jobs of the current conditional draw that are never NULLed
+          * (the xfb scans, jm-v7 074): they read the predicate themselves.
+          */
+         struct mali_job_header_packed *keep[8];
+         uint32_t keep_count;
+      } cond_render;
+#endif
+#if PAN_ARCH == 9
+      /* jm-v7 118: instances before the CPU split chunk being lowered
+       * (v9_prerast_draw_split()). The chunk keeps the API firstInstance and
+       * the lowered VS adds this to its instance IDs, as CSF
+       * gpu_prerast_inst_base (csf-v11 191).
+       */
+      uint32_t gpu_prerast_inst_base;
+#endif
    } state;
 };
+
+#if PAN_ARCH <= 9
+/* A draw or dispatch recorded while conditional rendering is active: the
+ * predicate job queued before its jobs (see cmd_cond_render_begin). */
+struct panvk_cond_render_mark {
+   struct panvk_batch *batch;
+   struct mali_job_header_packed *job;
+   uint64_t *list;
+   unsigned index;
+};
+#endif
 
 VK_DEFINE_HANDLE_CASTS(panvk_cmd_buffer, vk.base, VkCommandBuffer,
                        VK_OBJECT_TYPE_COMMAND_BUFFER)
@@ -135,6 +209,13 @@ struct panvk_batch *
    panvk_per_arch(cmd_open_batch)(struct panvk_cmd_buffer *cmdbuf);
 
 void panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf);
+
+#if PAN_ARCH <= 9
+void panvk_per_arch(cmd_cond_render_begin)(struct panvk_cmd_buffer *cmdbuf,
+                                           struct panvk_cond_render_mark *m);
+void panvk_per_arch(cmd_cond_render_end)(struct panvk_cmd_buffer *cmdbuf,
+                                         struct panvk_cond_render_mark *m);
+#endif
 
 VkResult panvk_per_arch(cmd_alloc_fb_desc)(struct panvk_cmd_buffer *cmdbuf);
 

@@ -108,4 +108,12 @@ ANativeWindow_setSharedBufferMode(ANativeWindow *window,
 {
    return 0;
 }
+
+int32_t ANativeWindow_getWidth(ANativeWindow *window) { return 0; }
+int32_t ANativeWindow_getHeight(ANativeWindow *window) { return 0; }
+int32_t ANativeWindow_setBuffersGeometry(ANativeWindow *window, int32_t width, int32_t height, int32_t format) { return 0; }
+int32_t ANativeWindow_lock(ANativeWindow *window, ANativeWindow_Buffer *outBuffer, ARect *inOutDirtyBounds) { return 0; }
+int32_t ANativeWindow_unlockAndPost(ANativeWindow *window) { return 0; }
+int32_t AHardwareBuffer_lock(AHardwareBuffer *buffer, uint64_t usage, int32_t fence, const ARect *rect, void **outVirtualAddress) { return 0; }
+int32_t AHardwareBuffer_unlock(AHardwareBuffer *buffer, int32_t *fence) { return 0; }
 }

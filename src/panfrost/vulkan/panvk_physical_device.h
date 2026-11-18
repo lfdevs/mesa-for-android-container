@@ -58,6 +58,12 @@ struct panvk_physical_device {
       dev_t render_rdev;
    } drm;
 
+   /* Device node path for kbase (non-DRM) devices, e.g. "/dev/mali0";
+    * empty for DRM devices.  Logical devices must open() a fresh fd from
+    * this path: dup()ing the physical device fd would share the kbase
+    * context, whose version handshake can only be performed once. */
+   char kbase_node_path[32];
+
    struct {
       const struct pan_blendable_format *blendable;
       const struct pan_format *all;
@@ -76,6 +82,17 @@ struct panvk_physical_device {
       uint64_t max_supported_va;
 
       struct panvk_heap_budget *budget;
+      alignas(8) uint64_t heap_used;
+      alignas(8) uint64_t available;
+      alignas(8) uint64_t available_ns;
+
+      /* PANVK_MEM_BUDGET_PRESSURE (default 1): the budget only counts
+       * MemAvailable beyond budget_reserve, plus 256 MiB more while swap is
+       * running out (swap_* sampled with MemAvailable). */
+      bool budget_pressure;
+      uint64_t budget_reserve;
+      alignas(8) uint64_t swap_total;
+      alignas(8) uint64_t swap_free;
    } memory;
 
    struct vk_sync_type drm_syncobj_type;
@@ -104,6 +121,30 @@ VkResult panvk_physical_device_init(struct panvk_physical_device *device,
                                     struct panvk_instance *instance,
                                     drmDevicePtr drm_device);
 
+#if defined(HAVE_PAN_KMOD_KBASE)
+VkResult panvk_physical_device_init_kbase(struct panvk_physical_device *device,
+                                          struct panvk_instance *instance,
+                                          const char *path);
+
+#define PANVK_KBASE_SYNC_TARGET_COUNT 3
+
+typedef VkResult (*panvk_kbase_sync_wait_func)(
+   void *data,
+   const uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT],
+   uint64_t abs_timeout_ns);
+
+void panvk_kbase_sync_set_pending(
+   struct vk_sync *sync, void *data, panvk_kbase_sync_wait_func wait,
+   const uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT],
+   const uint64_t target_addrs[PANVK_KBASE_SYNC_TARGET_COUNT]);
+
+bool panvk_kbase_sync_peek(struct vk_sync *sync, void **data,
+                           uint64_t targets[PANVK_KBASE_SYNC_TARGET_COUNT]);
+
+int panvk_kbase_sync_gpu_wait_targets(
+   struct vk_sync *sync, uint64_t out[PANVK_KBASE_SYNC_TARGET_COUNT]);
+#endif
+
 void panvk_physical_device_finish(struct panvk_physical_device *device);
 
 
@@ -117,6 +158,15 @@ panvk_get_max_resource_size(const struct panvk_physical_device *device);
 
 VkDeviceSize
 panvk_get_max_buffer_size(const struct panvk_physical_device *device);
+
+bool panvk_bc_emul_enabled(const struct panvk_physical_device *device);
+
+/* BC lowmem (csf-v11/197): BC1-BC5 images keep an ETC2/EAC shadow instead
+ * of an exact decoded one, and BC images that can never be read back drop
+ * the raw block plane. panvk_bc_lm_opts() is PANVK_BC_LM_OPTS, the
+ * transcoder search flags. */
+bool panvk_bc_lowmem_enabled(const struct panvk_physical_device *device);
+uint32_t panvk_bc_lm_opts(void);
 
 #ifdef PAN_ARCH
 void panvk_per_arch(get_physical_device_extensions)(

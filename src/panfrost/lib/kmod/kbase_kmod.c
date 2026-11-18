@@ -1,0 +1,3973 @@
+/*
+ * Copyright © 2026 Collabora, Ltd.
+ * SPDX-License-Identifier: MIT
+ *
+ * kmod backend for the ARM Mali kbase kernel driver (/dev/mali*).
+ * Targets the Bifrost/Valhall kbase driver r32p0–r44p0, both the JM
+ * (arch <= 9, uAPI 11.x) and CSF (arch >= 10, uAPI 1.x) flavours.
+ *
+ * Key architectural differences from the panthor / panfrost DRM backends
+ * (see the panfork driver, src/panfrost/base/, for a working reference):
+ *
+ *  - kbase is not a DRM driver; the fd is not a DRM fd.  The handshake is:
+ *    VERSION_CHECK (CSF nr 52 / JM nr 0) -> SET_FLAGS -> mmap() of the
+ *    tracking page.  Every other ioctl returns -EPERM before that.
+ *  - There are no GEM handles; we mint our own u32 handles for the
+ *    pan_kmod handle_to_bo sparse array.
+ *  - For 64-bit clients the kernel forces SAME_VA on all non-executable
+ *    allocations: KBASE_IOCTL_MEM_ALLOC returns a cookie, and mmap()-ing
+ *    the fd at that cookie establishes the mapping, with CPU VA == GPU VA.
+ *    We therefore mmap() every BO right at allocation time and keep that
+ *    mapping until the BO is freed (bo_mmap/bo_munmap ops return/release
+ *    the cached mapping).  munmap() of a SAME_VA region frees the GPU
+ *    mapping too (free-on-close), so bo_free relies on it.
+ *  - GPU-executable BOs come from the EXEC_VA zone (initialised with
+ *    KBASE_IOCTL_MEM_EXEC_INIT at device-open time) and return a real
+ *    GPU VA, which doubles as the mmap offset for CPU access.
+ *  - The GPU address space is implicit (one per context), so vm_create /
+ *    vm_bind are thin wrappers that record the VAs assigned by the kernel.
+ *  - drmPrimeFDToHandle() does not work on a kbase fd; pan_kmod_bo_import()
+ *    will fail gracefully (returns NULL). dma-buf import / WSI is left for
+ *    future work (KBASE_IOCTL_MEM_IMPORT).
+ *  - Command submission (CSF queue groups / JM job atoms) is not wired up
+ *    yet; this backend currently only supports device enumeration and
+ *    memory management.
+ */
+
+#include <errno.h>
+#include <inttypes.h>
+#include <math.h>
+#include <fcntl.h>
+#include <linux/dma-buf.h>
+#include <linux/dma-heap.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <poll.h>
+#include <sys/mman.h>
+#include <time.h>
+#include <unistd.h>
+#ifdef __ANDROID__
+#include <dlfcn.h>
+#endif
+
+#include "util/macros.h"
+#include "util/os_time.h"
+#include "util/u_atomic.h"
+#include "util/u_math.h"
+#include "util/log.h"
+#include "util/list.h"
+#include "util/u_debug.h"
+
+#include "drm-uapi/mali_kbase_ioctl.h"
+/* Only used as the interchange format for CSF interface information; no
+ * panthor functionality is required. */
+#include "drm-uapi/panthor_drm.h"
+
+#include "kbase_kmod.h"
+
+/* ION new-ABI uapi (<linux/ion.h> is not in the NDK). */
+struct kbase_ion_alloc {
+   uint64_t len;
+   uint32_t heap_id_mask;
+   uint32_t flags;
+   uint32_t fd;
+   uint32_t unused;
+};
+struct kbase_ion_heap_data {
+   char name[32];
+   uint32_t type;
+   uint32_t heap_id;
+   uint32_t reserved[3];
+};
+struct kbase_ion_heap_query {
+   uint32_t cnt;
+   uint32_t reserved0;
+   uint64_t heaps;
+   uint32_t reserved1;
+   uint32_t reserved2;
+};
+#define KBASE_ION_IOC_ALLOC      _IOWR('I', 0, struct kbase_ion_alloc)
+#define KBASE_ION_IOC_HEAP_QUERY _IOWR('I', 8, struct kbase_ion_heap_query)
+
+#include "pan_kmod_backend.h"
+#include "pan_props.h"
+#include "pan_trace.h"
+
+/* Forward declaration — the full definition is at the end of this file. */
+const struct pan_kmod_ops kbase_kmod_ops;
+
+/* -------------------------------------------------------------------------
+ * Internal device / BO / VM objects
+ * ---------------------------------------------------------------------- */
+
+/* JM submission ported from FristOneRR-Panvk-Source (MIT) */
+
+struct base_jd_udata {
+   __u64 blob[2];
+};
+
+struct base_jd_atom {
+   __u64 jc;
+   struct base_jd_udata udata;
+   __u64 extres_list;
+   __u16 nr_extres;
+   __u8 jit_id[2];
+   struct {
+      __u8 atom_id;
+      __u8 dependency_type;
+   } pre_dep[2];
+   __u8 atom_number;
+   __u8 prio;
+   __u8 device_nr;
+   __u8 jobslot;
+   __u32 core_req;
+   __u8 renderpass_id;
+   __u8 padding[15];
+};
+
+/* JM-only memory flag (mali_base_jm_kernel.h); CSF reserves bit 20. */
+#define KBASE_JM_MEM_TILER_ALIGN_TOP ((uint64_t)1 << 20)
+
+#define BASE_JD_EVENT_DONE     0x01
+#define BASE_JD_EVENT_ERR_MASK 0x40
+
+struct base_jd_event_v2 {
+   __u32 event_code;
+   __u8 atom_number;
+   __u8 padding[3];
+   struct base_jd_udata udata;
+};
+
+#define KBASE_MAX_ATOMS 256
+
+struct kbase_atom_slot {
+   uint64_t atom_number;
+   struct pan_kmod_bo *bos[8];
+   uint32_t nbo;
+   uint32_t core_req;
+   bool completed;
+   bool errored;
+   /* Counted in kbase_kmod_dev::busy_inflight (PANVK_GPU_STATS on JM). */
+   bool busy_counted;
+   uint32_t waiters;
+};
+
+struct kbase_kmod_dev {
+   struct pan_kmod_dev base;
+
+   /* True for the CSF flavour of kbase (arch >= 10), false for JM. */
+   bool is_csf;
+
+   /* KBASE_GPUPROP_RAW_COHERENCY_MODE, the system coherency kbase selected
+    * (DRM_PANTHOR_GPU_COHERENCY_* values), or KBASE_COHERENCY_UNREPORTED. */
+   uint32_t coherency_mode;
+
+   /* PANVK_KBASE_COHERENT_POOLS=1 on a CSF device with ACE-Lite or ACE:
+    * CPU-cached allocations ask for BASE_MEM_COHERENT_SYSTEM
+    * (kbase_kmod_bo_alloc()). kbase_coherent_pools_off() clears it if the
+    * kernel drops the flag or fails such an allocation. */
+   bool coherent_pools;
+
+   /* CSF interface information (CSF only), queried from
+    * KBASE_IOCTL_CS_GET_GLB_IFACE and stored in the panthor uAPI layout
+    * so CSF-generic code can consume either backend. */
+   struct drm_panthor_csif_info csif_info;
+
+   /* Tracking page mapped at BASE_MEM_MAP_TRACKING_HANDLE.  Required by
+    * the kernel before any memory operation; unmapped at destroy time. */
+   void *tracking_page;
+
+   /* CSF USER register page (LATEST_FLUSH etc.), CSF only. */
+   void *user_reg_page;
+
+   /* Monotonically-increasing handle counter.
+    * kbase has no GEM handles; we mint our own u32 handles for use with the
+    * pan_kmod handle_to_bo sparse array. */
+   uint32_t next_handle; /* accessed with p_atomic_inc */
+
+   /* Android dma-heap used for BOs which need to be shared with WSI. */
+   int dma_heap_fd;
+   /* system-uncached heap for the BOs without WB_MMAP on a GPU without IO
+    * coherency (PANVK_KBASE_UNCACHED_HEAP), or -1. */
+   int dma_heap_uncached_fd;
+   /* CSF, no IO coherency and no uncached heap: PANVK_KBASE_IMPORT_SYNC
+    * default (clean CPU-mapped imports before each submit). */
+   bool csf_import_sync;
+
+   /* Kernels without dma-heap (4.14/5.4 ION) use /dev/ion through the same
+    * fd field; ion_heap_mask is the system heap id mask. */
+   bool heap_is_ion;
+   uint32_t ion_heap_mask;
+
+   /* Set when the CSF notification stream reports a queue-group error.
+    * Vulkan queue status queries use this latch instead of invalidating and
+    * reading every GPU subqueue context on every submission. */
+   uint32_t csf_error;
+
+   /* CS_QUEUE_GROUP_CREATE / CS_TILER_HEAP_INIT layout (ioctl size in
+    * bytes) that the kernel accepted first; 0 until then. */
+   uint32_t group_create_layout;
+   uint32_t heap_init_layout;
+
+   /* Allocation ioctl that first succeeded (KBASE_MEM_ALLOC_PATH_*); 0
+    * until then. */
+   uint32_t mem_alloc_path;
+#define KBASE_MEM_ALLOC_PATH_EX     1
+#define KBASE_MEM_ALLOC_PATH_LEGACY 2
+
+   /* A persistent kernel CPU queue turns GPU timeline writes into pollable
+    * sync_file fences.  At most one CQS wait is pending on this queue. */
+   struct {
+      simple_mtx_t lock;
+      base_kcpu_queue_id id;
+      bool valid;
+      bool pending;
+      uint64_t addr;
+      uint64_t target_minus_one;
+      int fence_fd;
+   } kcpu;
+
+   struct {
+      simple_mtx_t lock;
+      base_kcpu_queue_id id;
+      bool valid;
+   } kcpu_export;
+
+   simple_mtx_t atoms_lock;
+   simple_mtx_t atoms_read_lock;
+   /* JM GPU stats (kbase_kmod_jm_busy_ns()), under atoms_lock: time with at
+    * least one atom of this context submitted and not yet completed. */
+   bool busy_track;
+   uint32_t busy_inflight;
+   uint64_t busy_start_ns, busy_ns;
+   struct kbase_atom_slot atoms[KBASE_MAX_ATOMS];
+   uint64_t next_atom_number;
+   unsigned atom_stride;
+   /* Stock base_jd_atom (stride 64): a u64 seq_nr precedes our atom. */
+   bool atom_seq_nr;
+   uint32_t last_event_code[KBASE_MAX_ATOMS];
+   bool atom_failed[KBASE_MAX_ATOMS];
+   uint64_t last_done_atom_ctx[KBASE_MAX_ATOMS];
+   uint32_t last_done_code_ctx[KBASE_MAX_ATOMS];
+
+   /* v9 JM: CPU-mapped dma-buf imports the kernel did not make coherent
+    * (kbase_kmod_jm_clean_imports()). */
+   simple_mtx_t nc_lock;
+   struct list_head nc_bos;
+};
+
+struct kbase_kmod_vm {
+   struct pan_kmod_vm base;
+
+   /* Nothing kbase-specific: the kernel manages one implicit address space
+    * per context and assigns all VAs itself. */
+};
+
+struct kbase_kmod_bo {
+   struct pan_kmod_bo base;
+
+   /* GPU virtual address.  For SAME_VA allocations this equals the CPU
+    * mapping address; for EXEC_VA-zone allocations it is the address
+    * returned by KBASE_IOCTL_MEM_ALLOC; for NEED_MMAP (non-SAME_VA)
+    * dma-heap imports it is req.out.gpu_va with a separate CPU mapping. */
+   uint64_t gpu_va;
+
+   /* CPU mapping established at allocation time, valid for the whole BO
+    * lifetime.  bo_mmap returns it; bo_munmap is a no-op. */
+   void *cpu_ptr;
+
+   /* Mapping on the kbase fd which establishes the GPU VA.  This differs
+    * from cpu_ptr for imported dma-bufs: Pixel kbase UMM mappings reserve the
+    * GPU VA but reject CPU faults, so CPU access uses the dma-buf fd mapping.
+    */
+   void *gpu_mapping;
+
+   /* Retained dma-buf for imported/shareable BOs, or -1 for native kbase
+    * allocations.
+    */
+   int dmabuf_fd;
+
+   /* Whether cpu_ptr was mapped by this BO and must be munmap()ed. */
+   bool owns_cpu_mapping;
+
+   /* Whether this is a SAME_VA region (freed by munmap()) or a zone
+    * region (freed by KBASE_IOCTL_MEM_FREE). */
+   bool same_va;
+
+   /* Whether the kernel reported BASE_MEM_COHERENT_SYSTEM for this region.
+    * Coherent regions need no KBASE_IOCTL_MEM_SYNC (which this DDK rejects
+    * for dma-heap imports with EINVAL); the kernel keeps CPU/GPU coherent.
+    */
+   bool cpu_gpu_coherent;
+
+   /* On kbase_kmod_dev::nc_bos (nc_link valid). */
+   bool nc_listed;
+   struct list_head nc_link;
+};
+
+bool
+kbase_kmod_supports_dmabuf(const struct pan_kmod_dev *dev)
+{
+   const struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, const struct kbase_kmod_dev, base);
+
+   return kbase_dev->dma_heap_fd >= 0;
+}
+
+uint64_t
+kbase_kmod_page_size(void)
+{
+   static uint64_t page_size;
+
+   if (!page_size) {
+      long ps = sysconf(_SC_PAGESIZE);
+      page_size = ps > 0 ? (uint64_t)ps : 4096;
+   }
+   return page_size;
+}
+
+/* The uAPI headers spell the special mmap handles with a 4 KiB page shift;
+ * the kernel compares them in its own PAGE_SHIFT units.  Single-page
+ * mmap()/munmap() lengths of 4096 need no scaling: the kernel rounds the
+ * length up to PAGE_SIZE. */
+#define KBASE_MMAP_HANDLE(h) (((h) >> 12) * kbase_kmod_page_size())
+
+/* -------------------------------------------------------------------------
+ * GPU properties blob parsing helpers
+ * ---------------------------------------------------------------------- */
+
+/*
+ * Each entry in the GPU props blob is encoded as:
+ *   4 bytes header: (key << 2) | size_code
+ *     size_code 0 → u8 (1 byte)
+ *     size_code 1 → u16 (2 bytes)
+ *     size_code 2 → u32 (4 bytes)
+ *     size_code 3 → u64 (8 bytes)
+ *   N bytes value
+ */
+static uint64_t
+kbase_gpuprop_get(const uint8_t *buf, size_t buf_size,
+                  uint32_t target_key, uint64_t default_val)
+{
+   size_t offset = 0;
+
+   while (offset + 4 <= buf_size) {
+      uint32_t hdr;
+      memcpy(&hdr, buf + offset, 4);
+      offset += 4;
+
+      uint32_t key = hdr >> 2;
+      uint32_t size_code = hdr & 0x3;
+      uint32_t val_size = 1u << size_code;
+
+      if (offset + val_size > buf_size)
+         break;
+
+      if (key == target_key) {
+         uint64_t val = 0;
+         memcpy(&val, buf + offset, val_size);
+         return val;
+      }
+
+      offset += val_size;
+   }
+
+   return default_val;
+}
+
+/* Fetch the GPU props blob from the kernel.  Returns a heap-allocated buffer
+ * (must be freed by the caller) and its byte length, or NULL on error. */
+static uint8_t *
+kbase_get_gpuprops(int fd, size_t *out_size)
+{
+   /* First call: size=0 probes the required buffer length. */
+   struct kbase_ioctl_get_gpuprops req = { 0 };
+   int ret = ioctl(fd, KBASE_IOCTL_GET_GPUPROPS, &req);
+   if (ret < 0) {
+      mesa_loge("kbase: KBASE_IOCTL_GET_GPUPROPS (probe) failed: %s",
+                strerror(errno));
+      return NULL;
+   }
+
+   size_t size = (size_t)ret;
+   if (size == 0) {
+      mesa_loge("kbase: KBASE_IOCTL_GET_GPUPROPS returned zero size");
+      return NULL;
+   }
+
+   uint8_t *buf = malloc(size);
+   if (!buf)
+      return NULL;
+
+   req.buffer = (uintptr_t)buf;
+   req.size = (uint32_t)size;
+
+   ret = ioctl(fd, KBASE_IOCTL_GET_GPUPROPS, &req);
+   if (ret < 0) {
+      mesa_loge("kbase: KBASE_IOCTL_GET_GPUPROPS (fill) failed: %s",
+                strerror(errno));
+      free(buf);
+      return NULL;
+   }
+
+   *out_size = size;
+   return buf;
+}
+
+/* kbase_kmod_dev::coherency_mode when the props blob has no
+ * KBASE_GPUPROP_RAW_COHERENCY_MODE. */
+#define KBASE_COHERENCY_UNREPORTED UINT32_MAX
+
+static const char *
+kbase_coherency_mode_str(uint32_t mode)
+{
+   switch (mode) {
+   case DRM_PANTHOR_GPU_COHERENCY_ACE_LITE:
+      return "ACE-Lite";
+   case DRM_PANTHOR_GPU_COHERENCY_ACE:
+      return "ACE";
+   case DRM_PANTHOR_GPU_COHERENCY_NONE:
+      return "none";
+   case KBASE_COHERENCY_UNREPORTED:
+      return "not reported";
+   default:
+      return "unknown";
+   }
+}
+
+static void
+kbase_dev_query_props(struct kbase_kmod_dev *kbase_dev,
+                      const uint8_t *buf, size_t buf_size)
+{
+   struct pan_kmod_dev_props *props = &kbase_dev->base.props;
+
+   /* GPU ID
+    *   product_id  = bits[31:16] of the GPU_ID register
+    *   major_rev   = bits[15:12]
+    *   minor_rev   = bits[11:4]
+    *   version_status = bits[3:0]
+    *
+    * KBASE_GPUPROP_RAW_GPU_ID holds the complete 32-bit GPU_ID register.
+    * If that property is absent (older drivers), fall back to reconstructing
+    * from the individual fields. */
+   uint32_t raw_gpu_id = (uint32_t)kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_GPU_ID, 0);
+
+   if (raw_gpu_id) {
+      /* gpu_id as used by pan_arch(): product_id (top 16 bits) << 16 |
+       * revision (bottom 16 bits). */
+      props->gpu_id = ((uint64_t)(raw_gpu_id & 0xffff0000u)) |
+                      (uint64_t)(raw_gpu_id & 0xffffu);
+   } else {
+      /* Fallback: reassemble from individual props (older kbase). */
+      uint32_t product_id     = (uint32_t)kbase_gpuprop_get(
+         buf, buf_size, KBASE_GPUPROP_PRODUCT_ID, 0);
+      uint32_t major_revision = (uint32_t)kbase_gpuprop_get(
+         buf, buf_size, KBASE_GPUPROP_MAJOR_REVISION, 0);
+      uint32_t minor_revision = (uint32_t)kbase_gpuprop_get(
+         buf, buf_size, KBASE_GPUPROP_MINOR_REVISION, 0);
+      uint32_t version_status = (uint32_t)kbase_gpuprop_get(
+         buf, buf_size, KBASE_GPUPROP_VERSION_STATUS, 0);
+
+      props->gpu_id = ((uint64_t)product_id << 16) |
+                      ((uint64_t)(major_revision & 0xf) << 12) |
+                      ((uint64_t)(minor_revision & 0xff) << 4) |
+                      (uint64_t)(version_status & 0xf);
+   }
+
+   /* GPU variant (lower 8 bits of CORE_FEATURES register) */
+   props->gpu_variant = (uint32_t)kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_CORE_FEATURES, 0) & 0xff;
+
+   /* Hardware feature registers */
+   props->shader_present = kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_SHADER_PRESENT, 0);
+   props->tiler_features = (uint32_t)kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_TILER_FEATURES, 0);
+   props->mem_features = (uint32_t)kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_MEM_FEATURES, 0);
+   props->mmu_features = (uint32_t)kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_MMU_FEATURES, 0);
+
+   /* TEXTURE_FEATURES_0..2 are consecutive keys, but TEXTURE_FEATURES_3
+    * was added later and got a non-contiguous key. */
+   STATIC_ASSERT(ARRAY_SIZE(props->texture_features) == 4);
+   for (unsigned i = 0; i < 3; i++) {
+      props->texture_features[i] = (uint32_t)kbase_gpuprop_get(
+         buf, buf_size,
+         KBASE_GPUPROP_RAW_TEXTURE_FEATURES_0 + i, 0);
+   }
+   props->texture_features[3] = (uint32_t)kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_TEXTURE_FEATURES_3, 0);
+
+   /* AFBC_FEATURES has no equivalent in the kbase GPU props blob; panfork
+    * reports 0 for it as well. */
+   props->afbc_features = 0;
+
+   /* Thread / core properties */
+   props->max_threads_per_core = (uint32_t)kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_THREAD_MAX_THREADS, 0);
+   props->max_threads_per_wg = (uint32_t)kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_THREAD_MAX_WORKGROUP_SIZE, 0);
+
+   uint32_t thread_features = (uint32_t)kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_THREAD_FEATURES, 0);
+   props->max_tasks_per_core = MAX2(thread_features >> 24, 1);
+   props->num_registers_per_core = thread_features & 0xffff;
+
+   props->max_tls_instance_per_core = (uint32_t)kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_TLS_ALLOC, 0);
+   if (!props->max_tls_instance_per_core)
+      props->max_tls_instance_per_core = props->max_threads_per_core;
+
+   /* If num_registers_per_core is zero, use fallback defaults per arch. */
+   if (!props->num_registers_per_core) {
+      unsigned arch = pan_arch(props->gpu_id);
+      switch (arch) {
+      case 4:
+      case 5:
+         props->num_registers_per_core = props->max_threads_per_core * 4;
+         break;
+      case 6:
+         props->num_registers_per_core = props->max_threads_per_core * 64;
+         break;
+      default:
+         props->num_registers_per_core = props->max_threads_per_core * 32;
+         break;
+      }
+   }
+
+   /* Coherency: KBASE_GPUPROP_RAW_COHERENCY_MODE is the coherency mode kbase
+    * selected (base_gpu_props::coherency_mode), not the supported ones, in
+    * the COHERENCY_ENABLE encoding panthor and panfrost report too:
+    * 0 = ACE-Lite, 1 = ACE, 31 = none.
+    *
+    * In pan_kmod, is_io_coherent means explicit CPU cache maintenance can be
+    * skipped for WB_MMAP BOs. That is not true for this kbase backend: kbase
+    * cached CPU mappings still need KBASE_IOCTL_MEM_SYNC before GPU access and
+    * after GPU writes, unless the region itself is BASE_MEM_COHERENT_SYSTEM.
+    */
+   const uint64_t coherency_raw = kbase_gpuprop_get(
+      buf, buf_size, KBASE_GPUPROP_RAW_COHERENCY_MODE, UINT64_MAX);
+   kbase_dev->coherency_mode = coherency_raw == UINT64_MAX
+                                  ? KBASE_COHERENCY_UNREPORTED
+                                  : (uint32_t)coherency_raw;
+   props->is_io_coherent = false;
+
+   /* Timestamp: expose if gpu_id is non-zero (safe assumption). */
+   props->gpu_can_query_timestamp = (props->gpu_id != 0);
+
+   /* timestamp_device_coherent (shaderDeviceClock) says the GPU timestamp
+    * reaches the shader cores, so a device-scope clock read (LD_GCLK
+    * SYSTEM_TIMESTAMP) runs and agrees across cores: panfrost asks for it
+    * with the cycle-count job requirement, panthor 1.6 sets GLB_COUNTER_EN.
+    * The coherency mode does not tell that, and 114 read it as "0 = none",
+    * so the clock was advertised with COHERENCY_NONE and hidden with
+    * ACE-Lite or an unreported mode (the shaderDeviceClock split between the
+    * G615 MC2 phones and the MC6 dev device). Nothing in this backend starts
+    * the counter for shaders: JM atoms only run it with PERMON (timestamp
+    * queries), and kbase does not report whether the CSF firmware got
+    * GLB_COUNTER_EN. So the device scope is not advertised; the subgroup
+    * scope is unchanged. PANVK_KBASE_STRICT_DEVICE_CLOCK=0 = 114 (coherency
+    * mode != 0, an unreported mode reads as 0). */
+   const bool strict_clock =
+      debug_get_bool_option("PANVK_KBASE_STRICT_DEVICE_CLOCK", true);
+   const uint32_t mode_114 =
+      kbase_dev->coherency_mode == KBASE_COHERENCY_UNREPORTED
+         ? 0
+         : kbase_dev->coherency_mode;
+   props->timestamp_device_coherent = !strict_clock && mode_114 != 0;
+
+   /* Perf review B2, opt-in until a device A/B passes. With ACE-Lite or ACE
+    * the GPU can snoop the CPU caches for regions allocated
+    * BASE_MEM_COHERENT_SYSTEM, and the CPU caches see the GPU's writes, so
+    * the CPU cache maintenance on the CPU-cached BOs (command buffer CS and
+    * descriptor pools, descriptor pools, device pools, HOST_CACHED memory)
+    * is not needed: such BOs get PAN_KMOD_BO_FLAG_IO_COHERENT, which makes
+    * pan_kmod_queue_bo_map_sync() return early, and MEM_SYNC already skips
+    * them. kbase drops the flag on a system that is not coherent; the
+    * allocation checks the returned flags per BO. CSF only for now. */
+   const bool pools_wanted =
+      debug_get_bool_option("PANVK_KBASE_COHERENT_POOLS", false);
+   kbase_dev->coherent_pools =
+      pools_wanted && kbase_dev->is_csf &&
+      (kbase_dev->coherency_mode == DRM_PANTHOR_GPU_COHERENCY_ACE_LITE ||
+       kbase_dev->coherency_mode == DRM_PANTHOR_GPU_COHERENCY_ACE);
+
+   /* One line with what the kernel reports, so a device log shows the mode
+    * the cache-maintenance work has to rely on. */
+   mesa_logi("kbase: coherency mode %u (%s), shaderDeviceClock %s (%s), "
+             "coherent pools %s",
+             kbase_dev->coherency_mode,
+             kbase_coherency_mode_str(kbase_dev->coherency_mode),
+             props->timestamp_device_coherent ? "on" : "off",
+             strict_clock ? "strict, PANVK_KBASE_STRICT_DEVICE_CLOCK=0 = 114"
+                          : "114 rule, coherency mode != 0",
+             kbase_dev->coherent_pools
+                ? "requested (PANVK_KBASE_COHERENT_POOLS=1)"
+             : pools_wanted
+                ? "off (PANVK_KBASE_COHERENT_POOLS=1 needs CSF and ACE-Lite "
+                  "or ACE)"
+                : "off (PANVK_KBASE_COHERENT_POOLS=1 enables)");
+
+   props->timestamp_frequency = 0;
+#if defined(__aarch64__)
+   uint64_t cntfrq;
+   __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(cntfrq));
+   props->timestamp_frequency = cntfrq;
+#endif
+   if (props->timestamp_frequency)
+      props->timestamp_cycles_to_ns_factor =
+         1000000000.0 / props->timestamp_frequency;
+
+   /* Priorities: kbase currently only advertises medium. */
+   props->allowed_group_priorities_mask =
+      PAN_KMOD_GROUP_ALLOW_PRIORITY_MEDIUM |
+      PAN_KMOD_GROUP_ALLOW_PRIORITY_LOW;
+
+   /* kbase's SAME_VA/EXEC_VA allocations are exposed at the base 4 KiB
+    * granularity.  Newer pan_kmod derives the VM bitmap from device props. */
+   props->pgsize_bitmap = PAN_PGSIZE_4K;
+
+   /* Supported BO flags. WB_MMAP is backed by BASE_MEM_CACHED_CPU and explicit
+    * KBASE_IOCTL_MEM_SYNC operations in kbase_kmod_flush_bo_map_syncs().
+    */
+   props->supported_bo_flags = PAN_KMOD_BO_FLAG_EXECUTABLE |
+                                PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT |
+                                PAN_KMOD_BO_FLAG_NO_MMAP |
+                                PAN_KMOD_BO_FLAG_WB_MMAP |
+                                PAN_KMOD_BO_FLAG_GPU_UNCACHED |
+                                PAN_KMOD_BO_FLAG_CSF_EVENT;
+
+   /* NO_ZERO skips 041's clear of the committed pages.
+    * PANVK_KBASE_ZERO_ALL=1 clears every BO again (114). */
+   if (!debug_get_bool_option("PANVK_KBASE_ZERO_ALL", false))
+      props->supported_bo_flags |= PAN_KMOD_BO_FLAG_NO_ZERO;
+}
+
+/* jm-v7 109: GPU timestamp frequency calibration.
+ *
+ * timestamp_frequency is the CPU's cntfrq_el0, which assumes the GPU
+ * TIMESTAMP register counts the system counter. The FTL Galaxy A31
+ * (MT6768, Mali-G52 MC2) GPU counter runs at twice that (GPU timestamp
+ * deltas were 2.0x the wall time). KBASE_IOCTL_GET_CPU_GPU_TIMEINFO
+ * returns the GPU TIMESTAMP register (the counter the GPU writes for
+ * timestamp queries) and the kernel's monotonic time, sampled together.
+ * Three samples PANVK_KBASE_TS_CAL_MS apart give two rate estimates; they
+ * must agree within 2 % (a counter that stalled across a power transition
+ * would not), and the result is used only when it is more than 10 % away
+ * from cntfrq. A result within 3 % of cntfrq x 2^k (k = -2..2, k != 0)
+ * snaps to it.
+ *
+ * PANVK_KBASE_TS_CALIBRATE: unset = JM only, and only a counter faster
+ * than cntfrq is taken; 0 = off (cntfrq always); 1 = JM and CSF, faster
+ * or slower. PANVK_KBASE_TS_CAL_MS = window (default 5 ms, 1-1000).
+ */
+static bool
+kbase_ts_sample(int fd, uint64_t *ts, uint64_t *ns)
+{
+   union kbase_ioctl_get_cpu_gpu_timeinfo req = {
+      .in.request_flags =
+         BASE_TIMEINFO_MONOTONIC_FLAG | BASE_TIMEINFO_TIMESTAMP_FLAG,
+   };
+
+   if (ioctl(fd, KBASE_IOCTL_GET_CPU_GPU_TIMEINFO, &req))
+      return false;
+
+   *ts = req.out.timestamp;
+   *ns = req.out.sec * 1000000000ull + req.out.nsec;
+   return true;
+}
+
+/* jm-v7 110: cntfrq_el0 reads 0 on some SoCs (FTL Galaxy S9, Exynos
+ * 9810: the firmware does not program CNTFRQ and the kernel takes the
+ * arch-timer rate from the device tree). timestamp_frequency is then 0 and
+ * timestampPeriod was 0 with timestamps still advertised. The rate is then
+ * measured with the same samples, whatever PANVK_KBASE_TS_CALIBRATE says
+ * (except 0) and on CSF too, retried once with a 4x window, and snapped to
+ * the nearest common SoC timer rate within 3 % (else rounded to 1 kHz). If
+ * no stable rate comes out, gpu_can_query_timestamp is cleared, so
+ * timestampValidBits = 0 and timestampComputeAndGraphics = false instead of
+ * timestamp queries with period 0. Every return path logs one line.
+ */
+static const double kbase_ts_common_rates[] = {
+   13e6, 19.2e6, 24e6, 25e6, 26e6, 38.4e6, 50e6, 52e6, 100e6,
+};
+
+/* 0 = ok (*meas, f[2] set), else a short reason. */
+static const char *
+kbase_ts_measure(int fd, int ms, double *meas, double f[2], int *eno)
+{
+   /* Poll every ~100 us rather than sleep: each TIMEINFO keeps the GPU
+    * powered (kbase_pm_context_active), so a counter that would stop while
+    * the GPU is off cannot skew the window.
+    */
+   uint64_t ts[3], ns[3];
+   for (unsigned i = 0; i < 3; i++) {
+      unsigned polls = 0;
+      do {
+         if (polls++) {
+            struct timespec d = { .tv_nsec = 100000 };
+            while (nanosleep(&d, &d) && errno == EINTR)
+               ;
+         }
+         if (!kbase_ts_sample(fd, &ts[i], &ns[i])) {
+            *eno = errno;
+            return "TIMEINFO failed";
+         }
+      } while (i && ns[i] < ns[i - 1] + (uint64_t)ms * 1000000ull &&
+               polls < 100000);
+   }
+
+   for (unsigned i = 0; i < 2; i++) {
+      if (ns[i + 1] <= ns[i] || ts[i + 1] <= ts[i])
+         return "counter not advancing";
+      f[i] = (double)(ts[i + 1] - ts[i]) * 1e9 / (double)(ns[i + 1] - ns[i]);
+   }
+
+   *meas = (f[0] + f[1]) / 2.0;
+   if (fabs(f[0] - f[1]) > 0.02 * *meas || *meas < 1e6 || *meas > 1e9)
+      return "unstable";
+   return NULL;
+}
+
+static void
+kbase_ts_set_frequency(struct pan_kmod_dev_props *props, uint64_t freq)
+{
+   props->timestamp_frequency = freq;
+   props->timestamp_cycles_to_ns_factor = 1000000000.0 / freq;
+}
+
+static void
+kbase_calibrate_timestamp_frequency(int fd, bool is_csf,
+                                    struct pan_kmod_dev_props *props)
+{
+   const char *env = getenv("PANVK_KBASE_TS_CALIBRATE");
+   const int mode = (env && env[0]) ? atoi(env) : -1;
+   const bool no_cntfrq = !props->timestamp_frequency;
+
+   if (!props->gpu_can_query_timestamp) {
+      mesa_logi("kbase: timestamp calibration: no GPU timestamps (gpu_id 0)");
+      return;
+   }
+   if (mode == 0) {
+      mesa_logi("kbase: timestamp calibration off (PANVK_KBASE_TS_CALIBRATE=0): "
+                "cntfrq %" PRIu64 " Hz%s", props->timestamp_frequency,
+                no_cntfrq ? ", timestampPeriod 0" : "");
+      return;
+   }
+   if (mode < 0 && is_csf && !no_cntfrq) {
+      mesa_logi("kbase: timestamp calibration: CSF, keeping cntfrq %" PRIu64
+                " Hz (PANVK_KBASE_TS_CALIBRATE=1 = measure)",
+                props->timestamp_frequency);
+      return;
+   }
+
+   const char *ms_env = getenv("PANVK_KBASE_TS_CAL_MS");
+   int ms = (ms_env && ms_env[0]) ? atoi(ms_env) : 5;
+   if (ms < 1 || ms > 1000)
+      ms = 5;
+
+   double meas = 0, f[2] = { 0, 0 };
+   int eno = 0;
+   const char *err = kbase_ts_measure(fd, ms, &meas, f, &eno);
+   if (err && no_cntfrq) {
+      const int ms2 = MIN2(ms * 4, 1000);
+      mesa_logi("kbase: timestamp calibration: cntfrq_el0 is 0 and the %d ms "
+                "measurement failed (%s, %.0f / %.0f Hz), retrying with %d ms",
+                ms, err, f[0], f[1], ms2);
+      eno = 0;
+      err = kbase_ts_measure(fd, ms2, &meas, f, &eno);
+   }
+
+   if (err) {
+      if (no_cntfrq) {
+         props->gpu_can_query_timestamp = false;
+         mesa_logw("kbase: timestamp calibration: cntfrq_el0 is 0 and the "
+                   "GPU counter rate is unknown (%s%s%s, %.0f / %.0f Hz): "
+                   "timestamps not advertised", err, eno ? ": " : "",
+                   eno ? strerror(eno) : "", f[0], f[1]);
+      } else {
+         mesa_logi("kbase: timestamp calibration: %s%s%s (%.0f / %.0f Hz), "
+                   "keeping %" PRIu64 " Hz", err, eno ? ": " : "",
+                   eno ? strerror(eno) : "", f[0], f[1],
+                   props->timestamp_frequency);
+      }
+      return;
+   }
+
+   if (no_cntfrq) {
+      uint64_t freq = (uint64_t)(meas / 1000.0 + 0.5) * 1000;
+      double best = 0.03;
+      for (unsigned i = 0; i < ARRAY_SIZE(kbase_ts_common_rates); i++) {
+         const double r = kbase_ts_common_rates[i];
+         const double d = fabs(meas - r) / r;
+         if (d <= best) {
+            best = d;
+            freq = (uint64_t)(r + 0.5);
+         }
+      }
+      mesa_logw("kbase: cntfrq_el0 is 0; GPU timestamp counter measured at "
+                "%.0f Hz (%.0f / %.0f): using %" PRIu64 " Hz "
+                "(PANVK_KBASE_TS_CALIBRATE=0 = period 0)", meas, f[0], f[1],
+                freq);
+      kbase_ts_set_frequency(props, freq);
+      return;
+   }
+
+   const double cpu = (double)props->timestamp_frequency;
+
+   /* Default: only a faster GPU counter (the A31 case). A slower reading
+    * could also be a counter that pauses, so it needs =1.
+    */
+   if (fabs(meas - cpu) <= 0.10 * cpu || (mode < 0 && meas < cpu)) {
+      mesa_logi("kbase: timestamp calibration: %.0f Hz, keeping cntfrq "
+                "%" PRIu64 " Hz", meas, props->timestamp_frequency);
+      return;
+   }
+
+   uint64_t freq = (uint64_t)(meas + 0.5);
+   for (int k = -2; k <= 2; k++) {
+      if (!k)
+         continue;
+      const double snap = k > 0 ? cpu * (1 << k) : cpu / (1 << -k);
+      if (fabs(meas - snap) <= 0.03 * snap) {
+         freq = (uint64_t)(snap + 0.5);
+         break;
+      }
+   }
+
+   mesa_logw("kbase: GPU timestamp counter measured at %.0f Hz (%.0f / "
+             "%.0f), cntfrq %" PRIu64 " Hz: using %" PRIu64 " Hz "
+             "(PANVK_KBASE_TS_CALIBRATE=0 = cntfrq)", meas, f[0], f[1],
+             props->timestamp_frequency, freq);
+   kbase_ts_set_frequency(props, freq);
+}
+
+/* -------------------------------------------------------------------------
+ * Device creation / destruction
+ * ---------------------------------------------------------------------- */
+
+/* Query the CSF global interface and derive the information CSF-generic
+ * code needs, in the panthor uAPI layout.  Returns 0 on success. */
+static int
+kbase_query_csif_info(int fd, struct drm_panthor_csif_info *csif)
+{
+   /* First call with zero sizes to learn the group/stream counts. */
+   union kbase_ioctl_cs_get_glb_iface req = { 0 };
+   if (ioctl(fd, KBASE_IOCTL_CS_GET_GLB_IFACE, &req) < 0) {
+      mesa_loge("kbase: KBASE_IOCTL_CS_GET_GLB_IFACE (probe) failed: %s",
+                strerror(errno));
+      return -1;
+   }
+
+   uint32_t group_num = req.out.group_num;
+   uint32_t total_stream_num = req.out.total_stream_num;
+
+   if (!group_num || !total_stream_num) {
+      mesa_loge("kbase: GLB interface reports no queue groups/streams");
+      return -1;
+   }
+
+   struct basep_cs_group_control *groups =
+      calloc(group_num, sizeof(*groups));
+   struct basep_cs_stream_control *streams =
+      calloc(total_stream_num, sizeof(*streams));
+   if (!groups || !streams) {
+      free(groups);
+      free(streams);
+      return -1;
+   }
+
+   req.in.max_group_num = group_num;
+   req.in.max_total_stream_num = total_stream_num;
+   req.in.groups_ptr = (uintptr_t)groups;
+   req.in.streams_ptr = (uintptr_t)streams;
+
+   int ret = ioctl(fd, KBASE_IOCTL_CS_GET_GLB_IFACE, &req);
+   if (ret < 0) {
+      mesa_loge("kbase: KBASE_IOCTL_CS_GET_GLB_IFACE (fill) failed: %s",
+                strerror(errno));
+      free(groups);
+      free(streams);
+      return -1;
+   }
+
+   /* Stream features nominally encode the work register count in [7:0]
+    * and the scoreboard slot count in [15:8], but the encoding is not
+    * reliable across kbase/firmware versions (a Pixel 7 kbase 1.38
+    * reports a work register value that underflows the register file the
+    * CS compiler was designed for).  Like panthor, read WORK_REGS, but
+    * sanity-check it: shipping CSF parts have 96 (v10/v11) or 128 (v12+)
+    * CS registers, 4 of them unpreserved.  Resolve implausible counts once
+    * the architecture is known.  Only trust the scoreboard count when it
+    * is in the plausible [PANVK-supported] 1..16 range. */
+   uint32_t stream_features = streams[0].features;
+   uint32_t scoreboard_slot_count = (stream_features >> 8) & 0xff;
+   uint32_t cs_reg_count = (stream_features & 0xff) + 1;
+
+   mesa_logd("kbase: GLB iface: version 0x%x, features 0x%x, %u groups, "
+             "%u streams (stream 0: features 0x%x, group 0: %u streams, "
+             "suspend size %u)",
+             req.out.glb_version, req.out.features, group_num,
+             total_stream_num, stream_features, groups[0].stream_num,
+             groups[0].suspend_size);
+
+   *csif = (struct drm_panthor_csif_info){
+      .csg_slot_count = group_num,
+      .cs_slot_count = groups[0].stream_num,
+      .cs_reg_count = cs_reg_count,
+      .scoreboard_slot_count =
+         (scoreboard_slot_count - 1) < 16 ? scoreboard_slot_count : 8,
+      /* Number of CS registers the FW may clobber; matches panthor's
+       * CSF_UNPRESERVED_REG_COUNT. */
+      .unpreserved_cs_reg_count = 4,
+   };
+
+   free(groups);
+   free(streams);
+   return 0;
+}
+
+const struct drm_panthor_csif_info *
+kbase_kmod_get_csif_props(const struct pan_kmod_dev *dev)
+{
+   assert(dev->ops == &kbase_kmod_ops);
+
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+
+   assert(kbase_dev->is_csf);
+   return &kbase_dev->csif_info;
+}
+
+uint32_t
+kbase_kmod_get_flush_id(const struct pan_kmod_dev *dev)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+
+   if (!kbase_dev->user_reg_page)
+      return 0;
+
+   return *(volatile uint32_t *)((uint8_t *)kbase_dev->user_reg_page +
+                                 CS_USER_REG_LATEST_FLUSH);
+}
+
+/* -------------------------------------------------------------------------
+ * CSF queue group / queue / tiler heap primitives
+ * ---------------------------------------------------------------------- */
+
+/* Endpoint masks/maxes match what panfork uses on all CSF parts: a single
+ * tiler unit, all fragment/compute endpoints.  Priority 0 is
+ * BASE_QUEUE_GROUP_PRIORITY_HIGH: resist CSG rotation so the Pixel kbase
+ * off-slot heap-reclaim shrinker cannot empty our tiler heaps under memory
+ * pressure.  Tiler heap growth is serviced by the kernel OOM path.  At
+ * max_chunks kbase terminates the group, unless csi_handlers has
+ * BASE_CSF_TILER_OOM_EXCEPTION_FLAG: it then answers with a NULL chunk and
+ * the firmware raises TILER_OOM on the CS that registered the incremental
+ * rendering handler (jm-v7-wip 0161: the fragment CS, same group as the
+ * vertex/tiler CS).  The 1_6 layout has no csi_handlers. */
+#define KBASE_GROUP_CREATE_IN(cs_count)                                        \
+   .tiler_mask = 1, .fragment_mask = ~0ull, .compute_mask = ~0ull,            \
+   .cs_min = (cs_count), .priority = 0, .tiler_max = 1, .fragment_max = 64,   \
+   .compute_max = 64
+
+static int
+kbase_csf_group_create_ioctl(int fd, unsigned layout, bool fault_report,
+                             uint32_t cs_queue_count, uint8_t csi_handlers,
+                             uint32_t *group_handle)
+{
+   STATIC_ASSERT(sizeof(union kbase_ioctl_cs_queue_group_create_1_6) == 32);
+   STATIC_ASSERT(sizeof(union kbase_ioctl_cs_queue_group_create_1_18) == 40);
+   STATIC_ASSERT(sizeof(union kbase_ioctl_cs_queue_group_create) == 112);
+
+   if (layout == 112) {
+      /* uAPI 1.25+: ask for recoverable CS faults through read(). */
+      union kbase_ioctl_cs_queue_group_create req = {
+         .in = { KBASE_GROUP_CREATE_IN(cs_queue_count),
+                 .csi_handlers = csi_handlers,
+                 .cs_fault_report_enable = fault_report },
+      };
+      if (ioctl(fd, KBASE_IOCTL_CS_QUEUE_GROUP_CREATE, &req))
+         return -1;
+      *group_handle = req.out.group_handle;
+   } else if (layout == 40) {
+      union kbase_ioctl_cs_queue_group_create_1_18 req = {
+         .in = { KBASE_GROUP_CREATE_IN(cs_queue_count),
+                 .csi_handlers = csi_handlers },
+      };
+      if (ioctl(fd, KBASE_IOCTL_CS_QUEUE_GROUP_CREATE_1_18, &req))
+         return -1;
+      *group_handle = req.out.group_handle;
+   } else {
+      union kbase_ioctl_cs_queue_group_create_1_6 req = {
+         .in = { KBASE_GROUP_CREATE_IN(cs_queue_count) },
+      };
+      if (ioctl(fd, KBASE_IOCTL_CS_QUEUE_GROUP_CREATE_1_6, &req))
+         return -1;
+      *group_handle = req.out.group_handle;
+   }
+   return 0;
+}
+
+int
+kbase_kmod_csf_group_create(struct pan_kmod_dev *dev, uint32_t cs_queue_count,
+                            bool tiler_oom_handler, uint32_t *group_handle)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   const bool fault_report =
+      pan_kmod_driver_version_at_least(&dev->driver, 1, 25);
+   const uint8_t csi_handlers =
+      tiler_oom_handler && pan_kmod_driver_version_at_least(&dev->driver, 1, 12)
+         ? BASE_CSF_TILER_OOM_EXCEPTION_FLAG
+         : 0;
+   unsigned layouts[3], n;
+   int err = 0;
+
+   layouts[0] = p_atomic_read(&kbase_dev->group_create_layout);
+   n = layouts[0] ? 1
+                  : kbase_csf_group_create_layouts(dev->driver.version.major,
+                                                   dev->driver.version.minor,
+                                                   layouts);
+
+   /* The kernel's 1_6 compat handler drops csi_handlers (CSF 1.19-1.24
+    * kernels such as MediaTek 1.21 try 32 bytes first): try the layouts that
+    * carry the flag first. */
+   if (csi_handlers && n > 1 && layouts[0] == 32) {
+      memmove(layouts, layouts + 1, (n - 1) * sizeof(layouts[0]));
+      layouts[n - 1] = 32;
+   }
+
+   for (unsigned i = 0; i < n; i++) {
+      if (kbase_csf_group_create_ioctl(dev->fd, layouts[i], fault_report,
+                                       cs_queue_count, csi_handlers,
+                                       group_handle) == 0) {
+         if (p_atomic_cmpxchg(&kbase_dev->group_create_layout, 0,
+                              layouts[i]) == 0)
+            mesa_logi("kbase: queue_group_create layout=%u bytes, %u CS, "
+                      "csi_handlers 0x%x",
+                      layouts[i], cs_queue_count, csi_handlers);
+         return 0;
+      }
+
+      /* Only a rejected layout (unknown ioctl size/nr, or a field the
+       * kernel refuses) is worth retrying with another layout. */
+      err = errno;
+      if (err != EINVAL && err != ENOTTY)
+         break;
+      if (i + 1 < n)
+         mesa_logw("kbase: CS_QUEUE_GROUP_CREATE layout=%u bytes failed: %s",
+                   layouts[i], strerror(err));
+   }
+
+   mesa_loge("kbase: KBASE_IOCTL_CS_QUEUE_GROUP_CREATE failed: %s",
+             strerror(err));
+   return -1;
+}
+
+static void
+kbase_log_csf_queue_error(const char *kind, uint8_t group_handle,
+                          uint8_t csi_index, uint32_t status,
+                          uint64_t sideband, uint8_t has_extra,
+                          uint32_t trace_id0, uint32_t trace_id1,
+                          uint32_t trace_task)
+{
+   mesa_loge("kbase: CSF group %u CSI %u %s: status 0x%08x "
+             "(exception 0x%02x), sideband 0x%016" PRIx64,
+             group_handle, csi_index, kind, status, status & 0xff, sideband);
+
+   if (has_extra) {
+      mesa_loge("kbase: CSF group %u CSI %u fault trace: id0 0x%08x, "
+                "id1 0x%08x, task 0x%08x",
+                group_handle, csi_index, trace_id0, trace_id1, trace_task);
+   }
+}
+
+static int
+kbase_log_csf_notification(struct pan_kmod_dev *dev,
+                           const struct base_csf_notification *event)
+{
+   STATIC_ASSERT(sizeof(struct base_csf_notification) == 64);
+
+   if (event->type == BASE_CSF_NOTIFICATION_EVENT) {
+      mesa_logd("kbase: received CSF event notification");
+      return 0;
+   }
+
+   if (event->type == BASE_CSF_NOTIFICATION_CPU_QUEUE_DUMP) {
+      mesa_logw("kbase: received CSF CPU queue dump notification");
+      return 0;
+   }
+
+   if (event->type != BASE_CSF_NOTIFICATION_GPU_QUEUE_GROUP_ERROR) {
+      mesa_logw("kbase: received unknown CSF notification type %u",
+                event->type);
+      return 0;
+   }
+
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   p_atomic_set(&kbase_dev->csf_error, true);
+
+   const uint8_t group_handle = event->payload.csg_error.handle;
+   const struct base_gpu_queue_group_error *error =
+      &event->payload.csg_error.error;
+
+   int error_type = error->error_type + 1;
+
+   switch (error->error_type) {
+   case BASE_GPU_QUEUE_GROUP_ERROR_FATAL: {
+      const struct base_gpu_queue_group_error_fatal_payload *payload =
+         &error->payload.fatal_group;
+      mesa_loge("kbase: CSF group %u fatal error: status 0x%08x "
+                "(exception 0x%02x), sideband 0x%016" PRIx64,
+                group_handle, payload->status, payload->status & 0xff,
+                (uint64_t)payload->sideband);
+      break;
+   }
+
+   case BASE_GPU_QUEUE_GROUP_QUEUE_ERROR_FATAL: {
+      const struct base_gpu_queue_error_fatal_payload *payload =
+         &error->payload.fatal_queue;
+      kbase_log_csf_queue_error(
+         "fatal error", group_handle, payload->csi_index, payload->status,
+         payload->sideband, payload->has_extra, payload->trace_id0,
+         payload->trace_id1, payload->trace_task);
+      break;
+   }
+
+   case BASE_GPU_QUEUE_GROUP_ERROR_TIMEOUT:
+      mesa_loge("kbase: CSF group %u progress timeout notification",
+                group_handle);
+      break;
+
+   case BASE_GPU_QUEUE_GROUP_ERROR_TILER_HEAP_OOM:
+      mesa_loge("kbase: CSF group %u tiler heap OOM notification",
+                group_handle);
+      break;
+
+   case BASE_GPU_QUEUE_GROUP_QUEUE_ERROR_FAULT: {
+      const struct base_gpu_queue_error_fault_payload *payload =
+         &error->payload.fault_queue;
+      kbase_log_csf_queue_error(
+         "recoverable fault", group_handle, payload->csi_index,
+         payload->status, payload->sideband, payload->has_extra,
+         payload->trace_id0, payload->trace_id1, payload->trace_task);
+      break;
+   }
+
+   default:
+      mesa_loge("kbase: CSF group %u unknown error type %u", group_handle,
+                error->error_type);
+      break;
+   }
+   return error_type;
+}
+
+void
+kbase_kmod_csf_group_destroy(struct pan_kmod_dev *dev, uint32_t group_handle)
+{
+   struct kbase_ioctl_cs_queue_group_term req = {
+      .group_handle = group_handle,
+   };
+
+   if (ioctl(dev->fd, KBASE_IOCTL_CS_QUEUE_GROUP_TERMINATE, &req))
+      mesa_loge("kbase: KBASE_IOCTL_CS_QUEUE_GROUP_TERMINATE failed: %s",
+                strerror(errno));
+}
+
+void *
+kbase_kmod_csf_queue_bind(struct pan_kmod_dev *dev, uint32_t group_handle,
+                          uint32_t csi_index, uint64_t ringbuf_va,
+                          uint32_t ringbuf_size)
+{
+   struct kbase_ioctl_cs_queue_register reg = {
+      .buffer_gpu_addr = ringbuf_va,
+      .buffer_size = ringbuf_size,
+      .priority = 0, /* BASE_QUEUE_GROUP_PRIORITY_HIGH: resist CSG rotation so the
+                              * Pixel kbase off-slot heap-reclaim shrinker cannot
+                              * empty our tiler heaps under memory pressure. */
+   };
+
+   if (ioctl(dev->fd, KBASE_IOCTL_CS_QUEUE_REGISTER, &reg)) {
+      mesa_loge("kbase: KBASE_IOCTL_CS_QUEUE_REGISTER failed: %s",
+                strerror(errno));
+      return NULL;
+   }
+
+   union kbase_ioctl_cs_queue_bind bind = {
+      .in = {
+         .buffer_gpu_addr = ringbuf_va,
+         .group_handle = group_handle,
+         .csi_index = csi_index,
+      },
+   };
+
+   if (ioctl(dev->fd, KBASE_IOCTL_CS_QUEUE_BIND, &bind)) {
+      mesa_loge("kbase: KBASE_IOCTL_CS_QUEUE_BIND failed: %s",
+                strerror(errno));
+      goto err_term_queue;
+   }
+
+   void *user_io = mmap(NULL, BASEP_QUEUE_NR_MMAP_USER_PAGES * kbase_kmod_page_size(),
+                        PROT_READ | PROT_WRITE, MAP_SHARED, dev->fd,
+                        bind.out.mmap_handle);
+   if (user_io == MAP_FAILED) {
+      mesa_loge("kbase: mmap of CS USER_IO pages failed: %s",
+                strerror(errno));
+      goto err_term_queue;
+   }
+
+   return user_io;
+
+err_term_queue:
+   {
+      struct kbase_ioctl_cs_queue_terminate term = {
+         .buffer_gpu_addr = ringbuf_va,
+      };
+      ioctl(dev->fd, KBASE_IOCTL_CS_QUEUE_TERMINATE, &term);
+   }
+   return NULL;
+}
+
+void
+kbase_kmod_csf_queue_term(struct pan_kmod_dev *dev, uint64_t ringbuf_va,
+                          void *user_io)
+{
+   if (user_io)
+      munmap(user_io, BASEP_QUEUE_NR_MMAP_USER_PAGES * kbase_kmod_page_size());
+
+   struct kbase_ioctl_cs_queue_terminate term = {
+      .buffer_gpu_addr = ringbuf_va,
+   };
+
+   if (ioctl(dev->fd, KBASE_IOCTL_CS_QUEUE_TERMINATE, &term))
+      mesa_loge("kbase: KBASE_IOCTL_CS_QUEUE_TERMINATE failed: %s",
+                strerror(errno));
+}
+
+int
+kbase_kmod_csf_queue_kick(struct pan_kmod_dev *dev, uint64_t ringbuf_va)
+{
+   struct kbase_ioctl_cs_queue_kick kick = {
+      .buffer_gpu_addr = ringbuf_va,
+   };
+
+   if (ioctl(dev->fd, KBASE_IOCTL_CS_QUEUE_KICK, &kick)) {
+      mesa_loge("kbase: KBASE_IOCTL_CS_QUEUE_KICK failed: %s",
+                strerror(errno));
+      return -1;
+   }
+
+   return 0;
+}
+
+/* PANVK_KBASE_WAIT_STATS=1 (diagnostics, off by default): once a second, one
+ * line over the CSF notification waits of that second: how many, how many
+ * slept a whole 20 ms slice without a notification (a late or missed
+ * wakeup), their mean and longest time, and whether KCPU fence waits are on. */
+static int kbase_kmod_csf_wait_event_raw(struct pan_kmod_dev *dev,
+                                         int64_t timeout_ns);
+
+static struct {
+   simple_mtx_t lock;
+   int on; /* -1 = not read yet */
+   uint64_t start_ns, n, full_slices, sum_ns, max_ns;
+} kbase_wait_stats = { .lock = SIMPLE_MTX_INITIALIZER, .on = -1 };
+
+static void
+kbase_wait_stats_add(struct pan_kmod_dev *dev, uint64_t t0, int64_t timeout_ns,
+                     bool timed_out)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   const uint64_t now = os_time_get_nano(), d = now - t0;
+
+   simple_mtx_lock(&kbase_wait_stats.lock);
+   if (!kbase_wait_stats.start_ns)
+      kbase_wait_stats.start_ns = t0;
+   kbase_wait_stats.n++;
+   kbase_wait_stats.sum_ns += d;
+   kbase_wait_stats.max_ns = MAX2(kbase_wait_stats.max_ns, d);
+   if (timed_out && timeout_ns >= 19000000)
+      kbase_wait_stats.full_slices++;
+   if (now - kbase_wait_stats.start_ns >= 1000000000ull) {
+      mesa_logi("kbase: wait-stats waits=%" PRIu64 " full_20ms_slices=%" PRIu64
+                " avg_ms=%.2f max_ms=%.2f kcpu=%d",
+                kbase_wait_stats.n, kbase_wait_stats.full_slices,
+                (double)kbase_wait_stats.sum_ns / 1e6 / kbase_wait_stats.n,
+                (double)kbase_wait_stats.max_ns / 1e6, kd->kcpu.valid);
+      kbase_wait_stats.start_ns = now;
+      kbase_wait_stats.n = kbase_wait_stats.full_slices = 0;
+      kbase_wait_stats.sum_ns = kbase_wait_stats.max_ns = 0;
+   }
+   simple_mtx_unlock(&kbase_wait_stats.lock);
+}
+
+int
+kbase_kmod_csf_wait_event(struct pan_kmod_dev *dev, int64_t timeout_ns)
+{
+   if (unlikely(kbase_wait_stats.on))  {
+      if (kbase_wait_stats.on < 0)
+         kbase_wait_stats.on =
+            debug_get_bool_option("PANVK_KBASE_WAIT_STATS", false);
+      if (kbase_wait_stats.on) {
+         const uint64_t t0 = os_time_get_nano();
+         int ret = kbase_kmod_csf_wait_event_raw(dev, timeout_ns);
+         kbase_wait_stats_add(dev, t0, timeout_ns, ret == 0 &&
+                              os_time_get_nano() - t0 >= (uint64_t)timeout_ns);
+         return ret;
+      }
+   }
+   return kbase_kmod_csf_wait_event_raw(dev, timeout_ns);
+}
+
+static int
+kbase_kmod_csf_wait_event_raw(struct pan_kmod_dev *dev, int64_t timeout_ns)
+{
+   /* Block until the kernel has a CSF notification pending, then consume one
+    * notification with read().  This is what drives kernel-side
+    * servicing of the submitted work (tiler-heap OOM growth, sync-update
+    * wakeups, group scheduling) — a pure userspace spin on the seqno cell
+    * never gives the driver's event path a chance to run.  Mirrors
+    * panfork's poll()+read() CSF wait model. */
+   struct pollfd pfd = {
+      .fd = dev->fd,
+      .events = POLLIN,
+   };
+   struct timespec ts = {
+      .tv_sec = timeout_ns / 1000000000,
+      .tv_nsec = timeout_ns % 1000000000,
+   };
+
+   int ret = ppoll(&pfd, 1, &ts, NULL);
+   if (ret < 0)
+      return (errno == EINTR) ? 0 : -1;
+
+   if (ret == 0 || !(pfd.revents & POLLIN))
+      return 0;
+
+   /* The kbase fd is blocking.  Read exactly one notification after poll;
+    * trying to drain it until EAGAIN would block forever after the final
+    * pending record.  Another queued record will make the next poll return
+    * immediately. */
+   struct base_csf_notification event;
+   ssize_t rd;
+
+   do {
+      rd = read(dev->fd, &event, sizeof(event));
+   } while (rd < 0 && errno == EINTR);
+
+   if (rd < 0)
+      return -1;
+
+   if (rd != sizeof(event)) {
+      errno = EIO;
+      return -1;
+   }
+
+   return kbase_log_csf_notification(dev, &event);
+}
+
+static int
+kbase_kcpu_poll_fence(int fd, int64_t timeout_ns)
+{
+   struct pollfd pfd = {
+      .fd = fd,
+      .events = POLLIN,
+   };
+   struct timespec ts = {
+      .tv_sec = timeout_ns / 1000000000,
+      .tv_nsec = timeout_ns % 1000000000,
+   };
+
+   int ret;
+   do {
+      ret = ppoll(&pfd, 1, &ts, NULL);
+   } while (ret < 0 && errno == EINTR);
+
+   if (ret <= 0)
+      return ret;
+
+   /* sync_file reports a signalled fence through POLLIN.  POLLERR/HUP also
+    * retires the KCPU command; the caller reads the adjacent CQS error word
+    * before accepting queue completion. */
+   return pfd.revents & (POLLIN | POLLERR | POLLHUP) ? 1 : -1;
+}
+
+int
+kbase_kmod_csf_wait_cqs64(struct pan_kmod_dev *dev, uint64_t addr,
+                          uint64_t target_minus_one, int64_t timeout_ns)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   int ret = -1;
+
+   STATIC_ASSERT(sizeof(struct base_fence) == 8);
+   STATIC_ASSERT(sizeof(struct base_cqs_wait_operation_info) == 24);
+   STATIC_ASSERT(sizeof(struct base_kcpu_command) == 24);
+
+   if (!kbase_dev->is_csf || (addr & 15))
+      return -1;
+
+   simple_mtx_lock(&kbase_dev->kcpu.lock);
+   if (!kbase_dev->kcpu.valid)
+      goto out;
+
+   /* Reap an earlier wait first.  Normally it belongs to this same caller:
+    * keeping it queued across a 20 ms userspace watchdog slice avoids
+    * repeatedly creating fences for a long GPU job. */
+   if (kbase_dev->kcpu.pending) {
+      ret = kbase_kcpu_poll_fence(kbase_dev->kcpu.fence_fd, 0);
+      if (ret == 1) {
+         bool matches = kbase_dev->kcpu.addr == addr &&
+                        kbase_dev->kcpu.target_minus_one == target_minus_one;
+         close(kbase_dev->kcpu.fence_fd);
+         kbase_dev->kcpu.fence_fd = -1;
+         kbase_dev->kcpu.pending = false;
+         if (matches)
+            goto out;
+      } else if (ret < 0) {
+         mesa_logw("kbase: KCPU sync fence poll failed: %s", strerror(errno));
+         goto disable;
+      } else if (kbase_dev->kcpu.addr != addr ||
+                 kbase_dev->kcpu.target_minus_one != target_minus_one) {
+         /* One device context may back multiple Vulkan queues.  Do not put a
+          * different wait behind the outstanding one: its caller can use the
+          * existing CSF-notification fallback without head-of-line blocking. */
+         ret = -1;
+         goto out;
+      } else {
+         ret = kbase_kcpu_poll_fence(kbase_dev->kcpu.fence_fd, timeout_ns);
+         if (ret < 0) {
+            mesa_loge("kbase: kbase_kcpu_poll_fence (%d) failed: %s", __LINE__, strerror(errno));
+         }
+         if (ret == 1) {
+            close(kbase_dev->kcpu.fence_fd);
+            kbase_dev->kcpu.fence_fd = -1;
+            kbase_dev->kcpu.pending = false;
+         }
+         goto out;
+      }
+   }
+
+   struct base_cqs_wait_operation_info wait = {
+      .addr = addr,
+      .val = target_minus_one,
+      .operation = BASEP_CQS_WAIT_OPERATION_GT,
+      .data_type = BASEP_CQS_DATA_TYPE_U64,
+   };
+   struct base_fence fence = {
+      .basep = {
+         .fd = -1,
+         .stream_fd = -1,
+      },
+   };
+   struct base_kcpu_command commands[2] = {
+      {
+         .type = BASE_KCPU_COMMAND_TYPE_CQS_WAIT_OPERATION,
+         .info.cqs_wait_operation = {
+            .objs = (uintptr_t)&wait,
+            .nr_objs = 1,
+         },
+      },
+      {
+         .type = BASE_KCPU_COMMAND_TYPE_FENCE_SIGNAL,
+         .info.fence = {
+            .fence = (uintptr_t)&fence,
+         },
+      },
+   };
+   struct kbase_ioctl_kcpu_queue_enqueue enqueue_wait = {
+      .addr = (uintptr_t)&commands[0],
+      .nr_commands = 1,
+      .id = kbase_dev->kcpu.id,
+   };
+   struct kbase_ioctl_kcpu_queue_enqueue enqueue_fence = {
+      .addr = (uintptr_t)&commands[1],
+      .nr_commands = 1,
+      .id = kbase_dev->kcpu.id,
+   };
+
+   /* The public ioctl envelope has a command count, but shipping kbase
+    * implementations require exactly one command per enqueue.  Put the
+    * fence behind the CQS wait with a second ioctl. */
+   if (ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_ENQUEUE, &enqueue_wait) ||
+       ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_ENQUEUE, &enqueue_fence) ||
+       fence.basep.fd < 0) {
+      mesa_logd("kbase: KCPU CQS wait unavailable: %s",
+                fence.basep.fd < 0 && errno == 0 ? "no sync fence" :
+                                                  strerror(errno));
+      goto disable;
+   }
+
+   kbase_dev->kcpu.pending = true;
+   kbase_dev->kcpu.addr = addr;
+   kbase_dev->kcpu.target_minus_one = target_minus_one;
+   kbase_dev->kcpu.fence_fd = fence.basep.fd;
+
+   ret = kbase_kcpu_poll_fence(fence.basep.fd, timeout_ns);
+   if (ret == 1) {
+      close(kbase_dev->kcpu.fence_fd);
+      kbase_dev->kcpu.fence_fd = -1;
+      kbase_dev->kcpu.pending = false;
+   } else if (ret < 0) {
+      mesa_loge("kbase: kbase_kcpu_poll_fence failed: %s", strerror(errno));
+      goto disable;
+   }
+   goto out;
+
+disable:
+   if (kbase_dev->kcpu.fence_fd >= 0) {
+      close(kbase_dev->kcpu.fence_fd);
+      kbase_dev->kcpu.fence_fd = -1;
+   }
+   kbase_dev->kcpu.pending = false;
+   if (kbase_dev->kcpu.valid) {
+      struct kbase_ioctl_kcpu_queue_delete delete = {
+         .id = kbase_dev->kcpu.id,
+      };
+      ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_DELETE, &delete);
+      kbase_dev->kcpu.valid = false;
+   }
+   mesa_loge("kbase: kcpu queue disabled due to error");
+   ret = -1;
+
+out:
+   simple_mtx_unlock(&kbase_dev->kcpu.lock);
+   return ret;
+}
+
+int
+kbase_kmod_csf_export_cqs64_fence(struct pan_kmod_dev *dev,
+                                  const uint64_t *addrs,
+                                  const uint64_t *targets_minus_one,
+                                  unsigned count)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   struct base_cqs_wait_operation_info waits[3] = {0};
+   struct base_fence fence = {
+      .basep = {
+         .fd = -1,
+         .stream_fd = -1,
+      },
+   };
+   struct base_kcpu_command commands[2] = {
+      {
+         .type = BASE_KCPU_COMMAND_TYPE_CQS_WAIT_OPERATION,
+         .info.cqs_wait_operation = {
+            .objs = (uintptr_t)waits,
+            .nr_objs = count,
+         },
+      },
+      {
+         .type = BASE_KCPU_COMMAND_TYPE_FENCE_SIGNAL,
+         .info.fence = {
+            .fence = (uintptr_t)&fence,
+         },
+      },
+   };
+
+   if (!kbase_dev->is_csf) {
+      errno = ENOTSUP;
+      return -1;
+   }
+
+   if (count > ARRAY_SIZE(waits)) {
+      errno = EINVAL;
+      return -1;
+   }
+
+   for (unsigned i = 0; i < count; i++) {
+      if (addrs[i] & 15) {
+         errno = EINVAL;
+         return -1;
+      }
+      waits[i] = (struct base_cqs_wait_operation_info){
+         .addr = addrs[i],
+         .val = targets_minus_one[i],
+         .operation = BASEP_CQS_WAIT_OPERATION_GT,
+         .data_type = BASEP_CQS_DATA_TYPE_U64,
+      };
+   }
+
+   simple_mtx_lock(&kbase_dev->kcpu_export.lock);
+   if (!kbase_dev->kcpu_export.valid) {
+      struct kbase_ioctl_kcpu_queue_new create = {0};
+      if (ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_CREATE, &create)) {
+         simple_mtx_unlock(&kbase_dev->kcpu_export.lock);
+         return -1;
+      }
+      kbase_dev->kcpu_export.id = create.id;
+      kbase_dev->kcpu_export.valid = true;
+   }
+
+   for (unsigned i = count ? 0 : 1; i < 2; i++) {
+      struct kbase_ioctl_kcpu_queue_enqueue enqueue = {
+         .addr = (uintptr_t)&commands[i],
+         .nr_commands = 1,
+         .id = kbase_dev->kcpu_export.id,
+      };
+      if (ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_ENQUEUE, &enqueue)) {
+         simple_mtx_unlock(&kbase_dev->kcpu_export.lock);
+         return -1;
+      }
+   }
+   simple_mtx_unlock(&kbase_dev->kcpu_export.lock);
+
+   if (fence.basep.fd < 0)
+      errno = ENOENT;
+   return fence.basep.fd;
+}
+
+bool
+kbase_kmod_csf_has_error(const struct pan_kmod_dev *dev)
+{
+   const struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, const struct kbase_kmod_dev, base);
+   return p_atomic_read(&kbase_dev->csf_error);
+}
+
+int
+kbase_kmod_csf_tiler_heap_create(struct pan_kmod_dev *dev,
+                                 uint32_t chunk_size, uint32_t initial_chunks,
+                                 uint32_t max_chunks,
+                                 uint32_t target_in_flight,
+                                 uint32_t mem_group_id,
+                                 uint64_t *heap_ctx_va,
+                                 uint64_t *first_chunk_va)
+{
+   STATIC_ASSERT(sizeof(union kbase_ioctl_cs_tiler_heap_init_1_13) == 16);
+   STATIC_ASSERT(sizeof(union kbase_ioctl_cs_tiler_heap_init) == 24);
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   unsigned layouts[2], n;
+   int err = 0;
+
+   layouts[0] = p_atomic_read(&kbase_dev->heap_init_layout);
+   n = layouts[0] ? 1
+                  : kbase_csf_tiler_heap_init_layouts(
+                       dev->driver.version.major, dev->driver.version.minor,
+                       layouts);
+
+   for (unsigned i = 0; i < n; i++) {
+      /* The uAPI group_id is the physical memory group used for
+       * allocations, not the CS queue group handle.  buf_desc_va = 0 is
+       * what the kernel's 1.13 compat handler passes. */
+      union kbase_ioctl_cs_tiler_heap_init req = {
+         .in = {
+            .chunk_size = chunk_size,
+            .initial_chunks = initial_chunks,
+            .max_chunks = max_chunks,
+            .target_in_flight = MIN2(target_in_flight, UINT16_MAX),
+            .group_id = mem_group_id,
+         },
+      };
+      const unsigned long cmd = layouts[i] == 24
+                                   ? KBASE_IOCTL_CS_TILER_HEAP_INIT
+                                   : KBASE_IOCTL_CS_TILER_HEAP_INIT_1_13;
+
+      /* Both layouts share the in/out prefix, so one buffer serves both. */
+      if (ioctl(dev->fd, cmd, &req) == 0) {
+         if (p_atomic_cmpxchg(&kbase_dev->heap_init_layout, 0, layouts[i]) == 0)
+            mesa_logi("kbase: tiler_heap_init layout=%u bytes", layouts[i]);
+         *heap_ctx_va = req.out.gpu_heap_va;
+         *first_chunk_va = req.out.first_chunk_va;
+         return 0;
+      }
+
+      err = errno;
+      if (err != EINVAL && err != ENOTTY)
+         break;
+      if (i + 1 < n)
+         mesa_logw("kbase: CS_TILER_HEAP_INIT layout=%u bytes failed: %s",
+                   layouts[i], strerror(err));
+   }
+
+   mesa_loge("kbase: KBASE_IOCTL_CS_TILER_HEAP_INIT failed: %s",
+             strerror(err));
+   return -1;
+}
+
+void
+kbase_kmod_csf_tiler_heap_destroy(struct pan_kmod_dev *dev,
+                                  uint64_t heap_ctx_va)
+{
+   struct kbase_ioctl_cs_tiler_heap_term req = {
+      .gpu_heap_va = heap_ctx_va,
+   };
+
+   if (ioctl(dev->fd, KBASE_IOCTL_CS_TILER_HEAP_TERM, &req))
+      mesa_loge("kbase: KBASE_IOCTL_CS_TILER_HEAP_TERM failed: %s",
+                strerror(errno));
+}
+
+uint64_t
+kbase_kmod_alias_create(struct pan_kmod_dev *dev, uint64_t bo_va,
+                        uint64_t size, uint32_t nents)
+{
+   const uint64_t page_size = kbase_kmod_page_size();
+   uint64_t total = size * nents;
+   struct base_mem_aliasing_info ai[4];
+
+   assert(nents >= 1 && nents <= ARRAY_SIZE(ai));
+   assert(!(size % page_size) && !(bo_va % page_size));
+
+   for (uint32_t i = 0; i < nents; i++) {
+      ai[i] = (struct base_mem_aliasing_info){
+         .handle = bo_va,
+         .offset = 0,
+         .length = size / page_size,
+      };
+   }
+
+   /* kbase's get_unmapped_area rejects MAP_FIXED and address hints
+    * outright ("err on fixed address"), so the kernel always picks the
+    * address.  Callers only need the mapping to not cross a 4G boundary
+    * (so ring wraparound can be done with 32-bit maths), which a
+    * kernel-picked address almost always satisfies — in the unlikely case
+    * it doesn't, destroy the mapping and try again with a fresh alias
+    * region. */
+   for (unsigned attempt = 0; attempt < 16; attempt++) {
+      /* Note: CPU_WR is not allowed on alias regions, and the source BO
+       * must be GPU-cached and share the same coherency domain. */
+      union kbase_ioctl_mem_alias req = {
+         .in = {
+            .flags = BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR |
+                     BASE_MEM_PROT_CPU_RD,
+            .stride = size / page_size,
+            .nents = nents,
+            .aliasing_info = (uintptr_t)ai,
+         },
+      };
+
+      if (ioctl(dev->fd, KBASE_IOCTL_MEM_ALIAS, &req)) {
+         mesa_loge("kbase: KBASE_IOCTL_MEM_ALIAS failed: %s",
+                   strerror(errno));
+         return 0;
+      }
+
+      /* For 64-bit clients the alias is a SAME_VA region: out.gpu_va is a
+       * cookie and mmap()ing it establishes the mapping, with the
+       * resulting address being both the CPU and GPU VA. */
+      void *ptr =
+         mmap(NULL, total, PROT_READ, MAP_SHARED, dev->fd, req.out.gpu_va);
+      if (ptr == MAP_FAILED) {
+         mesa_loge("kbase: mmap of alias region failed: %s",
+                   strerror(errno));
+         struct kbase_ioctl_mem_free free_req = { .gpu_addr = req.out.gpu_va };
+         ioctl(dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+         return 0;
+      }
+
+      uint64_t va = (uintptr_t)ptr;
+
+      if ((va >> 32) == ((va + total - 1) >> 32))
+         return va;
+
+      /* Crosses a 4G boundary: munmap destroys the SAME_VA alias region
+       * (free-on-close), try again. */
+      munmap(ptr, total);
+   }
+
+   mesa_loge("kbase: could not get an alias mapping that doesn't cross a "
+             "4G boundary");
+   return 0;
+}
+
+void
+kbase_kmod_alias_destroy(struct pan_kmod_dev *dev, uint64_t va, uint64_t size,
+                         uint32_t nents)
+{
+   /* SAME_VA region: munmap() tears down the GPU mapping too. */
+   munmap((void *)(uintptr_t)va, size * nents);
+}
+
+int
+kbase_kmod_bo_set_evictable(struct pan_kmod_bo *bo, bool evictable)
+{
+   struct kbase_kmod_bo *kbase_bo =
+      container_of(bo, struct kbase_kmod_bo, base);
+
+   /* kbase only evicts native regions; growable ones are not fully
+    * committed. */
+   if (kbase_bo->dmabuf_fd >= 0 ||
+       (bo->flags & PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT))
+      return -EINVAL;
+
+   struct kbase_ioctl_mem_flags_change req = {
+      .gpu_va = kbase_bo->gpu_va,
+      .flags = evictable ? BASE_MEM_DONT_NEED : 0,
+      .mask = BASE_MEM_DONT_NEED,
+   };
+   int ret = ioctl(bo->dev->fd, KBASE_IOCTL_MEM_FLAGS_CHANGE, &req);
+
+   if (evictable)
+      return ret ? -errno : 0;
+
+   /* Clearing DONT_NEED re-backs what the shrinker took, but kbase returns
+    * EINVAL for it on native regions (only imports get past the flags
+    * update that follows), so its result says nothing. MEM_COMMIT refuses
+    * DONT_NEED regions: committing every page succeeds only when the region
+    * is needed again, and grows it back if the re-backing fell short. */
+   struct kbase_ioctl_mem_commit commit = {
+      .gpu_addr = kbase_bo->gpu_va,
+      .pages = DIV_ROUND_UP(bo->size, kbase_kmod_page_size()),
+   };
+
+   return ioctl(bo->dev->fd, KBASE_IOCTL_MEM_COMMIT, &commit) ? -errno : 0;
+}
+
+/* struct base_jd_atom above is the kernel's base_jd_atom_v2 (56 bytes)
+ * padded with zeros to 64.  Stock kbase reads stride 56 as base_jd_atom_v2
+ * and stride 64 as base_jd_atom (a leading seq_nr, so our layout would be
+ * read 8 bytes off), and refuses stride 72 with EINVAL before reading any
+ * atom.  MediaTek kbase built with its GPU bandwidth monitor appends a u32
+ * frame_nr to both structs: it accepts only stride 64, read as
+ * base_jd_atom_v2 + frame_nr (our padding gives frame_nr 0), and 72.
+ * Submitting one dependency-only atom at stride 72 tells them apart.
+ * Probe from bmdhacks/malisx2 (MIT, src/kbase/jm.c). */
+static unsigned
+kbase_probe_atom_stride(int fd)
+{
+   STATIC_ASSERT(sizeof(struct base_jd_atom) == 64);
+   STATIC_ASSERT(sizeof(struct base_jd_event_v2) == 24);
+
+   /* seq_nr + base_jd_atom_v2 + frame_nr + tail padding (our zero pad). */
+   struct {
+      __u64 seq_nr;
+      struct base_jd_atom atom;
+   } probe = {
+      .atom = {
+         .udata = { .blob = { 0x6d616c6973783270ull, 0x61746f6d2d70726full } },
+         .atom_number = 255,
+      },
+   };
+   STATIC_ASSERT(sizeof(probe) == 72);
+   struct kbase_ioctl_job_submit sub = {
+      .addr = (uintptr_t)&probe,
+      .nr_atoms = 1,
+      .stride = sizeof(probe),
+   };
+
+   if (ioctl(fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0) {
+      if (errno == EINVAL) {
+         mesa_logi("kbase: stock JM atom layout (stride 72 refused), stride 56");
+         return 56;
+      }
+      mesa_logw("kbase: JM atom layout probe failed (%s), stride 64",
+                strerror(errno));
+      return 64;
+   }
+
+   struct base_jd_event_v2 ev = { 0 };
+   ssize_t n = -1;
+   struct pollfd pfd = { .fd = fd, .events = POLLIN };
+   int ret;
+   do {
+      ret = poll(&pfd, 1, 1000);
+   } while (ret < 0 && errno == EINTR);
+   if (ret > 0 && (pfd.revents & POLLIN)) {
+      do {
+         n = read(fd, &ev, sizeof(ev));
+      } while (n < 0 && errno == EINTR);
+   }
+
+   if (n == (ssize_t)sizeof(ev) && ev.atom_number == 255 &&
+       ev.udata.blob[0] == probe.atom.udata.blob[0] &&
+       ev.udata.blob[1] == probe.atom.udata.blob[1])
+      mesa_logi("kbase: MediaTek JM atom layout (frame_nr), stride 64, "
+                "probe event 0x%x", ev.event_code);
+   else
+      mesa_logw("kbase: stride 72 accepted but the probe atom came back "
+                "as %u (n=%zd); unknown atom layout, stride 64",
+                ev.atom_number, n);
+   return 64;
+}
+
+/* Submit one dependency-only atom (number 255) at the given stride and
+ * drain its event.  Returns false only if the kernel refuses the stride. */
+static bool
+kbase_try_atom_stride(int fd, unsigned stride, bool seq_nr)
+{
+   struct {
+      __u64 seq_nr;
+      struct base_jd_atom atom;
+   } w = { .atom = { .atom_number = 255 } };
+   struct kbase_ioctl_job_submit sub = {
+      .addr = seq_nr ? (uintptr_t)&w : (uintptr_t)&w.atom,
+      .nr_atoms = 1,
+      .stride = stride,
+   };
+
+   if (ioctl(fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0)
+      return errno != EINVAL;
+
+   struct base_jd_event_v2 ev;
+   struct pollfd pfd = { .fd = fd, .events = POLLIN };
+   int ret;
+   do {
+      ret = poll(&pfd, 1, 1000);
+   } while (ret < 0 && errno == EINTR);
+   if (ret > 0 && (pfd.revents & POLLIN)) {
+      while (read(fd, &ev, sizeof(ev)) < 0 && errno == EINTR)
+         ;
+   }
+   return true;
+}
+
+/* Bifrost (arch < 9) only: the 72-byte probe only tells stock from
+ * MediaTek kbase.  On stock kbase, check that stride 56 (base_jd_atom_v2)
+ * is really accepted, else try 64 (seq_nr + v2, the layout JimVulkan's
+ * mali-panvk uses), so v9 behaviour is unchanged. */
+static unsigned
+kbase_check_bifrost_atom_stride(int fd, bool *seq_nr)
+{
+   *seq_nr = false;
+   if (kbase_try_atom_stride(fd, 56, false)) {
+      mesa_logi("kbase: Bifrost JM atom stride 56 (base_jd_atom_v2)");
+      return 56;
+   }
+   if (kbase_try_atom_stride(fd, 64, true)) {
+      *seq_nr = true;
+      mesa_logi("kbase: Bifrost JM atom stride 56 refused, stride 64 "
+                "(seq_nr + base_jd_atom_v2)");
+      return 64;
+   }
+   /* jm-v7 019: kbase before uAPI 11.22 (the G71/G72 era) has no
+    * renderpass_id, and its base_jd_atom_v2 is our first 48 bytes. Later
+    * kernels also take 48 as a compat size, so it is only tried last.
+    */
+   if (kbase_try_atom_stride(fd, 48, false)) {
+      mesa_logi("kbase: Bifrost JM atom strides 56 and 64 refused, stride 48 "
+                "(base_jd_atom_v2 without renderpass_id)");
+      return 48;
+   }
+   mesa_logw("kbase: Bifrost JM atom strides 56, 64 and 48 refused, "
+             "keeping 56");
+   return 56;
+}
+
+/* jm-v7 111: the JM warm-up sleep.
+ *
+ * jm-v9 001 (ported from FristOneRR-Panvk-Source efd07ba) slept 2 s after
+ * the atom layout probe on every JM device open, with no comment. The
+ * reason is not known: the probe atoms are dependency-only (jc 0), the
+ * kernel completes them without the GPU, and their event is read within
+ * the probe's 1 s poll (or the submit is refused with EINVAL) before the
+ * sleep; the Bifrost stride checks after it submit more such atoms with
+ * no delay. On the FTL A31 it
+ * was 2.0 s of every one of 94 opens (~3 min of a 463 s run).
+ *
+ * Keeping the delay but only for the first JM open in the process
+ * (concurrent opens wait for it to finish) was the conservative change.
+ *
+ * 115 (perf review 2026-10-26 D4): off by default. Nothing in the code or
+ * history explains it: the stride probes before and after it are
+ * dependency-only atoms whose events are read (or refused) synchronously,
+ * the probe's atom number is free again once its event is read, and the
+ * first vertex/tiler and fragment chains of every queue are submitted
+ * synchronously with up to 5 attempts and 0.4-1.6 s back-off
+ * (kbase_kmod_job_submit_retry(), the jm-v9 002 warm-up path), which is
+ * what would catch a GPU that is not ready yet. The sleep cost 2 s per
+ * process: about 78 s (21-26 %) of an FTL PanProbe run and 2 s per game
+ * start. Watch the first submit of each process (PanProbe's first test,
+ * any "JM atom ... failed" or DEVICE_LOST right after "kbase: JM warm-up
+ * off") on the first device runs.
+ *
+ * PANVK_KBASE_JM_WARMUP: unset/0 = never (115); 1 = once per process (114);
+ * 2 = every open (before 111). PANVK_KBASE_JM_WARMUP_MS = length (default
+ * 2000, 0-10000).
+ */
+static void
+kbase_jm_warmup(void)
+{
+   static simple_mtx_t lock = SIMPLE_MTX_INITIALIZER;
+   static bool done;
+
+   const char *env = getenv("PANVK_KBASE_JM_WARMUP");
+   const int mode = (env && env[0]) ? atoi(env) : 0;
+   const char *ms_env = getenv("PANVK_KBASE_JM_WARMUP_MS");
+   int ms = (ms_env && ms_env[0]) ? atoi(ms_env) : 2000;
+   if (ms < 0 || ms > 10000)
+      ms = 2000;
+
+   if (mode == 0 || ms == 0) {
+      mesa_logi("kbase: JM warm-up off (PANVK_KBASE_JM_WARMUP=%d, _MS=%d; "
+                "=1 = 2 s once per process as in 114)", mode, ms);
+      return;
+   }
+
+   const bool once = mode != 2;
+   if (once)
+      simple_mtx_lock(&lock);
+   if (once && done) {
+      simple_mtx_unlock(&lock);
+      mesa_logi("kbase: JM warm-up skipped (done once in this process; "
+                "PANVK_KBASE_JM_WARMUP=2 = every open)");
+      return;
+   }
+   mesa_logi("kbase: JM warm-up %d ms (%s)", ms,
+             once ? "first JM open in this process" : "every open");
+   struct timespec warmup_ts = {
+      .tv_sec = ms / 1000,
+      .tv_nsec = (long)(ms % 1000) * 1000000l,
+   };
+   while (nanosleep(&warmup_ts, &warmup_ts) && errno == EINTR)
+      ;
+   if (once) {
+      done = true;
+      simple_mtx_unlock(&lock);
+   }
+}
+
+static struct pan_kmod_dev *
+kbase_kmod_dev_create(int fd, uint32_t flags,
+                      const struct pan_kmod_allocator *allocator)
+{
+   /* Version handshake.  This must be the very first ioctl on the fd; all
+    * other ioctls return -EPERM until it succeeds.  The CSF flavour
+    * (arch >= 10: G610/G710/...) uses ioctl nr 52, the JM flavour
+    * (arch <= 9) uses nr 0 — and each flavour rejects the other's number
+    * with -EPERM, which is what makes this probe reliable.  We pass 0.0 and
+    * let the kernel report the version it implements (CSF: 1.x, JM: 11.x,
+    * legacy Midgard: 3.x). */
+   struct kbase_ioctl_version_check ver = { 0 };
+   bool is_csf = false;
+
+   if (ioctl(fd, KBASE_IOCTL_VERSION_CHECK_CSF, &ver) == 0) {
+      is_csf = true;
+   } else if (ioctl(fd, KBASE_IOCTL_VERSION_CHECK_JM, &ver) == 0) {
+      is_csf = false;
+
+      if (ver.major < 11) {
+         mesa_loge("kbase: legacy JM driver version %d.%d not supported "
+                   "(need >= 11.0)", ver.major, ver.minor);
+         return NULL;
+      }
+   } else {
+      /* Not a usable kbase fd (or a device node we can't handshake with).
+       * This is an expected outcome when probing device nodes, so keep it
+       * quiet. */
+      mesa_logd("kbase: version handshake rejected: %s", strerror(errno));
+      return NULL;
+   }
+
+   mesa_logi("kbase: %s driver, uAPI version %d.%d, page_size=%u",
+             is_csf ? "CSF" : "JM", ver.major, ver.minor,
+             (unsigned)kbase_kmod_page_size());
+
+   /* Set context creation flags.  Zero for maximum compatibility; this also
+    * creates the kernel-side context. */
+   struct kbase_ioctl_set_flags set_flags = { .create_flags = 0 };
+   if (ioctl(fd, KBASE_IOCTL_SET_FLAGS, &set_flags)) {
+      mesa_loge("kbase: KBASE_IOCTL_SET_FLAGS failed: %s", strerror(errno));
+      return NULL;
+   }
+
+   unsigned atom_stride = 0;
+   if (!is_csf) {
+      atom_stride = kbase_probe_atom_stride(fd);
+      kbase_jm_warmup();
+   }
+
+   /* Map the tracking page.  The kernel requires this before any memory
+    * operation. */
+   void *tracking_page = mmap(NULL, 4096, PROT_NONE, MAP_SHARED, fd,
+                              KBASE_MMAP_HANDLE(BASE_MEM_MAP_TRACKING_HANDLE));
+   if (tracking_page == MAP_FAILED) {
+      mesa_loge("kbase: mmap(BASE_MEM_MAP_TRACKING_HANDLE) failed: %s",
+                strerror(errno));
+      return NULL;
+   }
+
+   /* Fetch GPU properties. */
+   size_t props_size = 0;
+   uint8_t *props_buf = kbase_get_gpuprops(fd, &props_size);
+   if (!props_buf) {
+      mesa_loge("kbase: failed to read GPU properties");
+      goto err_unmap_tracking;
+   }
+
+   /* Initialise the EXEC_VA zone so that GPU-executable allocations
+    * (shader BOs) get their own zone.  Must run before JIT_INIT: JM kbase
+    * and CSF kbase before uAPI 1.9 carve EXEC_VA from the end of SAME_VA
+    * and refuse with -EPERM once JIT's CUSTOM_VA zone exists
+    * (kbase_region_tracker_init_exec checks kctx->jit_va).  CSF >= 1.9
+    * sets the zone up at context creation and this is a no-op.  4G
+    * (0x100000 pages) is the kernel maximum and matches panfork; without
+    * the zone, GPU_EX allocations fall back to CUSTOM_VA, so failure is
+    * not fatal. */
+   struct kbase_ioctl_mem_exec_init exec_init = {
+      .va_pages = (4ull << 30) / kbase_kmod_page_size(),
+   };
+   if (ioctl(fd, KBASE_IOCTL_MEM_EXEC_INIT, &exec_init)) {
+      if (errno == EPERM || errno == EINVAL)
+         mesa_logd("kbase: KBASE_IOCTL_MEM_EXEC_INIT: %s (zone exists or "
+                   "unsupported; GPU_EX BOs use CUSTOM_VA)", strerror(errno));
+      else
+         mesa_logw("kbase: KBASE_IOCTL_MEM_EXEC_INIT failed: %s "
+                   "(executable BO allocation may not work)", strerror(errno));
+   }
+
+   /* Initialise the JIT allocator.  This must happen before any allocation
+    * is made: besides setting up JIT, on 64-bit clients this is what carves
+    * the CUSTOM_VA zone out of the top of the SAME_VA zone
+    * (kbase_region_tracker_init_jit_64) — and kernel-internal allocations
+    * such as tiler heap contexts/chunks come from that zone, so without it
+    * KBASE_IOCTL_CS_TILER_HEAP_INIT fails with ENOMEM.  Parameters match
+    * panfork's.  Failure is non-fatal for enumeration but breaks tiler
+    * heaps, so warn. */
+   struct kbase_ioctl_mem_jit_init jit_init = {
+      .va_pages = (128ull << 30) / kbase_kmod_page_size(),
+      .max_allocations = 255,
+      .phys_pages = (128ull << 30) / kbase_kmod_page_size(),
+   };
+   /* Bifrost (arch < 9) JM: nothing we allocate needs JIT or CUSTOM_VA
+    * (the tiler heap is a SAME_VA GROW_ON_GPF BO), and JIT_INIT fails with
+    * ENOMEM on G52 r1 kernels, so skip it (as JimVulkan/mali-panvk, MIT). */
+   uint64_t raw_id = kbase_gpuprop_get(props_buf, props_size,
+                                       KBASE_GPUPROP_RAW_GPU_ID, 0);
+   if (!raw_id)
+      raw_id = kbase_gpuprop_get(props_buf, props_size,
+                                 KBASE_GPUPROP_PRODUCT_ID, 0) << 16;
+   if (!is_csf && raw_id && pan_arch(raw_id & 0xffffffffu) < 9) {
+      mesa_logi("kbase: v%u JM, KBASE_IOCTL_MEM_JIT_INIT skipped; tiler "
+                "heap is a GROW_ON_GPF region",
+                pan_arch(raw_id & 0xffffffffu));
+   } else if (ioctl(fd, KBASE_IOCTL_MEM_JIT_INIT, &jit_init)) {
+      mesa_logw("kbase: KBASE_IOCTL_MEM_JIT_INIT failed: %s "
+                "(tiler heap creation will not work)", strerror(errno));
+   }
+
+   bool atom_seq_nr = false;
+   if (!is_csf && atom_stride == 56 && raw_id &&
+       pan_arch(raw_id & 0xffffffffu) < 9)
+      atom_stride = kbase_check_bifrost_atom_stride(fd, &atom_seq_nr);
+
+   struct kbase_kmod_dev *kbase_dev =
+      pan_kmod_alloc(allocator, sizeof(*kbase_dev));
+   if (!kbase_dev) {
+      mesa_loge("kbase: failed to allocate kbase_kmod_dev");
+      free(props_buf);
+      goto err_unmap_tracking;
+   }
+
+   /* Report the kernel uAPI version from the handshake: the caller cannot
+    * use drmGetVersion() on a kbase fd. */
+   struct pan_kmod_driver kbase_drv = {
+      .version = { .major = ver.major, .minor = ver.minor },
+   };
+
+   /* kbase traditionally routes cached BO synchronization through
+    * KBASE_IOCTL_MEM_SYNC.  When the architecture exposes userspace cache
+    * maintenance, the generic kmod layer issues the same range operations
+    * directly and batches one barrier per submit.  This removes dozens of
+    * ioctls per second on G710.  PANVK_KBASE_USER_CACHE_SYNC=0 keeps the
+    * kernel path as a compatibility override; architectures without cache
+    * ops fall back automatically. */
+   const char *user_cache_sync = getenv("PANVK_KBASE_USER_CACHE_SYNC");
+   if (user_cache_sync && !strcmp(user_cache_sync, "0"))
+      flags |= PAN_KMOD_DEV_FLAG_MMAP_SYNC_THROUGH_KERNEL;
+
+   pan_kmod_dev_init(&kbase_dev->base, fd, flags, &kbase_drv,
+                     allocator, &kbase_kmod_ops, NULL);
+
+   kbase_dev->is_csf = is_csf;
+   kbase_dev->tracking_page = tracking_page;
+   kbase_dev->next_handle = 1;
+   kbase_dev->dma_heap_fd = -1;
+   kbase_dev->dma_heap_uncached_fd = -1;
+   kbase_dev->kcpu.fence_fd = -1;
+   simple_mtx_init(&kbase_dev->kcpu.lock, mtx_plain);
+   simple_mtx_init(&kbase_dev->kcpu_export.lock, mtx_plain);
+   simple_mtx_init(&kbase_dev->nc_lock, mtx_plain);
+   list_inithead(&kbase_dev->nc_bos);
+   if (!is_csf) {
+      kbase_dev->atom_stride = atom_stride;
+      kbase_dev->atom_seq_nr = atom_seq_nr;
+      simple_mtx_init(&kbase_dev->atoms_lock, mtx_plain);
+      simple_mtx_init(&kbase_dev->atoms_read_lock, mtx_plain);
+   }
+
+   if (is_csf && kbase_query_csif_info(fd, &kbase_dev->csif_info)) {
+      mesa_loge("kbase: failed to query the CSF global interface");
+      free(props_buf);
+      munmap(tracking_page, 4096);
+      kbase_dev->base.flags &= ~PAN_KMOD_DEV_FLAG_OWNS_FD;
+      pan_kmod_dev_cleanup(&kbase_dev->base);
+      simple_mtx_destroy(&kbase_dev->kcpu.lock);
+      pan_kmod_free(allocator, kbase_dev);
+      return NULL;
+   }
+
+   if (is_csf) {
+      /* Map the CSF USER register page for LATEST_FLUSH reads.  Failure is
+       * non-fatal: kbase_kmod_get_flush_id() then returns 0, which just
+       * makes FLUSH_CACHE2 waits more conservative. */
+      kbase_dev->user_reg_page =
+         mmap(NULL, 4096, PROT_READ, MAP_SHARED, fd,
+              KBASE_MMAP_HANDLE(BASEP_MEM_CSF_USER_REG_PAGE_HANDLE));
+      if (kbase_dev->user_reg_page == MAP_FAILED) {
+         mesa_logw("kbase: mmap of the CSF USER register page failed: %s",
+                   strerror(errno));
+         kbase_dev->user_reg_page = NULL;
+      }
+   }
+
+   kbase_dev_query_props(kbase_dev, props_buf, props_size);
+   free(props_buf);
+   kbase_calibrate_timestamp_frequency(fd, is_csf, &kbase_dev->base.props);
+
+   const char *dma_heap = getenv("PANVK_KBASE_DMA_HEAP");
+   if (!dma_heap || !dma_heap[0])
+      dma_heap = "/dev/dma_heap/system";
+
+   kbase_dev->dma_heap_fd = open(dma_heap, O_RDONLY | O_CLOEXEC);
+   if (kbase_dev->dma_heap_fd < 0)
+      mesa_logd("kbase: dma-heap unavailable at %s: %s", dma_heap,
+                strerror(errno));
+
+   /* ION fallback (new ABI, kernels 4.14-5.4): placed maps need a dma-buf. */
+   if (kbase_dev->dma_heap_fd < 0) {
+      int ion = open("/dev/ion", O_RDONLY | O_CLOEXEC);
+      if (ion >= 0) {
+         struct kbase_ion_heap_data heaps[16] = {0};
+         struct kbase_ion_heap_query q = {
+            .cnt = ARRAY_SIZE(heaps),
+            .heaps = (uintptr_t)heaps,
+         };
+         if (!ioctl(ion, KBASE_ION_IOC_HEAP_QUERY, &q)) {
+            for (uint32_t i = 0; i < q.cnt && i < ARRAY_SIZE(heaps); i++) {
+               if (heaps[i].type == 0 /* ION_HEAP_TYPE_SYSTEM */) {
+                  kbase_dev->ion_heap_mask = 1u << heaps[i].heap_id;
+                  break;
+               }
+            }
+         }
+         if (kbase_dev->ion_heap_mask) {
+            kbase_dev->dma_heap_fd = ion;
+            kbase_dev->heap_is_ion = true;
+            mesa_logi("kbase: using ION system heap, mask 0x%x",
+                      kbase_dev->ion_heap_mask);
+         } else {
+            mesa_logi("kbase: no usable ION system heap");
+            close(ion);
+         }
+      } else {
+         mesa_logi("kbase: /dev/ion unavailable: %s", strerror(errno));
+      }
+   }
+
+   /* A GPU without IO coherency (mode 31) does not snoop the CPU caches, and
+    * kbase drops BASE_MEM_COHERENT_SYSTEM from dma-buf imports, so CPU writes
+    * through the system heap's cached mapping can sit in the CPU cache while
+    * the GPU reads memory. On CSF that hit HOST_COHERENT memory of 32-bit
+    * WoW64 games (placed maps, 091): garbled DXVK HUD text on Pixel 8. BOs
+    * without WB_MMAP come from the write-combined system-uncached heap then,
+    * like kbase's own HOST_COHERENT mappings. Without that heap, CPU-mapped
+    * imports are cleaned before each submit (PANVK_KBASE_IMPORT_SYNC).
+    * PANVK_KBASE_UNCACHED_HEAP=0 = 115 (the cached system heap for all). */
+   if (is_csf && !kbase_dev->heap_is_ion && kbase_dev->dma_heap_fd >= 0 &&
+       kbase_dev->coherency_mode == DRM_PANTHOR_GPU_COHERENCY_NONE &&
+       debug_get_bool_option("PANVK_KBASE_UNCACHED_HEAP", true)) {
+      kbase_dev->dma_heap_uncached_fd =
+         open("/dev/dma_heap/system-uncached", O_RDONLY | O_CLOEXEC);
+      if (kbase_dev->dma_heap_uncached_fd >= 0) {
+         mesa_logi("kbase: GPU not IO-coherent: HOST_COHERENT dma-heap BOs "
+                   "from /dev/dma_heap/system-uncached "
+                   "(PANVK_KBASE_UNCACHED_HEAP=0 = 115)");
+      } else {
+         kbase_dev->csf_import_sync = true;
+         mesa_logi("kbase: GPU not IO-coherent, /dev/dma_heap/system-uncached "
+                   "unavailable (%s): imports cleaned before each submit",
+                   strerror(errno));
+      }
+   }
+
+   if (!kbase_dev->base.props.gpu_id) {
+      mesa_loge("kbase: failed to determine GPU ID from properties");
+      if (kbase_dev->dma_heap_fd >= 0)
+         close(kbase_dev->dma_heap_fd);
+      munmap(tracking_page, 4096);
+      /* On failure the caller keeps ownership of the fd (it closes it on
+       * NULL return), so don't let pan_kmod_dev_cleanup() close it too. */
+      kbase_dev->base.flags &= ~PAN_KMOD_DEV_FLAG_OWNS_FD;
+      pan_kmod_dev_cleanup(&kbase_dev->base);
+      simple_mtx_destroy(&kbase_dev->kcpu.lock);
+      if (!is_csf) {
+         simple_mtx_destroy(&kbase_dev->atoms_read_lock);
+         simple_mtx_destroy(&kbase_dev->atoms_lock);
+      }
+      pan_kmod_free(allocator, kbase_dev);
+      return NULL;
+   }
+
+   if (is_csf && kbase_dev->csif_info.cs_reg_count != 96 &&
+       kbase_dev->csif_info.cs_reg_count != 128) {
+      uint32_t cs_reg_count =
+         pan_arch(kbase_dev->base.props.gpu_id) >= 12 ? 128 : 96;
+      mesa_logw("kbase: implausible CS work register count %u, using %u",
+                kbase_dev->csif_info.cs_reg_count, cs_reg_count);
+      kbase_dev->csif_info.cs_reg_count = cs_reg_count;
+   }
+
+   const char *kcpu_sync = getenv("PANVK_KBASE_KCPU_SYNC");
+   /* Keep this path opt-in for now.  A KCPU CQS wait needs two enqueue
+    * ioctls (shipping kernels accept one command per enqueue), which is a
+    * net loss for the sub-millisecond waits common in lightweight scenes.
+    * It remains useful for profiling long waits and as the building block
+    * for future async WSI fence export. */
+   if (is_csf && kcpu_sync && !strcmp(kcpu_sync, "1")) {
+      struct kbase_ioctl_kcpu_queue_new create = { 0 };
+      if (!ioctl(fd, KBASE_IOCTL_KCPU_QUEUE_CREATE, &create)) {
+         kbase_dev->kcpu.id = create.id;
+         kbase_dev->kcpu.valid = true;
+         mesa_logd("kbase: created KCPU queue %u", create.id);
+      } else {
+         mesa_logd("kbase: KCPU queue unavailable: %s", strerror(errno));
+      }
+   }
+
+   return &kbase_dev->base;
+
+err_unmap_tracking:
+   munmap(tracking_page, 4096);
+   return NULL;
+}
+
+static void
+kbase_kmod_dev_destroy(struct pan_kmod_dev *dev)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+
+   simple_mtx_lock(&kbase_dev->kcpu.lock);
+   if (kbase_dev->kcpu.fence_fd >= 0)
+      close(kbase_dev->kcpu.fence_fd);
+   if (kbase_dev->kcpu.valid) {
+      struct kbase_ioctl_kcpu_queue_delete delete = {
+         .id = kbase_dev->kcpu.id,
+      };
+      ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_DELETE, &delete);
+   }
+   simple_mtx_unlock(&kbase_dev->kcpu.lock);
+   simple_mtx_destroy(&kbase_dev->kcpu.lock);
+
+   if (kbase_dev->kcpu_export.valid) {
+      struct kbase_ioctl_kcpu_queue_delete delete = {
+         .id = kbase_dev->kcpu_export.id,
+      };
+      ioctl(dev->fd, KBASE_IOCTL_KCPU_QUEUE_DELETE, &delete);
+   }
+   simple_mtx_destroy(&kbase_dev->kcpu_export.lock);
+   simple_mtx_destroy(&kbase_dev->nc_lock);
+
+   if (!kbase_dev->is_csf) {
+      simple_mtx_destroy(&kbase_dev->atoms_read_lock);
+      simple_mtx_destroy(&kbase_dev->atoms_lock);
+   }
+
+   if (kbase_dev->user_reg_page)
+      munmap(kbase_dev->user_reg_page, 4096);
+
+   if (kbase_dev->tracking_page)
+      munmap(kbase_dev->tracking_page, 4096);
+
+   if (kbase_dev->dma_heap_fd >= 0)
+      close(kbase_dev->dma_heap_fd);
+   if (kbase_dev->dma_heap_uncached_fd >= 0)
+      close(kbase_dev->dma_heap_uncached_fd);
+
+   pan_kmod_dev_cleanup(dev);
+   pan_kmod_free(dev->allocator, kbase_dev);
+}
+
+/* -------------------------------------------------------------------------
+ * VA range query
+ *
+ * kbase supports up to 48-bit VAs on Valhall; on JM GPUs the VA space is
+ * 32-bit (mmu_features.va_bits = 32). Reserve the bottom 32 MB as panfrost
+ * does.
+ * ---------------------------------------------------------------------- */
+
+#define KBASE_KMOD_VA_RESERVE 0x2000000ull
+
+static struct pan_kmod_va_range
+kbase_kmod_dev_query_user_va_range(const struct pan_kmod_dev *dev)
+{
+   uint8_t va_bits = MMU_FEATURES_VA_BITS(dev->props.mmu_features);
+   if (va_bits < 32)
+      va_bits = 32;
+
+   uint64_t end = va_bits == 32 ? (1ull << 32) : (1ull << (va_bits - 1));
+
+   return (struct pan_kmod_va_range){
+      .start = KBASE_KMOD_VA_RESERVE,
+      .size  = end - KBASE_KMOD_VA_RESERVE,
+   };
+}
+
+/* -------------------------------------------------------------------------
+ * Buffer object allocation / free
+ * ---------------------------------------------------------------------- */
+
+static uint64_t
+to_kbase_mem_flags(uint32_t kmod_flags)
+{
+   uint64_t flags = BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR |
+                    BASE_MEM_PROT_CPU_RD | BASE_MEM_PROT_CPU_WR;
+
+   /* Keep GPU cores coherent with each other (panfork does the same). */
+   flags |= BASE_MEM_COHERENT_LOCAL;
+
+   if (kmod_flags & PAN_KMOD_BO_FLAG_EXECUTABLE) {
+      /* The kernel rejects GPU_EX|GPU_WR (W^X), and executable regions
+       * must come from the EXEC_VA zone rather than SAME_VA. */
+      flags |= BASE_MEM_PROT_GPU_EX;
+      flags &= ~BASE_MEM_PROT_GPU_WR;
+   } else {
+      /* The kernel forces SAME_VA on non-executable allocations from
+       * 64-bit clients anyway; request it explicitly so the behavior is
+       * uniform. */
+      flags |= BASE_MEM_SAME_VA;
+   }
+
+   if (kmod_flags & PAN_KMOD_BO_FLAG_GPU_UNCACHED)
+      flags |= BASE_MEM_UNCACHED_GPU;
+
+   if (kmod_flags & PAN_KMOD_BO_FLAG_WB_MMAP)
+      flags |= BASE_MEM_CACHED_CPU;
+
+   if (kmod_flags & PAN_KMOD_BO_FLAG_IO_COHERENT)
+      flags |= BASE_MEM_COHERENT_SYSTEM;
+
+   if (kmod_flags & PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT)
+      flags |= BASE_MEM_GROW_ON_GPF;
+
+   if (kmod_flags & PAN_KMOD_BO_FLAG_CSF_EVENT) {
+      flags |= BASE_MEM_CSF_EVENT;
+      flags &= ~BASE_MEM_COHERENT_LOCAL;
+   }
+
+   return flags;
+}
+
+struct pan_kmod_bo *
+kbase_kmod_bo_import_host(struct pan_kmod_dev *dev, void *host_ptr,
+                          uint64_t size)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   const uint64_t page_size = kbase_kmod_page_size();
+
+   if (kbase_dev->is_csf) {
+      errno = ENOTSUP;
+      return NULL;
+   }
+
+   struct kbase_kmod_bo *kbase_bo =
+      pan_kmod_dev_alloc(dev, sizeof(*kbase_bo));
+   if (!kbase_bo)
+      return NULL;
+   kbase_bo->dmabuf_fd = -1;
+
+   struct {
+      uint64_t ptr;
+      uint64_t length;
+   } user_buf = { (uintptr_t)host_ptr, size };
+
+   union kbase_ioctl_mem_import req = {
+      .in = {
+         .flags = BASE_MEM_PROT_CPU_RD | BASE_MEM_PROT_CPU_WR |
+                  BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR,
+         .phandle = (uintptr_t)&user_buf,
+         .type = BASE_MEM_IMPORT_TYPE_USER_BUFFER,
+      },
+   };
+
+   if (ioctl(dev->fd, KBASE_IOCTL_MEM_IMPORT, &req)) {
+      mesa_loge("kbase: host memory import failed: %s", strerror(errno));
+      pan_kmod_dev_free(dev, kbase_bo);
+      return NULL;
+   }
+
+   const uint64_t bo_size = req.out.va_pages * page_size;
+   kbase_bo->same_va =
+      (req.out.flags & (BASE_MEM_SAME_VA | BASE_MEM_NEED_MMAP)) != 0;
+   kbase_bo->cpu_gpu_coherent =
+      (req.out.flags & BASE_MEM_COHERENT_SYSTEM) != 0;
+
+   if (kbase_bo->same_va) {
+      kbase_bo->gpu_mapping = mmap(NULL, bo_size, PROT_READ | PROT_WRITE,
+                                   MAP_SHARED, dev->fd, req.out.gpu_va);
+      if (kbase_bo->gpu_mapping == MAP_FAILED) {
+         mesa_loge("kbase: host memory GPU mmap failed: %s", strerror(errno));
+         struct kbase_ioctl_mem_free free_req = { .gpu_addr = req.out.gpu_va };
+         ioctl(dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+         pan_kmod_dev_free(dev, kbase_bo);
+         return NULL;
+      }
+      kbase_bo->gpu_va = (uintptr_t)kbase_bo->gpu_mapping;
+   } else {
+      kbase_bo->gpu_va = req.out.gpu_va;
+   }
+
+   kbase_bo->cpu_ptr = host_ptr;
+   kbase_bo->owns_cpu_mapping = false;
+
+   uint32_t handle = p_atomic_inc_return(&kbase_dev->next_handle);
+   pan_kmod_bo_init(&kbase_bo->base, dev, NULL, bo_size,
+                    PAN_KMOD_BO_FLAG_IMPORTED, handle);
+   return &kbase_bo->base;
+}
+
+static struct pan_kmod_bo *
+kbase_kmod_import_dmabuf(struct pan_kmod_dev *dev,
+                         struct pan_kmod_vm *exclusive_vm, int fd,
+                         uint64_t size, uint32_t kmod_flags,
+                         bool external_import)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   const uint64_t page_size = kbase_kmod_page_size();
+   struct kbase_kmod_bo *kbase_bo =
+      pan_kmod_dev_alloc(dev, sizeof(*kbase_bo));
+   if (!kbase_bo)
+      return NULL;
+
+   kbase_bo->dmabuf_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+   if (kbase_bo->dmabuf_fd < 0) {
+      mesa_loge("kbase: failed to duplicate dma-buf: %s", strerror(errno));
+      goto err_free_bo;
+   }
+
+   uint64_t import_flags =
+      BASE_MEM_PROT_CPU_RD | BASE_MEM_PROT_CPU_WR |
+      BASE_MEM_PROT_GPU_RD | BASE_MEM_PROT_GPU_WR |
+      BASE_MEM_IMPORT_SHARED | BASE_MEM_COHERENT_SYSTEM;
+
+   if (kmod_flags & PAN_KMOD_BO_FLAG_GPU_UNCACHED)
+      import_flags |= BASE_MEM_UNCACHED_GPU;
+   if (kmod_flags & PAN_KMOD_BO_FLAG_WB_MMAP)
+      import_flags |= BASE_MEM_CACHED_CPU;
+
+   /* Bring-up escape hatch: PANVK_KBASE_IMPORT_CLEAR/SET adjust the
+    * MEM_IMPORT flag word (hex masks) to probe DDK-specific import
+    * behavior without rebuilding. */
+   const char *clear_env = getenv("PANVK_KBASE_IMPORT_CLEAR");
+   const char *set_env = getenv("PANVK_KBASE_IMPORT_SET");
+   if (clear_env && clear_env[0])
+      import_flags &= ~strtoull(clear_env, NULL, 0);
+   if (set_env && set_env[0])
+      import_flags |= strtoull(set_env, NULL, 0);
+
+   int import_fd = kbase_bo->dmabuf_fd;
+   union kbase_ioctl_mem_import req = {
+      .in = {
+         .flags = import_flags,
+         .phandle = (uintptr_t)&import_fd,
+         .type = BASE_MEM_IMPORT_TYPE_UMM,
+      },
+   };
+
+   /* MediaTek kbase built with CONFIG_MALI_MTK_SLC_DYNAMIC_POLICY_V2 (MT6993
+    * Mali-G1-Ultra, CSF uAPI 1.38) appends PBHA hint fields to both halves of
+    * union kbase_ioctl_mem_import, so it is 40 bytes there and the Arm
+    * 24-byte _IOWR encoding is unknown to the kernel (ENOTTY).  Retry with
+    * the 40-byte layout; zeroed extras select the "no PBHA hint" path.
+    * Latched per process: 0 unknown, 1 Arm layout, 2 MTK layout. */
+   static uint32_t import_layout;
+   int ret = -1;
+
+   if (p_atomic_read(&import_layout) != 2) {
+      ret = ioctl(dev->fd, KBASE_IOCTL_MEM_IMPORT, &req);
+      if (!ret && p_atomic_cmpxchg(&import_layout, 0, 1) == 0)
+         mesa_logi("kbase: mem_import via MEM_IMPORT (24 bytes)");
+   }
+
+   if (ret && (p_atomic_read(&import_layout) == 2 || errno == ENOTTY)) {
+      union {
+         struct {
+            uint64_t flags;
+            uint64_t phandle;
+            uint32_t type;
+            uint32_t padding;
+            uint32_t vk_allocate_memory_call_id;
+            uint8_t num_planes;
+            uint8_t pbha_8bit;
+            uint8_t alignment[6];
+         } in;
+         struct {
+            uint64_t flags;
+            uint64_t gpu_va;
+            uint64_t va_pages;
+            uint8_t pbha_8bit;
+            uint8_t alignment[7];
+         } out;
+      } mreq = {
+         .in = {
+            .flags = req.in.flags,
+            .phandle = req.in.phandle,
+            .type = req.in.type,
+         },
+      };
+      static_assert(sizeof(mreq) == 40, "MTK SLC mem_import layout");
+
+      if (p_atomic_read(&import_layout) != 2)
+         mesa_logw("kbase: KBASE_IOCTL_MEM_IMPORT failed: %s; trying the "
+                   "MTK SLC layout", strerror(errno));
+      ret = ioctl(dev->fd, _IOWR(KBASE_IOCTL_TYPE, 22, __typeof__(mreq)),
+                  &mreq);
+      if (!ret) {
+         req.out.flags = mreq.out.flags;
+         req.out.gpu_va = mreq.out.gpu_va;
+         req.out.va_pages = mreq.out.va_pages;
+         if (p_atomic_cmpxchg(&import_layout, 0, 2) == 0)
+            mesa_logi("kbase: mem_import via MTK SLC layout (40 bytes)");
+      }
+   }
+
+   if (ret) {
+      mesa_loge("kbase: KBASE_IOCTL_MEM_IMPORT failed: %s", strerror(errno));
+      goto err_close_dmabuf;
+   }
+
+   const uint64_t bo_size = req.out.va_pages * page_size;
+   /* SAME_VA and NEED_MMAP are different contracts (UAPI: SAME_VA regions
+    * return a mmap cookie and the mmap return address becomes both VAs;
+    * NEED_MMAP regions return a real GPU VA with a separate CPU mapping).
+    * Older DDKs report SAME_VA for dma-heap imports; this DDK (MediaTek,
+    * CSF uAPI 1.21) reports NEED_MMAP, so the cases must not be lumped. */
+   kbase_bo->same_va =
+      (req.out.flags & (BASE_MEM_SAME_VA | BASE_MEM_NEED_MMAP)) != 0;
+   kbase_bo->cpu_gpu_coherent =
+      (req.out.flags & BASE_MEM_COHERENT_SYSTEM) != 0;
+
+   kbase_bo->gpu_mapping =
+      mmap(NULL, bo_size, PROT_READ | PROT_WRITE, MAP_SHARED, dev->fd,
+           req.out.gpu_va);
+   if (kbase_bo->gpu_mapping == MAP_FAILED) {
+      mesa_loge("kbase: mmap of imported dma-buf failed: %s",
+                strerror(errno));
+      kbase_bo->gpu_mapping = NULL;
+      struct kbase_ioctl_mem_free free_req = { .gpu_addr = req.out.gpu_va };
+      ioctl(dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+      goto err_close_dmabuf;
+   }
+
+   if (!(kmod_flags & PAN_KMOD_BO_FLAG_NO_MMAP)) {
+      kbase_bo->cpu_ptr =
+         mmap(NULL, bo_size, PROT_READ | PROT_WRITE, MAP_SHARED,
+              kbase_bo->dmabuf_fd, 0);
+      if (kbase_bo->cpu_ptr == MAP_FAILED) {
+         mesa_loge("kbase: CPU mmap of imported dma-buf failed: %s",
+                   strerror(errno));
+         kbase_bo->cpu_ptr = NULL;
+         goto err_unmap_gpu;
+      }
+      kbase_bo->owns_cpu_mapping = true;
+   }
+
+   kbase_bo->gpu_va = (uintptr_t)kbase_bo->gpu_mapping;
+   uint32_t handle = p_atomic_inc_return(&kbase_dev->next_handle);
+   uint32_t flags = kmod_flags;
+   if (external_import)
+      flags |= PAN_KMOD_BO_FLAG_IMPORTED;
+
+   pan_kmod_bo_init(&kbase_bo->base, dev, exclusive_vm, bo_size, flags,
+                    handle);
+
+   /* Host-visible memory on JM is a dma-heap buffer the CPU writes through
+    * its own (cached) dma-buf mapping. When the kernel did not grant
+    * COHERENT_SYSTEM, HOST_COHERENT writes can sit in the CPU cache while
+    * the GPU reads memory (faux123: black dashes in 32-bit DXVK games).
+    * WB_MMAP BOs are flushed by vkFlushMappedMemoryRanges instead.
+    *
+    * jm-v7 094: v6/v7 take the same path, but only with
+    * PANVK_KBASE_IMPORT_SYNC=1. The clean is a full DMA_BUF_IOCTL_SYNC of
+    * every listed BO on every submit, O(BO size), and DXVK host-visible
+    * chunks are 32-256 MiB; the A06 (v7) passes without it. Enable it when
+    * a v6/v7 device shows the black-dash symptom, then measure.
+    *
+    * CSF (v10+): on by default only for a GPU without IO coherency whose
+    * kernel has no system-uncached heap (the submit cleans the list too). */
+   const unsigned bo_arch = pan_arch(dev->props.gpu_id);
+   if ((kbase_dev->is_csf || bo_arch <= 9) &&
+       !kbase_bo->cpu_gpu_coherent && kbase_bo->cpu_ptr &&
+       !(kmod_flags & PAN_KMOD_BO_FLAG_WB_MMAP) &&
+       debug_get_bool_option("PANVK_KBASE_IMPORT_SYNC",
+                             kbase_dev->is_csf ? kbase_dev->csf_import_sync
+                                               : bo_arch == 9)) {
+      mesa_logw_once("kbase: dma-buf imports are not CPU-coherent; cleaning "
+                     "them before each submit (PANVK_KBASE_IMPORT_SYNC=0 "
+                     "disables)");
+      simple_mtx_lock(&kbase_dev->nc_lock);
+      list_addtail(&kbase_bo->nc_link, &kbase_dev->nc_bos);
+      kbase_bo->nc_listed = true;
+      simple_mtx_unlock(&kbase_dev->nc_lock);
+   }
+   mesa_log(MESA_LOG_DEBUG, MESA_LOG_TAG, "kbase_kmod_bo_alloc_dmabuf: succeeded for %d, bo_size=%lu, handle=%u", kbase_bo->dmabuf_fd, bo_size, handle);
+   mesa_log(MESA_LOG_DEBUG, MESA_LOG_TAG, "kbase: import flags=0x%llx -> va=0x%llx pages=%llu outflags=0x%llx",
+             (unsigned long long)import_flags,
+             (unsigned long long)req.out.gpu_va,
+             (unsigned long long)req.out.va_pages,
+             (unsigned long long)req.out.flags);
+   return &kbase_bo->base;
+
+err_unmap_gpu:
+   munmap(kbase_bo->gpu_mapping, bo_size);
+   if (!kbase_bo->same_va) {
+      struct kbase_ioctl_mem_free free_req = { .gpu_addr = req.out.gpu_va };
+      ioctl(dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+   }
+err_close_dmabuf:
+   close(kbase_bo->dmabuf_fd);
+err_free_bo:
+   pan_kmod_dev_free(dev, kbase_bo);
+   return NULL;
+}
+
+static struct pan_kmod_bo *
+kbase_kmod_bo_alloc_dmabuf(struct pan_kmod_dev *dev, uint64_t size,
+                           uint32_t kmod_flags)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+   const uint64_t page_size = kbase_kmod_page_size();
+   struct dma_heap_allocation_data alloc = {
+      .len = ALIGN_POT(size, page_size),
+      .fd_flags = O_RDWR | O_CLOEXEC,
+   };
+
+   if (kbase_dev->heap_is_ion) {
+      struct kbase_ion_alloc ia = {
+         .len = alloc.len,
+         .heap_id_mask = kbase_dev->ion_heap_mask,
+         .flags = 1, /* ION_FLAG_CACHED */
+      };
+      if (ioctl(kbase_dev->dma_heap_fd, KBASE_ION_IOC_ALLOC, &ia)) {
+         mesa_loge("kbase: ION_IOC_ALLOC failed: %s", strerror(errno));
+         return NULL;
+      }
+      alloc.fd = ia.fd;
+   } else if (ioctl(kbase_dev->dma_heap_uncached_fd >= 0 &&
+                       !(kmod_flags & PAN_KMOD_BO_FLAG_WB_MMAP)
+                    ? kbase_dev->dma_heap_uncached_fd
+                    : kbase_dev->dma_heap_fd,
+                    DMA_HEAP_IOCTL_ALLOC, &alloc)) {
+      mesa_loge("kbase: DMA_HEAP_IOCTL_ALLOC failed: %s", strerror(errno));
+      return NULL;
+   }
+
+   struct pan_kmod_bo *bo = kbase_kmod_import_dmabuf(
+      dev, NULL, alloc.fd, alloc.len, kmod_flags, false);
+   close(alloc.fd);
+   return bo;
+}
+
+/* Without /dev/dma_heap and a new-ABI ION heap (MediaTek 4.14 kernels, a31:
+ * ION_IOC_HEAP_QUERY is EINVAL), gralloc is the dma-buf allocator an app can
+ * reach: a BLOB AHardwareBuffer, imported like a dma-heap buffer. Placed
+ * maps (VK_EXT_map_memory_placed, 32-bit WoW64) need a dma-buf. A BO
+ * without WB_MMAP asks for a CPU mapping gralloc keeps uncached (READ_RARELY),
+ * the GPU does not snoop CPU caches here. */
+static struct pan_kmod_bo *
+kbase_kmod_bo_alloc_ahb(struct pan_kmod_dev *dev, uint64_t size,
+                        uint32_t kmod_flags)
+{
+#ifdef __ANDROID__
+   struct ahb_desc {
+      uint32_t width, height, layers, format;
+      uint64_t usage;
+      uint32_t stride, rfu0;
+      uint64_t rfu1;
+   };
+   struct native_handle {
+      int version, num_fds, num_ints, data[];
+   };
+   void *lib = dlopen("libnativewindow.so", RTLD_NOW | RTLD_LOCAL);
+   int (*ahb_alloc)(const struct ahb_desc *, void **) =
+      lib ? dlsym(lib, "AHardwareBuffer_allocate") : NULL;
+   void (*ahb_release)(void *) =
+      lib ? dlsym(lib, "AHardwareBuffer_release") : NULL;
+   const struct native_handle *(*ahb_handle)(const void *) =
+      lib ? dlsym(lib, "AHardwareBuffer_getNativeHandle") : NULL;
+
+   if (!ahb_alloc || !ahb_release || !ahb_handle)
+      return NULL;
+
+   const uint64_t len = ALIGN_POT(size, kbase_kmod_page_size());
+   const uint64_t cpu = (kmod_flags & PAN_KMOD_BO_FLAG_WB_MMAP)
+                           ? 0x33 /* CPU_READ_OFTEN | CPU_WRITE_OFTEN */
+                           : 0x22 /* CPU_READ_RARELY | CPU_WRITE_RARELY */;
+   struct ahb_desc desc = {
+      .width = len, .height = 1, .layers = 1,
+      .format = 0x21 /* AHARDWAREBUFFER_FORMAT_BLOB */,
+      .usage = cpu | (1ull << 24) /* GPU_DATA_BUFFER */,
+   };
+   void *ahb = NULL;
+
+   if (len > UINT32_MAX)
+      return NULL;
+   if (ahb_alloc(&desc, &ahb)) {
+      desc.usage = cpu;
+      if (ahb_alloc(&desc, &ahb)) {
+         mesa_loge("kbase: gralloc BLOB allocation of %" PRIu64 " bytes "
+                   "failed", len);
+         return NULL;
+      }
+   }
+
+   /* The buffer is not always fd 0: an MTK handle is gralloc_extra, the
+    * dma-buf, an ashmem metadata region. */
+   const struct native_handle *h = ahb_handle(ahb);
+   struct pan_kmod_bo *bo = NULL;
+   for (int i = 0; h && i < h->num_fds && !bo; i++) {
+      char path[32], link[32] = "";
+      snprintf(path, sizeof(path), "/proc/self/fd/%d", h->data[i]);
+      if (readlink(path, link, sizeof(link) - 1) > 0 &&
+          (!strncmp(link, "/dmabuf:", 8) ||
+           !strcmp(link, "anon_inode:dmabuf")))
+         bo = kbase_kmod_import_dmabuf(dev, NULL, h->data[i], len,
+                                       kmod_flags, false);
+   }
+   /* The import holds its own dma-buf reference (and fd). */
+   ahb_release(ahb);
+   return bo;
+#else
+   return NULL;
+#endif
+}
+
+/* PANVK_KBASE_COHERENT_POOLS=1 fallback: later allocations use the 114
+ * flags. BOs that were allocated coherent stay coherent. */
+static void
+kbase_coherent_pools_off(struct kbase_kmod_dev *kbase_dev, const char *why)
+{
+   if (p_atomic_xchg(&kbase_dev->coherent_pools, false))
+      mesa_logw("kbase: coherent pools off: %s (coherency mode %u)", why,
+                kbase_dev->coherency_mode);
+}
+
+static struct pan_kmod_bo *
+kbase_kmod_bo_alloc(struct pan_kmod_dev *dev,
+                    struct pan_kmod_vm *exclusive_vm, uint64_t size,
+                    uint32_t kmod_flags)
+{
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(dev, struct kbase_kmod_dev, base);
+
+   if (!exclusive_vm &&
+       !(kmod_flags & (PAN_KMOD_BO_FLAG_EXECUTABLE |
+                       PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT |
+                       PAN_KMOD_BO_FLAG_CSF_EVENT))) {
+      if (kbase_dev->dma_heap_fd >= 0)
+         return kbase_kmod_bo_alloc_dmabuf(dev, size, kmod_flags);
+      struct pan_kmod_bo *bo = kbase_kmod_bo_alloc_ahb(dev, size, kmod_flags);
+      if (bo)
+         return bo;
+      /* A kbase BO still works for everything but a placed map. */
+   }
+
+   const uint64_t page_size = kbase_kmod_page_size();
+   uint64_t va_pages = (size + page_size - 1) / page_size;
+
+   struct kbase_kmod_bo *kbase_bo =
+      pan_kmod_dev_alloc(dev, sizeof(*kbase_bo));
+   if (!kbase_bo) {
+      mesa_loge("kbase: failed to allocate kbase_kmod_bo");
+      return NULL;
+   }
+   kbase_bo->dmabuf_fd = -1;
+   kbase_bo->owns_cpu_mapping = true;
+
+   uint64_t commit_pages = va_pages;
+   uint64_t extension = 0;
+   uint64_t alloc_flags = to_kbase_mem_flags(kmod_flags);
+   uint64_t alloc_gpu_va;
+
+   /* Perf review B2 (PANVK_KBASE_COHERENT_POOLS=1, see
+    * kbase_dev_query_props()): a CPU-cached BO asks for a system-coherent
+    * region instead of a GPU-coherent one (kbase rejects the two flags
+    * together). GPU-only, growable, GPU-uncached, executable and event
+    * memory keep the 114 flags. */
+   bool want_coherent =
+      p_atomic_read(&kbase_dev->coherent_pools) &&
+      (kmod_flags & PAN_KMOD_BO_FLAG_WB_MMAP) &&
+      !(kmod_flags & (PAN_KMOD_BO_FLAG_EXECUTABLE |
+                      PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT |
+                      PAN_KMOD_BO_FLAG_NO_MMAP |
+                      PAN_KMOD_BO_FLAG_GPU_UNCACHED |
+                      PAN_KMOD_BO_FLAG_CSF_EVENT));
+   if (want_coherent) {
+      alloc_flags &= ~BASE_MEM_COHERENT_LOCAL;
+      alloc_flags |= BASE_MEM_COHERENT_SYSTEM;
+   }
+
+   if (kmod_flags & PAN_KMOD_BO_FLAG_ALLOC_ON_FAULT) {
+      /* Growable region: grown in 2 MB increments on GPU page fault
+       * (matches panfork's heap setup).  A CPU-mapped BO gets the first
+       * increment committed so the CPU can write a header; CPU access past
+       * the committed pages faults, so only the GPU may touch the rest. */
+      extension = (2 * 1024 * 1024) / page_size;
+      commit_pages = (kmod_flags & PAN_KMOD_BO_FLAG_NO_MMAP)
+                        ? 0
+                        : MIN2(extension, va_pages);
+
+      /* v9 JM GPU-only growable regions (tiler heap, indirect varyings):
+       * commit one 2 MiB step and let the kernel place the region so that
+       * start + commit is 2 MiB aligned (TILER_ALIGN_TOP, JM-only flag, as
+       * kbase gives its own JIT heaps). The tiler heap descriptor's Top is
+       * then the end of the committed step, and GROW_ON_GPF commits the
+       * region step by step instead of all at once (bmdhacks/malisx2, MIT). */
+      if (!kbase_dev->is_csf && pan_arch(dev->props.gpu_id) == 9 &&
+          (kmod_flags & PAN_KMOD_BO_FLAG_NO_MMAP)) {
+         alloc_flags |= KBASE_JM_MEM_TILER_ALIGN_TOP;
+         commit_pages = MIN2(extension, va_pages);
+      }
+
+      /* Bifrost JM (no JIT, see dev_create): commit 1 MiB up front and let
+       * GPU faults grow the rest in 2 MiB steps (JimVulkan/mali-panvk). */
+      if (!kbase_dev->is_csf && pan_arch(dev->props.gpu_id) < 9 &&
+          (kmod_flags & PAN_KMOD_BO_FLAG_NO_MMAP)) {
+         commit_pages = MIN2((1024 * 1024) / page_size, va_pages);
+         /* jm-v7 105: a region under 64 MiB (the geometry emulation
+          * buffers and 2 MiB slabs of the v6/v7 gs_pool; the tiler heaps,
+          * tess arena and indirect varying buffer are 64 MiB or more and
+          * keep 1 MiB + 2 MiB steps) commits and grows in steps of 1/64 of
+          * its size, 64 KiB to 1 MiB. Each GS draw has its own buffers, and
+          * a 1 MiB commit + 2 MiB growth per buffer was the floor of a
+          * draw's footprint: 256 tessellated GS draws in one command
+          * buffer committed 768 MiB before the GPU ran (G72 OOM kill).
+          * PANVK_V7_GROW_STEP=0 = old.
+          */
+         static int small_step = -1;
+         if (small_step < 0) {
+            const char *e = getenv("PANVK_V7_GROW_STEP");
+            small_step = !(e && !strcmp(e, "0"));
+         }
+         const uint64_t big_pages = (64ull * 1024 * 1024) / page_size;
+         if (small_step && va_pages < big_pages) {
+            const uint64_t step =
+               CLAMP(va_pages / 64, (64 * 1024) / page_size,
+                     (1024 * 1024) / page_size);
+            extension = step;
+            commit_pages = MIN2(step, va_pages);
+         }
+         /* jm-v7 115: info level for the first 8 per process, then debug
+          * (every gs_pool slab and GS emulation buffer comes here).
+          * MESA_LOG_LEVEL=debug shows them all.
+          */
+         static unsigned grow_logged;
+         const unsigned grow_n = p_atomic_inc_return(&grow_logged);
+         const bool grow_info = grow_n <= 8;
+         mesa_log(grow_info ? MESA_LOG_INFO : MESA_LOG_DEBUG, MESA_LOG_TAG,
+                  "kbase: v%u growable BO, GROW_ON_GPF, %" PRIu64
+                  " of %" PRIu64 " pages committed%s",
+                  pan_arch(dev->props.gpu_id), commit_pages, va_pages,
+                  grow_n == 8 ? " (later ones at debug level)" : "");
+      }
+   }
+
+   /* MEM_ALLOC_EX (nr 59, 64 bytes) exists on CSF uAPI 1.9+ and the kernel
+    * implements legacy MEM_ALLOC (nr 5) as ALLOC_EX with fixed_address 0, so
+    * both build the same request.  Some vendor CSF kernels (v14 G1-Ultra,
+    * Linux 6.12) reject ALLOC_EX with ENOTTY: fall back to MEM_ALLOC until
+    * one path has succeeded, then stick to it. */
+retry_alloc:;
+   uint32_t path = p_atomic_read(&kbase_dev->mem_alloc_path);
+   bool done = false;
+
+   if (kbase_dev->is_csf &&
+       pan_kmod_driver_version_at_least(&dev->driver, 1, 9) &&
+       path != KBASE_MEM_ALLOC_PATH_LEGACY) {
+      /* Match current Arm userspace on modern CSF kernels.  Besides keeping
+       * the allocation ABI aligned with kbase, this leaves room for fixed-VA
+       * and future allocation parameters without another backend split. */
+      union kbase_ioctl_mem_alloc_ex req = {
+         .in = {
+            .va_pages = va_pages,
+            .commit_pages = commit_pages,
+            .extension = extension,
+            .flags = alloc_flags,
+         },
+      };
+
+      if (ioctl(dev->fd, KBASE_IOCTL_MEM_ALLOC_EX, &req) == 0) {
+         if (p_atomic_cmpxchg(&kbase_dev->mem_alloc_path, 0,
+                              KBASE_MEM_ALLOC_PATH_EX) == 0)
+            mesa_logi("kbase: mem_alloc via ALLOC_EX");
+         alloc_flags = req.out.flags;
+         alloc_gpu_va = req.out.gpu_va;
+         done = true;
+      } else {
+         const int err = errno;
+         if (path || (err != ENOTTY && err != EINVAL)) {
+            mesa_loge("kbase: KBASE_IOCTL_MEM_ALLOC_EX failed: %s",
+                      strerror(err));
+            goto err_alloc;
+         }
+         mesa_logw("kbase: KBASE_IOCTL_MEM_ALLOC_EX failed: %s; "
+                   "trying KBASE_IOCTL_MEM_ALLOC", strerror(err));
+      }
+   }
+
+   if (!done) {
+      union kbase_ioctl_mem_alloc req = {
+         .in = {
+            .va_pages = va_pages,
+            .commit_pages = commit_pages,
+            .extension = extension,
+            .flags = alloc_flags,
+         },
+      };
+
+      int ret = ioctl(dev->fd, KBASE_IOCTL_MEM_ALLOC, &req);
+      if (ret && (errno == EINVAL || errno == ENOMEM) &&
+          (alloc_flags & KBASE_JM_MEM_TILER_ALIGN_TOP)) {
+         /* Kernel without TILER_ALIGN_TOP: the old full-size behaviour. */
+         req.in.flags = alloc_flags & ~KBASE_JM_MEM_TILER_ALIGN_TOP;
+         req.in.commit_pages = 0;
+         ret = ioctl(dev->fd, KBASE_IOCTL_MEM_ALLOC, &req);
+         commit_pages = 0;
+      }
+      if (ret) {
+         mesa_loge("kbase: KBASE_IOCTL_MEM_ALLOC failed: %s", strerror(errno));
+         goto err_alloc;
+      }
+      if (p_atomic_cmpxchg(&kbase_dev->mem_alloc_path, 0,
+                           KBASE_MEM_ALLOC_PATH_LEGACY) == 0)
+         mesa_logi("kbase: mem_alloc via ALLOC");
+
+      alloc_flags = req.out.flags;
+      alloc_gpu_va = req.out.gpu_va;
+   }
+
+   if (want_coherent) {
+      if (!(alloc_flags & BASE_MEM_COHERENT_SYSTEM)) {
+         /* kbase dropped the flag, so this region is neither system- nor
+          * GPU-coherent: free it and allocate with the 114 flags. */
+         struct kbase_ioctl_mem_free free_req = { .gpu_addr = alloc_gpu_va };
+         ioctl(dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+         kbase_coherent_pools_off(kbase_dev, "the kernel dropped "
+                                             "BASE_MEM_COHERENT_SYSTEM");
+         want_coherent = false;
+         alloc_flags = to_kbase_mem_flags(kmod_flags);
+         goto retry_alloc;
+      }
+      mesa_logi_once("kbase: coherent pools on: the kernel kept "
+                     "BASE_MEM_COHERENT_SYSTEM (flags 0x%" PRIx64 "), no CPU "
+                     "cache maintenance on CPU-cached BOs",
+                     alloc_flags);
+   }
+
+   kbase_bo->same_va = (alloc_flags & BASE_MEM_SAME_VA) != 0;
+   kbase_bo->cpu_gpu_coherent =
+      (alloc_flags & BASE_MEM_COHERENT_SYSTEM) != 0;
+
+   /* Establish the CPU mapping right away:
+    *  - for SAME_VA regions out.gpu_va is a cookie, and this mmap() is what
+    *    actually creates the region mapping — the returned CPU address IS
+    *    the GPU VA;
+    *  - for EXEC_VA-zone regions out.gpu_va is already a real GPU VA that
+    *    doubles as the mmap offset.
+    * The mapping is kept for the whole BO lifetime (see bo_mmap/bo_munmap).
+    */
+   void *cpu_ptr = mmap(NULL, va_pages * page_size, PROT_READ | PROT_WRITE,
+                        MAP_SHARED, dev->fd, alloc_gpu_va);
+   if (cpu_ptr == MAP_FAILED) {
+      mesa_loge("kbase: mmap of BO (cookie/VA 0x%" PRIx64 ", size %" PRIu64
+                ") failed: %s", alloc_gpu_va,
+                va_pages * page_size, strerror(errno));
+
+      /* MEM_FREE works on both real VAs and pending cookies. */
+      struct kbase_ioctl_mem_free free_req = { .gpu_addr = alloc_gpu_va };
+      ioctl(dev->fd, KBASE_IOCTL_MEM_FREE, &free_req);
+      goto err_free_bo;
+   }
+
+   kbase_bo->cpu_ptr = cpu_ptr;
+   kbase_bo->gpu_mapping = cpu_ptr;
+   kbase_bo->gpu_va = kbase_bo->same_va ? (uintptr_t)cpu_ptr : alloc_gpu_va;
+
+   if (commit_pages && !(kmod_flags & PAN_KMOD_BO_FLAG_NO_ZERO)) {
+      memset(cpu_ptr, 0, commit_pages * page_size);
+      if ((alloc_flags & BASE_MEM_CACHED_CPU) && !kbase_bo->cpu_gpu_coherent) {
+         struct kbase_ioctl_mem_sync sync_req = {
+            .handle = kbase_bo->gpu_va,
+            .user_addr = (uintptr_t)cpu_ptr,
+            .size = commit_pages * page_size,
+            .type = BASE_SYNCSET_OP_MSYNC,
+         };
+         if (pan_kmod_ioctl(dev->fd, KBASE_IOCTL_MEM_SYNC, &sync_req))
+            mesa_loge("kbase: KBASE_IOCTL_MEM_SYNC failed: %s",
+                      strerror(errno));
+      }
+   }
+
+   /* Allocate a unique u32 handle for the pan_kmod handle_to_bo table. */
+   uint32_t handle = p_atomic_inc_return(&kbase_dev->next_handle);
+
+   /* A system-coherent CPU-cached BO needs no CPU cache maintenance:
+    * IO_COHERENT makes pan_kmod_queue_bo_map_sync() skip it. */
+   pan_kmod_bo_init(&kbase_bo->base, dev, exclusive_vm,
+                    va_pages * page_size,
+                    want_coherent ? kmod_flags | PAN_KMOD_BO_FLAG_IO_COHERENT
+                                  : kmod_flags,
+                    handle);
+   return &kbase_bo->base;
+
+err_alloc:
+   if (want_coherent) {
+      kbase_coherent_pools_off(kbase_dev, "a BASE_MEM_COHERENT_SYSTEM "
+                                          "allocation failed");
+      want_coherent = false;
+      alloc_flags = to_kbase_mem_flags(kmod_flags);
+      goto retry_alloc;
+   }
+err_free_bo:
+   pan_kmod_dev_free(dev, kbase_bo);
+   return NULL;
+}
+
+static void
+kbase_kmod_bo_free(struct pan_kmod_bo *bo)
+{
+   struct kbase_kmod_bo *kbase_bo =
+      container_of(bo, struct kbase_kmod_bo, base);
+   struct kbase_kmod_dev *kbase_dev =
+      container_of(bo->dev, struct kbase_kmod_dev, base);
+
+   if (kbase_bo->nc_listed) {
+      simple_mtx_lock(&kbase_dev->nc_lock);
+      list_del(&kbase_bo->nc_link);
+      simple_mtx_unlock(&kbase_dev->nc_lock);
+   }
+
+   pan_kmod_bo_cleanup(bo);
+
+   /* For SAME_VA regions, munmap() alone tears the whole region down
+    * (free-on-close); a MEM_FREE afterwards would hit a stale VA.  For
+    * zone regions (EXEC_VA), munmap() only drops the CPU mapping and the
+    * region must be freed explicitly. */
+   if (kbase_bo->owns_cpu_mapping && kbase_bo->cpu_ptr &&
+       kbase_bo->cpu_ptr != kbase_bo->gpu_mapping)
+      munmap(kbase_bo->cpu_ptr, bo->size);
+
+   if (kbase_bo->gpu_mapping)
+      munmap(kbase_bo->gpu_mapping, bo->size);
+
+   if (!kbase_bo->same_va) {
+      struct kbase_ioctl_mem_free req = { .gpu_addr = kbase_bo->gpu_va };
+      if (ioctl(bo->dev->fd, KBASE_IOCTL_MEM_FREE, &req))
+         mesa_loge("kbase: KBASE_IOCTL_MEM_FREE failed: %s", strerror(errno));
+   }
+
+   if (kbase_bo->dmabuf_fd >= 0)
+      close(kbase_bo->dmabuf_fd);
+
+   pan_kmod_dev_free(bo->dev, kbase_bo);
+}
+
+static struct pan_kmod_bo *
+kbase_kmod_bo_import(struct pan_kmod_dev *dev, int fd)
+{
+   off_t size = lseek(fd, 0, SEEK_END);
+   if (size < 0)
+      return NULL;
+
+   struct pan_kmod_bo *bo =
+      kbase_kmod_import_dmabuf(dev, NULL, fd, size, 0, true);
+   if (!bo)
+      return NULL;
+
+   /* pan_kmod_bo_import() holds handle_to_bo.lock. Kbase assigns a fresh
+    * handle to each import, so no existing BO can occupy this slot. */
+   struct pan_kmod_bo **slot =
+      util_sparse_array_get(&dev->handle_to_bo.array, bo->handle);
+   if (!slot) {
+      dev->ops->bo_free(bo);
+      return NULL;
+   }
+
+   assert(*slot == NULL);
+   *slot = bo;
+   return bo;
+}
+
+static int
+kbase_kmod_bo_export(struct pan_kmod_bo *bo)
+{
+   struct kbase_kmod_bo *kbase_bo =
+      container_of(bo, struct kbase_kmod_bo, base);
+
+   if (kbase_bo->dmabuf_fd < 0) {
+      errno = ENOSYS;
+      return -1;
+   }
+
+   return fcntl(kbase_bo->dmabuf_fd, F_DUPFD_CLOEXEC, 3);
+}
+
+/* Return the CPU mapping established at allocation time.  A SAME_VA region
+ * has exactly one CPU mapping and kbase's get_unmapped_area rejects both
+ * MAP_FIXED and mremap(MREMAP_FIXED) (measured on G615: EINVAL).  A
+ * caller-chosen address (VK_EXT_map_memory_placed, 32-bit WoW64 needs
+ * < 4 GiB) therefore only works for dma-buf backed BOs: the dma-buf is mapped
+ * a second time at that address, sharing pages with the GPU (no copy, no
+ * sync).  panvk allocates host-visible memory from the dma-heap when the app
+ * enables memoryMapPlaced (patch 091), from gralloc without a dma-heap or
+ * ION heap (kbase_kmod_bo_alloc_ahb()). */
+static void *
+kbase_kmod_bo_mmap(struct pan_kmod_bo *bo, UNUSED int prot, UNUSED int flags,
+                   void *host_addr)
+{
+   struct kbase_kmod_bo *kbase_bo =
+      container_of(bo, struct kbase_kmod_bo, base);
+
+   if (!kbase_bo->cpu_ptr) {
+      errno = EINVAL;
+      return MAP_FAILED;
+   }
+
+   if (host_addr == NULL || host_addr == kbase_bo->cpu_ptr)
+      return kbase_bo->cpu_ptr;
+
+   if (kbase_bo->dmabuf_fd < 0) {
+      mesa_loge("kbase: placed map of a non-dma-buf BO is not supported");
+      errno = ENOTSUP;
+      return MAP_FAILED;
+   }
+
+   /* MAP_FIXED is the VK_EXT_map_memory_placed contract: the range is the
+    * caller's (usually a PROT_NONE reservation). */
+   void *p = mmap(host_addr, bo->size, PROT_READ | PROT_WRITE,
+                  MAP_SHARED | MAP_FIXED, kbase_bo->dmabuf_fd, 0);
+   if (p == MAP_FAILED)
+      mesa_loge("kbase: placed dma-buf mmap at %p failed: %s", host_addr,
+                strerror(errno));
+   return p;
+}
+
+/* Normally the mapping belongs to the BO and lives until bo_free: unmapping
+ * a SAME_VA region would free its GPU mapping too.  Only a placed dma-buf
+ * alias (any other address) is unmapped. */
+static int
+kbase_kmod_bo_munmap(struct pan_kmod_bo *bo, void *host_addr, size_t size)
+{
+   struct kbase_kmod_bo *kbase_bo =
+      container_of(bo, struct kbase_kmod_bo, base);
+
+   if (host_addr && host_addr != kbase_bo->cpu_ptr &&
+       host_addr != kbase_bo->gpu_mapping)
+      return munmap(host_addr, size);
+   return 0;
+}
+
+/* kbase does not expose per-BO fence objects.
+ *
+ * Returning true here is safe for non-shared BOs that have an exclusive_vm
+ * (the common case for compute/render work) because the GPU is serialised by
+ * the queue-submission path before the CPU touches the buffer.  For shared /
+ * exported BOs proper inter-process synchronisation must be handled at a
+ * higher level (e.g. via sync_file / Android fence).
+ *
+ * A full implementation would use KBASE_IOCTL_KCPU_QUEUE_ENQUEUE with a
+ * fence-wait operation to block until the GPU has finished with the BO. */
+static bool
+kbase_kmod_bo_wait(struct pan_kmod_bo *bo, int64_t timeout_ns,
+                   bool for_read_only_access)
+{
+   return true;
+}
+
+/* KBASE_IOCTL_CS_EVENT_SIGNAL is _IO (mali_kbase_ioctl.h, same as
+ * kbase_csf_uapi.h:302) and carries no payload, so it cannot go through
+ * pan_kmod_ioctl(). The kernel re-walks CSF event memory and resumes any
+ * CSG suspended on a wait the CPU just satisfied. A cache clean does not.
+ */
+static int
+kbase_kmod_cs_event_signal(struct pan_kmod_dev *dev)
+{
+   if (ioctl(dev->fd, KBASE_IOCTL_CS_EVENT_SIGNAL)) {
+      mesa_loge("kbase: KBASE_IOCTL_CS_EVENT_SIGNAL failed: %s",
+                strerror(errno));
+      return -1;
+   }
+
+   return 0;
+}
+
+static int
+kbase_kmod_flush_bo_map_syncs(struct pan_kmod_dev *dev)
+{
+   util_dynarray_foreach(&dev->pending_bo_syncs.array,
+                         struct pan_kmod_deferred_bo_sync, sync) {
+      struct kbase_kmod_bo *kbase_bo =
+         container_of(sync->bo, struct kbase_kmod_bo, base);
+
+      const bool flush = sync->type == PAN_KMOD_BO_SYNC_CPU_CACHE_FLUSH;
+
+      /* System-coherent regions (dma-heap imports on DDKs that report
+       * BASE_MEM_COHERENT_SYSTEM) need no MEM_SYNC; the ioctl rejects
+       * them with EINVAL. */
+      if (kbase_bo->cpu_gpu_coherent)
+         continue;
+
+      struct kbase_ioctl_mem_sync req = {
+         .handle = kbase_bo->gpu_va,
+         .user_addr = (uintptr_t)kbase_bo->cpu_ptr + sync->start,
+         .size = sync->size,
+         .type = flush ? BASE_SYNCSET_OP_MSYNC : BASE_SYNCSET_OP_CSYNC,
+      };
+
+      int ret = pan_kmod_ioctl(dev->fd, KBASE_IOCTL_MEM_SYNC, &req);
+      if (ret) {
+         mesa_loge("kbase: KBASE_IOCTL_MEM_SYNC failed: %s", strerror(errno));
+         return -1;
+      }
+   }
+
+   return 0;
+}
+
+/* Eviction hints — kbase does not expose a madvise ioctl in the userspace
+ * API so these are no-ops. */
+static void
+kbase_kmod_bo_make_evictable(UNUSED struct pan_kmod_bo *bo)
+{
+}
+
+static bool
+kbase_kmod_bo_make_unevictable(UNUSED struct pan_kmod_bo *bo)
+{
+   return true;
+}
+
+/* -------------------------------------------------------------------------
+ * VM (GPU address space) management
+ *
+ * kbase provides exactly one GPU address space per context and assigns all
+ * VAs itself (SAME_VA: the CPU mapping address; EXEC_VA: kernel-chosen).
+ * There is no kernel object to create/destroy, so the VM is pure
+ * bookkeeping:
+ *
+ * vm_bind MAP: reports the GPU VA already assigned at allocation time.
+ * vm_bind UNMAP: no-op; the unmap happens when the BO is freed.
+ * ---------------------------------------------------------------------- */
+
+static struct pan_kmod_vm *
+kbase_kmod_vm_create(struct pan_kmod_dev *dev, uint32_t flags,
+                     uint64_t va_start, uint64_t va_range)
+{
+   struct kbase_kmod_vm *kbase_vm =
+      pan_kmod_dev_alloc(dev, sizeof(*kbase_vm));
+   if (!kbase_vm) {
+      mesa_loge("kbase: failed to allocate kbase_kmod_vm");
+      return NULL;
+   }
+
+   pan_kmod_vm_init(&kbase_vm->base, dev, 0 /* no kernel handle */, flags);
+   return &kbase_vm->base;
+}
+
+static void
+kbase_kmod_vm_destroy(struct pan_kmod_vm *vm)
+{
+   struct kbase_kmod_vm *kbase_vm =
+      container_of(vm, struct kbase_kmod_vm, base);
+
+   pan_kmod_dev_free(vm->dev, kbase_vm);
+}
+
+static int
+kbase_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
+                   struct pan_kmod_vm_op *ops, uint32_t op_count)
+{
+   if (mode == PAN_KMOD_VM_OP_MODE_ASYNC) {
+      mesa_loge("kbase: PAN_KMOD_VM_OP_MODE_ASYNC not supported");
+      return -1;
+   }
+
+   for (uint32_t i = 0; i < op_count; i++) {
+      struct pan_kmod_vm_op *op = &ops[i];
+
+      if (op->type == PAN_KMOD_VM_OP_TYPE_MAP) {
+         struct kbase_kmod_bo *kbase_bo =
+            container_of(op->map.bo, struct kbase_kmod_bo, base);
+         uint64_t va = kbase_bo->gpu_va + op->map.bo_offset;
+
+         if (op->va.start == PAN_KMOD_VM_MAP_AUTO_VA) {
+            /* kbase assigned the VA at alloc time; report it back. */
+            op->va.start = va;
+         } else if (op->va.start != va) {
+            /* Mapping at a caller-chosen address is impossible in kbase
+             * (no vm_bind equivalent).  Fail loudly rather than letting
+             * the caller use a VA the GPU doesn't know about. */
+            mesa_loge("kbase: cannot map BO at explicit VA 0x%" PRIx64
+                      " (kbase-assigned VA is 0x%" PRIx64 ")",
+                      op->va.start, va);
+            return -1;
+         }
+      } else if (op->type == PAN_KMOD_VM_OP_TYPE_UNMAP) {
+         /* Unmap happens automatically when the BO is freed. */
+      } else if (op->type == PAN_KMOD_VM_OP_TYPE_SYNC_ONLY) {
+         /* No-op. */
+      }
+   }
+
+   return 0;
+}
+
+static enum pan_kmod_vm_state
+kbase_kmod_vm_query_state(struct pan_kmod_vm *vm)
+{
+   /* kbase does not expose a VM-fault query; assume usable. */
+   return PAN_KMOD_VM_USABLE;
+}
+
+/* -------------------------------------------------------------------------
+ * Timestamp
+ * ---------------------------------------------------------------------- */
+
+static uint64_t
+kbase_kmod_query_timestamp(const struct pan_kmod_dev *dev)
+{
+   union kbase_ioctl_get_cpu_gpu_timeinfo req = {
+      .in.request_flags = BASE_TIMEINFO_TIMESTAMP_FLAG,
+   };
+
+   if (ioctl(dev->fd, KBASE_IOCTL_GET_CPU_GPU_TIMEINFO, &req) == 0)
+      return req.out.timestamp;
+
+   return 0;
+}
+
+/* -------------------------------------------------------------------------
+ * BO labelling (not available in the kbase uAPI, silently ignored)
+ * ---------------------------------------------------------------------- */
+
+static void
+kbase_kmod_bo_set_label(UNUSED struct pan_kmod_dev *dev,
+                        UNUSED struct pan_kmod_bo *bo,
+                        UNUSED const char *label)
+{
+}
+
+/* -------------------------------------------------------------------------
+ * ops vtable
+ * ---------------------------------------------------------------------- */
+
+static struct kbase_atom_slot *
+kbase_atom_alloc_try(struct kbase_kmod_dev *kd, struct pan_kmod_bo **bos,
+                      uint32_t nbo, uint32_t core_req, bool no_waiter)
+{
+   simple_mtx_lock(&kd->atoms_lock);
+   for (unsigned attempt = 0; attempt < 255; attempt++) {
+      uint64_t num = (kd->next_atom_number++ % 255) + 1;
+      bool used = false;
+
+      for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+         if (kd->atoms[i].atom_number == num) {
+            used = true;
+            break;
+         }
+      }
+
+      if (used)
+         continue;
+
+      for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+         if (!kd->atoms[i].atom_number) {
+            struct kbase_atom_slot *s = &kd->atoms[i];
+            s->atom_number = num;
+            s->completed = s->errored = false;
+            s->waiters = no_waiter ? 0 : 1;
+            s->core_req = core_req;
+            kd->atom_failed[num] = false;
+            kd->last_event_code[num] = 0;
+            kd->last_done_atom_ctx[num] = 0;
+            kd->last_done_code_ctx[num] = 0;
+            s->nbo = MIN2(nbo, ARRAY_SIZE(s->bos));
+            for (uint32_t j = 0; j < s->nbo; j++)
+               s->bos[j] = bos[j];
+            simple_mtx_unlock(&kd->atoms_lock);
+            return s;
+         }
+      }
+   }
+
+   simple_mtx_unlock(&kd->atoms_lock);
+   return NULL;
+}
+
+static void
+kbase_atom_process_event_locked(struct kbase_kmod_dev *kd,
+                                 const struct base_jd_event_v2 *ev)
+{
+   unsigned num = ev->atom_number;
+   bool errored = ev->event_code != BASE_JD_EVENT_DONE;
+   kd->last_event_code[num] = ev->event_code;
+   kd->atom_failed[num] = errored;
+   kd->last_done_atom_ctx[num] = num;
+   kd->last_done_code_ctx[num] = ev->event_code;
+
+   for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+      if (num && kd->atoms[i].atom_number == num) {
+         struct kbase_atom_slot *s = &kd->atoms[i];
+         s->completed = true;
+         s->errored = errored;
+         if (s->busy_counted) {
+            s->busy_counted = false;
+            if (!--kd->busy_inflight)
+               kd->busy_ns += os_time_get_nano() - kd->busy_start_ns;
+         }
+         if (errored)
+            mesa_loge("kbase: JM atom %u failed: event=0x%x core_req=0x%x",
+                      num, ev->event_code, s->core_req);
+         if (s->waiters == 0)
+            s->atom_number = 0;
+         return;
+      }
+   }
+
+   if (errored)
+      mesa_loge("kbase: untracked JM atom %u failed: event=0x%x",
+                num, ev->event_code);
+}
+
+static int
+kbase_drain_events(struct kbase_kmod_dev *kd, int timeout_ms)
+{
+   struct pollfd pfd = { .fd = kd->base.fd, .events = POLLIN };
+   int ret = poll(&pfd, 1, timeout_ms);
+   if (ret <= 0)
+      return ret < 0 && errno != EINTR ? -1 : 0;
+   if (!(pfd.revents & POLLIN))
+      return -1;
+
+   /* jm-v7 114: up to 16 events per read(). kbase_read() copies queued
+    * events while the buffer has room and returns as soon as the queue is
+    * empty once it has copied one, so a short read means the queue was
+    * drained and no further poll() is needed. Before, every event cost a
+    * poll() plus a read(). PANVK_KBASE_EVENT_BATCH=0 = one per read (old).
+    */
+   static int ev_batch = -1;
+   if (ev_batch < 0) {
+      const char *e = getenv("PANVK_KBASE_EVENT_BATCH");
+      ev_batch = !(e && e[0] == '0');
+   }
+   const unsigned max_ev = ev_batch ? 16 : 1;
+
+   simple_mtx_lock(&kd->atoms_read_lock);
+   for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+      struct pollfd rfd = { .fd = kd->base.fd, .events = POLLIN };
+      ret = poll(&rfd, 1, 0);
+      if (ret <= 0) {
+         ret = ret < 0 && errno != EINTR ? -1 : 0;
+         break;
+      }
+      if (!(rfd.revents & POLLIN)) {
+         ret = -1;
+         break;
+      }
+
+      struct base_jd_event_v2 ev[16];
+      ssize_t n;
+      do {
+         n = read(kd->base.fd, ev, max_ev * sizeof(ev[0]));
+      } while (n < 0 && errno == EINTR);
+      if (n <= 0 || n % (ssize_t)sizeof(ev[0])) {
+         ret = -1;
+         break;
+      }
+
+      const unsigned got = n / sizeof(ev[0]);
+      simple_mtx_lock(&kd->atoms_lock);
+      for (unsigned j = 0; j < got; j++)
+         kbase_atom_process_event_locked(kd, &ev[j]);
+      simple_mtx_unlock(&kd->atoms_lock);
+      ret = 0;
+      if (got < max_ev)
+         break;
+   }
+   simple_mtx_unlock(&kd->atoms_read_lock);
+   return ret;
+}
+
+static unsigned
+kbase_reclaim_completed(struct kbase_kmod_dev *kd)
+{
+   unsigned n = 0;
+   simple_mtx_lock(&kd->atoms_lock);
+   for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+      if (kd->atoms[i].atom_number && kd->atoms[i].completed) {
+         kd->atoms[i].atom_number = 0;
+         n++;
+      }
+   }
+   simple_mtx_unlock(&kd->atoms_lock);
+   return n;
+}
+
+static struct kbase_atom_slot *
+kbase_atom_alloc(struct kbase_kmod_dev *kd, struct pan_kmod_bo **bos,
+                 uint32_t nbo, uint32_t core_req, bool no_waiter)
+{
+   for (unsigned tries = 0; tries < 10000; tries++) {
+      struct kbase_atom_slot *s =
+         kbase_atom_alloc_try(kd, bos, nbo, core_req, no_waiter);
+      if (s)
+         return s;
+      if (kbase_drain_events(kd, 0) < 0)
+         return NULL;
+      if (!kbase_reclaim_completed(kd) && kbase_drain_events(kd, 1) < 0)
+         return NULL;
+   }
+
+   mesa_loge("kbase: JM atom table is full");
+   return NULL;
+}
+
+static bool
+kbase_wait_atom(struct kbase_kmod_dev *kd, uint64_t atom_num,
+                 int64_t timeout_ns)
+{
+   if (!atom_num)
+      return true;
+   if (atom_num >= KBASE_MAX_ATOMS) {
+      errno = EINVAL;
+      return false;
+   }
+
+   int64_t deadline = timeout_ns < 0 ? -1 :
+                      os_time_get_absolute_timeout(timeout_ns);
+   if (kbase_drain_events(kd, 0) < 0)
+      return false;
+
+   for (;;) {
+      simple_mtx_lock(&kd->atoms_lock);
+      bool present = false;
+      for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+         struct kbase_atom_slot *s = &kd->atoms[i];
+         if (s->atom_number != atom_num)
+            continue;
+         present = true;
+         if (s->completed) {
+            bool ok = !s->errored;
+            if (s->waiters > 0 && --s->waiters == 0)
+               s->atom_number = 0;
+            simple_mtx_unlock(&kd->atoms_lock);
+            return ok;
+         }
+         break;
+      }
+
+      if (!present) {
+         if (kd->atom_failed[atom_num]) {
+            simple_mtx_unlock(&kd->atoms_lock);
+            return false;
+         }
+         if (kd->last_done_atom_ctx[atom_num] == atom_num) {
+            bool ok = kd->last_done_code_ctx[atom_num] == BASE_JD_EVENT_DONE;
+            simple_mtx_unlock(&kd->atoms_lock);
+            return ok;
+         }
+      }
+      simple_mtx_unlock(&kd->atoms_lock);
+
+      if (deadline >= 0 && os_time_get_nano() >= deadline)
+         return false;
+      if (kbase_drain_events(kd, 1) < 0)
+         return false;
+   }
+}
+
+/* JM GPU stats: count the atom in flight before JOB_SUBMIT (its event can't
+ * come earlier), and back out when the ioctl fails. */
+static void
+kbase_busy_begin(struct kbase_kmod_dev *kd, struct kbase_atom_slot *slot)
+{
+   slot->busy_counted = false;
+   if (!kd->busy_track)
+      return;
+   simple_mtx_lock(&kd->atoms_lock);
+   if (!kd->busy_inflight++)
+      kd->busy_start_ns = os_time_get_nano();
+   slot->busy_counted = true;
+   simple_mtx_unlock(&kd->atoms_lock);
+}
+
+static void
+kbase_busy_cancel_locked(struct kbase_kmod_dev *kd,
+                         struct kbase_atom_slot *slot)
+{
+   if (slot->busy_counted && !--kd->busy_inflight)
+      kd->busy_ns += os_time_get_nano() - kd->busy_start_ns;
+   slot->busy_counted = false;
+}
+
+uint64_t
+kbase_kmod_bo_committed_size(struct pan_kmod_dev *dev, struct pan_kmod_bo *bo)
+{
+   if (dev->ops != &kbase_kmod_ops)
+      return bo->size;
+
+   struct kbase_kmod_bo *kb = container_of(bo, struct kbase_kmod_bo, base);
+   union kbase_ioctl_mem_query q = {
+      .in = {.gpu_addr = kb->gpu_va, .query = KBASE_MEM_QUERY_COMMIT_SIZE},
+   };
+   if (ioctl(dev->fd, KBASE_IOCTL_MEM_QUERY, &q) < 0)
+      return bo->size;
+   return MIN2(q.out.value * kbase_kmod_page_size(), bo->size);
+}
+
+void
+kbase_kmod_jm_busy_track(struct pan_kmod_dev *dev)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   kd->busy_track = !kd->is_csf;
+}
+
+uint64_t
+kbase_kmod_jm_busy_ns(struct pan_kmod_dev *dev)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   simple_mtx_lock(&kd->atoms_lock);
+   uint64_t ns = kd->busy_ns;
+   if (kd->busy_inflight)
+      ns += os_time_get_nano() - kd->busy_start_ns;
+   simple_mtx_unlock(&kd->atoms_lock);
+   return ns;
+}
+
+uint64_t
+kbase_kmod_job_submit(struct pan_kmod_dev *dev, uint64_t jc,
+                      uint32_t core_req, struct pan_kmod_bo **bos,
+                      uint32_t nbo, struct base_external_resource *ext_res,
+                      uint32_t next_res)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   if (kd->is_csf) {
+      errno = ENOTSUP;
+      return 0;
+   }
+   if (ext_res && next_res > UINT16_MAX) {
+      errno = EINVAL;
+      return 0;
+   }
+
+   struct kbase_atom_slot *slot =
+      kbase_atom_alloc(kd, bos, nbo, core_req, false);
+   if (!slot)
+      return 0;
+
+   struct base_jd_atom atom = {
+      .jc = jc,
+      .core_req = core_req,
+      .atom_number = (uint8_t)slot->atom_number,
+   };
+   if (ext_res && next_res) {
+      atom.extres_list = (uintptr_t)ext_res;
+      atom.nr_extres = (uint16_t)next_res;
+      atom.core_req |= BASE_JD_REQ_EXTERNAL_RESOURCES;
+   }
+
+   struct {
+      __u64 seq_nr;
+      struct base_jd_atom atom;
+   } w = { .atom = atom };
+   struct kbase_ioctl_job_submit sub = {
+      .addr = kd->atom_seq_nr ? (uintptr_t)&w : (uintptr_t)&atom,
+      .nr_atoms = 1,
+      .stride = kd->atom_stride,
+   };
+   kbase_busy_begin(kd, slot);
+   if (ioctl(dev->fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0) {
+      mesa_loge("kbase: JOB_SUBMIT failed: %s", strerror(errno));
+      simple_mtx_lock(&kd->atoms_lock);
+      kbase_busy_cancel_locked(kd, slot);
+      slot->atom_number = 0;
+      simple_mtx_unlock(&kd->atoms_lock);
+      return 0;
+   }
+   return atom.atom_number;
+}
+
+uint64_t
+kbase_kmod_job_submit_dep(struct pan_kmod_dev *dev, uint64_t jc,
+                          uint32_t core_req, struct pan_kmod_bo **bos,
+                          uint32_t nbo, uint64_t dep0, uint8_t dep0_type,
+                          uint64_t dep1, uint8_t dep1_type, bool no_waiter)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   if (kd->is_csf) {
+      errno = ENOTSUP;
+      return 0;
+   }
+
+   struct kbase_atom_slot *slot =
+      kbase_atom_alloc(kd, bos, nbo, core_req, no_waiter);
+   if (!slot)
+      return 0;
+
+   struct base_jd_atom atom = {
+      .jc = jc,
+      .core_req = core_req,
+      .atom_number = (uint8_t)slot->atom_number,
+   };
+   uint64_t deps[2] = { dep0, dep1 };
+   uint8_t types[2] = { dep0_type, dep1_type };
+   if (deps[1] == deps[0])
+      deps[1] = 0;
+   for (unsigned i = 0; i < 2; i++) {
+      bool use = deps[i] && types[i] && deps[i] != atom.atom_number;
+      atom.pre_dep[i].atom_id = use ? (uint8_t)deps[i] : 0;
+      atom.pre_dep[i].dependency_type = use ? types[i] : 0;
+   }
+
+   struct {
+      __u64 seq_nr;
+      struct base_jd_atom atom;
+   } w = { .atom = atom };
+   struct kbase_ioctl_job_submit sub = {
+      .addr = kd->atom_seq_nr ? (uintptr_t)&w : (uintptr_t)&atom,
+      .nr_atoms = 1,
+      .stride = kd->atom_stride,
+   };
+   kbase_busy_begin(kd, slot);
+   if (ioctl(dev->fd, KBASE_IOCTL_JOB_SUBMIT, &sub) < 0) {
+      mesa_loge("kbase: JOB_SUBMIT(dep) failed: %s", strerror(errno));
+      simple_mtx_lock(&kd->atoms_lock);
+      kbase_busy_cancel_locked(kd, slot);
+      slot->atom_number = 0;
+      simple_mtx_unlock(&kd->atoms_lock);
+      return 0;
+   }
+   return atom.atom_number;
+}
+
+void
+kbase_kmod_atom_release(struct pan_kmod_dev *dev, uint64_t atom_num)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   if (kd->is_csf) {
+      errno = ENOTSUP;
+      return;
+   }
+   if (!atom_num)
+      return;
+
+   simple_mtx_lock(&kd->atoms_lock);
+   for (unsigned i = 0; i < KBASE_MAX_ATOMS; i++) {
+      struct kbase_atom_slot *s = &kd->atoms[i];
+      if (s->atom_number != atom_num)
+         continue;
+      if (s->waiters > 0)
+         s->waiters--;
+      if (s->waiters == 0 && s->completed)
+         s->atom_number = 0;
+      break;
+   }
+   simple_mtx_unlock(&kd->atoms_lock);
+}
+
+bool
+kbase_kmod_job_submit_retry(struct pan_kmod_dev *dev, uint64_t jc,
+                            uint32_t core_req, struct pan_kmod_bo **bos,
+                            uint32_t nbo, struct base_external_resource *ext_res,
+                            uint32_t next_res, int max_attempts)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   if (kd->is_csf) {
+      errno = ENOTSUP;
+      return false;
+   }
+
+   for (int attempt = 0; attempt < max_attempts; attempt++) {
+      uint64_t atom = kbase_kmod_job_submit(dev, jc, core_req, bos, nbo,
+                                           ext_res, next_res);
+      if (!atom)
+         return false;
+      if (kbase_kmod_wait_atom(dev, atom, -1))
+         return true;
+
+      if (attempt + 1 < max_attempts) {
+         int64_t delay_ms = 400ll * (attempt + 1);
+         struct timespec ts = {
+            .tv_sec = delay_ms / 1000,
+            .tv_nsec = (delay_ms % 1000) * 1000000,
+         };
+         while (nanosleep(&ts, &ts) && errno == EINTR)
+            ;
+      }
+   }
+   return false;
+}
+
+/* Clean the CPU caches of every non-coherent CPU-mapped dma-buf import
+ * (see kbase_kmod_import_dmabuf()) so GPU work submitted next sees the CPU's
+ * writes. DMA_BUF_IOCTL_SYNC END makes the exporter sync its device
+ * attachments, kbase's included. ponytail: whole buffers on every submit;
+ * track dirty mappings if this shows up in profiles. */
+void
+kbase_kmod_jm_clean_imports(struct pan_kmod_dev *dev)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+
+   simple_mtx_lock(&kd->nc_lock);
+   list_for_each_entry(struct kbase_kmod_bo, bo, &kd->nc_bos, nc_link) {
+      struct dma_buf_sync sync = {
+         .flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE,
+      };
+      int ret;
+      do {
+         ret = ioctl(bo->dmabuf_fd, DMA_BUF_IOCTL_SYNC, &sync);
+      } while (ret && (errno == EINTR || errno == EAGAIN));
+      if (ret)
+         mesa_logw_once("kbase: DMA_BUF_IOCTL_SYNC failed: %s",
+                        strerror(errno));
+   }
+   simple_mtx_unlock(&kd->nc_lock);
+}
+
+bool
+kbase_kmod_wait_atom(struct pan_kmod_dev *dev, uint64_t atom_number,
+                     int64_t timeout_ns)
+{
+   struct kbase_kmod_dev *kd = container_of(dev, struct kbase_kmod_dev, base);
+   if (kd->is_csf) {
+      errno = ENOTSUP;
+      return false;
+   }
+   return kbase_wait_atom(kd, atom_number, timeout_ns);
+}
+
+const struct pan_kmod_ops kbase_kmod_ops = {
+   .no_syncobj             = true,
+   .dev_create             = kbase_kmod_dev_create,
+   .dev_destroy            = kbase_kmod_dev_destroy,
+   .dev_query_user_va_range = kbase_kmod_dev_query_user_va_range,
+   .bo_alloc               = kbase_kmod_bo_alloc,
+   .bo_free                = kbase_kmod_bo_free,
+   .bo_import              = kbase_kmod_bo_import,
+   .bo_export              = kbase_kmod_bo_export,
+   .bo_mmap                = kbase_kmod_bo_mmap,
+   .bo_munmap              = kbase_kmod_bo_munmap,
+   .flush_bo_map_syncs     = kbase_kmod_flush_bo_map_syncs,
+   .cs_event_signal        = kbase_kmod_cs_event_signal,
+   .bo_wait                = kbase_kmod_bo_wait,
+   .bo_make_evictable      = kbase_kmod_bo_make_evictable,
+   .bo_make_unevictable    = kbase_kmod_bo_make_unevictable,
+   .vm_create              = kbase_kmod_vm_create,
+   .vm_destroy             = kbase_kmod_vm_destroy,
+   .vm_bind                = kbase_kmod_vm_bind,
+   .vm_query_state         = kbase_kmod_vm_query_state,
+   .query_timestamp        = kbase_kmod_query_timestamp,
+   .bo_set_label           = kbase_kmod_bo_set_label,
+};

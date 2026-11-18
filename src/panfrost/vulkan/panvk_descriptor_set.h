@@ -73,6 +73,10 @@ struct panvk_descriptor_pool {
    /* Initialize to ones */
    BITSET_WORD *free_sets;
 
+   /* Every free_sets word below this index is 0, so the first-free search
+    * starts here (PANVK_DESC_POOL_HINT). */
+   uint32_t free_sets_hint;
+
    uint32_t max_sets;
    struct panvk_descriptor_set *sets;
 };

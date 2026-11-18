@@ -91,7 +91,42 @@ panlib_copy_ts_query_result(uint64_t pool_addr, global uint32_t *available_addr,
       vk_write_query(dst, 1, flags, available);
 }
 
-#else
+#endif
+
+#if PAN_ARCH >= 6
+/* Each report holds stat_count command stream counters followed by
+ * stat_count shader/hardware counters; the result is their sum. The
+ * availability objects are panvk_cs_sync32, two dwords each, on v10+ and
+ * one dword on v9. */
+KERNEL(1)
+panlib_copy_pstats_query_result(uint64_t pool_addr,
+                                global uint32_t *available_addr,
+                                uint32_t query_stride, uint32_t query_count,
+                                uint64_t dst_addr, uint64_t dst_stride,
+                                uint32_t flags, uint32_t stat_count)
+{
+   uint32_t i = cl_global_id.x;
+
+   if (i >= query_count)
+      return;
+
+   uintptr_t dst = dst_addr + ((uint64_t)i * dst_stride);
+   global uint64_t *report =
+      (global uint64_t *)(pool_addr + ((uint64_t)i * query_stride));
+   bool available = available_addr[PAN_ARCH >= 10 ? i * 2 : i] != 0;
+
+   if (available || (flags & VK_QUERY_RESULT_PARTIAL_BIT)) {
+      for (uint32_t s = 0; s < stat_count; s++)
+         vk_write_query(dst, s, flags, report[s] + report[stat_count + s]);
+   }
+
+   if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+      vk_write_query(dst, stat_count, flags, available);
+}
+
+#endif
+
+#if PAN_ARCH >= 6 && PAN_ARCH < 10
 
 static inline void
 write_occlusion_query_result(uintptr_t dst_addr, int32_t idx, uint32_t flags,
@@ -128,6 +163,11 @@ panlib_copy_query_result(uint64_t pool_addr, global uint32_t *available_addr,
    if ((flags & VK_QUERY_RESULT_PARTIAL_BIT) || available) {
       switch (query_type) {
       case VK_QUERY_TYPE_OCCLUSION:
+#if PAN_ARCH == 9
+      case VK_QUERY_TYPE_PRIMITIVES_GENERATED_EXT:
+#endif
+      /* One SYSTEM_TIMESTAMP report on JM (v6/v7 since jm-v7 021). */
+      case VK_QUERY_TYPE_TIMESTAMP:
          write_occlusion_query_result(dst, 0, flags, report_addr, report_count);
          break;
       default:

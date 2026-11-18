@@ -32,6 +32,7 @@
 #include "panvk_image.h"
 #include "panvk_image_view.h"
 #include "panvk_macros.h"
+#include "panvk_perf_knobs.h"
 #include "panvk_priv_bo.h"
 #include "panvk_sampler.h"
 
@@ -91,6 +92,66 @@ write_desc_data(struct panvk_descriptor_set *set, uint32_t binding,
 #define write_nulldesc(set, binding, elem, subdesc)                            \
    do {                                                                        \
    } while (0)
+
+/* nullDescriptor on Bifrost, see panvk_device::null_descs. A push set has
+ * no object base, the layout always has one.
+ * Ported from JimVulkan/mesa-unified-drivers (MIT, Copyright 2026
+ * XclipseTools).
+ */
+static void
+write_nulldesc_v7(struct panvk_descriptor_set *set, uint32_t binding,
+                  uint32_t elem, struct panvk_subdesc_info subdesc,
+                  VkDescriptorType type)
+{
+   const struct panvk_device *dev =
+      to_panvk_device(set->layout->vk.base.device);
+   uint32_t zero[PANVK_DESCRIPTOR_SIZE / 4] = {0};
+   const uint32_t *desc = NULL;
+
+   if (!dev->null_descs.valid)
+      return;
+
+   switch (type) {
+   case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+   case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+   case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+      desc = dev->null_descs.tex;
+      break;
+   case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+      desc = dev->null_descs.img;
+      break;
+   case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+   case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+      desc = dev->null_descs.texel;
+      break;
+   case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: {
+      /* Size 0 behind the bounds check null descriptors force on
+       * (panvk_ssbo_robustness()).
+       */
+      struct panvk_ssbo_addr *ssbo = (struct panvk_ssbo_addr *)zero;
+      ssbo->base_addr = dev->null_descs.zero_addr;
+      desc = zero;
+      break;
+   }
+   case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+      /* The zeroed page as a UBO. Not a 0-entry UBO: JimVulkan measured a
+       * job reading through a 0-entry UBO end TERMINATED, and pointer 0
+       * read-faults.
+       */
+      pan_pack((struct mali_uniform_buffer_packed *)zero, UNIFORM_BUFFER,
+               cfg) {
+         cfg.pointer = dev->null_descs.zero_addr;
+         cfg.entries = PANVK_NULL_UBO_ENTRIES;
+      }
+      desc = zero;
+      break;
+   default:
+      return;
+   }
+
+   write_desc_data(set, binding, elem, subdesc, 0, desc,
+                   PANVK_DESCRIPTOR_SIZE);
+}
 #endif
 
 static void
@@ -140,9 +201,18 @@ write_image_view_desc(struct panvk_descriptor_set *set,
 
    if (pImageInfo->imageView == VK_NULL_HANDLE) {
       for (uint8_t plane = 0; plane < binding_layout->textures_per_desc;
-           plane++)
+           plane++) {
+#if PAN_ARCH < 9
+         write_nulldesc_v7(set, binding, elem,
+                           type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+                              ? NO_SUBDESC
+                              : get_tex_subdesc_info(type, plane),
+                           type);
+#else
          write_nulldesc(set, binding, elem,
                         get_tex_subdesc_info(binding_layout->type, plane));
+#endif
+      }
       return;
    }
 
@@ -172,7 +242,11 @@ write_buffer_desc(struct panvk_descriptor_set *set,
                   uint32_t elem, VkDescriptorType type)
 {
    if (info->buffer == VK_NULL_HANDLE) {
+#if PAN_ARCH < 9
+      write_nulldesc_v7(set, binding, elem, NO_SUBDESC, type);
+#else
       write_nulldesc(set, binding, elem, NO_SUBDESC);
+#endif
       return;
    }
 
@@ -222,15 +296,29 @@ write_dynamic_buffer_desc(struct panvk_descriptor_set *set,
    uint64_t dev_addr = 0x8ull << 60;
    uint64_t range = 0;
 
+   const struct panvk_descriptor_set_binding_layout *binding_layout =
+      &set->layout->bindings[binding];
+
    if (info->buffer != VK_NULL_HANDLE) {
       VK_FROM_HANDLE(panvk_buffer, buffer, info->buffer);
 
       dev_addr = panvk_buffer_gpu_ptr(buffer, info->offset);
       range = panvk_buffer_range(buffer, info->offset, info->range);
    }
-
-   const struct panvk_descriptor_set_binding_layout *binding_layout =
-      &set->layout->bindings[binding];
+#if PAN_ARCH < 9
+   else if (binding_layout->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) {
+      /* A null dynamic UBO reads the zeroed page (see write_nulldesc_v7()).
+       * A null dynamic SSBO keeps size 0 at the sink address: its accesses
+       * are bounds checked.
+       */
+      const struct panvk_device *dev =
+         to_panvk_device(set->layout->vk.base.device);
+      if (dev->null_descs.valid) {
+         dev_addr = dev->null_descs.zero_addr;
+         range = PANVK_NULL_UBO_ENTRIES * 16;
+      }
+   }
+#endif
    uint32_t dyn_buf_idx = binding_layout->desc_idx + elem;
 
    assert(range <= UINT32_MAX);
@@ -246,7 +334,11 @@ write_buffer_view_desc(struct panvk_descriptor_set *set,
                        uint32_t elem, VkDescriptorType type)
 {
    if (bufferView == VK_NULL_HANDLE) {
+#if PAN_ARCH < 9
+      write_nulldesc_v7(set, binding, elem, NO_SUBDESC, type);
+#else
       write_nulldesc(set, binding, elem, NO_SUBDESC);
+#endif
       return;
    }
 
@@ -261,6 +353,17 @@ write_buffer_view_desc(struct panvk_descriptor_set *set,
       .attr_buf_desc = view->descs.attrib_buf,
       .attr_desc = view->descs.attrib,
    };
+
+   /* jm-v7 116: the element count for the bindless texel buffer bounds
+    * check (build_bindless_buf_texel()), computed from the packed words the
+    * shader read before: (size - offset) / stride, size and stride in
+    * ATTRIBUTE_BUFFER words 3 and 2, offset in ATTRIBUTE word 1.
+    */
+   const uint32_t *buf_w = (const uint32_t *)&padded_desc.attr_buf_desc;
+   const uint32_t *attr_w = (const uint32_t *)&padded_desc.attr_desc;
+   const uint32_t stride = MAX2(buf_w[2], 1), size = buf_w[3];
+   const uint32_t offset = attr_w[1];
+   padded_desc.pad[0] = size >= offset ? (size - offset) / stride : 0;
 
    write_desc(set, binding, elem, &padded_desc, NO_SUBDESC);
 #else
@@ -297,6 +400,8 @@ panvk_desc_pool_free_set(struct panvk_descriptor_pool *pool,
             set->desc_count * PANVK_DESCRIPTOR_SIZE);
 
       BITSET_SET(pool->free_sets, set_idx);
+      pool->free_sets_hint =
+         MIN2(pool->free_sets_hint, (uint32_t)(set_idx / BITSET_WORDBITS));
 
       /* Discard constness to call vk_descriptor_set_layout_unref(). */
       struct panvk_descriptor_set_layout *set_layout =
@@ -338,9 +443,9 @@ panvk_init_pool_memory(struct panvk_device *device,
    if (!(pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_EXT)) {
       uint32_t bo_flags =
          panvk_device_adjust_bo_flags(device, PAN_KMOD_BO_FLAG_WB_MMAP);
-      VkResult result = panvk_priv_bo_create(device, pool_size, bo_flags,
+      VkResult result = panvk_priv_bo_create_kind(device, pool_size, bo_flags,
                                              VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
-                                             &pool->desc_bo);
+                                             &pool->desc_bo, PANVK_MEM_DESC_POOL);
       if (result != VK_SUCCESS)
          return result;
 
@@ -540,10 +645,21 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
    }
 
    uint64_t descs_size = num_descs * PANVK_DESCRIPTOR_SIZE;
+
+   /* Perf review M3: the search for the lowest free set used to start at
+    * word 0, so filling a pool cost O(sets / 32) per allocation. The words
+    * below free_sets_hint are all 0 (every free path lowers the hint), so
+    * starting there finds the same set. PANVK_DESC_POOL_HINT=0 = 114. */
+   const uint32_t hint =
+      PANVK_PERF(DESC_POOL_HINT) ? pool->free_sets_hint : 0;
    uint32_t first_free_set =
-      __bitset_ffs(pool->free_sets, BITSET_WORDS(pool->max_sets));
+      __bitset_ffs(pool->free_sets + hint,
+                   BITSET_WORDS(pool->max_sets) - hint);
+   if (first_free_set)
+      first_free_set += hint * BITSET_WORDBITS;
    if (first_free_set == 0 || pool->desc_heap.free_size < descs_size)
       return panvk_error(pool, VK_ERROR_OUT_OF_POOL_MEMORY);
+   pool->free_sets_hint = (first_free_set - 1) / BITSET_WORDBITS;
 
    uint64_t descs_dev_addr = 0;
    if (num_descs) {
@@ -657,10 +773,28 @@ panvk_per_arch(ResetDescriptorPool)(VkDevice _device, VkDescriptorPool _pool,
 {
    VK_FROM_HANDLE(panvk_descriptor_pool, pool, _pool);
 
-   for (uint32_t i = 0; i < pool->max_sets; i++)
-      panvk_desc_pool_free_set(pool, &pool->sets[i]);
+   if (PANVK_PERF(DESC_POOL_HINT)) {
+      /* Visit the allocated sets (the 0 bits of free_sets) a word at a time
+       * instead of testing every slot. */
+      for (uint32_t w = 0; w < BITSET_WORDS(pool->max_sets); w++) {
+         BITSET_WORD used = ~pool->free_sets[w];
+
+         while (used) {
+            const uint32_t i = w * BITSET_WORDBITS + u_bit_scan(&used);
+
+            if (i >= pool->max_sets)
+               break;
+
+            panvk_desc_pool_free_set(pool, &pool->sets[i]);
+         }
+      }
+   } else {
+      for (uint32_t i = 0; i < pool->max_sets; i++)
+         panvk_desc_pool_free_set(pool, &pool->sets[i]);
+   }
 
    BITSET_SET_COUNT(pool->free_sets, 0, pool->max_sets);
+   pool->free_sets_hint = 0;
    return VK_SUCCESS;
 }
 

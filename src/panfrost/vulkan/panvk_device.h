@@ -20,15 +20,34 @@
 #include "panvk_utrace_perfetto.h"
 
 #include "kmod/pan_kmod.h"
+#include "kmod/panthor_kmod.h"
+#ifdef HAVE_PAN_KMOD_KBASE
+#include "kmod/kbase_kmod.h"
+#endif
 #include "util/perf/u_trace.h"
 
 #include "util/simple_mtx.h"
+#include "util/u_dynarray.h"
 #include "util/u_call_once.h"
 #include "util/u_printf.h"
+#include "util/u_queue.h"
 #include "util/vma.h"
 
 /* 128 MiB */
 #define PANVK_POLY_HEAP_SIZE (1 << 27)
+struct panvk_image;
+
+/* On JM hardware, we need to allocate a buffer depending on vertex count.
+ *
+ * As a result, for indirect and indexed draw we allocate a large buffer with
+ * alloc on fault set.
+ *
+ * The size of that buffer is calculated assuming a max of 2 millions vertices
+ * and 18 attributes per vertex (16 user attributes, 2 specials)
+ */
+
+#define PANVK_JM_MAX_VERTICES_INDIRECT                (4000000)
+#define PANVK_JM_MAX_PER_VTX_ATTRIBUTES_INDIRECT_SIZE (18 * 4)
 
 struct panvk_precomp_cache;
 struct panvk_device_draw_context;
@@ -68,6 +87,31 @@ struct panvk_device {
    } kmod;
 
    struct panvk_priv_bo *tiler_heap;
+   /* v9: second heap for the odd passes of PANVK_OVERLAP (v67b), so each
+    * heap grows from its own base (kbase commits up to the faulting page). */
+   struct panvk_priv_bo *tiler_heap2;
+   struct panvk_priv_bo *indirect_varying_buffer;
+   /* v6/v7 tessellation (jm-v7 014), see panvk_gs.h. NULL elsewhere. */
+   struct panvk_priv_bo *tess_arena;
+   /* jm-v7 106: v6/v7 tessellation, one per PANVK_OVERLAP heap half (the
+    * batch's heap_half): the indirect varying buffer of odd-half batches,
+    * and the geometry emulation buffers of nested tess draws, bump
+    * allocated from 0 in every batch. NULL when unused.
+    */
+   struct panvk_priv_bo *indirect_varying_buffer2;
+   struct panvk_priv_bo *tess_gs_scratch[2];
+   /* JM (v6/v7/v9) options, read once at device creation. */
+   struct {
+      /* PANVK_V7_FS_COPY_ONCE (default 1): v6/v7 FS descriptor copy job
+       * only when the FS tables change, none per tiler job. */
+      bool fs_copy_once;
+      /* PANVK_JM_RESET_FLUSH (default once, batch/0 = old): a resubmitted
+       * command buffer cleans its descriptor pool once, not per batch. */
+      bool reset_flush_once;
+      /* PANVK_V7_TESS_BATCH_DRAWS (default 4, 0 = old): v6/v7 tess draws
+       * that may share a batch at their worst-case varying charge. */
+      uint32_t tess_batch_draws;
+   } jm_opt;
    struct panvk_priv_bo *sample_positions;
 
    struct {
@@ -76,6 +120,74 @@ struct panvk_device {
    } tiler_oom;
 
    struct vk_meta_device meta;
+
+   /* BC emulation (csf-v11/200): PANVK_DEBUG=bc_timing GPU timestamps,
+    * under the lock in panvk_vX_cmd_meta.c. */
+   struct {
+      VkQueryPool timing_pool;
+      uint32_t timing_next;
+      uint64_t timing_ops;
+      double timing_us;
+      /* csf-v11/206: expanded EAC endpoint pair tables (panvk_bc_eac_lut.h)
+       * per kind, created at the first transcode that needs one. */
+      struct panvk_priv_bo *eac_lut[3];
+      /* Item 7: transcoder pipelines compiled from image creation, one
+       * fence per bc_xcode_mode() (panvk_vX_cmd_meta.c). */
+      void (*prewarm)(struct panvk_device *dev, const struct panvk_image *img);
+      simple_mtx_t prewarm_lock;
+      struct util_queue prewarm_queue;
+      bool prewarm_queue_ok;
+      uint32_t prewarm_started;
+      struct util_queue_fence prewarm_fence[10];
+      /* 0170: block compute BC decoders (bc_decode_shader_index())
+       * compiled in the background after the first upload of a format. */
+      struct util_queue dec_queue;
+      bool dec_queue_ok;
+      uint32_t dec_started;
+      uint64_t dec_texel_ns; /* last per-texel decoder compile end */
+      uint32_t dec_texel_busy; /* per-texel decoder compiles running */
+      struct util_queue_fence dec_fence[4];
+   } bc;
+
+   /* BC raw store (csf-v11/201), under the lock in panvk_image.c: the
+    * spill file (fd + 1, 0: not opened, -1: unavailable), its end, and the
+    * spill worker. */
+   struct {
+      int fd_plus1;
+      uint64_t file_end;
+      struct util_queue *queue;
+      uint64_t resident_B, spilled_B;
+      /* csf-v11/207, PANVK_BC_RAW=lazy: set (atomically) at the first read
+       * of a BC image that kept no raw blocks; BC images created after it
+       * keep a raw store again. */
+      int needed;
+   } bc_raw;
+
+   /* Bound in place of a missing FS so the depth bounds test still runs. */
+   struct panvk_shader *depth_bounds_fs;
+
+   /* Bifrost (v6/v7) has no NULL descriptor. A null descriptor write copies
+    * one of these instead: a texture of an internal 1x1 image with a ZERO
+    * swizzle, and a storage image and texel buffer whose attribute buffer
+    * is 0 bytes, so loads return zeros and stores are dropped by the bounds
+    * check. zero_bo is zeroed memory nothing writes, what null vertex
+    * buffers and UBOs point at (null SSBOs too, with size 0). Unused, and
+    * the same layout, on v9+.
+    * From JimVulkan/mesa-unified-drivers (MIT, Copyright 2026 XclipseTools).
+    */
+#define PANVK_NULL_UBO_ENTRIES 256
+   struct {
+      bool valid;
+      uint32_t tex[8], img[8], texel[8];
+      struct panvk_priv_bo *zero_bo;
+      uint64_t zero_addr;
+      /* SAMPLER descriptor for samplerless texel fetches through the
+       * direct (bindless) sampler table (jm-v7 050). */
+      uint64_t dummy_sampler_addr;
+      VkImage image;
+      VkDeviceMemory image_mem;
+      VkImageView view;
+   } null_descs;
 
    struct {
       struct panvk_pool rw;
@@ -108,6 +220,69 @@ struct panvk_device {
    } utrace;
 
    struct panvk_device_draw_context* draw_ctx;
+   /* Allocated (and fully committed) at the first gpu_prerast /
+    * tessellation draw recorded on the device, under gpu_prerast_lock,
+    * unless PANVK_GPU_PRERAST_ARENA=eager (csf-v11/205). Read them through
+    * panvk_per_arch(device_gpu_prerast_arena)(). gpu_prerast_wanted /
+    * gpu_prerast_tess_wanted say whether the device may use them. */
+   struct panvk_priv_mem gpu_prerast_arena;
+   struct panvk_priv_mem gpu_prerast_tess_arena;
+   /* Second tessellation arena, CSF only, at the first draw that picks it
+    * (csf-v11 tess-arenas, see device_gpu_prerast_tess_arena2()). */
+   struct panvk_priv_mem gpu_prerast_tess_arena2;
+   bool gpu_prerast_wanted;
+   bool gpu_prerast_tess_wanted;
+   simple_mtx_t gpu_prerast_lock;
+   /* struct panvk_gpu_prerast_syncs */
+   struct panvk_priv_bo *gpu_prerast_syncs;
+   /* CSF tessellation fast paths, read once at device creation so that a
+    * process can A/B them per VkDevice. */
+   struct {
+      /* PANVK_TESS_FUSE (default 1): panlib_tess_count_draw(). */
+      bool fuse;
+      /* PANVK_TESS_FUSE_GEN_MAX (default 64): patches of a direct draw the
+       * fused workgroup also tessellates. */
+      uint32_t fuse_gen_max;
+      /* PANVK_TESS_SETUP_STEP (default 1): panlib_tess_setup_step(). */
+      bool setup_in_step;
+      /* PANVK_TESS_ARENAS (default 2): tessellation arenas a command
+       * buffer alternates its tess draws over. */
+      uint8_t arenas;
+      /* PANVK_TESS_WINDING_INLINE (default 1): POLY_TESS_CCW_INLINE. */
+      bool winding_inline;
+      /* PANVK_TESS_VS_REGION_MB (default 8 on v10+, 32 = the v9 layout):
+       * end of the VS records in the tessellation arenas, where their data
+       * region starts. */
+      uint64_t vs_region_end;
+   } tess_opt;
+
+   /* Command buffer memory options, read once at device creation. */
+   struct {
+      /* PANVK_CS_FLUSH_USED (default 1, CSF): EndCommandBuffer flushes each
+       * CS chunk up to what its builder wrote, not every CS pool BO whole. */
+      bool cs_flush_used;
+      /* PANVK_JM_CMD_POOL_AUTOTRIM (default 1): command pool auto-trim
+       * (csf-v11 226/231) on v6/v7/v9 JM too. */
+      bool jm_pool_autotrim;
+      /* PANVK_CS_CHUNK_KB (default 4, 64 = fixed 64 KiB chunks): size of
+       * the first CS chunk of a stream (CSF), doubling up to 64 KiB. */
+      uint32_t cs_chunk_min_B;
+      /* PANVK_CMD_SLAB_CACHE (default 1, CSF): command pools share their
+       * idle CS, descriptor and TLS slabs through slab_cache[]. */
+      bool slab_cache;
+   } cmdbuf_opt;
+
+   /* Device-wide caches of idle command buffer slabs, indexed by enum
+    * panvk_slab_cache_kind (used when cmdbuf_opt.slab_cache). */
+   struct panvk_slab_cache slab_cache[PANVK_SLAB_CACHE_COUNT];
+
+   /* Device-wide thread local storage shared by all command buffers. The
+    * last BO is the current one; outgrown ones stay alive for command
+    * buffers that still point at them. */
+   struct {
+      simple_mtx_t lock;
+      struct util_dynarray bos;
+   } tls;
 
    struct {
       bool initialized;
@@ -157,6 +332,61 @@ to_panvk_device(struct vk_device *dev)
    return container_of(dev, struct panvk_device, vk);
 }
 
+/* Base of the v6/v7 direct (bindless) texture and sampler tables, see
+ * PANVK_DIRECT_BASE_SPAN in panvk_cmd_desc_state.h (jm-v7 050). Kept 32-byte
+ * aligned like the descriptors.
+ */
+static inline uint64_t
+panvk_desc_direct_base(const struct panvk_device *dev)
+{
+   const uint64_t span = 64ull << 30;
+   uint64_t anchor = dev->null_descs.dummy_sampler_addr;
+
+   return anchor > span ? anchor - span : 0;
+}
+
+/* CSF interface information, sourced from the panthor uAPI or from the
+ * kbase GLB interface depending on which backend the device came from.
+ * Always use this instead of calling panthor_kmod_get_csif_props()
+ * directly, which reads garbage on a kbase device. */
+static inline const struct drm_panthor_csif_info *
+panvk_get_csif_props(const struct panvk_device *dev)
+{
+#if defined(HAVE_PAN_KMOD_KBASE) && !defined(HAVE_PAN_KMOD_PANTHOR)
+   return kbase_kmod_get_csif_props(dev->kmod.dev);
+#elif defined(HAVE_PAN_KMOD_KBASE)
+   const struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(dev->vk.physical);
+
+   if (phys_dev->kbase_node_path[0])
+      return kbase_kmod_get_csif_props(dev->kmod.dev);
+
+   return panthor_kmod_get_csif_props(dev->kmod.dev);
+#else
+   return panthor_kmod_get_csif_props(dev->kmod.dev);
+#endif
+}
+
+/* Latest cache-flush ID, sourced from the panthor uAPI or the kbase CSF
+ * USER register page depending on which backend the device came from. */
+static inline uint32_t
+panvk_get_flush_id(const struct panvk_device *dev)
+{
+#if defined(HAVE_PAN_KMOD_KBASE) && !defined(HAVE_PAN_KMOD_PANTHOR)
+   return kbase_kmod_get_flush_id(dev->kmod.dev);
+#elif defined(HAVE_PAN_KMOD_KBASE)
+   const struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(dev->vk.physical);
+
+   if (phys_dev->kbase_node_path[0])
+      return kbase_kmod_get_flush_id(dev->kmod.dev);
+
+   return panthor_kmod_get_flush_id(dev->kmod.dev);
+#else
+   return panthor_kmod_get_flush_id(dev->kmod.dev);
+#endif
+}
+
 static inline void
 panvk_address_binding_report(struct panvk_device *dev,
                              struct vk_object_base *object, uint64_t base,
@@ -193,6 +423,10 @@ panvk_device_adjust_bo_flags(const struct panvk_device *device,
    if (!(device->kmod.dev->props.supported_bo_flags &
          PAN_KMOD_BO_FLAG_GPU_UNCACHED))
       bo_flags &= ~PAN_KMOD_BO_FLAG_GPU_UNCACHED;
+
+   if (!(device->kmod.dev->props.supported_bo_flags &
+         PAN_KMOD_BO_FLAG_NO_ZERO))
+      bo_flags &= ~PAN_KMOD_BO_FLAG_NO_ZERO;
 
    return bo_flags;
 }
@@ -290,6 +524,24 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
 
 void panvk_per_arch(destroy_device)(struct panvk_device *device,
                                     const VkAllocationCallbacks *pAllocator);
+
+/* Device teardown of the BC emulation state (csf-v11/200), then of the
+ * vk_meta device (it replaces panvk_meta_cleanup() in destroy_device). */
+void panvk_per_arch(device_bc_finish)(struct panvk_device *dev);
+void panvk_per_arch(bc_xcode_prewarm)(struct panvk_device *dev,
+                                      const struct panvk_image *img);
+
+/* The gpu_prerast arena (tess = false) or the tessellation arena,
+ * allocated on first use on v10+ (csf-v11/205). Returns a zero
+ * panvk_priv_mem if the device does not use it or the allocation failed. */
+struct panvk_priv_mem
+panvk_per_arch(device_gpu_prerast_arena)(struct panvk_device *dev, bool tess);
+
+/* The second tessellation arena (csf-v11 tess-arenas), allocated on first
+ * use like the first one. Zero when tessellation is off, PANVK_TESS_ARENAS
+ * is 1 or the allocation failed: the draw then uses the first arena. */
+struct panvk_priv_mem
+panvk_per_arch(device_gpu_prerast_tess_arena2)(struct panvk_device *dev);
 
 static inline VkResult
 panvk_common_check_status(struct panvk_device *dev)

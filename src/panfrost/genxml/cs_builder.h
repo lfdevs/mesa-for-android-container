@@ -105,6 +105,14 @@ struct cs_builder_conf {
    /* CS buffer allocator */
    struct cs_buffer (*alloc_buffer)(void *cookie);
 
+   /* Optional CS buffer allocator used instead of alloc_buffer when set: the
+    * buffer must hold at least min_instrs instructions. b->cur_chunk is
+    * still the chunk being left (empty for the root chunk), so chunks can
+    * grow from one to the next.
+    */
+   struct cs_buffer (*alloc_buffer_sized)(struct cs_builder *b, void *cookie,
+                                          uint32_t min_instrs);
+
    /* Optional dirty registers tracker. */
    struct cs_dirty_tracker *dirty_tracker;
 
@@ -512,6 +520,17 @@ cs_cur_block(struct cs_builder *b)
 
 #define JUMP_SEQ_INSTR_COUNT 4
 
+/* A new chunk holds the sequence that needs it and the jump out of it. */
+static inline struct cs_buffer
+cs_alloc_chunk(struct cs_builder *b, uint32_t num_instrs)
+{
+   if (b->conf.alloc_buffer_sized)
+      return b->conf.alloc_buffer_sized(b, b->conf.cookie,
+                                        num_instrs + JUMP_SEQ_INSTR_COUNT);
+
+   return b->conf.alloc_buffer(b->conf.cookie);
+}
+
 static inline bool
 cs_reserve_instrs(struct cs_builder *b, uint32_t num_instrs)
 {
@@ -526,7 +545,7 @@ cs_reserve_instrs(struct cs_builder *b, uint32_t num_instrs)
       return false;
 
    /* Make sure we have sufficient capacity if we wont allocate more */
-   if (b->conf.alloc_buffer == NULL) {
+   if (b->conf.alloc_buffer == NULL && b->conf.alloc_buffer_sized == NULL) {
       if (unlikely(b->cur_chunk.size + num_instrs > b->cur_chunk.buffer.capacity)) {
          assert(!"Out of CS space");
          b->invalid = true;
@@ -538,7 +557,7 @@ cs_reserve_instrs(struct cs_builder *b, uint32_t num_instrs)
 
    /* Lazy root chunk allocation. */
    if (unlikely(!b->root_chunk.buffer.cpu)) {
-      b->root_chunk.buffer = b->conf.alloc_buffer(b->conf.cookie);
+      b->root_chunk.buffer = cs_alloc_chunk(b, num_instrs);
       b->cur_chunk.buffer = b->root_chunk.buffer;
       if (!b->cur_chunk.buffer.cpu) {
          b->invalid = true;
@@ -558,7 +577,7 @@ cs_reserve_instrs(struct cs_builder *b, uint32_t num_instrs)
       b->cur_chunk.buffer.capacity;
    if (unlikely(jump_to_next_chunk)) {
       /* Now, allocate a new chunk */
-      struct cs_buffer newbuf = b->conf.alloc_buffer(b->conf.cookie);
+      struct cs_buffer newbuf = cs_alloc_chunk(b, num_instrs);
 
       /* Allocation failure, from now on, all new instructions will be
        * discarded.

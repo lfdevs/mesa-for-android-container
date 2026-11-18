@@ -52,6 +52,9 @@ panvk_storage_pview(const struct panvk_image_view *view,
 {
    struct pan_image_view spview = *pview;
 
+   if (spview.dim == MALI_TEXTURE_DIMENSION_CUBE)
+      spview.dim = MALI_TEXTURE_DIMENSION_2D;
+
    /* A storage view only sees its Z-slice range. The range defaults to the
     * full view depth, so non-sliced views are left unchanged
     * (VK_EXT_image_sliced_view_of_3d).
@@ -94,9 +97,15 @@ prepare_tex_descs(struct panvk_image_view *view)
       util_format_compose_swizzles(r001, view->pview.swizzle, pview.swizzle);
    }
 #if PAN_ARCH == 7
-   /* v7 requires AFBC reswizzle. */
+   /* v7 requires AFBC reswizzle. With customBorderColorWithoutFormat
+    * enabled, only AFBC images get it (jm-v7 044): the sampler cannot
+    * pre-swizzle a border color without a format, so R/B-swapped formats
+    * do not use AFBC then (panvk_image_can_use_mod()) and keep their native
+    * component order, which the border color matches. */
    else if (!pan_format_is_yuv(view->pview.format) &&
-            pan_afbc_supports_format(PAN_ARCH, view->pview.format))
+            pan_afbc_supports_format(PAN_ARCH, view->pview.format) &&
+            (drm_is_afbc(image->vk.drm_format_mod) ||
+             !dev->vk.enabled_features.customBorderColorWithoutFormat))
       GENX(pan_texture_afbc_reswizzle)(&pview);
 #endif
 
@@ -428,6 +437,28 @@ panvk_per_arch(CreateImageView)(VkDevice _device,
       view->pview.format = panvk_image_stencil_only_pfmt(image);
    else if (view->vk.aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
       view->pview.format = panvk_image_depth_only_pfmt(image);
+
+   if (image->bc_emul && panvk_format_is_bc(view->vk.view_format)) {
+      view->pview.format = panvk_bc_view_pfmt(image, view->vk.view_format);
+      /* The BC6H ASTC shadow (csf-v11/202) is HDR: the flag computed from
+       * the BC view format above must follow the format swap. */
+      view->pview.astc.hdr = util_format_is_astc_hdr(view->pview.format);
+      view->pview.planes[0] = (struct pan_image_plane_ref){
+         .image = &image->bc_decoded.image,
+         .plane_idx = 0,
+      };
+
+      if (view->vk.view_format == VK_FORMAT_BC1_RGB_UNORM_BLOCK ||
+          view->vk.view_format == VK_FORMAT_BC1_RGB_SRGB_BLOCK) {
+         static const unsigned char rgb1[4] = {
+            PIPE_SWIZZLE_X, PIPE_SWIZZLE_Y, PIPE_SWIZZLE_Z, PIPE_SWIZZLE_1,
+         };
+         unsigned char swz[4];
+
+         util_format_compose_swizzles(rgb1, view->pview.swizzle, swz);
+         memcpy(view->pview.swizzle, swz, sizeof(swz));
+      }
+   }
 
    VkImageUsageFlags2KHR tex_usage_mask = VK_IMAGE_USAGE_2_SAMPLED_BIT_KHR;
 

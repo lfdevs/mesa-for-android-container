@@ -12,6 +12,7 @@
  */
 
 #include "pan_buffer.h"
+#include "compiler/pan_compiler.h"
 #include "pan_desc.h"
 #include "pan_format.h"
 #include "pan_texture.h"
@@ -46,6 +47,11 @@ GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
       cfg.stride = stride;
       cfg.conversion = conv;
    }
+
+#if PAN_ARCH < 11
+   if (!util_format_has_alpha(bview->format))
+      out->opaque[7] |= PAN_VA_BUF_CVT_NO_ALPHA;
+#endif
 }
 
 #elif PAN_ARCH >= 6

@@ -214,6 +214,42 @@ os_get_android_option(const char *name)
    }
    return NULL;
 }
+
+/* Every miss above is three property lookups, and for an app context each
+ * denied lookup is also logged by libc: about 1 ms per call. Some options are
+ * read per object (vkCreateImage reads two), which added up to over 100 ms
+ * of a game's load. Look each name up once; properties are not expected to
+ * change while the driver runs.
+ */
+static struct hash_table *android_option_tbl;
+static simple_mtx_t android_option_mtx = SIMPLE_MTX_INITIALIZER;
+
+static const char *
+os_get_android_option_cached(const char *name)
+{
+   const char *opt;
+
+   simple_mtx_lock(&android_option_mtx);
+   if (!android_option_tbl)
+      android_option_tbl = _mesa_hash_table_create(NULL, _mesa_hash_string,
+                                                   _mesa_key_string_equal);
+   struct hash_entry *entry =
+      android_option_tbl ? _mesa_hash_table_search(android_option_tbl, name)
+                         : NULL;
+   if (entry) {
+      opt = entry->data;
+   } else {
+      opt = os_get_android_option(name);
+      char *key = android_option_tbl ? ralloc_strdup(android_option_tbl, name)
+                                     : NULL;
+      if (key) {
+         opt = ralloc_strdup(android_option_tbl, opt);
+         _mesa_hash_table_insert(android_option_tbl, key, (void *)opt);
+      }
+   }
+   simple_mtx_unlock(&android_option_mtx);
+   return opt;
+}
 #endif
 
 #if DETECT_OS_WINDOWS
@@ -247,7 +283,7 @@ os_get_option_internal(const char *name, bool use_secure_getenv)
    }
 #if DETECT_OS_ANDROID
    if (!opt) {
-      opt = os_get_android_option(name);
+      opt = os_get_android_option_cached(name);
    }
 #endif
    return opt;

@@ -104,7 +104,8 @@ pan_kmod_dev_init(struct pan_kmod_dev *dev, int fd, uint32_t flags,
                   const struct pan_kmod_ops *ops,
                   struct util_sync_provider *sync_ops)
 {
-   if (!sync_ops)
+   /* Non-DRM backends use their own synchronization instead of syncobjs. */
+   if (!sync_ops && !ops->no_syncobj)
       return -1;
 
    simple_mtx_init(&dev->handle_to_bo.lock, mtx_plain);
@@ -132,7 +133,8 @@ pan_kmod_dev_cleanup(struct pan_kmod_dev *dev)
    util_sparse_array_finish(&dev->handle_to_bo.array);
    simple_mtx_destroy(&dev->handle_to_bo.lock);
    simple_mtx_destroy(&dev->pending_bo_syncs.lock);
-   dev->sync_ops->finalize(dev->sync_ops);
+   if (dev->sync_ops)
+      dev->sync_ops->finalize(dev->sync_ops);
 }
 
 static inline void *

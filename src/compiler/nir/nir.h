@@ -6063,6 +6063,7 @@ typedef struct nir_load_store_vectorize_options {
 } nir_load_store_vectorize_options;
 
 bool nir_opt_load_store_vectorize(nir_shader *shader, const nir_load_store_vectorize_options *options);
+bool nir_opt_vectorize_robust_ssbo_loads(nir_shader *shader);
 bool nir_opt_load_store_update_alignments(nir_shader *shader);
 
 typedef bool (*nir_lower_shader_calls_should_remat_func)(nir_instr *instr, void *data);

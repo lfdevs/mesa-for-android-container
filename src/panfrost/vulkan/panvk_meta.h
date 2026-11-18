@@ -22,6 +22,14 @@ enum panvk_meta_object_key_type {
    PANVK_META_OBJECT_KEY_FB_ZS_PRELOAD_SHADER,
    PANVK_META_OBJECT_KEY_FB_COLOR_PRELOAD_SHADER,
    PANVK_META_OBJECT_KEY_FB_RESOLVE_SHADER,
+   PANVK_META_OBJECT_KEY_BC_DECODE_LAYOUT,
+   PANVK_META_OBJECT_KEY_BC_DECODE_SHADER,
+   PANVK_META_OBJECT_KEY_BC_DECODE_GFX_LAYOUT,
+   PANVK_META_OBJECT_KEY_BC_DECODE_GFX_SHADER,
+   PANVK_META_OBJECT_KEY_BC_XCODE_LAYOUT,
+   PANVK_META_OBJECT_KEY_BC_XCODE_SHADER,
+   PANVK_META_OBJECT_KEY_BC_SCOPY_LAYOUT,
+   PANVK_META_OBJECT_KEY_BC_SCOPY_SHADER,
 };
 
 static inline VkFormat
@@ -188,5 +196,16 @@ VkResult panvk_per_arch(meta_get_copy_desc_job)(
    const struct panvk_descriptor_state *desc_state,
    const struct panvk_shader_desc_state *shader_desc_state,
    uint32_t attrib_buf_idx_offset, struct pan_ptr *job_desc);
+#endif
+
+struct panvk_cmd_buffer;
+
+void panvk_per_arch(cmd_bc_decode_zero_initialized)(
+   struct panvk_cmd_buffer *cmdbuf, const VkDependencyInfo *dep_info);
+
+#if PAN_ARCH >= 10
+/* The command buffer is no longer pending (reset or freed): log its
+ * PANVK_DEBUG=bc_timing records (csf-v11/200). */
+void panvk_per_arch(cmd_bc_release)(struct panvk_cmd_buffer *cmdbuf);
 #endif
 #endif

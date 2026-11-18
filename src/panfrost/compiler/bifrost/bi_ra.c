@@ -12,7 +12,15 @@
 
 struct lcra_state {
    unsigned node_count;
+
+   /* Affinity used by the solver: one of aff[] below. The interference
+    * graph is the same for the 32 register (split file) and 64 register
+    * attempts, so it is built once with both affinity masks. */
    uint64_t *affinity;
+   uint64_t *aff[2];
+
+   /* Registers forced before solving, to reset solutions between attempts */
+   unsigned *forced;
 
    /* Linear constraints imposed. For each node there there is a
     * 'nodearray' structure, which changes between a sparse and dense
@@ -29,8 +37,14 @@ struct lcra_state {
    /* Before solving, forced registers; after solving, solutions. */
    unsigned *solutions;
 
-   /** Node which caused register allocation to fail */
-   unsigned spill_node;
+   /** Every node that failed, when solving past failures */
+   unsigned *failed;
+   unsigned failed_count;
+
+   /* While building from scratch, constraints are queued here as
+    * (row << 40 | key << 16 | value) and sorted into rows at the end, which
+    * is much cheaper than inserting each into a sorted sparse row. */
+   struct util_dynarray *pending;
 };
 
 /* This module is an implementation of "Linearly Constrained
@@ -48,7 +62,9 @@ lcra_alloc_equations(unsigned node_count)
 
    l->linear = calloc(sizeof(l->linear[0]), node_count);
    l->solutions = calloc(sizeof(l->solutions[0]), node_count);
-   l->affinity = calloc(sizeof(l->affinity[0]), node_count);
+   l->forced = calloc(sizeof(l->forced[0]), node_count);
+   l->aff[0] = calloc(sizeof(l->aff[0][0]), node_count);
+   l->aff[1] = calloc(sizeof(l->aff[1][0]), node_count);
 
    memset(l->solutions, ~0, sizeof(l->solutions[0]) * node_count);
 
@@ -62,10 +78,15 @@ lcra_free(struct lcra_state *l)
       nodearray_reset(&l->linear[i]);
 
    free(l->linear);
-   free(l->affinity);
+   free(l->aff[0]);
+   free(l->aff[1]);
+   free(l->forced);
    free(l->solutions);
+   free(l->failed);
    free(l);
 }
+
+static void lcra_flush_pending(struct lcra_state *l);
 
 static void
 lcra_add_node_interference(struct lcra_state *l, unsigned i, unsigned cmask_i,
@@ -81,7 +102,9 @@ lcra_add_node_interference(struct lcra_state *l, unsigned i, unsigned cmask_i,
     * allocation can be done in parallel for every possible solution,
     * with lower-order bits representing smaller registers. */
 
-   for (unsigned D = 0; D < 8; ++D) {
+   if (cmask_i == 1 && cmask_j == 1) {
+      constraint_fw = constraint_bw = 1 << 7;
+   } else for (unsigned D = 0; D < 8; ++D) {
       if (cmask_i & (cmask_j << D)) {
          constraint_fw |= (1 << (7 + D));
          constraint_bw |= (1 << (7 - D));
@@ -93,9 +116,115 @@ lcra_add_node_interference(struct lcra_state *l, unsigned i, unsigned cmask_i,
       }
    }
 
-   /* Use dense arrays after adding 256 elements */
-   nodearray_orr(&l->linear[j], i, constraint_fw, 256, l->node_count);
-   nodearray_orr(&l->linear[i], j, constraint_bw, 256, l->node_count);
+   if (l->pending) {
+      assert(i < (1 << 24) && j < (1 << 24));
+      if (constraint_fw)
+         util_dynarray_append_typed(l->pending, uint64_t,
+                                    ((uint64_t)j << 40) | ((uint64_t)i << 16) |
+                                       constraint_fw);
+      if (constraint_bw)
+         util_dynarray_append_typed(l->pending, uint64_t,
+                                    ((uint64_t)i << 40) | ((uint64_t)j << 16) |
+                                       constraint_bw);
+
+      /* Bound the queue's memory on huge shaders */
+      if (util_dynarray_num_elements(l->pending, uint64_t) >= (1 << 20))
+         lcra_flush_pending(l);
+      return;
+   }
+
+   /* Keep rows sparse until they hold a quarter of the nodes, where a dense
+    * row gets smaller. The solver scans a dense row in full for every use,
+    * which dominated solving big shaders with a 256 element limit. */
+   nodearray_orr(&l->linear[j], i, constraint_fw, ~0u, l->node_count);
+   nodearray_orr(&l->linear[i], j, constraint_bw, ~0u, l->node_count);
+}
+
+/* Sorts the queued constraints into the rows: counting sort by key, then
+ * stably by row, so each row's new keys come out sorted and merge with the
+ * row in one pass. Rows get the representation nodearray_orr would have
+ * given them.
+ */
+static void
+lcra_flush_pending(struct lcra_state *l)
+{
+   unsigned n = l->node_count;
+   unsigned count = util_dynarray_num_elements(l->pending, uint64_t);
+   uint64_t *a = l->pending->data;
+   /* Also scratch for merging a row: sparse rows hold under n / 4 keys */
+   uint64_t *b = malloc(sizeof(uint64_t) * (count + n / 4 + 1));
+   unsigned *pos = malloc(sizeof(unsigned) * (n + 1));
+
+   memset(pos, 0, sizeof(unsigned) * (n + 1));
+   for (unsigned e = 0; e < count; ++e)
+      pos[((a[e] >> 16) & 0xffffff) + 1]++;
+   for (unsigned k = 0; k < n; ++k)
+      pos[k + 1] += pos[k];
+   for (unsigned e = 0; e < count; ++e)
+      b[pos[(a[e] >> 16) & 0xffffff]++] = a[e];
+
+   memset(pos, 0, sizeof(unsigned) * (n + 1));
+   for (unsigned e = 0; e < count; ++e)
+      pos[(b[e] >> 40) + 1]++;
+   for (unsigned k = 0; k < n; ++k)
+      pos[k + 1] += pos[k];
+   for (unsigned e = 0; e < count; ++e)
+      a[pos[b[e] >> 40]++] = b[e];
+
+   /* pos[r] is now the end of row r */
+   for (unsigned r = 0, start = 0; r < n; start = pos[r++]) {
+      if (start == pos[r])
+         continue;
+
+      nodearray *row = &l->linear[r];
+
+      if (!nodearray_is_sparse(row)) {
+         for (unsigned e = start; e < pos[r]; ++e)
+            row->dense[(a[e] >> 16) & 0xffffff] |= a[e] & 0xffff;
+         continue;
+      }
+
+      /* Merge the row with its new keys, ORing equal keys */
+      unsigned u = 0, o = 0;
+      unsigned e = start;
+
+      while (o < row->size || e < pos[r]) {
+         nodearray_sparse x;
+
+         if (e == pos[r] ||
+             (o < row->size && nodearray_sparse_key(&row->sparse[o]) <=
+                                  ((a[e] >> 16) & 0xffffff)))
+            x = row->sparse[o++];
+         else
+            x = a[e++] & BITFIELD64_MASK(40);
+
+         if (u && nodearray_sparse_key(&b[u - 1]) == nodearray_sparse_key(&x))
+            b[u - 1] |= x;
+         else
+            b[u++] = x;
+      }
+
+      nodearray_reset(row);
+
+      if (u < n / 4) {
+         row->sparse = malloc(sizeof(nodearray_sparse) * u);
+         memcpy(row->sparse, b, sizeof(nodearray_sparse) * u);
+         row->size = row->sparse_capacity = u;
+      } else {
+         row->dense =
+            calloc(NODEARRAY_DENSE_ALIGN(n), sizeof(nodearray_value));
+         row->size = n;
+         row->sparse_capacity = ~0U;
+
+         for (unsigned k = 0; k < u; ++k)
+            row->dense[nodearray_sparse_key(&b[k])] =
+               nodearray_sparse_value(&b[k]);
+      }
+   }
+
+   free(pos);
+   free(b);
+   util_dynarray_clear(l->pending);
 }
 
 static bool
@@ -141,9 +270,50 @@ lcra_test_linear(struct lcra_state *l, unsigned *solutions, unsigned i)
    return true;
 }
 
-static bool
-lcra_solve(struct lcra_state *l)
+/* Registers node i cannot take given the nodes solved so far. Bit (d + 7) of
+ * a constraint forbids c_i - c_j == d, i.e. c_i == c_j + d. One pass over the
+ * row gives the answer for all 64 registers, where lcra_test_linear needs a
+ * pass per candidate register.
+ */
+static uint64_t
+lcra_forbidden(struct lcra_state *l, unsigned i)
 {
+   uint64_t forbidden = 0;
+
+#define LCRA_FORBID(j, constraint)                                             \
+   do {                                                                        \
+      if (l->solutions[j] != ~0 && (constraint)) {                             \
+         int sh = (int)l->solutions[j] - 7;                                    \
+         uint64_t m = (uint64_t)(constraint);                                  \
+         forbidden |= sh >= 0 ? (m << sh) : (m >> -sh);                        \
+      }                                                                        \
+   } while (0)
+
+   if (nodearray_is_sparse(&l->linear[i])) {
+      nodearray_sparse_foreach(&l->linear[i], elem)
+         LCRA_FORBID(nodearray_sparse_key(elem), nodearray_sparse_value(elem));
+   } else {
+      nodearray_value *row = l->linear[i].dense;
+
+      for (unsigned j = 0; j < l->node_count; ++j)
+         LCRA_FORBID(j, row[j]);
+   }
+
+#undef LCRA_FORBID
+   return forbidden;
+}
+
+/* With keep_going, a node that fails is left unassigned (it constrains nothing)
+ * and solving continues, so one pass finds every node that does not fit. The
+ * spiller then handles all of them at once instead of one per full RA pass.
+ */
+static bool
+lcra_solve(struct lcra_state *l, bool keep_going)
+{
+   l->failed_count = 0;
+   if (keep_going && !l->failed)
+      l->failed = malloc(sizeof(*l->failed) * l->node_count);
+
    for (unsigned step = 0; step < l->node_count; ++step) {
       if (l->solutions[step] != ~0)
          continue;
@@ -152,23 +322,24 @@ lcra_solve(struct lcra_state *l)
 
       bool succ = false;
 
-      u_foreach_bit64(r, l->affinity[step]) {
-         l->solutions[step] = r;
-
-         if (lcra_test_linear(l, l->solutions, step)) {
-            succ = true;
-            break;
-         }
+      /* First fit: the lowest allowed register */
+      uint64_t allowed = l->affinity[step] & ~lcra_forbidden(l, step);
+      if (allowed) {
+         l->solutions[step] = ffsll(allowed) - 1;
+         succ = true;
       }
 
       /* Out of registers - prepare to spill */
       if (!succ) {
-         l->spill_node = step;
-         return false;
+         if (!keep_going)
+            return false;
+
+         l->failed[l->failed_count++] = step;
+         l->solutions[step] = ~0;
       }
    }
 
-   return true;
+   return l->failed_count == 0;
 }
 
 /* Register spilling is implemented with a cost-benefit system. Costs are set
@@ -212,9 +383,73 @@ bi_liveness_ins_update_ra(uint8_t *live, bi_instr *ins)
    }
 }
 
-static bool
-liveness_block_update(bi_block *blk, unsigned temp_count)
+/* Only nodes that some block reads before writing them (upward-exposed) can
+ * be live at a block boundary, so block liveness tracks just those "global"
+ * nodes. That makes liveness O(blocks * globals) instead of
+ * O(blocks * nodes), which matters for big shaders with many blocks.
+ * block->live_in/live_out are indexed by global index.
+ */
+struct bi_ra_live {
+   unsigned *gidx;  /* node -> global index, or ~0 */
+   unsigned *glist; /* global index -> node */
+   unsigned count;
+};
+
+static void
+bi_find_global_nodes(bi_context *ctx, struct bi_ra_live *g)
 {
+   unsigned n = ctx->ssa_alloc;
+   unsigned *stamp = calloc(n, sizeof(unsigned));
+   uint8_t *written = malloc(n);
+
+   g->gidx = malloc(n * sizeof(unsigned));
+   g->glist = malloc(n * sizeof(unsigned));
+   g->count = 0;
+   memset(g->gidx, ~0, n * sizeof(unsigned));
+
+   unsigned s = 0;
+   bi_foreach_block(ctx, blk) {
+      ++s;
+      bi_foreach_instr_in_block(blk, ins) {
+         bi_foreach_ssa_src(ins, src) {
+            unsigned v = ins->src[src].value;
+            unsigned rmask = BITFIELD_MASK(bi_count_read_registers(ins, src))
+                             << ins->src[src].offset;
+            uint8_t w = stamp[v] == s ? written[v] : 0;
+
+            if ((rmask & ~w) && g->gidx[v] == ~0u) {
+               g->gidx[v] = g->count;
+               g->glist[g->count++] = v;
+            }
+         }
+
+         bi_foreach_dest(ins, d) {
+            unsigned v = ins->dest[d].value;
+
+            if (stamp[v] != s) {
+               stamp[v] = s;
+               written[v] = 0;
+            }
+            written[v] |= bi_writemask(ins, d);
+         }
+      }
+   }
+
+   free(stamp);
+   free(written);
+}
+
+static void
+bi_ra_live_fini(struct bi_ra_live *g)
+{
+   free(g->gidx);
+   free(g->glist);
+}
+
+static bool
+liveness_block_update(bi_block *blk, const struct bi_ra_live *g)
+{
+   unsigned temp_count = g->count;
    bool progress = false;
 
    /* live_out[s] = sum { p in succ[s] } ( live_in[p] ) */
@@ -223,11 +458,25 @@ liveness_block_update(bi_block *blk, unsigned temp_count)
          blk->live_out[i] |= succ->live_in[i];
    }
 
-   uint8_t *live = ralloc_array(blk, uint8_t, temp_count);
+   uint8_t *live = ralloc_array(blk, uint8_t, MAX2(temp_count, 1));
    memcpy(live, blk->live_out, temp_count);
 
-   bi_foreach_instr_in_block_rev(blk, ins)
-      bi_liveness_ins_update_ra(live, ins);
+   /* bi_liveness_ins_update_ra over global nodes only */
+   bi_foreach_instr_in_block_rev(blk, ins) {
+      bi_foreach_dest(ins, d) {
+         unsigned k = g->gidx[ins->dest[d].value];
+         if (k != ~0u)
+            live[k] &= ~bi_writemask(ins, d);
+      }
+
+      bi_foreach_ssa_src(ins, src) {
+         unsigned k = g->gidx[ins->src[src].value];
+         if (k != ~0u) {
+            unsigned rmask = BITFIELD_MASK(bi_count_read_registers(ins, src));
+            live[k] |= (rmask << ins->src[src].offset);
+         }
+      }
+   }
 
    /* To figure out progress, diff live_in */
 
@@ -247,8 +496,10 @@ liveness_block_update(bi_block *blk, unsigned temp_count)
  */
 
 static void
-bi_compute_liveness_ra(bi_context *ctx)
+bi_compute_liveness_ra(bi_context *ctx, struct bi_ra_live *g)
 {
+   bi_find_global_nodes(ctx, g);
+
    u_worklist worklist;
    bi_worklist_init(ctx, &worklist);
 
@@ -256,8 +507,8 @@ bi_compute_liveness_ra(bi_context *ctx)
       ralloc_free(block->live_in);
       ralloc_free(block->live_out);
 
-      block->live_in = rzalloc_array(block, uint8_t, ctx->ssa_alloc);
-      block->live_out = rzalloc_array(block, uint8_t, ctx->ssa_alloc);
+      block->live_in = rzalloc_array(block, uint8_t, MAX2(g->count, 1));
+      block->live_out = rzalloc_array(block, uint8_t, MAX2(g->count, 1));
 
       bi_worklist_push_tail(&worklist, block);
    }
@@ -269,7 +520,7 @@ bi_compute_liveness_ra(bi_context *ctx)
       /* Update liveness information. If we made progress, we need to
        * reprocess the predecessors
        */
-      if (liveness_block_update(blk, ctx->ssa_alloc)) {
+      if (liveness_block_update(blk, g)) {
          bi_foreach_predecessor(blk, pred)
             bi_worklist_push_head(&worklist, *pred);
       }
@@ -319,18 +570,54 @@ bi_make_affinity(uint64_t clobber, unsigned count, bool split_file)
    return ~clobbered;
 }
 
+/* The nodes with a nonzero live mask, so interference only walks live nodes
+ * instead of every node for every destination.
+ */
+struct bi_live_set {
+   unsigned *list, *pos, count;
+};
+
+static inline void
+bi_live_set_add(struct bi_live_set *s, unsigned v)
+{
+   if (s->pos[v] == ~0u) {
+      s->pos[v] = s->count;
+      s->list[s->count++] = v;
+   }
+}
+
+static inline void
+bi_live_set_del(struct bi_live_set *s, unsigned v)
+{
+   if (s->pos[v] != ~0u) {
+      unsigned last = s->list[--s->count];
+      s->list[s->pos[v]] = last;
+      s->pos[last] = s->pos[v];
+      s->pos[v] = ~0u;
+   }
+}
+
+/* With dirty == NULL, records every constraint. Otherwise only constraints
+ * involving a dirty node, and only dirty nodes' affinities: dls then tracks
+ * the live dirty nodes, so clean definitions only walk those.
+ */
 static void
 bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live,
-                     uint64_t preload_live, unsigned node_count, bool is_blend,
-                     bool split_file, unsigned arch)
+                     struct bi_live_set *ls, struct bi_live_set *dls,
+                     const BITSET_WORD *dirty, uint64_t preload_live,
+                     bool is_blend, unsigned arch)
 {
    bool aligned_sr = arch >= 9;
+
+#define IS_DIRTY(v) (!dirty || BITSET_TEST(dirty, (v)))
+
    bi_foreach_instr_in_block_rev(block, ins) {
       /* Mark all registers live after the instruction as
        * interfering with the destination */
 
       bi_foreach_dest(ins, d) {
          unsigned node = ins->dest[d].value;
+         bool node_dirty = IS_DIRTY(node);
 
          /* Don't allocate to anything that's read later as a
           * preloaded register. The affinity is the intersection
@@ -340,15 +627,20 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live,
           * offset, so we shift right. */
          unsigned count = bi_count_write_registers(ins, d);
          unsigned offset = ins->dest[d].offset;
-         uint64_t affinity =
-            bi_make_affinity(preload_live, count, split_file) >> offset;
-         /* Valhall needs >= 64-bit staging writes to be pair-aligned */
-         if (aligned_sr && (count >= 2 || offset))
-            affinity &= EVEN_BITS_MASK;
+         for (unsigned f = 0; f < 2 && node_dirty; ++f) {
+            uint64_t affinity =
+               bi_make_affinity(preload_live, count, f == 0) >> offset;
+            /* Valhall needs >= 64-bit staging writes to be pair-aligned */
+            if (aligned_sr && (count >= 2 || offset))
+               affinity &= EVEN_BITS_MASK;
 
-         l->affinity[node] &= affinity;
+            l->aff[f][node] &= affinity;
+         }
 
-         for (unsigned i = 0; i < node_count; ++i) {
+         struct bi_live_set *s = node_dirty ? ls : dls;
+
+         for (unsigned k = 0; k < s->count; ++k) {
+            unsigned i = s->list[k];
             uint8_t r = live[i];
 
             /* Nodes only interfere if they occupy
@@ -370,7 +662,7 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live,
          }
 
          unsigned node_first = ins->dest[0].value;
-         if (d == 1) {
+         if (d == 1 && (node_dirty || IS_DIRTY(node_first))) {
             lcra_add_node_interference(l, node, bi_writemask(ins, 1),
                                        node_first, bi_writemask(ins, 0));
          }
@@ -387,7 +679,8 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live,
          const unsigned dmask = bi_writemask(ins, 0);
 
          for (unsigned s = 0; s < 2; ++s) {
-            if (bi_is_ssa(ins->src[s]))
+            if (bi_is_ssa(ins->src[s]) &&
+                (IS_DIRTY(dnode) || IS_DIRTY(ins->src[s].value)))
                lcra_add_node_interference(l, dnode, dmask, ins->src[s].value,
                                           dmask);
          }
@@ -396,11 +689,15 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live,
       /* Valhall needs >= 64-bit reads to be pair-aligned */
       if (aligned_sr) {
          bi_foreach_ssa_src(ins, s) {
-            if (bi_count_read_registers(ins, s) >= 2)
-               l->affinity[ins->src[s].value] &= EVEN_BITS_MASK;
-            else if (s < valhall_opcodes[ins->op].nr_srcs &&
-                     va_src_info(ins->op, s).size > VA_SIZE_32)
-               l->affinity[ins->src[s].value] &= EVEN_BITS_MASK;
+            if (!IS_DIRTY(ins->src[s].value))
+               continue;
+
+            if (bi_count_read_registers(ins, s) >= 2 ||
+                (s < valhall_opcodes[ins->op].nr_srcs &&
+                 va_src_info(ins->op, s).size > VA_SIZE_32)) {
+               l->aff[0][ins->src[s].value] &= EVEN_BITS_MASK;
+               l->aff[1][ins->src[s].value] &= EVEN_BITS_MASK;
+            }
          }
       }
 
@@ -409,58 +706,132 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live,
          uint64_t clobber =
             BITFIELD64_MASK(16) |
             BITFIELD64_BIT(bi_preload_reg(BI_PRELOAD_BLEND_LINK, arch));
+         struct bi_live_set *s = dirty ? dls : ls;
 
-         for (unsigned i = 0; i < node_count; ++i) {
-            if (live[i])
-               l->affinity[i] &= ~clobber;
+         for (unsigned k = 0; k < s->count; ++k) {
+            l->aff[0][s->list[k]] &= ~clobber;
+            l->aff[1][s->list[k]] &= ~clobber;
          }
       }
 
       /* Update live_in */
       preload_live = bi_postra_liveness_ins(preload_live, ins);
-      bi_liveness_ins_update_ra(live, ins);
+
+      /* bi_liveness_ins_update_ra, keeping the live sets in sync */
+      bi_foreach_dest(ins, d) {
+         unsigned v = ins->dest[d].value;
+         live[v] &= ~bi_writemask(ins, d);
+         if (!live[v]) {
+            bi_live_set_del(ls, v);
+            if (dirty && BITSET_TEST(dirty, v))
+               bi_live_set_del(dls, v);
+         }
+      }
+
+      bi_foreach_ssa_src(ins, src) {
+         unsigned v = ins->src[src].value;
+         unsigned rmask = BITFIELD_MASK(bi_count_read_registers(ins, src));
+         live[v] |= (rmask << ins->src[src].offset);
+         if (live[v]) {
+            bi_live_set_add(ls, v);
+            if (dirty && BITSET_TEST(dirty, v))
+               bi_live_set_add(dls, v);
+         }
+      }
    }
+
+#undef IS_DIRTY
 
    block->reg_live_in = preload_live;
 }
 
 static void
-bi_compute_interference(bi_context *ctx, struct lcra_state *l, bool full_regs)
+bi_compute_interference(bi_context *ctx, struct lcra_state *l,
+                        const BITSET_WORD *dirty)
 {
-   bi_compute_liveness_ra(ctx);
+   struct bi_ra_live g;
+   bi_compute_liveness_ra(ctx, &g);
    bi_postra_liveness(ctx);
 
+   unsigned n = ctx->ssa_alloc;
+   uint8_t *live = calloc(n, 1);
+   struct bi_live_set ls = {
+      .list = malloc(sizeof(unsigned) * n),
+      .pos = malloc(sizeof(unsigned) * n),
+   };
+   struct bi_live_set dls = {
+      .list = malloc(sizeof(unsigned) * n),
+      .pos = malloc(sizeof(unsigned) * n),
+   };
+   memset(ls.pos, ~0, sizeof(unsigned) * n);
+   memset(dls.pos, ~0, sizeof(unsigned) * n);
+
+   /* live[] and the live sets are all clear between blocks: only the global
+    * nodes live out of the block need to be set up. */
    bi_foreach_block_rev(ctx, blk) {
-      uint8_t *live = mem_dup(blk->live_out, ctx->ssa_alloc);
+      for (unsigned k = 0; k < g.count; ++k) {
+         if (blk->live_out[k]) {
+            unsigned v = g.glist[k];
+            live[v] = blk->live_out[k];
+            bi_live_set_add(&ls, v);
+            if (dirty && BITSET_TEST(dirty, v))
+               bi_live_set_add(&dls, v);
+         }
+      }
 
-      bi_mark_interference(blk, l, live, blk->reg_live_out, ctx->ssa_alloc,
-                           ctx->inputs->is_blend, !full_regs, ctx->arch);
+      bi_mark_interference(blk, l, live, &ls, &dls, dirty, blk->reg_live_out,
+                           ctx->inputs->is_blend, ctx->arch);
 
-      free(live);
+      for (unsigned k = 0; k < ls.count; ++k) {
+         live[ls.list[k]] = 0;
+         ls.pos[ls.list[k]] = ~0u;
+      }
+      for (unsigned k = 0; k < dls.count; ++k)
+         dls.pos[dls.list[k]] = ~0u;
+      ls.count = dls.count = 0;
    }
+
+   free(live);
+   free(ls.list);
+   free(ls.pos);
+   free(dls.list);
+   free(dls.pos);
+   bi_ra_live_fini(&g);
 }
 
-static struct lcra_state *
-bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
+/* Default affinities (of dirty nodes, or all with dirty == NULL) and forced
+ * registers */
+static void
+bi_lcra_init_nodes(bi_context *ctx, struct lcra_state *l,
+                   const BITSET_WORD *dirty)
 {
-   struct lcra_state *l = lcra_alloc_equations(ctx->ssa_alloc);
-
    /* Blend shaders are restricted to R0-R15. Other shaders at full
     * occupancy also can access R48-R63. At half occupancy they can access
     * the whole file. */
+   uint64_t default_affinity[2];
 
-   uint64_t default_affinity =
-      ctx->inputs->is_blend ? BITFIELD64_MASK(16)
-      : full_regs           ? BITFIELD64_MASK(64)
-                  : (BITFIELD64_MASK(16) | (BITFIELD64_MASK(16) << 48));
+   for (unsigned f = 0; f < 2; ++f) {
+      bool full_regs = f == 1;
+      default_affinity[f] =
+         ctx->inputs->is_blend ? BITFIELD64_MASK(16)
+         : full_regs           ? BITFIELD64_MASK(64)
+                     : (BITFIELD64_MASK(16) | (BITFIELD64_MASK(16) << 48));
 
-   /* To test spilling, mimic a small register file */
-   if (bifrost_debug & BIFROST_DBG_SPILL && !ctx->inputs->is_blend && (bifrost_debug & BIFROST_DBG_NOSSARA))
-      default_affinity &= BITFIELD64_MASK(48) << 8;
+      /* To test spilling, mimic a small register file */
+      if (bifrost_debug & BIFROST_DBG_SPILL && !ctx->inputs->is_blend && (bifrost_debug & BIFROST_DBG_NOSSARA))
+         default_affinity[f] &= BITFIELD64_MASK(48) << 8;
+   }
+
+   memset(l->solutions, ~0, sizeof(l->solutions[0]) * l->node_count);
 
    bi_foreach_instr_global(ctx, ins) {
-      bi_foreach_dest(ins, d)
-         l->affinity[ins->dest[d].value] = default_affinity;
+      bi_foreach_dest(ins, d) {
+         unsigned v = ins->dest[d].value;
+         if (!dirty || BITSET_TEST(dirty, v)) {
+            l->aff[0][v] = default_affinity[0];
+            l->aff[1][v] = default_affinity[1];
+         }
+      }
 
       /* Blend shaders expect the src colour to be in blend_src0_c0
        * through c3 */
@@ -502,7 +873,140 @@ bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
       }
    }
 
-   bi_compute_interference(ctx, l, full_regs);
+   memcpy(l->forced, l->solutions, sizeof(l->solutions[0]) * l->node_count);
+}
+
+/* Builds the constraints, shared by the 32 and 64 register attempts */
+static struct lcra_state *
+bi_build_lcra(bi_context *ctx)
+{
+   struct lcra_state *l = lcra_alloc_equations(ctx->ssa_alloc);
+
+   struct util_dynarray pending;
+   util_dynarray_init(&pending, NULL);
+   l->pending = &pending;
+
+   bi_lcra_init_nodes(ctx, l, NULL);
+   bi_compute_interference(ctx, l, NULL);
+   lcra_flush_pending(l);
+
+   l->pending = NULL;
+   util_dynarray_fini(&pending);
+   return l;
+}
+
+static void
+nodearray_clear_key(nodearray *a, unsigned key)
+{
+   if (!nodearray_is_sparse(a)) {
+      if (key < a->size)
+         a->dense[key] = 0;
+      return;
+   }
+
+   if (!a->size)
+      return;
+
+   nodearray_sparse *elem;
+   unsigned idx = nodearray_sparse_search(a, key, &elem);
+
+   if (nodearray_sparse_key(elem) == key) {
+      memmove(elem, elem + 1, (a->size - idx - 1) * sizeof(*elem));
+      a->size--;
+   }
+}
+
+static void
+lcra_grow(struct lcra_state *l, unsigned n)
+{
+   unsigned old = l->node_count;
+
+   if (n == old)
+      return;
+
+   l->linear = realloc(l->linear, n * sizeof(l->linear[0]));
+   memset(l->linear + old, 0, (n - old) * sizeof(l->linear[0]));
+
+   for (unsigned i = 0; i < old; ++i) {
+      nodearray *a = &l->linear[i];
+
+      if (!nodearray_is_sparse(a)) {
+         unsigned from = NODEARRAY_DENSE_ALIGN(a->size);
+         unsigned to = NODEARRAY_DENSE_ALIGN(n);
+
+         a->dense = realloc(a->dense, to * sizeof(nodearray_value));
+         memset(a->dense + from, 0, (to - from) * sizeof(nodearray_value));
+         a->size = n;
+      }
+   }
+
+#define GROW(arr)                                                              \
+   do {                                                                        \
+      arr = realloc(arr, n * sizeof(arr[0]));                                  \
+      memset(arr + old, 0, (n - old) * sizeof(arr[0]));                        \
+   } while (0)
+
+   GROW(l->aff[0]);
+   GROW(l->aff[1]);
+   GROW(l->solutions);
+   GROW(l->forced);
+#undef GROW
+
+   free(l->failed);
+   l->failed = NULL;
+   l->node_count = n;
+}
+
+/* Spilling only changes the spilled nodes and adds fill temporaries: no
+ * other node gains or loses a definition, and the spill code reads and
+ * writes nothing else, so every other node's liveness is unchanged. Remove
+ * the spilled nodes' constraints and recompute those involving a spilled
+ * node or a new node. The result is the same as a full rebuild, without
+ * redoing the constraints between all the other nodes.
+ */
+static void
+bi_update_lcra(bi_context *ctx, struct lcra_state *l, const unsigned *spilled,
+               unsigned spilled_count)
+{
+   unsigned old = l->node_count, n = ctx->ssa_alloc;
+
+   lcra_grow(l, n);
+
+   BITSET_WORD *dirty = BITSET_CALLOC(n);
+   BITSET_SET_RANGE(dirty, old, n - 1);
+
+   for (unsigned s = 0; s < spilled_count; ++s) {
+      unsigned x = spilled[s];
+      nodearray *row = &l->linear[x];
+
+      BITSET_SET(dirty, x);
+
+      if (nodearray_is_sparse(row)) {
+         nodearray_sparse_foreach(row, elem)
+            nodearray_clear_key(&l->linear[nodearray_sparse_key(elem)], x);
+      } else {
+         for (unsigned j = 0; j < row->size; ++j) {
+            if (row->dense[j])
+               nodearray_clear_key(&l->linear[j], x);
+         }
+      }
+
+      nodearray_reset(row);
+
+      /* init_nodes only resets the affinity of nodes it finds defined */
+      l->aff[0][x] = l->aff[1][x] = 0;
+   }
+
+   bi_lcra_init_nodes(ctx, l, dirty);
+   bi_compute_interference(ctx, l, dirty);
+   free(dirty);
+}
+
+static bool
+bi_solve_lcra(bi_context *ctx, struct lcra_state *l, bool full_regs)
+{
+   l->affinity = l->aff[full_regs];
+   memcpy(l->solutions, l->forced, sizeof(l->solutions[0]) * l->node_count);
 
    /* Coalesce register moves if we're allowed. We need to be careful due
     * to the restricted affinity induced by the blend shader ABI.
@@ -538,9 +1042,9 @@ bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
       }
    }
 
-   *success = lcra_solve(l);
-
-   return l;
+   /* Only the full register file attempt spills, so only it needs every
+    * failing node. */
+   return lcra_solve(l, full_regs);
 }
 
 static bi_index
@@ -617,12 +1121,12 @@ bi_rewrite_index_src_single(bi_instr *ins, bi_index old, bi_index new)
    }
 }
 
-/* If register allocation fails, find the best spill node */
+/* Nodes that must not be spilled, satisfying bi_spill_register's
+ * preconditions */
 
-static signed
-bi_choose_spill_node(bi_context *ctx, struct lcra_state *l)
+static BITSET_WORD *
+bi_no_spill_set(bi_context *ctx, struct lcra_state *l)
 {
-   /* Pick a node satisfying bi_spill_register's preconditions */
    BITSET_WORD *no_spill = BITSET_CALLOC(l->node_count);
 
    bi_foreach_instr_global(ctx, ins) {
@@ -642,6 +1146,24 @@ bi_choose_spill_node(bi_context *ctx, struct lcra_state *l)
       }
    }
 
+   return no_spill;
+}
+
+static unsigned
+bi_spill_benefit(struct lcra_state *l, unsigned *benefit, unsigned i)
+{
+   if (benefit[i] == ~0)
+      benefit[i] = lcra_count_constraints(l, i);
+
+   return benefit[i];
+}
+
+/* If register allocation fails at `node`, find the best spill node */
+
+static signed
+bi_choose_spill_node(struct lcra_state *l, BITSET_WORD *no_spill,
+                     unsigned *benefit, unsigned node)
+{
    unsigned best_benefit = 0;
    signed best_node = -1;
 
@@ -649,13 +1171,13 @@ bi_choose_spill_node(bi_context *ctx, struct lcra_state *l)
     * rather the ones interfering with it, if that would be
     * better
     */
-   if (!BITSET_TEST(no_spill, l->spill_node)) {
-      best_node = l->spill_node;
-      best_benefit = lcra_count_constraints(l, best_node);
+   if (!BITSET_TEST(no_spill, node)) {
+      best_node = node;
+      best_benefit = bi_spill_benefit(l, benefit, node);
    }
 
-   if (nodearray_is_sparse(&l->linear[l->spill_node])) {
-      nodearray_sparse_foreach(&l->linear[l->spill_node], elem) {
+   if (nodearray_is_sparse(&l->linear[node])) {
+      nodearray_sparse_foreach(&l->linear[node], elem) {
          unsigned i = nodearray_sparse_key(elem);
          unsigned constraint = nodearray_sparse_value(elem);
 
@@ -667,15 +1189,15 @@ bi_choose_spill_node(bi_context *ctx, struct lcra_state *l)
          if (BITSET_TEST(no_spill, i))
             continue;
 
-         unsigned benefit = lcra_count_constraints(l, i);
+         unsigned b = bi_spill_benefit(l, benefit, i);
 
-         if (benefit > best_benefit) {
-            best_benefit = benefit;
+         if (b > best_benefit) {
+            best_benefit = b;
             best_node = i;
          }
       }
    } else {
-      nodearray_value *row = l->linear[l->spill_node].dense;
+      nodearray_value *row = l->linear[node].dense;
 
       for (unsigned i = 0; i < l->node_count; ++i) {
          /* Only spill nodes that interfere with the node failing
@@ -686,16 +1208,15 @@ bi_choose_spill_node(bi_context *ctx, struct lcra_state *l)
          if (BITSET_TEST(no_spill, i))
             continue;
 
-         unsigned benefit = lcra_count_constraints(l, i);
+         unsigned b = bi_spill_benefit(l, benefit, i);
 
-         if (benefit > best_benefit) {
-            best_benefit = benefit;
+         if (b > best_benefit) {
+            best_benefit = b;
             best_node = i;
          }
       }
    }
 
-   free(no_spill);
    return best_node;
 }
 
@@ -779,30 +1300,99 @@ bi_compute_reg_alignment(bi_context *ctx)
    }
 }
 
-/* Once we've chosen a spill node, spill it and return new (aligned) offset */
+struct bi_spill_ref {
+   bi_block *block;
+   bi_instr *I;
+};
 
+static void
+bi_spill_ref_add(struct util_dynarray *refs, bi_block *block, bi_instr *I)
+{
+   struct bi_spill_ref *last =
+      refs->size ? util_dynarray_top_ptr(refs, struct bi_spill_ref) : NULL;
+   if (!last || last->I != I)
+      util_dynarray_append_typed(refs, struct bi_spill_ref,
+                                 ((struct bi_spill_ref){block, I}));
+}
+
+/* Spills nodes[k] with spill point points[k] for each k in turn, returning the
+ * new (aligned) offset. Spilling a node only inserts instructions referencing
+ * that node and new temporaries, and only rewrites that node's sources, so
+ * the instructions referencing each node (or defining its spill point) are
+ * collected in one scan instead of scanning the shader once per node.
+ */
 static unsigned
-bi_spill_register(bi_context *ctx, bi_index index, uint32_t offset,
-                  bi_index spill_point)
+bi_spill_registers(bi_context *ctx, const unsigned *nodes,
+                   const unsigned *points, unsigned count, uint32_t offset)
 {
    bi_builder b = {.shader = ctx};
    if (!ctx->reg_alignment)
       bi_compute_reg_alignment(ctx);
-   assert(index.value < ctx->ssa_alloc);
-   unsigned channels = ctx->reg_alignment[index.value] / 4;
-   assert(channels > 0);
-   unsigned alignment = (ctx->arch >= 9) ? ctx->reg_alignment[index.value] : 4;
 
-   /* first figure out the alignment we will need, based on the
-    * maximum count we see
-    */
-   offset = ALIGN_POT(offset, alignment);
+   unsigned n = ctx->ssa_alloc;
+   int *by_node = malloc(sizeof(int) * n);
+   int *by_point = malloc(sizeof(int) * n);
+   int *next_point = malloc(sizeof(int) * MAX2(count, 1));
+   struct util_dynarray *refs = calloc(MAX2(count, 1), sizeof(*refs));
+   memset(by_node, ~0, sizeof(int) * n);
+   memset(by_point, ~0, sizeof(int) * n);
 
-   /* Spill after every store, fill before every load */
+   for (unsigned k = 0; k < count; ++k) {
+      assert(by_node[nodes[k]] < 0);
+      by_node[nodes[k]] = k;
+      next_point[k] = by_point[points[k]];
+      by_point[points[k]] = k;
+      util_dynarray_init(&refs[k], NULL);
+   }
+
    bi_foreach_block(ctx, block) {
+      bi_foreach_instr_in_block(block, I) {
+         bi_foreach_dest(I, d) {
+            if (I->dest[d].type != BI_INDEX_NORMAL)
+               continue;
+
+            unsigned v = I->dest[d].value;
+            for (int k = by_point[v]; k >= 0; k = next_point[k])
+               bi_spill_ref_add(&refs[k], block, I);
+            if (by_node[v] >= 0)
+               bi_spill_ref_add(&refs[by_node[v]], block, I);
+         }
+
+         bi_foreach_src(I, s) {
+            if (I->src[s].type == BI_INDEX_NORMAL &&
+                by_node[I->src[s].value] >= 0)
+               bi_spill_ref_add(&refs[by_node[I->src[s].value]], block, I);
+         }
+      }
+   }
+
+   for (unsigned k = 0; k < count; ++k) {
+      bi_index index = bi_get_index(nodes[k]);
+      bi_index spill_point = bi_get_index(points[k]);
+      unsigned channels = ctx->reg_alignment[index.value] / 4;
+      assert(channels > 0);
+      unsigned alignment =
+         (ctx->arch >= 9) ? ctx->reg_alignment[index.value] : 4;
+
+      /* first figure out the alignment we will need, based on the
+       * maximum count we see
+       */
+      offset = ALIGN_POT(offset, alignment);
+
+      /* Spill after every store, fill before every load */
+      bi_block *block = NULL;
       bool fill = true;
       bool found_spill_point = false;
-      bi_foreach_instr_in_block_safe(block, I) {
+
+      util_dynarray_foreach(&refs[k], struct bi_spill_ref, ref) {
+         bi_instr *I = ref->I;
+
+         if (ref->block != block) {
+            block = ref->block;
+            fill = true;
+            found_spill_point = false;
+         }
+
          bi_foreach_dest(I, d) {
             if (bi_is_equiv(I->dest[d], spill_point)) {
                found_spill_point = true;
@@ -835,9 +1425,16 @@ bi_spill_register(bi_context *ctx, bi_index index, uint32_t offset,
             ld->no_spill = true;
          }
       }
+
+      offset += channels * 4;
+      util_dynarray_fini(&refs[k]);
    }
 
-   return offset + (channels * 4);
+   free(refs);
+   free(next_point);
+   free(by_point);
+   free(by_node);
+   return offset;
 }
 
 /*
@@ -894,14 +1491,24 @@ bi_lower_vector(bi_context *ctx, unsigned first_reg)
    free(remap);
 
    /* After generating a pile of moves, clean up */
-   bi_compute_liveness_ra(ctx);
+   struct bi_ra_live g;
+   bi_compute_liveness_ra(ctx, &g);
+
+   /* Dead code removal only shrinks liveness, so live-in stays within the
+    * global nodes. live[] is all clear between blocks; nodes set in a block
+    * are recorded in touched[] to clear them again. */
+   uint8_t *live = calloc(ctx->ssa_alloc, 1);
+   struct util_dynarray touched;
+   util_dynarray_init(&touched, NULL);
 
    bi_foreach_block_rev(ctx, block) {
-      uint8_t *live = rzalloc_array(block, uint8_t, ctx->ssa_alloc);
-
       bi_foreach_successor(block, succ) {
-         for (unsigned i = 0; i < ctx->ssa_alloc; ++i)
-            live[i] |= succ->live_in[i];
+         for (unsigned k = 0; k < g.count; ++k) {
+            if (succ->live_in[k]) {
+               live[g.glist[k]] |= succ->live_in[k];
+               util_dynarray_append_typed(&touched, unsigned, g.glist[k]);
+            }
+         }
       }
 
       bi_foreach_instr_in_block_safe_rev(block, ins) {
@@ -912,15 +1519,32 @@ bi_lower_vector(bi_context *ctx, unsigned first_reg)
                all_null = false;
          }
 
-         if (all_null && !bi_side_effects(ins))
+         if (all_null && !bi_side_effects(ins)) {
             bi_remove_instruction(ins);
-         else
+         } else {
             bi_liveness_ins_update_ra(live, ins);
+            bi_foreach_ssa_src(ins, src) {
+               util_dynarray_append_typed(&touched, unsigned,
+                                          ins->src[src].value);
+            }
+         }
       }
 
+      uint8_t *live_in = ralloc_array(block, uint8_t, MAX2(g.count, 1));
+      for (unsigned k = 0; k < g.count; ++k)
+         live_in[k] = live[g.glist[k]];
+
       ralloc_free(block->live_in);
-      block->live_in = live;
+      block->live_in = live_in;
+
+      util_dynarray_foreach(&touched, unsigned, v)
+         live[*v] = 0;
+      util_dynarray_clear(&touched);
    }
+
+   util_dynarray_fini(&touched);
+   free(live);
+   bi_ra_live_fini(&g);
 }
 
 /*
@@ -1296,7 +1920,12 @@ bi_register_allocate(bi_context *ctx)
          if (ctx->inputs->is_blend)
             UNREACHABLE("Blend shaders may not spill");
 
-         bi_spill_ssa(ctx, regs_to_use);
+         /* Spilling reserves 8 registers for its parallel copies on top of
+          * the k it is given (see reserved_size() in bi_ra_ssa.c), so
+          * k = 64 left ~87 registers of demand and LCRA had to spill the
+          * rest one RA pass at a time. Leave room for the reservation.
+          */
+         bi_spill_ssa(ctx, MAX2(regs_to_use - 8, 16));
          spill_count += bi_lower_spill(ctx, spill_count);
 
          /* By default, we use packed TLS addressing on Valhall.
@@ -1320,42 +1949,64 @@ bi_register_allocate(bi_context *ctx)
    squeeze_index(ctx);
 
    /* Try with reduced register pressure to improve thread count */
-   if (ctx->arch >= 7) {
-      l = bi_allocate_registers(ctx, &success, false);
+   l = bi_build_lcra(ctx);
 
-      if (success) {
+   if (ctx->arch >= 7) {
+      success = bi_solve_lcra(ctx, l, false);
+
+      if (success)
          ctx->info.work_reg_count = 32;
-      } else {
-         lcra_free(l);
-         l = NULL;
-      }
    }
 
    /* Otherwise, use the register file and spill until we succeed */
    while (!success && ((iter_count++) < max_iters)) {
-      l = bi_allocate_registers(ctx, &success, true);
+      success = bi_solve_lcra(ctx, l, true);
 
       if (success) {
          ctx->info.work_reg_count = BI_MAX_REGS;
       } else {
-         signed spill_node = bi_choose_spill_node(ctx, l);
-
-         if (spill_node == -1)
-            UNREACHABLE("Failed to choose spill node\n");
-
          if (ctx->inputs->is_blend)
             UNREACHABLE("Blend shaders may not spill");
 
-         spill_count =
-            bi_spill_register(ctx, bi_get_index(spill_node), spill_count,
-                              bi_get_index(l->spill_node));
+         /* Spill one node for every node that failed. Each RA pass costs a
+          * full liveness and interference rebuild, so spilling one node per
+          * pass took hundreds of passes (seconds) on big shaders.
+          */
+         BITSET_WORD *no_spill = bi_no_spill_set(ctx, l);
+         unsigned *benefit = malloc(sizeof(*benefit) * l->node_count);
+         memset(benefit, ~0, sizeof(*benefit) * l->node_count);
+         unsigned *spilled_nodes = malloc(sizeof(unsigned) * l->failed_count);
+         unsigned *spill_points = malloc(sizeof(unsigned) * l->failed_count);
+         unsigned spilled = 0;
 
-         lcra_free(l);
-         l = NULL;
+         for (unsigned f = 0; f < l->failed_count; ++f) {
+            signed spill_node =
+               bi_choose_spill_node(l, no_spill, benefit, l->failed[f]);
+            if (spill_node == -1)
+               continue;
+
+            /* Don't pick it again for another failed node */
+            BITSET_SET(no_spill, spill_node);
+            spill_points[spilled] = l->failed[f];
+            spilled_nodes[spilled++] = spill_node;
+         }
+
+         spill_count = bi_spill_registers(ctx, spilled_nodes, spill_points,
+                                          spilled, spill_count);
+         free(spill_points);
+
+         free(benefit);
+         free(no_spill);
+
+         if (spilled == 0)
+            UNREACHABLE("Failed to choose spill node\n");
+
          /* In case the spill affected an instruction with tied
           * operands, we need to fix up.
           */
          bi_coalesce_tied(ctx);
+         bi_update_lcra(ctx, l, spilled_nodes, spilled);
+         free(spilled_nodes);
       }
    }
 

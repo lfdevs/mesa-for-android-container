@@ -95,6 +95,17 @@ panvk_per_arch(cmd_prepare_compute_push_uniforms)(
                                 (uint64_t *)&cmdbuf->state.compute.sysvals);
 }
 
+#if PAN_ARCH < 9
+VkResult
+panvk_per_arch(cmd_prepare_gs_push_uniforms)(
+   struct panvk_cmd_buffer *cmdbuf, const struct panvk_shader_variant *shader,
+   const struct panvk_compute_sysvals *sysvals, struct pan_ptr *push_uniforms)
+{
+   return prepare_push_uniforms(cmdbuf, shader, push_uniforms, 1,
+                                (uint64_t *)sysvals);
+}
+#endif
+
 VKAPI_ATTR void VKAPI_CALL
 panvk_per_arch(CmdPushConstants2KHR)(
    VkCommandBuffer commandBuffer,
@@ -102,7 +113,10 @@ panvk_per_arch(CmdPushConstants2KHR)(
 {
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
 
-   if (pPushConstantsInfo->stageFlags & VK_SHADER_STAGE_VERTEX_BIT)
+   if (pPushConstantsInfo->stageFlags &
+       (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+        VK_SHADER_STAGE_GEOMETRY_BIT))
       gfx_state_set_dirty(cmdbuf, VS_PUSH_UNIFORMS);
 
    if (pPushConstantsInfo->stageFlags & VK_SHADER_STAGE_FRAGMENT_BIT)

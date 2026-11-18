@@ -22,6 +22,7 @@
 #include "panvk_macros.h"
 #include "panvk_meta.h"
 #include "panvk_physical_device.h"
+#include "panvk_perf_knobs.h"
 
 #include "pan_desc.h"
 #include "pan_encoder.h"
@@ -45,7 +46,7 @@ panvk_per_arch(cmd_dispatch_prepare_tls)(
    panvk_per_arch(cmd_alloc_tls_desc)(cmdbuf, false);
 
    batch->tlsinfo.tls.size = MAX2(cs->info.tls_size, batch->tlsinfo.tls.size);
-   batch->tlsinfo.wls.size = cs->info.wls_size;
+   batch->tlsinfo.wls.size = MAX2(cs->info.wls_size, batch->tlsinfo.wls.size);
 
    if (batch->tlsinfo.wls.size) {
       unsigned core_id_range =
@@ -60,6 +61,103 @@ panvk_per_arch(cmd_dispatch_prepare_tls)(
    return batch->tls.gpu;
 }
 
+#if PAN_ARCH == 9
+/* v9 uses the same resource-table/driver_set descriptor design as CSF
+ * archs (>= 9), but still submits through JM. This mirrors
+ * csf/panvk_vX_cmd_dispatch.c's prepare_driver_set(), which has no CSF
+ * dependency of its own. */
+static VkResult
+prepare_driver_set(struct panvk_cmd_buffer *cmdbuf)
+{
+   if (!compute_state_dirty(cmdbuf, CS) &&
+       !compute_state_dirty(cmdbuf, DESC_STATE))
+      return VK_SUCCESS;
+
+   const struct panvk_shader_desc_info *cs_desc_info =
+      &cmdbuf->state.compute.shader->desc_info;
+   const struct panvk_descriptor_state *desc_state =
+      &cmdbuf->state.compute.desc_state;
+   struct panvk_shader_desc_state *cs_desc_state =
+      &cmdbuf->state.compute.cs.desc;
+   uint32_t desc_count = cs_desc_info->dyn_bufs.count + 1;
+   struct pan_ptr driver_set = panvk_cmd_alloc_dev_mem(
+      cmdbuf, desc, desc_count * PANVK_DESCRIPTOR_SIZE, PANVK_DESCRIPTOR_SIZE);
+   struct panvk_opaque_desc *descs = driver_set.cpu;
+
+   if (!driver_set.gpu)
+      return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+
+   /* Dummy sampler always comes first. */
+   pan_cast_and_pack(&descs[0], SAMPLER, cfg) {
+      cfg.clamp_integer_array_indices = false;
+   }
+
+   panvk_per_arch(cmd_fill_dyn_bufs)(desc_state, cs_desc_info,
+                                     (struct mali_buffer_packed *)(&descs[1]));
+
+   cs_desc_state->driver_set.dev_addr = driver_set.gpu;
+   cs_desc_state->driver_set.size = desc_count * PANVK_DESCRIPTOR_SIZE;
+   compute_state_set_dirty(cmdbuf, DESC_STATE);
+   return VK_SUCCESS;
+}
+
+#endif /* PAN_ARCH == 9 */
+
+/* Compute shader invocations of a pipeline statistics query, counted on the
+ * GPU by panlib_update_pstats_dispatch() like CSF cmd_pstats_dispatch() does
+ * for indirect dispatches (JM has no command stream to add the direct count
+ * with, so it gets a VkDispatchIndirectCommand written at record time).
+ * ponytail: vk_meta dispatches are counted too, as on CSF. */
+static void
+pstats_dispatch(struct panvk_cmd_buffer *cmdbuf,
+                const struct panvk_shader_variant *cs,
+                const struct panvk_dispatch_info *info)
+{
+   const uint64_t counter = panvk_pstats_counter_addr(
+      &cmdbuf->state.gfx.pstats_query,
+      VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT, true);
+   uint64_t cmd = info->indirect.buffer_dev_addr;
+
+   if (!counter)
+      return;
+
+   if (!cmd) {
+      struct pan_ptr ptr = panvk_cmd_alloc_dev_mem(
+         cmdbuf, desc, sizeof(VkDispatchIndirectCommand), 16);
+      if (!ptr.gpu)
+         return;
+
+      *(VkDispatchIndirectCommand *)ptr.cpu = (VkDispatchIndirectCommand){
+         .x = info->direct.wg_count.x,
+         .y = info->direct.wg_count.y,
+         .z = info->direct.wg_count.z,
+      };
+      cmd = ptr.gpu;
+   }
+
+   const uint32_t local_size =
+      cs->cs.local_size.x * cs->cs.local_size.y * cs->cs.local_size.z;
+   const bool had_batch = cmdbuf->cur_batch != NULL;
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+#if PAN_ARCH == 9
+   const struct panlib_update_pstats_dispatch_args args = {
+      .counter = counter,
+      .cmd = cmd,
+      .local_size = local_size,
+   };
+   panlib_update_pstats_dispatch_struct(&ctx, panlib_1d(1),
+                                        PANLIB_BARRIER_JM_BARRIER, args);
+#else
+   /* v6/v7 (jm-v7 016): the same count, from a Bifrost kernel. */
+   panlib_v7_update_pstats_dispatch(&ctx, panlib_1d(1),
+                                    PANLIB_BARRIER_JM_BARRIER, counter, cmd,
+                                    local_size);
+#endif
+   if (!had_batch)
+      panvk_per_arch(cmd_close_batch)(cmdbuf);
+}
+
 static void
 cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
 {
@@ -67,8 +165,16 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
       panvk_shader_only_variant(cmdbuf->state.compute.shader);
    VkResult result;
 
+   /* Before the empty-shader skip below, as on CSF: a shader compiled to
+    * nothing still has invocations. */
+   pstats_dispatch(cmdbuf, cs, info);
+
    /* If there's no compute shader, we can skip the dispatch. */
+#if PAN_ARCH < 9
    if (!panvk_priv_mem_check_alloc(cs->rsd))
+#else
+   if (!panvk_priv_mem_check_alloc(cs->spd))
+#endif
       return;
 
    panvk_per_arch(cmd_close_batch)(cmdbuf);
@@ -97,6 +203,20 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
 
    struct pan_ptr copy_desc_job = {0};
 
+#if PAN_ARCH == 9
+   /* v9 uses the resource-table descriptor design: driver_set (dummy
+    * sampler + dynamic buffers) is prepared in one step, then the
+    * resource table itself is built referencing it. There is no separate
+    * copy-desc job on this path. */
+   result = prepare_driver_set(cmdbuf);
+   if (result != VK_SUCCESS)
+      return;
+
+   result = panvk_per_arch(cmd_prepare_shader_res_table)(
+      cmdbuf, desc_state, cs_desc_info, cs_desc_state, 1);
+   if (result != VK_SUCCESS)
+      return;
+#else
    if (compute_state_dirty(cmdbuf, CS) ||
        compute_state_dirty(cmdbuf, DESC_STATE)) {
       result = panvk_per_arch(cmd_prepare_shader_desc_tables)(
@@ -118,6 +238,7 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
       if (copy_desc_job.cpu)
          util_dynarray_append(&batch->jobs, copy_desc_job.cpu);
    }
+#endif
 
    panvk_per_arch(cmd_prepare_dispatch_sysvals)(cmdbuf, info);
 
@@ -134,13 +255,40 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
 
    util_dynarray_append(&batch->jobs, job.cpu);
 
+#if PAN_ARCH != 9
+   /* v9 has no separate INVOCATION section; workgroup dims are written
+    * directly into the PAYLOAD section below instead. */
    if (!indirect) {
       pan_pack_work_groups_compute(
          pan_section_ptr(job.cpu, COMPUTE_JOB, INVOCATION), wg_count.x,
          wg_count.y, wg_count.z, cs->cs.local_size.x,
          cs->cs.local_size.y, cs->cs.local_size.z, false, false);
    }
+#endif
 
+#if PAN_ARCH == 9
+   /* v9: no separate PARAMETERS/DRAW sections; COMPUTE_JOB has a single
+    * PAYLOAD combining workgroup dims and the shader environment. There is
+    * no job_task_split field on this arch. */
+   pan_section_pack(job.cpu, COMPUTE_JOB, PAYLOAD, cfg) {
+      cfg.workgroup_size_x = cs->cs.local_size.x;
+      cfg.workgroup_size_y = cs->cs.local_size.y;
+      cfg.workgroup_size_z = cs->cs.local_size.z;
+      cfg.workgroup_count_x = wg_count.x;
+      cfg.workgroup_count_y = wg_count.y;
+      cfg.workgroup_count_z = wg_count.z;
+      cfg.allow_merging_workgroups =
+         PANVK_PERF(V9_JM_MERGE_WG) && cs->info.cs.allow_merging_workgroups;
+      /* Same as panfrost (Valhall JM). */
+      cfg.task_increment = 1;
+      cfg.task_axis = MALI_TASK_AXIS_Z;
+      cfg.compute.resources = cs_desc_state->res_table;
+      cfg.compute.shader = panvk_priv_mem_dev_addr(cs->spd);
+      cfg.compute.thread_storage = tsd;
+      cfg.compute.fau = cmdbuf->state.compute.push_uniforms;
+      cfg.compute.fau_count = cs->fau.total_count;
+   }
+#else
    pan_section_pack(job.cpu, COMPUTE_JOB, PARAMETERS, cfg) {
       cfg.job_task_split = util_logbase2_ceil(cs->cs.local_size.x + 1) +
                            util_logbase2_ceil(cs->cs.local_size.y + 1) +
@@ -158,6 +306,7 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
       cfg.textures = cs_desc_state->tables[PANVK_BIFROST_DESC_TABLE_TEXTURE];
       cfg.samplers = cs_desc_state->tables[PANVK_BIFROST_DESC_TABLE_SAMPLER];
    }
+#endif
 
    unsigned indirect_dep = 0;
    if (indirect) {
@@ -232,7 +381,14 @@ panvk_per_arch(CmdDispatchBase)(VkCommandBuffer commandBuffer,
       .wg_base = {baseGroupX, baseGroupY, baseGroupZ},
       .direct.wg_count = {groupCountX, groupCountY, groupCountZ},
    };
+#if PAN_ARCH <= 9
+   struct panvk_cond_render_mark cond;
+   panvk_per_arch(cmd_cond_render_begin)(cmdbuf, &cond);
+#endif
    cmd_dispatch(cmdbuf, &info);
+#if PAN_ARCH <= 9
+   panvk_per_arch(cmd_cond_render_end)(cmdbuf, &cond);
+#endif
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -245,5 +401,12 @@ panvk_per_arch(CmdDispatchIndirect)(VkCommandBuffer commandBuffer,
    struct panvk_dispatch_info info = {
       .indirect.buffer_dev_addr = buffer_gpu,
    };
+#if PAN_ARCH <= 9
+   struct panvk_cond_render_mark cond;
+   panvk_per_arch(cmd_cond_render_begin)(cmdbuf, &cond);
+#endif
    cmd_dispatch(cmdbuf, &info);
+#if PAN_ARCH <= 9
+   panvk_per_arch(cmd_cond_render_end)(cmdbuf, &cond);
+#endif
 }

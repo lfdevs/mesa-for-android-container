@@ -48,12 +48,15 @@
 #include <sys/un.h>
 #include "drm-uapi/drm_fourcc.h"
 #include "util/libdrm.h"
+#include "util/anon_file.h"
 #include "util/cnd_monotonic.h"
 #include "util/hash_table.h"
 #include "util/mesa-blake3.h"
 #include "util/os_file.h"
 #include "util/os_time.h"
 #include "util/u_debug.h"
+#include "util/u_atomic.h"
+#include "util/log.h"
 #include "util/u_thread.h"
 #include "util/xmlconfig.h"
 #include "util/timespec.h"
@@ -69,6 +72,8 @@
 #include "wsi_common_private.h"
 #include "wsi_common_queue.h"
 #include "loader/loader_dri_helper_screen.h"
+
+#include <sys/mman.h>
 
 #ifdef HAVE_SYS_SHM_H
 #include <sys/ipc.h>
@@ -102,6 +107,7 @@ struct wsi_x11_connection {
    bool is_xwayland;
    bool has_mit_shm;
    bool has_xfixes;
+   bool has_randr;
 
    struct list_head screen_resources_list;
 
@@ -380,6 +386,7 @@ wsi_x11_connection_create(struct wsi_device *wsi_dev,
 
    wsi_conn->is_xwayland = wsi_x11_detect_xwayland(conn, randr_reply,
                                                    xwl_reply);
+   wsi_conn->has_randr = randr_reply && randr_reply->present;
 
    wsi_conn->has_dri3_modifiers = has_dri3_v1_2 && has_present_v1_2;
    wsi_conn->has_dri3_explicit_sync = has_dri3_v1_4 && has_present_v1_4;
@@ -502,6 +509,13 @@ static struct wsi_x11_screen_resources *
 wsi_x11_connection_find_screen_resources(struct wsi_device *wsi_dev, xcb_connection_t *conn, xcb_window_t window)
 {
    struct wsi_x11_connection *wsi_conn = wsi_x11_get_connection(wsi_dev, conn);
+
+   /* The refresh estimate uses RandR. libxcb shuts the connection down on a
+    * request to an extension the server lacks (EXT_NOTSUPPORTED), so a
+    * server without RANDR gets no screen resources and no estimate. */
+   if (!wsi_conn || !wsi_conn->has_randr)
+      return NULL;
+
    xcb_get_geometry_cookie_t geometry_cookie = xcb_get_geometry_unchecked(conn, window);
    xcb_get_geometry_reply_t *geometry_reply = xcb_get_geometry_reply(conn, geometry_cookie, NULL);
 
@@ -671,6 +685,9 @@ wsi_GetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice,
    if (!(effective_queues & BITFIELD64_BIT(queueFamilyIndex)))
       return false;
 
+   if (!wsi_x11_dlopen())
+      return false;
+
    struct wsi_x11_connection *wsi_conn =
       wsi_x11_get_connection(wsi_device, connection);
 
@@ -697,7 +714,7 @@ wsi_GetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice,
    /* Our WSI implementation for X11 relies on threads.  Check Xlib is running
     * in thread safe mode before advertising support.
     */
-   if (!x11_xlib_display_is_thread_safe(dpy))
+   if (!wsi_x11_dlopen() || !x11_xlib_display_is_thread_safe(dpy))
       return false;
 
    return wsi_GetPhysicalDeviceXcbPresentationSupportKHR(physicalDevice,
@@ -821,8 +838,10 @@ x11_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
    geom_cookie = xcb_get_geometry(conn, window);
 
    geom = xcb_get_geometry_reply(conn, geom_cookie, &err);
-   if (!geom)
+   if (!geom) {
+      free(err);
       return VK_ERROR_SURFACE_LOST_KHR;
+   }
    {
       VkExtent2D extent = { geom->width, geom->height };
       caps->surfaceCapabilities.currentExtent = extent;
@@ -956,7 +975,10 @@ x11_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
          xcb_connection_t *conn = x11_surface_get_connection(icd_surface);
          struct wsi_x11_connection *wsi_conn = wsi_x11_get_connection(wsi_device, conn);
 
-         if (!wsi_device->has_host_query_reset && !wsi_conn->is_xwayland) {
+         /* The CPU copy present (x11_present_to_x11_sw) never reports a
+          * present stage, so timing requests would never complete. */
+         if ((!wsi_device->has_host_query_reset && !wsi_conn->is_xwayland) ||
+             (wsi_device->sw && !wsi_conn->has_mit_shm)) {
             /* X11 can sometimes COMPLETE before the GPU is even done.
              * In this case, we need to observe a reset timestamp when polling,
              * which requires host query resets. On Xwayland, this cannot happen,
@@ -1195,11 +1217,17 @@ wsi_CreateXcbSurfaceKHR(VkInstance _instance,
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR);
 
+   if (!wsi_x11_dlopen())
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
    unsigned visual_depth;
    xcb_visualtype_t *visual =
       get_visualtype_for_window(pCreateInfo->connection, pCreateInfo->window, &visual_depth, NULL);
-   if (!visual)
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   /* No visual means the window is already gone (destroyed or never
+    * mapped by the X server): that is not an allocation failure, and
+    * vkCreate*SurfaceKHR has no SURFACE_LOST code. Create the surface
+    * anyway, opaque; its queries and swapchain creation then report
+    * VK_ERROR_SURFACE_LOST_KHR, which apps handle (DXVK retries). */
 
    surface = vk_alloc2(&instance->alloc, pAllocator, sizeof(struct wsi_x11_vk_surface), 8,
                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
@@ -1210,7 +1238,7 @@ wsi_CreateXcbSurfaceKHR(VkInstance _instance,
    surface->xcb.connection = pCreateInfo->connection;
    surface->xcb.window = pCreateInfo->window;
 
-   surface->has_alpha = visual_has_alpha(visual, visual_depth);
+   surface->has_alpha = visual && visual_has_alpha(visual, visual_depth);
    surface->event_wsi = NULL;
    surface->event_wsi_conn = NULL;
 
@@ -1229,11 +1257,17 @@ wsi_CreateXlibSurfaceKHR(VkInstance _instance,
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR);
 
+   if (!wsi_x11_dlopen())
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
    unsigned visual_depth;
    xcb_visualtype_t *visual =
       get_visualtype_for_window(XGetXCBConnection(pCreateInfo->dpy), pCreateInfo->window, &visual_depth, NULL);
-   if (!visual)
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
+   /* No visual means the window is already gone (destroyed or never
+    * mapped by the X server): that is not an allocation failure, and
+    * vkCreate*SurfaceKHR has no SURFACE_LOST code. Create the surface
+    * anyway, opaque; its queries and swapchain creation then report
+    * VK_ERROR_SURFACE_LOST_KHR, which apps handle (DXVK retries). */
 
    surface = vk_alloc2(&instance->alloc, pAllocator, sizeof(struct wsi_x11_vk_surface), 8,
                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
@@ -1244,7 +1278,7 @@ wsi_CreateXlibSurfaceKHR(VkInstance _instance,
    surface->xlib.dpy = pCreateInfo->dpy;
    surface->xlib.window = pCreateInfo->window;
 
-   surface->has_alpha = visual_has_alpha(visual, visual_depth);
+   surface->has_alpha = visual && visual_has_alpha(visual, visual_depth);
    surface->event_wsi = NULL;
    surface->event_wsi_conn = NULL;
 
@@ -1268,6 +1302,21 @@ struct x11_image {
    xcb_shm_seg_t                             shmseg;
    int                                       shmid;
    uint8_t *                                 shmaddr;
+   /* sw present via MIT-SHM AttachFd: memfd copy target for ShmPutImage */
+   void *                                    sw_shm_map;
+   size_t                                    sw_shm_size;
+   /* sw_defer_reply: the GetGeometry sent after this image's last put,
+    * not collected yet (the server may still read the segment), its
+    * submission order and the present ID it completes. */
+   bool                                      sw_reply_pending;
+   unsigned int                              sw_reply_sequence;
+   uint64_t                                  sw_reply_serial;
+   uint64_t                                  sw_reply_present_id;
+   /* MESA_VK_X11_SW_TIMING: when the app queued it, when its put went out */
+   uint64_t                                  sw_t_queued_ns;
+   uint64_t                                  sw_t_put_ns;
+   /* sw_ab: the readback buffer is in the cached memory type */
+   bool                                      sw_cached;
    uint64_t                                  present_id;
    VkPresentModeKHR                          present_mode;
    xcb_rectangle_t                           rects[MAX_DAMAGE_RECTS];
@@ -1303,6 +1352,35 @@ struct x11_swapchain {
    bool                                         has_mit_shm;
    bool                                         has_async_may_tear;
    bool                                         msc_estimate_is_stable;
+   /* sw present: ShmPutImage from memfd segments instead of PutImage */
+   bool                                         sw_shm;
+   /* sw present: FIFO cadence (0 = unpaced) and next present deadline */
+   uint64_t                                     sw_fifo_interval_ns;
+   uint64_t                                     sw_next_present_ns;
+   /* sw MIT-SHM present: the event thread collects the GetGeometry
+    * replies (wsi_device::x11.sw_defer_reply); puts sent so far and
+    * replies outstanding.  Protected by thread_state_lock. */
+   bool                                         sw_defer_reply;
+   uint64_t                                     sw_reply_serial;
+   uint32_t                                     sw_replies_pending;
+   /* MESA_VK_X11_SW_TIMING=1 (diagnostics): per-stage time, see
+    * x11_sw_t_frame(). */
+   bool                                         sw_timing;
+   uint64_t                                     sw_t_start_ns, sw_t_frames;
+   uint64_t                                     sw_t_n[8], sw_t_sum[8], sw_t_max[8];
+   /* sw_defer_reply with wsi_device::sw_cached_auto: readback memory type
+    * chosen from this swapchain's frame interval, see x11_sw_ab_frame().
+    * Present thread only. */
+   bool                                         sw_ab;
+   bool                                         sw_cached;     /* target mode */
+   uint32_t                                     sw_ab_pending; /* images not in it */
+   uint32_t                                     sw_ab_phase;
+   bool                                         sw_ab_measuring;
+   uint32_t                                     sw_ab_n;
+   uint64_t                                     sw_ab_start_ns; /* first present */
+   uint64_t                                     sw_ab_t0;
+   uint64_t                                     sw_ab_ns[2];   /* [cached] */
+   uint32_t                                     sw_ab_tries;
 
    /* Some X servers reject DRI3FenceFromFD for imported pixmaps.  Fall back
     * to Present IdleNotify for implicit-sync image reuse when that happens.
@@ -1912,6 +1990,301 @@ x11_present_to_x11_dri3(struct x11_swapchain *chain, uint32_t image_index,
    return x11_swapchain_result(chain, VK_SUCCESS);
 }
 #endif
+/* The swapchain status a sw present's GetGeometry reply implies. */
+static VkResult
+x11_sw_geometry_result(const struct x11_swapchain *chain,
+                       const xcb_get_geometry_reply_t *geom)
+{
+   if (!geom)
+      return VK_ERROR_SURFACE_LOST_KHR;
+
+   if (chain->extent.width != geom->width ||
+       chain->extent.height != geom->height)
+      return VK_ERROR_OUT_OF_DATE_KHR;
+
+   return VK_SUCCESS;
+}
+
+static void
+x11_sw_complete_present_id(struct x11_swapchain *chain, uint64_t present_id)
+{
+   if (!present_id)
+      return;
+
+   mtx_lock(&chain->present_progress_mutex);
+   if (present_id > chain->present_id) {
+      chain->present_id = present_id;
+      u_cnd_monotonic_broadcast(&chain->present_progress_cond);
+   }
+   mtx_unlock(&chain->present_progress_mutex);
+}
+
+/* MESA_VK_X11_SW_TIMING=1: sw present stages, in ms (mean/max per event),
+ * logged once a second by the present thread:
+ *   queue   vkQueuePresentKHR -> the present thread takes the image
+ *   fence   present thread waits for the image's blit fence (GPU done)
+ *   pace    FIFO sleep to the next refresh (MESA_VK_X11_SW_REFRESH_HZ)
+ *   slot    wait for the image's segment / a free reply slot
+ *   copy    memcpy into the MIT-SHM segment (plus the ShmPutImage requests)
+ *   put     GetGeometry + xcb_flush (the requests reach the server)
+ *   reply   put flushed -> GetGeometry reply back (server done with it)
+ *   acquire vkAcquireNextImageKHR wait for a free image (app thread) */
+enum x11_sw_stage {
+   X11_SW_T_QUEUE, X11_SW_T_FENCE, X11_SW_T_PACE, X11_SW_T_SLOT,
+   X11_SW_T_COPY, X11_SW_T_PUT, X11_SW_T_REPLY, X11_SW_T_ACQUIRE,
+};
+
+static void
+x11_sw_t_add(struct x11_swapchain *chain, enum x11_sw_stage s, uint64_t t0)
+{
+   const uint64_t d = os_time_get_nano() - t0;
+   p_atomic_inc(&chain->sw_t_n[s]);
+   p_atomic_add(&chain->sw_t_sum[s], d);
+   if (d > chain->sw_t_max[s])
+      chain->sw_t_max[s] = d; /* racy max: good enough for a diagnostic */
+}
+
+/* Present thread, after each present. */
+static void
+x11_sw_t_frame(struct x11_swapchain *chain)
+{
+   static const char *const names[] = {
+      "queue", "fence", "pace", "slot", "copy", "put", "reply", "acquire",
+   };
+   const uint64_t now = os_time_get_nano();
+   if (!chain->sw_t_start_ns)
+      chain->sw_t_start_ns = now;
+   chain->sw_t_frames++;
+   if (now - chain->sw_t_start_ns < 1000000000ull)
+      return;
+
+   char line[512];
+   int o = snprintf(line, sizeof(line), "wsi/x11 sw timing %ux%u: %.1f fps",
+                    chain->extent.width, chain->extent.height,
+                    chain->sw_t_frames * 1e9 / (now - chain->sw_t_start_ns));
+   for (unsigned s = 0; s < ARRAY_SIZE(names) && o < (int)sizeof(line); s++) {
+      const uint64_t n = p_atomic_xchg(&chain->sw_t_n[s], 0);
+      const uint64_t sum = p_atomic_xchg(&chain->sw_t_sum[s], 0);
+      const uint64_t max = p_atomic_xchg(&chain->sw_t_max[s], 0);
+      o += snprintf(line + o, sizeof(line) - o, " %s=%.2f/%.2f", names[s],
+                    n ? sum / 1e6 / n : 0.0, max / 1e6);
+   }
+   mesa_logi("%s", line);
+   chain->sw_t_start_ns = now;
+   chain->sw_t_frames = 0;
+}
+
+/* sw_defer_reply: in-flight puts, at most.  The server always has the next
+ * frame queued while it handles one, and the window lags at most one frame
+ * behind the present thread. */
+#define X11_SW_MAX_PENDING_REPLIES 2
+
+/* 0171: which readback memory type is faster depends on the device and on
+ * the workload, not on the frame size or the CPU read alone. On the X6 Pro
+ * (v11), with the same 640x360 swapchain, the cached type + full-frame
+ * invalidate gives the D3D11 cube 382 fps vs 271 uncached, but D3D11 FL
+ * 11_1 505 vs 708. A one-off timing of the invalidate + read at the first
+ * swapchain picked cached for both. So each swapchain measures its own
+ * mean frame interval: the starting mode, the other one, the starting one
+ * again (A, B, A cancels a linear drift), each window X11_SW_AB_WINDOW
+ * frames and at least X11_SW_AB_WINDOW_NS after X11_SW_AB_SETTLE frames /
+ * X11_SW_AB_SETTLE_NS in the mode, the first one X11_SW_AB_START_NS after
+ * the swapchain's first present. An image moves to the other type right
+ * after its CPU copy, while it is idle.
+ *
+ * 0173: the swapchain decides once (a resize makes a new swapchain, which
+ * measures again). B wins only when it is X11_SW_AB_MARGIN faster than the
+ * faster A window, and loses when it is not X11_SW_AB_MARGIN faster than the
+ * slower one; in between (noisy content, or a frame rate still ramping up)
+ * the probe runs again after X11_SW_AB_RETRY_NS, X11_SW_AB_TRIES times at
+ * most, then the starting mode stays. 0171 measured again on every 25 %
+ * frame rate drift: on v12 (SM-X920) D3D12 gears re-probed five times in
+ * one pass and flipped between the modes (1 s fps 174-593), and the D3D11
+ * cube averaged 603 fps against 745-762 cached. */
+#define X11_SW_AB_SETTLE 15
+#define X11_SW_AB_SETTLE_NS (100ull * 1000 * 1000)
+#define X11_SW_AB_WINDOW 60
+#define X11_SW_AB_WINDOW_NS (400ull * 1000 * 1000)
+#define X11_SW_AB_START_NS (1000ull * 1000 * 1000)
+#define X11_SW_AB_MARGIN 0.10
+#define X11_SW_AB_RETRY_NS (3000ull * 1000 * 1000)
+#define X11_SW_AB_TRIES 2
+/* 0175: the B window ends early, and the probe with it, once its first
+ * X11_SW_AB_ABORT_FRAMES frames run below X11_SW_AB_ABORT of the A rate.
+ * Pixel 7 (v10) D3D11 cube: cached 587/574 fps, uncached 130.6 for a whole
+ * window; the probe cost of such a window is what the early end saves. */
+#define X11_SW_AB_ABORT_FRAMES 8
+#define X11_SW_AB_ABORT 0.70
+
+static void
+x11_sw_ab_set_mode(struct x11_swapchain *chain, bool cached)
+{
+   chain->sw_cached = cached;
+   chain->sw_ab_n = 0;
+   chain->sw_ab_measuring = false;
+   chain->sw_ab_pending = 0;
+   for (uint32_t i = 0; i < chain->base.image_count; i++)
+      chain->sw_ab_pending += chain->images[i].sw_cached != cached;
+}
+
+/* Mean frame interval of a finished window, else 0. */
+static uint64_t
+x11_sw_ab_window(struct x11_swapchain *chain, uint64_t now)
+{
+   if (chain->sw_ab_n++ == 0)
+      chain->sw_ab_t0 = now; /* mode settled from here on, or not yet */
+   if (!chain->sw_ab_measuring) {
+      if (chain->sw_ab_n < X11_SW_AB_SETTLE ||
+          now - chain->sw_ab_t0 < X11_SW_AB_SETTLE_NS)
+         return 0;
+      chain->sw_ab_measuring = true;
+      chain->sw_ab_n = 1;
+      chain->sw_ab_t0 = now;
+      return 0;
+   }
+   if (chain->sw_ab_n <= X11_SW_AB_WINDOW ||
+       now - chain->sw_ab_t0 < X11_SW_AB_WINDOW_NS)
+      return 0;
+   const uint64_t ns = (now - chain->sw_ab_t0) / (chain->sw_ab_n - 1);
+   chain->sw_ab_n = 0;
+   chain->sw_ab_measuring = false;
+   return ns;
+}
+
+/* Present thread, after the CPU copy of image, before it is released. */
+static void
+x11_sw_ab_frame(struct x11_swapchain *chain, struct x11_image *image)
+{
+   if (image->sw_cached != chain->sw_cached) {
+      if (wsi_image_set_cpu_readback_cached(&chain->base, &image->base,
+                                            chain->sw_cached) != VK_SUCCESS) {
+         /* Keep what each image has; stop switching. */
+         mesa_logw("wsi/x11 sw readback: moving an image failed, mode stays");
+         chain->sw_ab = false;
+         return;
+      }
+      image->sw_cached = chain->sw_cached;
+      chain->sw_ab_pending--;
+      chain->sw_ab_n = 0;
+      chain->sw_ab_measuring = false;
+      return;
+   }
+
+   if (chain->sw_ab_phase == 3) {
+      if (!chain->sw_ab_pending)
+         chain->sw_ab = false; /* every image in the chosen type */
+      return;
+   }
+   const uint64_t now = os_time_get_nano();
+   if (!chain->sw_ab_start_ns)
+      chain->sw_ab_start_ns = now;
+   if (chain->sw_ab_pending || now < chain->sw_ab_start_ns + X11_SW_AB_START_NS)
+      return;
+   const uint64_t ns = x11_sw_ab_window(chain, now);
+   if (!ns) {
+      if (chain->sw_ab_phase == 1 && chain->sw_ab_measuring &&
+          chain->sw_ab_n > X11_SW_AB_ABORT_FRAMES) {
+         const uint64_t a = chain->sw_ab_ns[!chain->sw_cached];
+         const uint64_t b = (now - chain->sw_ab_t0) / (chain->sw_ab_n - 1);
+         if (b * X11_SW_AB_ABORT > a) {
+            mesa_logi("wsi/x11 sw readback %ux%u: %s %.1f fps, %s %.1f fps "
+                      "after %u frames -> %s (early)",
+                      chain->extent.width, chain->extent.height,
+                      chain->sw_cached ? "uncached" : "cached", 1e9 / a,
+                      chain->sw_cached ? "cached" : "uncached", 1e9 / b,
+                      chain->sw_ab_n - 1,
+                      chain->sw_cached ? "uncached" : "cached");
+            x11_sw_ab_set_mode(chain, !chain->sw_cached);
+            chain->sw_ab_phase = 3;
+         }
+      }
+      return;
+   }
+   const bool cur = chain->sw_cached;
+
+   switch (chain->sw_ab_phase) {
+   case 0: /* A measured: try B. */
+      chain->sw_ab_ns[cur] = ns;
+      chain->sw_ab_phase = 1;
+      x11_sw_ab_set_mode(chain, !cur);
+      break;
+   case 1: /* B measured: A again. */
+      chain->sw_ab_ns[cur] = ns;
+      chain->sw_ab_phase = 2;
+      x11_sw_ab_set_mode(chain, !cur);
+      break;
+   default: {
+      /* cur is A again: both of its windows against B. */
+      const uint64_t a1 = chain->sw_ab_ns[cur], a2 = ns;
+      const uint64_t b = chain->sw_ab_ns[!cur];
+      /* B against the better and the worse A window: a drift between the
+       * A windows cannot make a clear winner look like a loser. */
+      const bool flip = b < MIN2(a1, a2) * (1.0 - X11_SW_AB_MARGIN);
+      const bool keep = b > MAX2(a1, a2) * (1.0 - X11_SW_AB_MARGIN);
+      const bool retry = !flip && !keep &&
+                         ++chain->sw_ab_tries < X11_SW_AB_TRIES;
+      mesa_logi("wsi/x11 sw readback %ux%u: %s %.1f/%.1f fps, %s %.1f fps "
+                "-> %s%s",
+                chain->extent.width, chain->extent.height,
+                cur ? "cached" : "uncached", 1e9 / a1, 1e9 / a2,
+                cur ? "uncached" : "cached", 1e9 / b,
+                (flip ? !cur : cur) ? "cached" : "uncached",
+                flip || keep ? "" : retry ? " (unclear, again later)"
+                                          : " (unclear, kept)");
+      if (flip)
+         x11_sw_ab_set_mode(chain, !cur);
+      if (retry) {
+         /* Again later from the start, in the mode kept. */
+         chain->sw_ab_phase = 0;
+         chain->sw_ab_start_ns = now + X11_SW_AB_RETRY_NS - X11_SW_AB_START_NS;
+      } else {
+         chain->sw_ab_phase = 3; /* decided: images still to move, then idle */
+      }
+      break;
+   }
+   }
+}
+
+/* Event thread, thread_state_lock held: collect the oldest outstanding
+ * GetGeometry reply.  Returns false when none is outstanding. */
+static bool
+x11_sw_collect_reply(struct x11_swapchain *chain)
+{
+   struct x11_image *image = NULL;
+   for (uint32_t i = 0; i < chain->base.image_count; i++) {
+      struct x11_image *it = &chain->images[i];
+      if (it->sw_reply_pending &&
+          (!image || it->sw_reply_serial < image->sw_reply_serial))
+         image = it;
+   }
+   if (!image)
+      return false;
+
+   /* Only this thread clears sw_reply_pending, and the present thread
+    * leaves the image's reply state alone until then. */
+   xcb_get_geometry_cookie_t cookie = { image->sw_reply_sequence };
+   mtx_unlock(&chain->thread_state_lock);
+   xcb_generic_error_t *err = NULL;
+   xcb_get_geometry_reply_t *geom =
+      xcb_get_geometry_reply(chain->conn, cookie, &err);
+   mtx_lock(&chain->thread_state_lock);
+
+   VkResult result = x11_sw_geometry_result(chain, geom);
+   free(err);
+   free(geom);
+   if (chain->sw_timing)
+      x11_sw_t_add(chain, X11_SW_T_REPLY, image->sw_t_put_ns);
+
+   image->sw_reply_pending = false;
+   chain->sw_replies_pending--;
+   x11_sw_complete_present_id(chain, image->sw_reply_present_id);
+   x11_swapchain_result(chain, result);
+
+   /* Wake the present thread if it waits for this segment or a slot. */
+   u_cnd_monotonic_broadcast(&chain->thread_state_cond);
+   return true;
+}
+
 /**
  * Send image to X server unaccelerated (software drivers).
  */
@@ -1922,8 +2295,15 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index)
    struct x11_image *image = &chain->images[image_index];
 
    /* Begin querying this before submitting the frame for improved async performance.
-    * In this _sw() mode we're expecting network round-trip delay, not just UNIX socket delay. */
-   xcb_get_geometry_cookie_t geom_cookie = xcb_get_geometry(chain->conn, chain->window);
+    * In this _sw() mode we're expecting network round-trip delay, not just UNIX socket delay.
+    * With MIT-SHM it goes after the put instead: its reply then proves the server
+    * has read the segment, so the next copy into it cannot race. */
+   xcb_get_geometry_cookie_t geom_cookie = { 0 };
+   if (!chain->sw_shm)
+      geom_cookie = xcb_get_geometry(chain->conn, chain->window);
+
+   /* The blit fence has signalled (present thread or vkQueuePresentKHR). */
+   wsi_image_invalidate_cpu_map(&chain->base, &image->base);
 
    xcb_void_cookie_t cookie;
    void *myptr = image->base.cpu_map;
@@ -1932,7 +2312,60 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index)
    size_t size = (hdr_len + stride_b * chain->extent.height) >> 2;
    uint64_t max_req_len = xcb_get_maximum_request_length(chain->conn);
 
-   if (image->rectangle_count > 0) {
+   uint64_t t_stage = chain->sw_timing ? os_time_get_nano() : 0;
+   if (chain->sw_shm) {
+      if (chain->sw_defer_reply) {
+         /* The reply to this image's previous put proves the server has
+          * read the segment, so the copy below cannot race with it. */
+         while (chain->status >= 0 &&
+                (image->sw_reply_pending ||
+                 chain->sw_replies_pending >= X11_SW_MAX_PENDING_REPLIES))
+            u_cnd_monotonic_wait(&chain->thread_state_cond,
+                                 &chain->thread_state_lock);
+         if (chain->status < 0)
+            return chain->status;
+      }
+      if (chain->sw_timing) {
+         x11_sw_t_add(chain, X11_SW_T_SLOT, t_stage);
+         t_stage = os_time_get_nano();
+      }
+
+      /* One CPU copy into the memfd segment; the server reads it directly. */
+      int n = image->rectangle_count;
+      xcb_rectangle_t full = { 0, 0, chain->extent.width, chain->extent.height };
+      const xcb_rectangle_t *rects = n > 0 ? image->rects : &full;
+      for (int i = 0; i < MAX2(n, 1); i++) {
+         xcb_rectangle_t rect = rects[i];
+         /* clipped in x11_queue_present; re-checked to keep copies in the segment */
+         if (rect.x < 0 || rect.y < 0 ||
+             rect.x >= chain->extent.width || rect.y >= chain->extent.height)
+            continue;
+         rect.width = MIN2(rect.width, chain->extent.width - rect.x);
+         rect.height = MIN2(rect.height, chain->extent.height - rect.y);
+         size_t off = (size_t)rect.y * stride_b + (size_t)rect.x * 4;
+         if (rect.x == 0 && rect.width == chain->extent.width) {
+            memcpy((uint8_t *)image->sw_shm_map + off, (uint8_t *)myptr + off,
+                   (size_t)rect.height * stride_b);
+         } else {
+            for (int j = 0; j < rect.height; j++)
+               memcpy((uint8_t *)image->sw_shm_map + off + (size_t)j * stride_b,
+                      (uint8_t *)myptr + off + (size_t)j * stride_b,
+                      (size_t)rect.width * 4);
+         }
+         cookie = xcb_shm_put_image(chain->conn, chain->window, chain->gc,
+                                    stride_b / 4, chain->extent.height,
+                                    rect.x, rect.y, rect.width, rect.height,
+                                    rect.x, rect.y, chain->depth,
+                                    XCB_IMAGE_FORMAT_Z_PIXMAP, 0,
+                                    image->shmseg, 0);
+         xcb_discard_reply(chain->conn, cookie.sequence);
+      }
+      if (chain->sw_timing) {
+         x11_sw_t_add(chain, X11_SW_T_COPY, t_stage);
+         t_stage = os_time_get_nano();
+      }
+      geom_cookie = xcb_get_geometry(chain->conn, chain->window);
+   } else if (image->rectangle_count > 0) {
       for (int i = 0; i < image->rectangle_count; i++) {
          xcb_rectangle_t rect = chain->images[image_index].rects[i];
          const uint8_t *data = (const uint8_t*)myptr + (rect.y * stride_b) + (rect.x * 4);
@@ -1980,6 +2413,29 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index)
    }
 
    xcb_flush(chain->conn);
+   if (chain->sw_timing) {
+      x11_sw_t_add(chain, X11_SW_T_PUT, t_stage);
+      image->sw_t_put_ns = os_time_get_nano();
+   }
+
+   if (chain->sw_defer_reply) {
+      /* The server reads only the segment, so the image can be acquired
+       * again right away.  The event thread collects the reply, completes
+       * the present ID and reports OUT_OF_DATE (one present later than the
+       * synchronous path does). */
+      image->sw_reply_pending = true;
+      image->sw_reply_sequence = geom_cookie.sequence;
+      image->sw_reply_serial = ++chain->sw_reply_serial;
+      image->sw_reply_present_id = image->present_id;
+      chain->sw_replies_pending++;
+
+      /* The server reads only the segment: the readback buffer is idle. */
+      if (chain->sw_ab)
+         x11_sw_ab_frame(chain, image);
+
+      wsi_queue_push(&chain->acquire_queue, image_index);
+      return VK_SUCCESS;
+   }
 
    /* We don't have queued present here.
     * Immediately let application acquire again, but query geometry first so
@@ -1987,16 +2443,13 @@ x11_present_to_x11_sw(struct x11_swapchain *chain, uint32_t image_index)
    xcb_generic_error_t *err;
 
    xcb_get_geometry_reply_t *geom = xcb_get_geometry_reply(chain->conn, geom_cookie, &err);
-   VkResult result = VK_SUCCESS;
-   if (geom) {
-      if (chain->extent.width != geom->width ||
-          chain->extent.height != geom->height)
-         result = VK_ERROR_OUT_OF_DATE_KHR;
-   } else {
-      result = VK_ERROR_SURFACE_LOST_KHR;
-   }
+   VkResult result = x11_sw_geometry_result(chain, geom);
    free(err);
    free(geom);
+   if (chain->sw_timing)
+      x11_sw_t_add(chain, X11_SW_T_REPLY, image->sw_t_put_ns);
+
+   x11_sw_complete_present_id(chain, image->present_id);
 
    wsi_queue_push(&chain->acquire_queue, image_index);
    return result;
@@ -2238,8 +2691,11 @@ x11_acquire_next_image(struct wsi_swapchain *wsi_chain,
       result = x11_wait_for_explicit_sync_release_submission(chain, timeout,
                                                              image_index);
    } else {
+      const uint64_t t_acquire = chain->sw_timing ? os_time_get_nano() : 0;
       result = wsi_queue_pull(&chain->acquire_queue,
                               image_index, timeout);
+      if (chain->sw_timing && result >= 0)
+         x11_sw_t_add(chain, X11_SW_T_ACQUIRE, t_acquire);
 
       /* x11_wait_for_explicit_sync_release_submission() is smart enough to do
        * this for us but wsi_queue_pull() isn't.
@@ -2298,17 +2754,34 @@ x11_queue_present(struct wsi_swapchain *wsi_chain,
        damage->rectangleCount <= MAX_DAMAGE_RECTS) {
       xcb_rectangle_t *rects = chain->images[image_index].rects;
 
-      update_area = chain->images[image_index].update_region;
+      /* Clip to the image: VkRectLayerKHR offsets may be negative, and a
+       * rect only partly inside must still update its visible part. The
+       * SW present paths index the image with these rects. */
+      unsigned count = 0;
       for (unsigned i = 0; i < damage->rectangleCount; i++) {
          const VkRectLayerKHR *rect = &damage->pRectangles[i];
          assert(rect->layer == 0);
-         rects[i].x = rect->offset.x;
-         rects[i].y = rect->offset.y;
-         rects[i].width = rect->extent.width;
-         rects[i].height = rect->extent.height;
+         const int64_t x0 = MAX2((int64_t)rect->offset.x, 0);
+         const int64_t y0 = MAX2((int64_t)rect->offset.y, 0);
+         const int64_t x1 = MIN2((int64_t)rect->offset.x + rect->extent.width,
+                                 (int64_t)chain->extent.width);
+         const int64_t y1 = MIN2((int64_t)rect->offset.y + rect->extent.height,
+                                 (int64_t)chain->extent.height);
+         if (x1 <= x0 || y1 <= y0)
+            continue;
+         rects[count].x = x0;
+         rects[count].y = y0;
+         rects[count].width = x1 - x0;
+         rects[count].height = y1 - y0;
+         count++;
       }
-      xcb_xfixes_set_region(chain->conn, update_area, damage->rectangleCount, rects);
-      chain->images[image_index].rectangle_count = damage->rectangleCount;
+      if (count > 0) {
+         update_area = chain->images[image_index].update_region;
+         xcb_xfixes_set_region(chain->conn, update_area, count, rects);
+      }
+      /* Nothing left inside the image: present it whole, as without
+       * damage. */
+      chain->images[image_index].rectangle_count = count;
    } else {
       chain->images[image_index].rectangle_count = 0;
    }
@@ -2318,6 +2791,8 @@ x11_queue_present(struct wsi_swapchain *wsi_chain,
    chain->images[image_index].present_mode = chain->base.present_mode;
    chain->images[image_index].timing_request = chain->timing_request;
    memset(&chain->timing_request, 0, sizeof(chain->timing_request));
+   if (chain->sw_timing)
+      chain->images[image_index].sw_t_queued_ns = os_time_get_nano();
 
    wsi_queue_push(&chain->present_queue, image_index);
    return x11_swapchain_read_status_atomic(chain);
@@ -2362,6 +2837,15 @@ x11_manage_event_queue(void *state)
    mtx_lock(&chain->thread_state_lock);
 
    while (chain->status >= 0) {
+      /* sw present has no Present events: this thread only collects the
+       * deferred GetGeometry replies, or sleeps until a put is sent. */
+      if (chain->sw_defer_reply) {
+         if (!x11_sw_collect_reply(chain))
+            u_cnd_monotonic_wait(&chain->thread_state_cond,
+                                 &chain->thread_state_lock);
+         continue;
+      }
+
       /* This thread should only go sleep waiting for X events when we know there are pending events.
        * We expect COMPLETION events when there is at least one image marked as present_queued.
        * We also expect IDLE events, but we only consider waiting for them when all images are busy,
@@ -2593,14 +3077,20 @@ x11_manage_present_queue(void *state)
       if (result < 0)
          break;
 
+      uint64_t t_stage = 0;
+      if (chain->sw_timing) {
+         x11_sw_t_add(chain, X11_SW_T_QUEUE,
+                      chain->images[image_index].sw_t_queued_ns);
+         t_stage = os_time_get_nano();
+      }
+
       VkPresentModeKHR present_mode = chain->images[image_index].present_mode;
 
       /* Not necessary to block when we have explicit sync */
-      /* x11.wait_for_fences: no fence on the dma-buf, so the X server cannot
-       * wait and we do, in every present mode. Checked here and not in
-       * x11_needs_wait_for_fences(), which also decides the image count. */
+      /* sw images are read by the CPU (X server or XPutImage): wait for the
+       * blit here instead of in vkQueuePresentKHR. */
       bool need_fence_wait =
-            (chain->base.wsi->x11.wait_for_fences ||
+            (chain->base.wsi->sw ||
              x11_needs_wait_for_fences(chain->base.wsi, wsi_conn, present_mode)) &&
             !chain->base.image_info.explicit_sync;
 
@@ -2616,6 +3106,28 @@ x11_manage_present_queue(void *state)
             result = VK_ERROR_OUT_OF_DATE_KHR;
             break;
          }
+      }
+      if (chain->sw_timing) {
+         x11_sw_t_add(chain, X11_SW_T_FENCE, t_stage);
+         t_stage = os_time_get_nano();
+      }
+
+      /* sw present has no vblank feedback (the X server completes at once),
+       * so pace FIFO by the display refresh interval. A late frame goes out
+       * immediately; a full missed interval restarts the cadence. */
+      if (chain->sw_fifo_interval_ns &&
+          (present_mode == VK_PRESENT_MODE_FIFO_KHR ||
+           present_mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR)) {
+         MESA_TRACE_SCOPE("sw fifo pace");
+         uint64_t now = os_time_get_nano();
+         if (now < chain->sw_next_present_ns) {
+            os_time_nanosleep_until(chain->sw_next_present_ns);
+            now = os_time_get_nano();
+         }
+         uint64_t next = chain->sw_next_present_ns + chain->sw_fifo_interval_ns;
+         chain->sw_next_present_ns = next > now ? next : now + chain->sw_fifo_interval_ns;
+         if (chain->sw_timing)
+            x11_sw_t_add(chain, X11_SW_T_PACE, t_stage);
       }
 
       mtx_lock(&chain->thread_state_lock);
@@ -2641,6 +3153,8 @@ x11_manage_present_queue(void *state)
          mtx_unlock(&chain->thread_state_lock);
          break;
       }
+      if (chain->sw_timing)
+         x11_sw_t_frame(chain);
 
       if (present_mode == VK_PRESENT_MODE_FIFO_KHR ||
           present_mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR) {
@@ -2692,6 +3206,67 @@ alloc_shm(struct wsi_image *imagew, unsigned size)
 #endif
 }
 
+/* sw present: MIT-SHM 1.2 (AttachFd) works without SysV shm, which Android
+ * lacks. Disabled by MESA_VK_WSI_DEBUG=noshm. */
+static bool
+x11_sw_shm_supported(xcb_connection_t *conn)
+{
+   if (WSI_DEBUG & WSI_DEBUG_NOSHM)
+      return false;
+
+   xcb_query_extension_reply_t *ext =
+      xcb_query_extension_reply(conn, xcb_query_extension(conn, 7, "MIT-SHM"), NULL);
+   bool present = ext && ext->present;
+   free(ext);
+   if (!present)
+      return false;
+
+   xcb_shm_query_version_reply_t *ver =
+      xcb_shm_query_version_reply(conn, xcb_shm_query_version(conn), NULL);
+   bool ok = ver && (ver->major_version > 1 ||
+                     (ver->major_version == 1 && ver->minor_version >= 2));
+   free(ver);
+   return ok;
+}
+
+static bool
+x11_image_init_sw_shm(struct x11_swapchain *chain, struct x11_image *image)
+{
+   size_t size = (size_t)image->base.row_pitches[0] * chain->extent.height;
+   /* memfd_create(MFD_ALLOW_SEALING) + ftruncate(size). */
+   int fd = os_create_anonymous_file(size, "wsi-x11-shm");
+   if (fd < 0)
+      return false;
+
+   /* Fix the size so the X server's mapping cannot be SIGBUSed by a shrink.
+    * Best effort: the tmpfile fallback cannot be sealed. */
+#ifdef F_ADD_SEALS
+   if (fcntl(fd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW) < 0)
+      mesa_logd("wsi/x11: shm memfd seal failed: %s", strerror(errno));
+#endif
+
+   void *map = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+   if (map == MAP_FAILED) {
+      close(fd);
+      return false;
+   }
+
+   /* xcb owns and closes the fd once sent. */
+   image->shmseg = xcb_generate_id(chain->conn);
+   xcb_generic_error_t *err =
+      xcb_request_check(chain->conn,
+                        xcb_shm_attach_fd_checked(chain->conn, image->shmseg, fd, 1));
+   if (err) {
+      free(err);
+      munmap(map, size);
+      return false;
+   }
+
+   image->sw_shm_map = map;
+   image->sw_shm_size = size;
+   return true;
+}
+
 static VkResult
 x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
                const VkSwapchainCreateInfoKHR *pCreateInfo,
@@ -2706,8 +3281,12 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
       return result;
 
    image->update_region = None;
-   if (chain->base.wsi->sw && !chain->has_mit_shm)
+   if (chain->base.wsi->sw && !chain->has_mit_shm) {
+      /* Any failure drops the whole chain back to PutImage. */
+      if (chain->sw_shm && !x11_image_init_sw_shm(chain, image))
+         chain->sw_shm = false;
       return VK_SUCCESS;
+   }
 
 #ifdef HAVE_X11_DRM
    xcb_void_cookie_t cookie;
@@ -2913,6 +3492,12 @@ x11_image_finish(struct x11_swapchain *chain,
          }
       }
 #endif
+   }
+
+   if (image->sw_shm_map) {
+      cookie = xcb_shm_detach(chain->conn, image->shmseg);
+      xcb_discard_reply(chain->conn, cookie.sequence);
+      munmap(image->sw_shm_map, image->sw_shm_size);
    }
 
    wsi_destroy_image(&chain->base, &image->base);
@@ -3236,6 +3821,12 @@ x11_swapchain_destroy(struct wsi_swapchain *wsi_chain,
       wsi_queue_destroy(&chain->acquire_queue);
    wsi_queue_destroy(&chain->present_queue);
 
+   /* Both threads are gone: drop the sw replies nobody will collect. */
+   for (uint32_t i = 0; i < chain->base.image_count; i++) {
+      if (chain->images[i].sw_reply_pending)
+         xcb_discard_reply(chain->conn, chain->images[i].sw_reply_sequence);
+   }
+
    for (uint32_t i = 0; i < chain->base.image_count; i++)
       x11_image_finish(chain, pAllocator, &chain->images[i]);
 #ifdef HAVE_X11_DRM
@@ -3537,6 +4128,17 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->has_async_may_tear = present_caps & XCB_PRESENT_CAPABILITY_ASYNC_MAY_TEAR;
    chain->has_reliable_msc = !wsi_conn->is_xwayland;
 
+   if (wsi_device->sw && !chain->has_mit_shm) {
+      chain->sw_shm = x11_sw_shm_supported(conn);
+      /* The X server's Present (if any) gives no real vblank here; the
+       * launcher passes the display refresh rate. Unset = unpaced FIFO. */
+      const char *hz_str = getenv("MESA_VK_X11_SW_REFRESH_HZ");
+      double hz = hz_str ? strtod(hz_str, NULL) : 0.0;
+      if (hz >= 1.0 && hz <= 1000.0)
+         chain->sw_fifo_interval_ns = (uint64_t)(1000000000.0 / hz);
+      chain->sw_timing = debug_get_bool_option("MESA_VK_X11_SW_TIMING", false);
+   }
+
    /* When images in the swapchain don't fit the window, X can still present them, but it won't
     * happen by flip, only by copy. So this is a suboptimal copy, because if the client would change
     * the chain extents X may be able to flip
@@ -3630,6 +4232,15 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
          goto fail_init_images;
    }
 
+   /* After the images: a failed segment attach drops sw_shm. */
+   chain->sw_defer_reply = chain->sw_shm && wsi_device->x11.sw_defer_reply;
+   chain->sw_cached = wsi_device->sw_cached_noncoherent;
+   for (uint32_t i = 0; i < chain->base.image_count; i++)
+      chain->images[i].sw_cached = chain->sw_cached;
+   chain->sw_ab = chain->sw_defer_reply && wsi_device->sw_cached_auto &&
+                  chain->base.blit.type == WSI_SWAPCHAIN_BUFFER_BLIT &&
+                  !chain->base.image_info.alloc_shm;
+
    /* The queues have a length of base.image_count + 1 because we will
     * occasionally use UINT32_MAX to signal the other thread that an error
     * has occurred and we don't want an overflow.
@@ -3650,6 +4261,9 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       for (unsigned i = 0; i < chain->base.image_count; i++)
          wsi_queue_push(&chain->acquire_queue, i);
    }
+
+   chain->base.sw_fence_wait_in_present_thread =
+      !chain->base.image_info.explicit_sync;
 
    ret = thrd_create(&chain->queue_manager,
                      x11_manage_present_queue, chain);

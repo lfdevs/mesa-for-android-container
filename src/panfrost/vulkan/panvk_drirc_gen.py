@@ -28,9 +28,10 @@ def declare_options():
             "Bitmask of shader cores that may be used for fragment jobs. "
             "If unset, defaults to scheduling across all available cores.",
             c_name="fragment_core_mask"),
-        B("pan_enable_vertex_pipeline_stores_atomics", False,
-          "Enable vertexPipelineStoresAndAtomics on v13+ (This cannot work on older "
-          "generation because of speculative behaviors around vertices)",
+        B("pan_enable_vertex_pipeline_stores_atomics", True,
+          "Enable vertexPipelineStoresAndAtomics on v10+ (v10-v12 run memory-writing "
+          "pre-rasterization stages through gpu_prerast, v13+ through IDVS; "
+          "set false to disable)",
           c_name="enable_vertex_pipeline_stores_atomics"),
         B("pan_force_enable_shader_atomics", False,
           "Enable fragmentStoresAndAtomics and vertexPipelineStoresAndAtomics on any "

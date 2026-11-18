@@ -237,6 +237,9 @@ struct util_queue {
    int num_queued;
    unsigned max_threads;
    unsigned num_threads; /* decreasing this number will terminate threads */
+   /* Set in a fork() child: the workers stayed in the parent, so the child
+    * starts its own worker at its first util_queue_add_job. */
+   bool respawn_after_fork;
    int max_jobs;
    int write_idx, read_idx; /* ring buffer pointers */
    size_t total_jobs_size;  /* memory use of all jobs in the queue */

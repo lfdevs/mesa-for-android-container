@@ -129,6 +129,37 @@ panvk_get_desc_stride(const struct panvk_descriptor_set_binding_layout *layout)
       ? layout->textures_per_desc + layout->samplers_per_desc : 1;
 }
 
+/* v6/v7 descriptor indexing (jm-v7 050): the per-draw descriptor copy into
+ * the per-type hardware tables cannot cover update-after-bind arrays of a
+ * million descriptors, nor mutable bindings whose type is only known per
+ * element. Such bindings are bindless: shaders read their descriptors from
+ * the set memory (storage images and texel buffers become address
+ * computations, textures and samplers are indexed relative to the lowest
+ * bound set, see panvk_per_arch(cmd_desc_direct_base)()).
+ */
+static inline bool
+panvk_binding_is_bindless(
+   const struct panvk_descriptor_set_binding_layout *layout)
+{
+#if PAN_ARCH < 9
+   switch (layout->type) {
+   case VK_DESCRIPTOR_TYPE_MUTABLE_EXT:
+      return true;
+   case VK_DESCRIPTOR_TYPE_SAMPLER:
+   case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+   case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+   case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+   case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+   case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+      return layout->flags & VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+   default:
+      return false;
+   }
+#else
+   return false;
+#endif
+}
+
 static inline uint32_t
 panvk_get_iub_desc_count(uint32_t size)
 {

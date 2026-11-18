@@ -7,6 +7,7 @@
 #include "panvk_entrypoints.h"
 #include "panvk_event.h"
 
+#include "kmod/kbase_kmod.h"
 #include "vk_log.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -21,16 +22,7 @@ panvk_per_arch(CreateEvent)(VkDevice _device,
    if (!event)
       return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   struct drm_syncobj_create create = {
-      .flags = 0,
-   };
-
-   int ret = pan_kmod_ioctl(device->drm_fd, DRM_IOCTL_SYNCOBJ_CREATE,
-                            &create);
-   if (ret)
-      return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   event->syncobj = create.handle;
+   event->signaled = false;
    *pEvent = panvk_event_to_handle(event);
 
    return VK_SUCCESS;
@@ -46,9 +38,6 @@ panvk_per_arch(DestroyEvent)(VkDevice _device, VkEvent _event,
    if (!event)
       return;
 
-   struct drm_syncobj_destroy destroy = {.handle = event->syncobj};
-   pan_kmod_ioctl(device->drm_fd, DRM_IOCTL_SYNCOBJ_DESTROY, &destroy);
-
    vk_object_free(&device->vk, pAllocator, event);
 }
 
@@ -57,47 +46,23 @@ panvk_per_arch(GetEventStatus)(VkDevice _device, VkEvent _event)
 {
    VK_FROM_HANDLE(panvk_device, device, _device);
    VK_FROM_HANDLE(panvk_event, event, _event);
-   bool signaled;
 
-   struct drm_syncobj_wait wait = {
-      .handles = (uintptr_t)&event->syncobj,
-      .count_handles = 1,
-      .timeout_nsec = 0,
-      .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT,
-   };
+   if (!event->signaled && event->signal_atom &&
+       kbase_kmod_wait_atom(device->kmod.dev, event->signal_atom, 0)) {
+      event->signaled = true;
+      event->signal_atom = 0;
+   }
 
-   int ret = pan_kmod_ioctl(device->drm_fd, DRM_IOCTL_SYNCOBJ_WAIT, &wait);
-   if (ret) {
-      if (errno == ETIME)
-         signaled = false;
-      else {
-         assert(0);
-         return VK_ERROR_DEVICE_LOST; /* TODO */
-      }
-   } else
-      signaled = true;
-
-   return signaled ? VK_EVENT_SET : VK_EVENT_RESET;
+   return event->signaled ? VK_EVENT_SET : VK_EVENT_RESET;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
 panvk_per_arch(SetEvent)(VkDevice _device, VkEvent _event)
 {
-   VK_FROM_HANDLE(panvk_device, device, _device);
    VK_FROM_HANDLE(panvk_event, event, _event);
 
-   struct drm_syncobj_array objs = {
-      .handles = (uint64_t)(uintptr_t)&event->syncobj,
-      .count_handles = 1};
-
-   /* This is going to just replace the fence for this syncobj with one that
-    * is already in signaled state. This won't be a problem because the spec
-    * mandates that the event will have been set before the vkCmdWaitEvents
-    * command executes.
-    * https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#commandbuffers-submission-progress
-    */
-   if (pan_kmod_ioctl(device->drm_fd, DRM_IOCTL_SYNCOBJ_SIGNAL, &objs))
-      return VK_ERROR_DEVICE_LOST;
+   event->signaled = true;
+   event->signal_atom = 0;
 
    return VK_SUCCESS;
 }
@@ -105,15 +70,10 @@ panvk_per_arch(SetEvent)(VkDevice _device, VkEvent _event)
 VKAPI_ATTR VkResult VKAPI_CALL
 panvk_per_arch(ResetEvent)(VkDevice _device, VkEvent _event)
 {
-   VK_FROM_HANDLE(panvk_device, device, _device);
    VK_FROM_HANDLE(panvk_event, event, _event);
 
-   struct drm_syncobj_array objs = {
-      .handles = (uint64_t)(uintptr_t)&event->syncobj,
-      .count_handles = 1};
-
-   if (pan_kmod_ioctl(device->drm_fd, DRM_IOCTL_SYNCOBJ_RESET, &objs))
-      return VK_ERROR_DEVICE_LOST;
+   event->signaled = false;
+   event->signal_atom = 0;
 
    return VK_SUCCESS;
 }

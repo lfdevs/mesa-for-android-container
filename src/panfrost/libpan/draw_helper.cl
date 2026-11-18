@@ -9,10 +9,14 @@
 #include "genxml/gen_macros.h"
 #include "lib/pan_encoder.h"
 #include "poly/cl/restart.h"
+#include "poly/cl/tessellator.h"
 #include "draw_helper.h"
 #include "poly/geometry.h"
+#include "draw_helper_vp.h"
+#include "tess_draw.h"
+#include "libpan_xfb.h"
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 9
 
 /* Subgroup size is always 16 on v10+ */
 #define SUBGROUP_SIZE 16
@@ -71,6 +75,903 @@ panlib_update_prims_generated_query_indirect(
    }
 }
 
+/* 64-bit atomic add built from 32-bit atomics: the carry is added to the
+ * high word exactly once per add, so concurrent adds stay exact. */
+static inline void
+pstats_add(global uint32_t *counter, uint64_t value)
+{
+   uint32_t lo = value, hi = value >> 32;
+
+   if (!value)
+      return;
+
+   uint32_t old = atomic_fetch_add((global atomic_uint *)counter, lo);
+   hi += (uint32_t)(old + lo) < old;
+   if (hi)
+      atomic_fetch_add((global atomic_uint *)(counter + 1), hi);
+}
+
+/* slots packs a 4-bit u64 slot index per counter, 0xf when not counted, in
+ * the order IA vertices, IA primitives, VS invocations, clipping invocations
+ * and clipping primitives. */
+static inline void
+pstats_add_slot(global uint32_t *stats, uint32_t slots, uint32_t counter,
+                uint64_t value)
+{
+   uint32_t slot = (slots >> (counter * 4)) & 0xf;
+
+   if (slot != 0xf)
+      pstats_add(stats + slot * 2, value);
+}
+
+KERNEL(SUBGROUP_SIZE * SUBGROUP_SIZE)
+panlib_update_pstats_draw(global uint32_t *stats, uint32_t slots,
+                          constant uint32_t *cmd, uint32_t cmd_stride,
+                          global uint32_t *count_buffer, uint32_t draw_index,
+                          uint64_t index_buffer, uint32_t index_buffer_size_el,
+                          uint32_t index_size_B, uint32_t restart,
+                          uint32_t prim, uint32_t view_count,
+                          uint32_t patch_size)
+{
+   assert(get_sub_group_size() == SUBGROUP_SIZE);
+
+   POLY_DECL_UNROLL_RESTART_SCRATCH(scratch, SUBGROUP_SIZE * SUBGROUP_SIZE);
+   uint32_t draw_id = cl_group_id.x;
+
+   if (count_buffer && draw_index + draw_id >= *count_buffer)
+      return;
+
+   cmd = (constant uint32_t *)((uintptr_t)cmd + cmd_stride * draw_id);
+
+   uint32_t prims;
+   if (restart) {
+      uint32_t restart_index =
+         index_size_B == 4 ? UINT32_MAX : (1u << (index_size_B * 8)) - 1;
+      prims = poly_count_restart_prims(cmd, index_buffer, index_buffer_size_el,
+                                       index_size_B, restart_index, prim,
+                                       scratch);
+   } else if (prim == MESA_PRIM_PATCHES) {
+      prims = cmd[0] / max(patch_size, 1u);
+   } else {
+      prims = u_decomposed_prims_for_vertices(prim, cmd[0]);
+   }
+
+   if (cl_local_id.x != 0)
+      return;
+
+   uint64_t instances = (uint64_t)cmd[1] * view_count;
+   uint64_t verts = cmd[0] * instances;
+
+   pstats_add_slot(stats, slots, 0, verts);
+   pstats_add_slot(stats, slots, 1, prims * instances);
+   pstats_add_slot(stats, slots, 2, verts);
+   pstats_add_slot(stats, slots, 3, prims * instances);
+   pstats_add_slot(stats, slots, 4, prims * instances);
+}
+
+KERNEL(1)
+panlib_update_pstats_dispatch(global uint32_t *counter,
+                              constant uint32_t *cmd, uint32_t local_size)
+{
+   pstats_add(counter, (uint64_t)cmd[0] * cmd[1] * cmd[2] * local_size);
+}
+
+/* Tessellation for gpu_prerast, see struct panlib_tess_draw. src_draw is the
+ * Vk[Indexed]DrawIndirectCommand of the API draw.
+ */
+KERNEL(1)
+panlib_tess_setup(global struct panlib_tess_draw *t, constant uint32_t *src_draw,
+                  constant uint32_t *count_buffer, uint32_t draw_index)
+{
+   uint32_t ps = max(t->input_patch_size, 1u);
+   bool live = !count_buffer || draw_index < count_buffer[0];
+
+   /* VkDrawIndirectCommand is 4 words. */
+   for (uint32_t i = 0; i < 5; i++)
+      t->in_draw[i] = live && (i < 4 || t->indexed) ? src_draw[i] : 0;
+
+   t->patches_per_instance = t->in_draw[0] / ps;
+   t->instances = t->in_draw[1];
+   t->total_patches = (uint64_t)t->patches_per_instance * t->instances;
+   t->next_patch = 0;
+   t->idx_total = 0;
+   t->idx_cursor = 0;
+   t->prims_done = 0;
+   t->new_chunk = 0;
+   t->more = 0;
+}
+
+/* Starts the next chunk of patches once the current one is fully drawn. A
+ * chunk is whole instances when an instance fits, else a patch range of one
+ * instance.
+ */
+KERNEL(1)
+panlib_tess_step(global struct panlib_tess_draw *t, global uint32_t *tcs_stat)
+{
+   global struct poly_tess_params *p = &t->p;
+
+   t->new_chunk = t->idx_cursor >= t->idx_total && t->next_patch < t->total_patches;
+   if (!t->new_chunk) {
+      t->vs_draw[0] = 0;
+      t->vs_draw[1] = 0;
+      t->tcs_grid[0] = 0;
+      t->tcs_grid[1] = 0;
+      t->tcs_grid[2] = 0;
+      p->nr_patches = 0;
+      return;
+   }
+
+   uint32_t ps = max(t->input_patch_size, 1u);
+   uint32_t ppi = t->patches_per_instance;
+   uint32_t inst = t->next_patch / ppi;
+   uint32_t first = t->next_patch % ppi;
+   uint32_t per_inst, k;
+
+   if (first == 0 && ppi <= t->max_patches) {
+      per_inst = ppi;
+      k = min(t->max_patches / ppi, t->instances - inst);
+      k = min(k, PANLIB_CHUNK_MAX_INSTANCES);
+   } else {
+      per_inst = min(t->max_patches, ppi - first);
+      k = 1;
+   }
+
+   uint32_t n = per_inst * k;
+   p->patches_per_instance = per_inst;
+   p->nr_patches = n;
+   p->heap->bottom = 0;
+   t->chunk_patches = n;
+   t->prim_base = first;
+   t->next_patch += n;
+
+   /* Base vertex/instance stay the API ones, the chunk start is added to the
+    * VS invocation IDs.
+    */
+   t->vs_draw[0] = per_inst * ps;
+   t->vs_draw[1] = k;
+   for (uint32_t i = 2; i < 5; i++)
+      t->vs_draw[i] = t->in_draw[i];
+   t->chunk_vertex = first * ps;
+   t->chunk_instance = inst;
+
+   t->tcs_grid[0] = per_inst;
+   t->tcs_grid[1] = k;
+   t->tcs_grid[2] = 1;
+
+#if PAN_ARCH == 9
+   /* With idx_limit, panlib_tess_draw() counts the patches the chunk keeps. */
+   if (tcs_stat && !t->idx_limit)
+      pstats_add(tcs_stat, n);
+#else
+   if (tcs_stat)
+      pstats_add(tcs_stat, n);
+#endif
+}
+
+/* domain: 0 triangles, 1 quads, 2 isolines. */
+KERNEL(64)
+panlib_tessellate(constant struct poly_tess_params *p, uint32_t domain__3,
+                  uint32_t mode__2)
+{
+   uint32_t patch = cl_global_id.x;
+   enum poly_tess_mode mode = mode__2;
+
+   if (patch >= p->nr_patches)
+      return;
+
+   if (domain__3 == 0)
+      poly_tess_tri_process(p, patch, mode);
+   else if (domain__3 == 1)
+      poly_tess_quad_process(p, patch, mode);
+   else
+      poly_tess_isoline_process(p, patch, mode);
+
+   /* The tessellator emits clockwise triangles, swap two vertices of each
+    * one for the other winding.
+    */
+   if (mode == POLY_TESS_MODE_WITH_COUNTS && p->ccw && domain__3 != 2 &&
+       !p->points_mode) {
+      global uint32_t *idx = p->index_buffer;
+      uint32_t end = p->counts[patch];
+
+      for (uint32_t i = patch ? p->counts[patch - 1] : 0; i + 2 < end;
+           i += 3) {
+         uint32_t t = idx[i + 1];
+         idx[i + 1] = idx[i + 2];
+         idx[i + 2] = t;
+      }
+   }
+}
+
+/* Prefix sums the per-patch index counts of a new chunk, then writes the
+ * indexed draw for the next range of the chunk's indices.
+ */
+KERNEL(1)
+panlib_tess_draw(global struct panlib_tess_draw *t, global uint32_t *c_invs,
+                 global uint32_t *c_prims, global uint32_t *prims_generated)
+{
+   global struct poly_tess_params *p = &t->p;
+   uint32_t vpp = max(t->verts_per_prim, 1u);
+
+   if (t->new_chunk) {
+      uint32_t sum = 0;
+
+#if PAN_ARCH == 9
+      uint32_t n = t->chunk_patches;
+
+      /* ponytail: serial prefix sum, a chunk holds a few thousand patches. */
+      for (uint32_t i = 0; i < t->chunk_patches; i++) {
+         if (t->idx_limit && i && sum + p->counts[i] > t->idx_limit) {
+            n = i;
+            break;
+         }
+         sum += p->counts[i];
+         p->counts[i] = sum;
+      }
+
+      /* The patches past the budget go to the next chunk, the tessellator
+       * writes the kept ones only. */
+      if (t->idx_limit) {
+         t->next_patch -= t->chunk_patches - n;
+         t->chunk_patches = n;
+         p->nr_patches = n;
+         if (t->tcs_stat)
+            pstats_add((global uint32_t *)(uintptr_t)t->tcs_stat, n);
+      }
+#else
+      /* ponytail: serial prefix sum, a chunk holds a few hundred patches. */
+      for (uint32_t i = 0; i < t->chunk_patches; i++) {
+         sum += p->counts[i];
+         p->counts[i] = sum;
+      }
+#endif
+
+      t->idx_total = sum;
+      t->idx_cursor = 0;
+      if (c_invs)
+         pstats_add(c_invs, sum / vpp);
+      if (c_prims)
+         pstats_add(c_prims, sum / vpp);
+   }
+
+   uint32_t left = t->idx_total - t->idx_cursor;
+   uint32_t count = t->range ? min(t->range, left) : left;
+
+   t->draw[0] = count;
+   t->draw[1] = 1;
+   t->draw[2] = t->idx_cursor;
+   t->draw[3] = 0;
+   t->draw[4] = 0;
+
+   t->idx_cursor += count;
+   t->gs_prim_base = t->prims_done;
+   t->prims_done += count / vpp;
+   t->more = t->idx_cursor < t->idx_total || t->next_patch < t->total_patches;
+
+   if (prims_generated)
+      atomic_fetch_add((global atomic_uint *)prims_generated, count / vpp);
+}
+
+/* Chunked non-tessellated gpu_prerast draws, see struct panlib_chunk_draw.
+ * src_draw is the Vk[Indexed]DrawIndirectCommand of the API draw.
+ */
+KERNEL(1)
+panlib_chunk_setup(global struct panlib_chunk_draw *c,
+                   constant uint32_t *src_draw,
+                   constant uint32_t *count_buffer, uint32_t draw_index)
+{
+   bool live = !count_buffer || draw_index < count_buffer[0];
+
+   for (uint32_t i = 0; i < 5; i++)
+      c->in_draw[i] = live && (i < 4 || c->indexed) ? src_draw[i] : 0;
+
+   c->next_inst = 0;
+   c->next_vertex = 0;
+   c->prims_done = 0;
+   c->prim_base = 0;
+   c->more = 0;
+}
+
+/* A restart index, or an index past the buffer: both end a strip. */
+static bool
+chunk_ends_strip(global struct panlib_chunk_draw *c, uint32_t pos)
+{
+   uint64_t at = (uint64_t)c->in_draw[2] + pos;
+
+   if (at >= c->index_count_el)
+      return true;
+
+   uintptr_t addr = (uintptr_t)(c->index_buffer + at * c->index_size);
+
+   if (c->index_size == 4)
+      return *(global uint32_t *)addr == UINT32_MAX;
+   else if (c->index_size == 2)
+      return *(global uint16_t *)addr == 0xffff;
+   else
+      return *(global uint8_t *)addr == 0xff;
+}
+
+#define CHUNK_WG 256
+
+struct chunk_scan {
+   /* Last restart index, UINT32_MAX if none. */
+   uint32_t last;
+   /* Primitives of the strips that a restart index ends. */
+   uint32_t closed;
+   /* Vertices after the last restart index. */
+   uint32_t run;
+};
+
+/* Scans the vertices [start, start + len) for restart indices with the whole
+ * workgroup: one window holds up to max_verts indices. Every invocation calls
+ * it with the same arguments and gets the same result.
+ */
+static struct chunk_scan
+chunk_scan(global struct panlib_chunk_draw *c, enum mesa_prim prim,
+           uint32_t start, uint32_t len, local uint32_t *tmp)
+{
+   const uint32_t tid = cl_local_id.x;
+   const uint32_t seg = (len + CHUNK_WG - 1) / CHUNK_WG;
+   const uint32_t b = min(tid * seg, len), e = min(b + seg, len);
+   uint32_t last = UINT32_MAX, lead = 0, inner = 0, run = 0;
+
+   for (uint32_t j = b; j < e; j++) {
+      if (chunk_ends_strip(c, start + j)) {
+         if (last == UINT32_MAX)
+            lead = run;
+         else
+            inner += u_decomposed_prims_for_vertices(prim, run);
+         last = j;
+         run = 0;
+      } else {
+         run++;
+      }
+   }
+
+   tmp[tid] = last;
+   tmp[CHUNK_WG + tid] = lead;
+   tmp[2 * CHUNK_WG + tid] = inner;
+   tmp[3 * CHUNK_WG + tid] = run;
+   barrier(CLK_LOCAL_MEM_FENCE);
+
+   struct chunk_scan r = {UINT32_MAX, 0, 0};
+   for (uint32_t t = 0; t < CHUNK_WG; t++) {
+      if (tmp[t] == UINT32_MAX) {
+         r.run += tmp[3 * CHUNK_WG + t];
+      } else {
+         r.closed += u_decomposed_prims_for_vertices(
+                        prim, r.run + tmp[CHUNK_WG + t]) +
+                     tmp[2 * CHUNK_WG + t];
+         r.run = tmp[3 * CHUNK_WG + t];
+         r.last = start + tmp[t];
+      }
+   }
+   barrier(CLK_LOCAL_MEM_FENCE);
+   return r;
+}
+
+/* Plans the next chunk: whole instances when an instance fits max_verts, else
+ * a vertex window of one instance. A strip window ends at its last restart
+ * index, or is cut mid-strip when it holds none, repeating the strip's
+ * overlap in the next one. c->draw is the chunk to lower, chunk_vertex and
+ * chunk_instance the start of the chunk the VS adds to its invocation IDs.
+ *
+ * The restart scan runs on the whole workgroup, the rest on invocation 0.
+ */
+KERNEL(CHUNK_WG)
+panlib_chunk_step(global struct panlib_chunk_draw *c)
+{
+   local uint32_t tmp[4 * CHUNK_WG];
+   uint32_t align, overlap, div;
+   panlib_chunk_topology(c->prim, &align, &overlap, &div);
+
+   enum mesa_prim prim = c->prim;
+   const uint32_t verts = c->in_draw[0], insts = c->in_draw[1];
+   const uint32_t inst = c->next_inst;
+   const bool strips = c->restart && overlap;
+   const uint32_t step =
+      c->max_verts > overlap ? (c->max_verts - overlap) / align * align : 0;
+   uint32_t i = c->next_vertex;
+
+   /* Every invocation has read c: invocation 0 may write it from here on. */
+   barrier(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
+
+   struct chunk_scan sc = {UINT32_MAX, 0, 0};
+   if (strips && verts && inst < insts) {
+      if (verts <= c->max_verts) {
+         sc = chunk_scan(c, prim, 0, verts, tmp);
+      } else if (step) {
+         while (i < verts && chunk_ends_strip(c, i))
+            i++;
+         if (i < verts)
+            sc = chunk_scan(c, prim, i, min(c->max_verts, verts - i), tmp);
+      }
+   }
+
+   if (cl_local_id.x != 0)
+      return;
+
+   for (uint32_t i = 0; i < 5; i++)
+      c->draw[i] = c->in_draw[i];
+   c->draw[0] = 0;
+   c->draw[1] = 0;
+   c->chunk_vertex = 0;
+   c->chunk_instance = 0;
+   c->more = 0;
+
+   if (!verts || inst >= insts)
+      return;
+
+   uint32_t n_verts, n_insts = 1, first = 0, prims = 0;
+
+   if (verts <= c->max_verts) {
+      n_verts = verts;
+      n_insts = min(max(c->max_verts / verts, 1u), insts - inst);
+      n_insts = min(n_insts, c->max_insts ? c->max_insts
+                                          : PANLIB_CHUNK_MAX_INSTANCES);
+      if (strips) {
+         prims = sc.closed + u_decomposed_prims_for_vertices(prim, sc.run);
+      } else {
+         prims = u_decomposed_prims_for_vertices(prim, verts);
+      }
+
+      c->prim_base = 0;
+      c->prims_done = 0;
+      c->next_inst = inst + n_insts;
+      c->next_vertex = 0;
+   } else {
+      uint32_t next;
+      bool done;
+
+      if (!step) {
+         c->next_inst = insts;
+         return;
+      }
+
+      /* i skipped the restart indices in front of the window above. */
+      if (i >= verts) {
+         c->next_inst = inst + 1;
+         c->next_vertex = 0;
+         c->prims_done = 0;
+         c->more = c->next_inst < insts;
+         return;
+      }
+
+      if (strips) {
+         const uint32_t window = min(c->max_verts, verts - i);
+
+         prims = sc.closed;
+#if PAN_ARCH == 9
+         if (sc.last != UINT32_MAX && c->cut_tail && sc.last - i < step / 2 &&
+             i + window < verts) {
+            /* The strip after the last restart starts at s: cut it at a
+             * multiple of align from s, as a strip without restart. */
+            const uint32_t s = sc.last + 1;
+            const uint32_t cut = s + (i + step - s) / align * align;
+
+            n_verts = cut + overlap - i;
+            next = cut;
+            prims += u_decomposed_prims_for_vertices(prim, cut + overlap - s);
+         } else
+#endif
+         if (sc.last != UINT32_MAX) {
+            n_verts = sc.last - i;
+            next = sc.last + 1;
+         } else {
+            n_verts = i + window >= verts ? window : step + overlap;
+            next = i + window >= verts ? verts : i + step;
+            prims = u_decomposed_prims_for_vertices(prim, n_verts);
+         }
+         done = next >= verts;
+      } else {
+         n_verts = min(step + overlap, verts - i);
+         next = i + step;
+         prims = u_decomposed_prims_for_vertices(prim, n_verts);
+         done = next + overlap >= verts;
+      }
+
+      first = i;
+      c->prim_base = c->prims_done;
+      c->prims_done += prims;
+      c->next_vertex = next;
+      if (done) {
+         c->next_inst = inst + 1;
+         c->next_vertex = 0;
+         c->prims_done = 0;
+      }
+   }
+
+   c->draw[0] = n_verts;
+   c->draw[1] = n_insts;
+   if (c->indexed)
+      c->draw[2] += first;
+   else
+      c->chunk_vertex = first;
+   c->chunk_instance = inst;
+   c->more = c->next_inst < insts;
+
+   if (c->prims_generated) {
+      atomic_fetch_add((global atomic_uint *)(uintptr_t)c->prims_generated,
+                       prims * n_insts * c->view_count);
+   }
+}
+
+/* Strip table of a GS draw with primitive restart, for the first
+ * min(*count, cap) generated indices: out[j] is the first vertex of the
+ * strip of j, out[cap + j] the primitives of the strips before it and
+ * out[2 * cap + j] the first restart at or after j (or the count). Each
+ * GS invocation then loads its strip instead of walking the indices, which
+ * made the GS job quadratic in the strip length.
+ */
+KERNEL(CHUNK_WG)
+panlib_gs_strip_table(constant uint32_t *gen, constant uint32_t *count,
+                      uint32_t cap, uint32_t prim, global uint32_t *out)
+{
+   local uint32_t tmp[5 * CHUNK_WG];
+   const enum mesa_prim p = (enum mesa_prim)prim;
+   const uint32_t n = min(count[0], cap);
+   const uint32_t tid = cl_local_id.x;
+   const uint32_t seg = (n + CHUNK_WG - 1) / CHUNK_WG;
+   const uint32_t b = min(tid * seg, n), e = min(b + seg, n);
+   uint32_t first = UINT32_MAX, last = UINT32_MAX, lead = 0, inner = 0;
+   uint32_t run = 0;
+
+   for (uint32_t j = b; j < e; j++) {
+      if (gen[j] == 0xffffffff) {
+         if (last == UINT32_MAX) {
+            first = j;
+            lead = run;
+         } else {
+            inner += u_decomposed_prims_for_vertices(p, run);
+         }
+         last = j;
+         run = 0;
+      } else {
+         run++;
+      }
+   }
+
+   tmp[tid] = last;
+   tmp[CHUNK_WG + tid] = lead;
+   tmp[2 * CHUNK_WG + tid] = inner;
+   tmp[3 * CHUNK_WG + tid] = run;
+   tmp[4 * CHUNK_WG + tid] = first;
+   barrier(CLK_LOCAL_MEM_FENCE);
+
+   /* State at b: strip start, its run so far, primitives before it. */
+   uint32_t start = 0, before = 0;
+   run = 0;
+   for (uint32_t t = 0; t < tid; t++) {
+      if (tmp[t] == UINT32_MAX) {
+         run += tmp[3 * CHUNK_WG + t];
+      } else {
+         before += u_decomposed_prims_for_vertices(p, run + tmp[CHUNK_WG + t]) +
+                   tmp[2 * CHUNK_WG + t];
+         run = tmp[3 * CHUNK_WG + t];
+         start = tmp[t] + 1;
+      }
+   }
+   uint32_t next = n;
+   for (uint32_t t = tid + 1; t < CHUNK_WG; t++) {
+      if (tmp[4 * CHUNK_WG + t] != UINT32_MAX) {
+         next = tmp[4 * CHUNK_WG + t];
+         break;
+      }
+   }
+
+   for (uint32_t j = b; j < e; j++) {
+      out[j] = start;
+      out[cap + j] = before;
+      if (gen[j] == 0xffffffff) {
+         before += u_decomposed_prims_for_vertices(p, run);
+         run = 0;
+         start = j + 1;
+      } else {
+         run++;
+      }
+   }
+   for (uint32_t j = e; j-- > b;) {
+      if (gen[j] == 0xffffffff)
+         next = j;
+      out[2 * cap + j] = next;
+   }
+}
+
+/* One chunk of a triangle fan as 32-bit indices: the hub element, then the
+ * count - 1 elements from first. Without an index buffer (index_size 0) the
+ * element numbers are the indices. Elements past the buffer read as 0.
+ */
+KERNEL(64)
+panlib_fan_chunk_indices(global uint32_t *dst, uint64_t index_buffer,
+                         uint32_t index_size, uint32_t index_count_el,
+                         uint32_t hub, uint32_t first, uint32_t count)
+{
+   uint32_t j = cl_global_id.x;
+
+   if (j >= count)
+      return;
+
+   uint32_t v = j ? first + j - 1 : hub;
+
+   if (index_size) {
+      uintptr_t addr = (uintptr_t)(index_buffer + (uint64_t)v * index_size);
+
+      if (v >= index_count_el)
+         v = 0;
+      else if (index_size == 4)
+         v = *(global uint32_t *)addr;
+      else if (index_size == 2)
+         v = *(global uint16_t *)addr;
+      else
+         v = *(global uint8_t *)addr;
+   }
+
+   dst[j] = v;
+}
+
+#define XFB_WG 256
+
+static uint32_t
+xfb_prim_verts(uint32_t prim)
+{
+   switch (prim) {
+   case MESA_PRIM_POINTS:
+      return 1;
+   case MESA_PRIM_LINES:
+   case MESA_PRIM_LINE_STRIP:
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      return 2;
+   default:
+      return 3;
+   }
+}
+
+static uint32_t
+xfb_topology_vertex(uint32_t prim, uint32_t v)
+{
+   switch (prim) {
+   case MESA_PRIM_LINES_ADJACENCY:
+   case MESA_PRIM_LINE_STRIP_ADJACENCY:
+      return v + 1;
+   case MESA_PRIM_TRIANGLES_ADJACENCY:
+   case MESA_PRIM_TRIANGLE_STRIP_ADJACENCY:
+      return v * 2;
+   default:
+      return v;
+   }
+}
+
+static uint32_t
+xfb_scan(uint32_t v, local uint32_t *tmp, uint32_t *total)
+{
+   uint32_t tid = cl_local_id.x;
+
+   barrier(CLK_LOCAL_MEM_FENCE);
+   tmp[tid] = v;
+   barrier(CLK_LOCAL_MEM_FENCE);
+   for (uint32_t o = 1; o < XFB_WG; o <<= 1) {
+      uint32_t t = tid >= o ? tmp[tid - o] : 0;
+      barrier(CLK_LOCAL_MEM_FENCE);
+      tmp[tid] += t;
+      barrier(CLK_LOCAL_MEM_FENCE);
+   }
+   *total = tmp[XFB_WG - 1];
+   return tmp[tid] - v;
+}
+
+static void
+xfb_write(constant struct panlib_xfb_params *x, uint32_t s, uint32_t g,
+          uint32_t *vtx, uint32_t k, uint32_t *off, uint32_t *fit)
+{
+   if (g >= fit[s])
+      return;
+
+   for (uint32_t o = 0; o < x->output_count; o++) {
+      uint32_t out = x->outputs[o];
+      uint32_t b = (out >> PANLIB_XFB_OUT_BUF_SHIFT) & 3;
+      uint32_t dst_dw = (out >> PANLIB_XFB_OUT_DST_SHIFT) & 0xfff;
+      uint32_t src_dw = (out >> PANLIB_XFB_OUT_SRC_SHIFT) & 0xff;
+
+      if (!x->strides[b] || !x->buffers[b] ||
+          ((x->buffer_to_stream >> (2 * b)) & 3) != s)
+         continue;
+
+      for (uint32_t v = 0; v < k; v++) {
+         global uint32_t *src =
+            (global uint32_t *)(x->records +
+                                (uint64_t)vtx[v] * x->record_stride);
+         global uint32_t *dst =
+            (global uint32_t *)(x->buffers[b] + off[b] +
+                                ((uint64_t)g * k + v) * x->strides[b]);
+         dst[dst_dw] = src[src_dw];
+      }
+   }
+}
+
+static void
+xfb_gs_walk(constant struct panlib_xfb_params *x, uint32_t rec0,
+            uint32_t count, uint32_t tag_dw, uint32_t k, bool emit,
+            uint32_t *base, uint32_t *off, uint32_t *fit, uint32_t *cnt)
+{
+   uint32_t len[PANLIB_XFB_MAX_STREAMS] = {0};
+   uint32_t p0[PANLIB_XFB_MAX_STREAMS] = {0};
+   uint32_t p1[PANLIB_XFB_MAX_STREAMS] = {0};
+   uint32_t vtx[3];
+
+   for (uint32_t v = 0; v < count; v++) {
+      uint32_t r = rec0 + v;
+      global uint32_t *rec =
+         (global uint32_t *)(x->records + (uint64_t)r * x->record_stride);
+      uint32_t tag = rec[tag_dw];
+      uint32_t s = tag & 3;
+      bool prim = false;
+
+      if (tag & 4)
+         len[s] = 0;
+
+      if (k == 1) {
+         vtx[0] = r;
+         prim = true;
+      } else if (k == 2) {
+         if (len[s] >= 1) {
+            vtx[0] = p1[s];
+            vtx[1] = r;
+            prim = true;
+         }
+      } else if (len[s] >= 2) {
+         bool odd = (len[s] - 2) & 1;
+         vtx[0] = p0[s];
+         vtx[1] = odd ? r : p1[s];
+         vtx[2] = odd ? p1[s] : r;
+         prim = true;
+      }
+
+      p0[s] = p1[s];
+      p1[s] = r;
+      len[s]++;
+
+      if (prim) {
+         if (emit)
+            xfb_write(x, s, base[s] + cnt[s], vtx, k, off, fit);
+         cnt[s]++;
+      }
+   }
+}
+
+KERNEL(XFB_WG)
+panlib_xfb_capture(constant struct panlib_xfb_params *x)
+{
+   global uint32_t *offsets = (global uint32_t *)x->offsets;
+   constant uint32_t *counts = (constant uint32_t *)x->counts;
+   local uint32_t tmp[XFB_WG];
+   POLY_DECL_UNROLL_RESTART_SCRATCH(scratch, XFB_WG);
+   uint32_t tid = cl_local_id.x;
+   uint32_t n = counts[0], inst = counts[1];
+   uint32_t k = xfb_prim_verts(x->prim);
+   uint32_t off[PANLIB_XFB_MAX_BUFFERS];
+   uint32_t fit[PANLIB_XFB_MAX_STREAMS];
+   uint32_t total[PANLIB_XFB_MAX_STREAMS] = {0};
+
+   if (!x->active)
+      return;
+
+   for (uint32_t s = 0; s < PANLIB_XFB_MAX_STREAMS; s++)
+      fit[s] = UINT32_MAX;
+
+   for (uint32_t b = 0; b < PANLIB_XFB_MAX_BUFFERS; b++) {
+      off[b] = offsets[b];
+      if (!x->strides[b] || !x->buffers[b])
+         continue;
+
+      uint32_t s = (x->buffer_to_stream >> (2 * b)) & 3;
+      uint32_t bytes = k * x->strides[b];
+      uint32_t avail = off[b] < x->sizes[b] ? (x->sizes[b] - off[b]) / bytes : 0;
+      fit[s] = min(fit[s], avail);
+   }
+
+   if (x->gs_max_vertices) {
+      uint32_t tag_dw = x->record_stride / 4 - 4;
+      uint32_t slots = min((uint64_t)n * inst * x->gs_invocations,
+                           (uint64_t)x->record_capacity);
+
+      for (uint32_t base_slot = 0; base_slot < slots; base_slot += XFB_WG) {
+         uint32_t slot = base_slot + tid;
+         uint32_t rec0 = slot * x->gs_max_vertices;
+         uint32_t count = 0;
+         uint32_t cnt[PANLIB_XFB_MAX_STREAMS] = {0};
+         uint32_t pre[PANLIB_XFB_MAX_STREAMS];
+
+         if (slot < slots) {
+            global uint32_t *r0 =
+               (global uint32_t *)(x->records +
+                                   (uint64_t)rec0 * x->record_stride);
+            count = min(r0[tag_dw + 1], x->gs_max_vertices);
+            xfb_gs_walk(x, rec0, count, tag_dw, k, false, total, off, fit,
+                        cnt);
+         }
+
+         for (uint32_t s = 0; s < PANLIB_XFB_MAX_STREAMS; s++) {
+            uint32_t sum;
+            pre[s] = total[s] + xfb_scan(cnt[s], tmp, &sum);
+            total[s] += sum;
+            cnt[s] = 0;
+         }
+
+         if (slot < slots)
+            xfb_gs_walk(x, rec0, count, tag_dw, k, true, pre, off, fit, cnt);
+      }
+   } else {
+      constant uint32_t *gen = (constant uint32_t *)x->indices;
+      uint32_t vtx[3];
+
+      for (uint32_t i = 0; i < inst; i++) {
+         uint32_t rec_base = i * n;
+         if (rec_base >= x->record_capacity)
+            break;
+
+         uint32_t nn = min(n, x->record_capacity - rec_base);
+         uint32_t needle = 0;
+
+         while (needle < nn) {
+            uint32_t next = nn;
+
+            if (x->restart) {
+               next = needle;
+               for (;;) {
+                  uint32_t idx = next + tid;
+                  bool is_restart = idx >= nn || gen[idx] == 0xffffffff;
+                  uint32_t first =
+                     poly_work_group_first_true(is_restart, scratch);
+
+                  next += first;
+                  if (first < XFB_WG)
+                     break;
+               }
+            }
+
+            uint32_t prims =
+               u_decomposed_prims_for_vertices((enum mesa_prim)x->prim,
+                                               next - needle);
+
+            for (uint32_t p = tid; p < prims; p += XFB_WG) {
+               for (uint32_t v = 0; v < k; v++)
+                  vtx[v] = rec_base + needle +
+                           poly_vertex_id_for_topology(
+                              (enum mesa_prim)x->prim, true, p, xfb_topology_vertex(x->prim, v),
+                              prims);
+               xfb_write(x, 0, total[0] + p, vtx, k, off, fit);
+            }
+
+            total[0] += prims;
+            needle = next + 1;
+         }
+      }
+   }
+
+   barrier(CLK_GLOBAL_MEM_FENCE);
+   if (tid)
+      return;
+
+   for (uint32_t b = 0; b < PANLIB_XFB_MAX_BUFFERS; b++) {
+      if (!x->strides[b] || !x->buffers[b])
+         continue;
+
+      uint32_t s = (x->buffer_to_stream >> (2 * b)) & 3;
+      offsets[b] = off[b] + min(total[s], fit[s]) * k * x->strides[b];
+   }
+
+   for (uint32_t s = 0; s < PANLIB_XFB_MAX_STREAMS; s++) {
+      global uint64_t *q = (global uint64_t *)x->queries[s];
+      if (q) {
+         q[0] += min(total[s], fit[s]);
+         q[1] += total[s];
+      }
+   }
+}
+
+#include "vp_runs.cl"
+
 #elif PAN_ARCH < 9
 
 struct panlib_draw_info {
@@ -92,7 +993,6 @@ struct panlib_draw_info {
 
    struct {
       global struct mali_attribute_buffer_packed *descs;
-      global struct libpan_draw_helper_varying_buf_info *info;
    } varying_bufs;
 
    struct {
@@ -368,6 +1268,10 @@ panlib_patch_attrib(struct panlib_draw_info *draw,
    pan_pack(desc, ATTRIBUTE, cfg) {
       cfg.buffer_index = unpacked_desc.buffer_index;
       cfg.offset = info.base_offset + draw->instance.base * info.stride;
+      /* Bifrost adds the DCD offset_start to the instanced attribute index
+       * too (pan_cmdstream.c undoes it the same way). */
+      if (draw->instance.count > 1)
+         cfg.offset -= (int32_t)(draw->vertex.raw_offset * info.start_stride);
       cfg.offset_enable = true;
       cfg.format = unpacked_desc.format;
    }
@@ -513,10 +1417,10 @@ panlib_draw_indirect_helper(
    *raw_vertex_offset_sysval = draw.vertex.raw_offset;
 }
 
-KERNEL(1)
-panlib_draw_indexed_indirect_helper(
+static void
+draw_indexed_indirect_body(
    global VkDrawIndexedIndirectCommand *cmd, global uint8_t *index_buffer_ptr,
-   global struct libpan_draw_helper_index_min_max_result *index_min_max_res,
+   uint32_t min_vertex, uint32_t max_vertex,
    uint32_t index_size, uint32_t primitive_vertex_count,
    uint32_t attrib_bufs_valid, uint32_t attribs_valid,
    global struct poly_heap *heap,
@@ -534,8 +1438,6 @@ panlib_draw_indexed_indirect_helper(
    const uint32_t first_instance = cmd->firstInstance;
    const uint32_t instance_count = cmd->instanceCount;
    const int32_t vertex_offset = cmd->vertexOffset;
-   const uint32_t min_vertex = index_min_max_res->min;
-   const uint32_t max_vertex = index_min_max_res->max;
    const uint32_t vertex_range = max_vertex - min_vertex + 1;
 
    struct panlib_draw_info draw = {
@@ -577,43 +1479,54 @@ panlib_draw_indexed_indirect_helper(
    *raw_vertex_offset_sysval = draw.vertex.raw_offset;
 }
 
-KERNEL(64)
-panlib_draw_index_minmax_search_helper(global uint8_t *index_buffer_ptr,
-                                       global VkDrawIndexedIndirectCommand *cmd,
-                                       global atomic_uint *min_ptr,
-                                       global atomic_uint *max_ptr,
-                                       uint32_t index_bytes_log2__3,
-                                       uint8_t primitive_restart__2)
+KERNEL(1)
+panlib_draw_indexed_indirect_helper(
+   global VkDrawIndexedIndirectCommand *cmd, global uint8_t *index_buffer_ptr,
+   global struct libpan_draw_helper_index_min_max_result *index_min_max_res,
+   uint32_t index_size, uint32_t primitive_vertex_count,
+   uint32_t attrib_bufs_valid, uint32_t attribs_valid,
+   global struct poly_heap *heap,
+   global struct mali_attribute_buffer_packed *varying_bufs_descs,
+   global struct mali_attribute_buffer_packed *attrib_bufs_descs,
+   global struct libpan_draw_helper_attrib_buf_info *attrib_bufs_infos,
+   global struct mali_attribute_packed *attribs_descs,
+   global struct libpan_draw_helper_attrib_info *attribs_infos,
+   global uint32_t *first_vertex_sysval, global uint32_t *first_instance_sysval,
+   global uint32_t *raw_vertex_offset_sysval, global uint8_t *idvs_job,
+   global uint8_t *vertex_job, global uint8_t *tiler_job)
 {
-   /* Max count of values to process per thread */
-   const uint32_t max_count_per_thread = 1024;
+   draw_indexed_indirect_body(
+      cmd, index_buffer_ptr, index_min_max_res->min, index_min_max_res->max,
+      index_size, primitive_vertex_count, attrib_bufs_valid, attribs_valid,
+      heap, varying_bufs_descs, attrib_bufs_descs,
+      attrib_bufs_infos, attribs_descs, attribs_infos, first_vertex_sysval,
+      first_instance_sysval, raw_vertex_offset_sysval, idvs_job, vertex_job,
+      tiler_job);
+}
 
-   const uint32_t index_bit_size = (1 << index_bytes_log2__3) * 8;
-   const uint32_t start = cmd->firstIndex;
-   const uint32_t index_count = cmd->indexCount;
-
-   uint32_t base_idx = cl_global_id.x * max_count_per_thread;
-
-   /* If the thread is out of range, bail out */
-   if (base_idx >= index_count)
-      return;
-
-   /* Compute expected max iteration to do in this thread */
-   uint32_t count = MIN2(max_count_per_thread, index_count - base_idx);
-
-   /* Sanity check so nothing weird will happen */
-   assert(base_idx + count <= index_count);
-
+/* jm-v7 096: index min/max, strided. Lane t of n reads indices t, t + n, ...
+ * so neighbouring lanes read neighbouring indices (the old kernel gave each
+ * thread 1024 consecutive indices: uncoalesced, and one thread for any draw
+ * under 1024 indices). Restart indices are skipped.
+ */
+static void
+index_minmax_strided(global uint8_t *index_buffer_ptr, uint32_t start,
+                     uint32_t count, uint32_t index_bytes_log2,
+                     bool primitive_restart, uint32_t lane, uint32_t nlanes,
+                     uint32_t *out_min, uint32_t *out_max)
+{
+   const uint32_t index_bit_size = (1 << index_bytes_log2) * 8;
    uint32_t local_min = ((uint64_t)1 << index_bit_size) - 1;
    uint32_t local_max = 0;
 
    switch (index_bit_size) {
 #define MINMAX_SEARCH_CASE(sz)                                                 \
    case sz: {                                                                  \
-      global uint##sz##_t *indices = (global uint##sz##_t *)index_buffer_ptr;  \
-      for (uint32_t i = 0; i < count; i++) {                                   \
-         uint32_t val = (uint32_t)indices[start + base_idx + i];               \
-         if (primitive_restart__2 && val == UINT##sz##_MAX)                    \
+      global uint##sz##_t *indices =                                           \
+         (global uint##sz##_t *)index_buffer_ptr + start;                      \
+      for (uint32_t i = lane; i < count; i += nlanes) {                        \
+         uint32_t val = (uint32_t)indices[i];                                  \
+         if (primitive_restart && val == UINT##sz##_MAX)                       \
             continue;                                                          \
          local_min = min(local_min, val);                                      \
          local_max = max(local_max, val);                                      \
@@ -628,7 +1541,1043 @@ panlib_draw_index_minmax_search_helper(global uint8_t *index_buffer_ptr,
       assert(0 && "Invalid index size");
    }
 
-   atomic_fetch_min(min_ptr, local_min);
-   atomic_fetch_max(max_ptr, local_max);
+   *out_min = local_min;
+   *out_max = local_max;
+}
+
+#define MINMAX_WG 64
+
+/* Workgroup min/max of every lane's (lmin, lmax), in tmin[0]/tmax[0]. */
+static void
+index_minmax_wg_reduce(local uint32_t *tmin, local uint32_t *tmax,
+                       uint32_t lmin, uint32_t lmax)
+{
+   const uint32_t tid = cl_local_id.x;
+   tmin[tid] = lmin;
+   tmax[tid] = lmax;
+   barrier(CLK_LOCAL_MEM_FENCE);
+   for (uint32_t s = MINMAX_WG / 2; s > 0; s >>= 1) {
+      if (tid < s) {
+         tmin[tid] = min(tmin[tid], tmin[tid + s]);
+         tmax[tid] = max(tmax[tid], tmax[tid + s]);
+      }
+      barrier(CLK_LOCAL_MEM_FENCE);
+   }
+}
+
+/* nthreads = the grid's workgroup count * MINMAX_WG. With one workgroup
+ * (single_wg__2), lane 0 stores the result itself and the caller needs no
+ * WRITE_VALUE job to initialise it; otherwise one atomic pair per
+ * workgroup into the initialised result.
+ */
+KERNEL(MINMAX_WG)
+panlib_draw_index_minmax_search_helper(global uint8_t *index_buffer_ptr,
+                                       global VkDrawIndexedIndirectCommand *cmd,
+                                       global atomic_uint *min_ptr,
+                                       global atomic_uint *max_ptr,
+                                       uint32_t nthreads,
+                                       uint32_t index_bytes_log2__3,
+                                       uint8_t primitive_restart__2,
+                                       uint8_t single_wg__2)
+{
+   local uint32_t tmin[MINMAX_WG];
+   local uint32_t tmax[MINMAX_WG];
+   uint32_t lmin, lmax;
+
+   index_minmax_strided(index_buffer_ptr, cmd->firstIndex, cmd->indexCount,
+                        index_bytes_log2__3, primitive_restart__2,
+                        cl_global_id.x, nthreads, &lmin, &lmax);
+   index_minmax_wg_reduce(tmin, tmax, lmin, lmax);
+
+   if (cl_local_id.x != 0)
+      return;
+
+   if (single_wg__2) {
+      *(global uint32_t *)min_ptr = tmin[0];
+      *(global uint32_t *)max_ptr = tmax[0];
+   } else {
+      atomic_fetch_min(min_ptr, tmin[0]);
+      atomic_fetch_max(max_ptr, tmax[0]);
+   }
+}
+
+/* jm-v7 096: a small direct indexed draw does its min/max search inside the
+ * indexed-indirect helper: one workgroup searches, lane 0 stores the result
+ * (other jobs of the draw read it, e.g. the geometry emulation) and patches
+ * the draw. One job instead of WRITE_VALUE + search + helper.
+ */
+KERNEL(MINMAX_WG)
+panlib_draw_indexed_indirect_minmax_helper(
+   global VkDrawIndexedIndirectCommand *cmd, global uint8_t *index_buffer_ptr,
+   global struct libpan_draw_helper_index_min_max_result *index_min_max_res,
+   uint32_t index_size, uint32_t primitive_vertex_count,
+   uint32_t attrib_bufs_valid, uint32_t attribs_valid,
+   global struct poly_heap *heap,
+   global struct mali_attribute_buffer_packed *varying_bufs_descs,
+   global struct mali_attribute_buffer_packed *attrib_bufs_descs,
+   global struct libpan_draw_helper_attrib_buf_info *attrib_bufs_infos,
+   global struct mali_attribute_packed *attribs_descs,
+   global struct libpan_draw_helper_attrib_info *attribs_infos,
+   global uint32_t *first_vertex_sysval, global uint32_t *first_instance_sysval,
+   global uint32_t *raw_vertex_offset_sysval, global uint8_t *idvs_job,
+   global uint8_t *vertex_job, global uint8_t *tiler_job,
+   uint32_t primitive_restart)
+{
+   local uint32_t tmin[MINMAX_WG];
+   local uint32_t tmax[MINMAX_WG];
+   uint32_t lmin, lmax;
+   const uint32_t log2_size = index_size == 4 ? 2 : index_size == 2 ? 1 : 0;
+
+   index_minmax_strided(index_buffer_ptr, cmd->firstIndex, cmd->indexCount,
+                        log2_size, primitive_restart != 0, cl_local_id.x,
+                        MINMAX_WG, &lmin, &lmax);
+   index_minmax_wg_reduce(tmin, tmax, lmin, lmax);
+
+   if (cl_local_id.x != 0)
+      return;
+
+   const uint32_t min_vertex = tmin[0];
+   const uint32_t max_vertex = tmax[0];
+   index_min_max_res->min = min_vertex;
+   index_min_max_res->max = max_vertex;
+
+   draw_indexed_indirect_body(
+      cmd, index_buffer_ptr, min_vertex, max_vertex, index_size,
+      primitive_vertex_count, attrib_bufs_valid, attribs_valid,
+      heap, varying_bufs_descs, attrib_bufs_descs,
+      attrib_bufs_infos, attribs_descs, attribs_infos, first_vertex_sysval,
+      first_instance_sysval, raw_vertex_offset_sysval, idvs_job, vertex_job,
+      tiler_job);
+}
+
+/* Transform feedback from the geometry shader emulation. Per invocation it
+ * left how many complete primitives it emitted and a staging record for
+ * every vertex slot. Capture order is draw order, which is invocation order:
+ * one thread turns the counts into each invocation's first primitive, fits
+ * the draw into the buffers and advances the write offsets. Every primitive
+ * of a draw is the same size, so the ones that fit are a prefix.
+ * Ported from JimVulkan (MIT, Copyright 2026 XclipseTools).
+ */
+KERNEL(1)
+panlib_xfb_scan(global struct libpan_xfb_draw *d)
+{
+   global uint32_t *counts = (global uint32_t *)d->counts;
+   global uint32_t *first = (global uint32_t *)d->first;
+   global uint32_t *off_in = (global uint32_t *)d->offsets_in;
+   global uint32_t *off_out = (global uint32_t *)d->offsets_out;
+
+   /* Conditional rendering failed (jm-v7 074): the emulation did not run,
+    * so its counts are garbage. Capture nothing, keep the offsets.
+    */
+   if (d->cond &&
+       ((*(global uint32_t *)d->cond != 0) == (d->cond_inverted != 0))) {
+      for (uint32_t b = 0; b < 4; b++) {
+         d->start[b] = off_in[b];
+         off_out[b] = off_in[b];
+      }
+      d->written = 0;
+      d->needed = 0;
+      return;
+   }
+
+   uint32_t total = 0;
+   for (uint32_t i = 0; i < d->invocations; i++) {
+      first[i] = total;
+      total += counts[i];
+   }
+
+   uint32_t fit = total;
+   for (uint32_t b = 0; b < 4; b++) {
+      const uint32_t o = off_in[b];
+      d->start[b] = o;
+      if (!d->stride[b])
+         continue;
+      const uint32_t room = d->size[b] > o ? d->size[b] - o : 0;
+      fit = min(fit, room / (d->stride[b] * d->vpp));
+   }
+
+   for (uint32_t b = 0; b < 4; b++)
+      off_out[b] = off_in[b] + fit * d->stride[b] * d->vpp;
+
+   d->written = fit;
+   d->needed = total;
+
+   /* VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {written, needed} after
+    * the two words the command stream would own (panvk_pstats_query_state
+    * layout). The scans of a command buffer are serialized.
+    */
+   if (d->query) {
+      global uint64_t *q = (global uint64_t *)d->query;
+      q[2] += fit;
+      q[3] += total;
+   }
+}
+
+/* One thread per emulation invocation: its primitives' vertices, record
+ * dword by record dword, to where the table says.
+ */
+KERNEL(64)
+panlib_xfb_copy(global struct libpan_xfb_draw *d)
+{
+   const uint32_t inv = cl_global_id.x;
+   if (inv >= d->invocations)
+      return;
+
+   const uint32_t p0 = ((global uint32_t *)d->first)[inv];
+   const uint32_t written = d->written;
+   if (p0 >= written)
+      return;
+
+   const uint32_t n = min(((global uint32_t *)d->counts)[inv], written - p0);
+   const uint32_t vpp = d->vpp;
+   const uint32_t k_dw = d->record_dwords;
+   global uint32_t *idx =
+      (global uint32_t *)d->indices + (uint64_t)inv * d->idx_per_invocation;
+   global uint32_t *staging = (global uint32_t *)d->staging;
+   global uint32_t *table = (global uint32_t *)d->table;
+
+   for (uint32_t p = 0; p < n; p++) {
+      for (uint32_t k = 0; k < vpp; k++) {
+         global uint32_t *rec = staging + (uint64_t)idx[p * vpp + k] * k_dw;
+         const uint64_t v = (uint64_t)(p0 + p) * vpp + k;
+
+         for (uint32_t j = 0; j < k_dw; j++) {
+            const uint32_t e = table[j];
+            const uint32_t b = e >> 16;
+            /* Another stream's buffer: not this pass's to write. */
+            if (!d->stride[b])
+               continue;
+            global uint32_t *dst =
+               (global uint32_t *)(d->buffer[b] + d->start[b] +
+                                   v * d->stride[b]);
+            dst[e & 0xffff] = rec[j];
+         }
+      }
+   }
+}
+
+/* vkCmdBegin/EndTransformFeedbackEXT with counter buffers: load the write
+ * offsets from them (load != 0, a missing counter starts at 0) or store the
+ * offsets into them.
+ */
+KERNEL(1)
+panlib_xfb_counters(global uint32_t *offsets, uint64_t c0, uint64_t c1,
+                    uint64_t c2, uint64_t c3, uint32_t load)
+{
+   const uint64_t c[4] = {c0, c1, c2, c3};
+
+   for (uint32_t b = 0; b < 4; b++) {
+      global uint32_t *counter = (global uint32_t *)c[b];
+      if (load)
+         offsets[b] = counter ? *counter : 0;
+      else if (counter)
+         *counter = offsets[b];
+   }
+}
+
+/* Tessellation (jm-v7 014), see struct panlib_v7_tess. src_draw is the
+ * Vk[Indexed]DrawIndirectCommand of the API draw: the patches are whole
+ * instances when they fit max_patches, else the first max_patches patches of
+ * the first instance. Sizes the tess control job, a NULL job when there is
+ * no patch.
+ */
+KERNEL(1)
+panlib_v7_tess_setup(global struct panlib_v7_tess *t,
+                     constant uint32_t *src_draw, global uint8_t *tcs_job)
+{
+   global struct poly_tess_params *p = &t->p;
+   uint32_t ps = max(t->input_patch_size, 1u);
+   uint32_t ppi = min(src_draw[0] / ps, t->max_patches);
+   uint32_t inst = ppi ? min(src_draw[1], t->max_patches / ppi) : 0;
+   uint32_t n = ppi * inst;
+
+   p->patches_per_instance = max(ppi, 1u);
+   p->nr_patches = n;
+   t->heap.bottom = 0;
+   t->draw[0] = 0;
+   t->draw[1] = 1;
+   t->draw[2] = 0;
+   t->draw[3] = 0;
+
+   panlib_patch_job_type_header((global struct mali_job_header_packed *)tcs_job,
+                                n ? MALI_JOB_TYPE_COMPUTE : MALI_JOB_TYPE_NULL);
+   if (n) {
+      pan_pack_work_groups_compute(
+         (global struct mali_invocation_packed *)(tcs_job +
+                                                  pan_section_offset(
+                                                     COMPUTE_JOB, INVOCATION)),
+         ppi, inst, 1, t->out_patch_size, 1, 1, false, false);
+   }
+}
+
+/* domain: 0 triangles, 1 quads, 2 isolines. Same as panlib_tessellate(). */
+KERNEL(64)
+panlib_v7_tessellate(constant struct poly_tess_params *p, uint32_t domain__3,
+                     uint32_t mode__2)
+{
+   uint32_t patch = cl_global_id.x;
+   enum poly_tess_mode mode = mode__2;
+
+   if (patch >= p->nr_patches)
+      return;
+
+   if (domain__3 == 0)
+      poly_tess_tri_process(p, patch, mode);
+   else if (domain__3 == 1)
+      poly_tess_quad_process(p, patch, mode);
+   else
+      poly_tess_isoline_process(p, patch, mode);
+
+   /* The tessellator emits clockwise triangles, swap two vertices of each
+    * one for the other winding (bit 0; POLY_TESS_CCW_INLINE: already
+    * swapped by the tessellator).
+    */
+   if (mode == POLY_TESS_MODE_WITH_COUNTS && (p->ccw & 1) && domain__3 != 2 &&
+       !p->points_mode) {
+      global uint32_t *idx = p->index_buffer;
+      uint32_t end = p->counts[patch];
+
+      for (uint32_t i = patch ? p->counts[patch - 1] : 0; i + 2 < end;
+           i += 3) {
+         uint32_t tmp = idx[i + 1];
+         idx[i + 1] = idx[i + 2];
+         idx[i + 2] = tmp;
+      }
+   }
+}
+
+/* Inclusive prefix sum of the per-patch index counts. Whole patches are kept
+ * while their indices fit max_indices and, with varying_info, the indirect
+ * varying buffer the tess eval draw allocates from. The tessellator then
+ * writes the kept patches only, and the tess eval draw covers them.
+ *
+ * jm-v7 027: one workgroup of TESS_PREFIX_WG invocations (it was serial, for
+ * at most 8192 patches): each invocation sums a run of patches, a workgroup
+ * scan gives each run its start, then each run writes its prefix and finds
+ * the first patch past the budget. Sums saturate at UINT32_MAX, the budget
+ * is far below it.
+ */
+#define TESS_PREFIX_WG 256
+
+static inline uint32_t
+tess_sat_add(uint32_t a, uint32_t b)
+{
+   return b > UINT32_MAX - a ? UINT32_MAX : a + b;
+}
+
+KERNEL(TESS_PREFIX_WG)
+panlib_v7_tess_prefix(global struct panlib_v7_tess *t)
+{
+   local uint32_t scan[TESS_PREFIX_WG];
+   local uint32_t cut[TESS_PREFIX_WG];
+   local uint32_t cut_sum[TESS_PREFIX_WG];
+   global struct poly_tess_params *p = &t->p;
+   const uint32_t tid = cl_local_id.x;
+   uint32_t budget = t->max_indices;
+
+   if (t->varying_info && t->varying_bytes) {
+      global struct poly_heap *vi =
+         (global struct poly_heap *)t->varying_info;
+      uint32_t used =
+         atomic_fetch_add_explicit((volatile global atomic_uint *)&vi->bottom,
+                                   0, memory_order_relaxed);
+      uint32_t left = vi->size > used + t->varying_margin
+                         ? vi->size - used - t->varying_margin
+                         : 0;
+      budget = min(budget, left / t->varying_bytes);
+   }
+
+   const uint32_t nr = p->nr_patches;
+   const uint32_t seg = (nr + TESS_PREFIX_WG - 1) / TESS_PREFIX_WG;
+   const uint32_t b = min(tid * seg, nr), e = min(b + seg, nr);
+
+   uint32_t own = 0;
+   for (uint32_t i = b; i < e; i++)
+      own = tess_sat_add(own, p->counts[i]);
+
+   /* Inclusive scan of the run sums. */
+   scan[tid] = own;
+   barrier(CLK_LOCAL_MEM_FENCE);
+   for (uint32_t o = 1; o < TESS_PREFIX_WG; o <<= 1) {
+      uint32_t v = tid >= o ? scan[tid - o] : 0;
+      barrier(CLK_LOCAL_MEM_FENCE);
+      scan[tid] = tess_sat_add(scan[tid], v);
+      barrier(CLK_LOCAL_MEM_FENCE);
+   }
+   const uint32_t total = scan[TESS_PREFIX_WG - 1];
+
+   /* The run's prefix, up to its first patch that does not fit. */
+   uint32_t sum = scan[tid] - own, my_cut = UINT32_MAX;
+   if (own == UINT32_MAX || scan[tid] == UINT32_MAX) {
+      /* Saturated: recount the start from the runs before. */
+      sum = 0;
+      for (uint32_t r = 0; r < tid; r++) {
+         uint32_t rb = min(r * seg, nr), re = min(rb + seg, nr);
+         for (uint32_t i = rb; i < re && sum <= budget; i++)
+            sum = tess_sat_add(sum, p->counts[i]);
+      }
+   }
+   for (uint32_t i = b; i < e; i++) {
+      uint32_t c = p->counts[i];
+      if (sum > budget || c > budget - sum) {
+         my_cut = i;
+         break;
+      }
+      sum += c;
+      p->counts[i] = sum;
+   }
+   cut[tid] = my_cut;
+   cut_sum[tid] = sum;
+   barrier(CLK_LOCAL_MEM_FENCE);
+
+   if (tid == 0) {
+      uint32_t n = nr, kept = total;
+      for (uint32_t r = 0; r < TESS_PREFIX_WG; r++) {
+         if (cut[r] != UINT32_MAX) {
+            n = cut[r];
+            kept = cut_sum[r];
+            break;
+         }
+      }
+      p->nr_patches = n;
+      t->draw[0] = kept;
+   }
+}
+
+/* Pipeline statistics on v6/v7 (jm-v7 016). The report of a query holds two
+ * u64 per enabled statistic; JM has no command stream, so only the second
+ * (shader) half is written, by these kernels, the geometry emulation and
+ * the FS invocation sum. 64-bit adds from 32-bit atomics, as on v9.
+ */
+static inline void
+v7_pstats_add(global uint32_t *counter, uint64_t value)
+{
+   uint32_t lo = value, hi = value >> 32;
+
+   if (!value)
+      return;
+
+   uint32_t old = atomic_fetch_add((global atomic_uint *)counter, lo);
+   hi += (uint32_t)(old + lo) < old;
+   if (hi)
+      atomic_fetch_add((global atomic_uint *)(counter + 1), hi);
+}
+
+static inline uint32_t
+v7_index_at(uint64_t index_buffer, uint32_t index_size_B, uint32_t i)
+{
+   if (index_size_B == 4)
+      return ((global uint32_t *)index_buffer)[i];
+   if (index_size_B == 2)
+      return ((global uint16_t *)index_buffer)[i];
+   return ((global uint8_t *)index_buffer)[i];
+}
+
+/* Primitives of an indexed draw with primitive restart, counted serially
+ * (Bifrost subgroups are too narrow for the v9 subgroup scan).
+ */
+static uint32_t
+v7_count_restart_prims(uint64_t index_buffer, uint32_t index_buffer_size_el,
+                       uint32_t index_size_B, uint32_t first, uint32_t count,
+                       uint32_t prim)
+{
+   const uint32_t restart_index =
+      index_size_B == 4 ? UINT32_MAX : (1u << (index_size_B * 8)) - 1;
+   uint32_t prims = 0, run = 0;
+
+   for (uint32_t i = 0; i < count; i++) {
+      const uint32_t at = first + i;
+      /* Out of range reads 0 (robustness), never a restart. */
+      const uint32_t v =
+         at < index_buffer_size_el
+            ? v7_index_at(index_buffer, index_size_B, at)
+            : 0;
+      if (v == restart_index) {
+         prims += u_decomposed_prims_for_vertices(prim, run);
+         run = 0;
+      } else {
+         run++;
+      }
+   }
+
+   return prims + u_decomposed_prims_for_vertices(prim, run);
+}
+
+/* One draw. cmd is a VkDraw[Indexed]IndirectCommand (the counts are the
+ * first two words, firstIndex the third). slots packs a 4-bit u64 slot per
+ * counter, 0xf when not counted: IA vertices, IA primitives, VS (or TES)
+ * invocations, clipping invocations, clipping primitives, TCS patches.
+ */
+KERNEL(1)
+panlib_v7_update_pstats_draw(global uint32_t *stats, uint32_t slots,
+                             constant uint32_t *cmd, uint64_t index_buffer,
+                             uint32_t index_buffer_size_el,
+                             uint32_t index_size_B, uint32_t restart,
+                             uint32_t prim, uint32_t view_count,
+                             uint32_t patch_size)
+{
+   const uint32_t count = cmd[0];
+   uint32_t prims;
+
+   if (prim == MESA_PRIM_PATCHES)
+      prims = count / max(patch_size, 1u);
+   else if (restart && index_size_B)
+      prims = v7_count_restart_prims(index_buffer, index_buffer_size_el,
+                                     index_size_B, cmd[2], count, prim);
+   else
+      prims = u_decomposed_prims_for_vertices(prim, count);
+
+   const uint64_t instances = (uint64_t)cmd[1] * view_count;
+   const uint64_t values[6] = {
+      count * instances, prims * instances, count * instances,
+      prims * instances, prims * instances, prims * instances,
+   };
+
+   for (uint32_t c = 0; c < 6; c++) {
+      const uint32_t slot = (slots >> (c * 4)) & 0xf;
+      if (slot != 0xf)
+         v7_pstats_add(stats + slot * 2, values[c]);
+   }
+}
+
+KERNEL(1)
+panlib_v7_update_pstats_dispatch(global uint32_t *counter,
+                                 constant uint32_t *cmd, uint32_t local_size)
+{
+   v7_pstats_add(counter, (uint64_t)cmd[0] * cmd[1] * cmd[2] * local_size);
+}
+
+/* The FS invocation counter borrowed the per-core occlusion counter: add
+ * its cores into the statistic.
+ */
+KERNEL(1)
+panlib_v7_pstats_sum_cores(global uint32_t *counter, constant uint64_t *cores,
+                           uint32_t core_count)
+{
+   uint64_t sum = 0;
+
+   for (uint32_t i = 0; i < core_count; i++)
+      sum += cores[i];
+   v7_pstats_add(counter, sum);
+}
+
+/* Position, within a restart-free run, of vertex i of primitive p, as the
+ * geometry emulation assembles it (gs_input_record()). topology is a
+ * PANVK_GS_TOPO_* (1 strip, 2 fan, 3 triangle strip with adjacency), ppi the
+ * run's primitive count.
+ */
+static uint32_t
+v7_gs_restart_seq(uint32_t topology, uint32_t vpp, uint32_t p, uint32_t i,
+                  uint32_t ppi)
+{
+   if (topology == 2)
+      return i == 2 ? 0 : p + i + 1;
+
+   if (topology == 3) {
+      const uint32_t p2 = 2 * p;
+      const uint32_t far = p + 1 == ppi ? p2 + 5 : p2 + 6;
+      if (p & 1) {
+         const uint32_t odd_v[6] = {p2 + 2, p2 - 2, p2, p2 + 3, p2 + 4, far};
+         return odd_v[i];
+      }
+      const uint32_t even_v[6] = {p2, p ? p2 - 2 : 1, p2 + 2, far, p2 + 4,
+                                  p2 + 3};
+      return even_v[i];
+   }
+
+   /* Strips: triangle strips take p, p+2, p+1 on odd p. */
+   if (vpp == 3 && (p & 1) && i)
+      return p + 3 - i;
+   return p + i;
+}
+
+static uint32_t
+v7_gs_restart_ppi(uint32_t topology, uint32_t vpp, uint32_t n)
+{
+   if (topology == 2)
+      return n >= 3 ? n - 2 : 0;
+   if (topology == 3)
+      return n >= 6 ? (n - 4) / 2 : 0;
+   return n >= vpp ? n - (vpp - 1) : 0;
+}
+
+/* Primitive restart for the geometry emulation (jm-v7 030): an indexed
+ * strip, fan or triangle strip with adjacency is cut into restart-free runs
+ * and each run's primitives are written as a 32-bit list, vpp indices per
+ * primitive, in draw order. out_cmd is the draw's VkDrawIndexedIndirectCommand
+ * over that list (firstIndex 0), so the emulation assembles a plain list and
+ * gl_PrimitiveIDIn counts the primitives actually assembled. At most
+ * max_prims primitives are kept. Serial: one thread walks the indices.
+ */
+KERNEL(1)
+panlib_v7_gs_restart_list(global uint32_t *out_idx, global uint32_t *out_cmd,
+                          constant uint32_t *cmd, uint64_t index_buffer,
+                          uint32_t index_buffer_size_el, uint32_t index_size_B,
+                          uint32_t topology, uint32_t vpp, uint32_t max_prims)
+{
+   const uint32_t restart_index =
+      index_size_B == 4 ? UINT32_MAX : (1u << (index_size_B * 8)) - 1;
+   const uint32_t count = cmd[0];
+   const uint32_t first = cmd[2];
+   uint32_t prims = 0;
+   uint32_t run_start = 0;
+
+   for (uint32_t i = 0; i <= count; i++) {
+      bool cut = i == count;
+      if (!cut) {
+         const uint32_t at = first + i;
+         /* Out of range reads 0 (robustness), never a restart. */
+         const uint32_t v =
+            at < index_buffer_size_el
+               ? v7_index_at(index_buffer, index_size_B, at)
+               : 0;
+         cut = v == restart_index;
+      }
+      if (!cut)
+         continue;
+
+      const uint32_t n = i - run_start;
+      const uint32_t ppi = v7_gs_restart_ppi(topology, vpp, n);
+      for (uint32_t p = 0; p < ppi && prims < max_prims; p++, prims++) {
+         for (uint32_t k = 0; k < vpp; k++) {
+            const uint32_t at =
+               first + run_start + v7_gs_restart_seq(topology, vpp, p, k, ppi);
+            out_idx[prims * vpp + k] =
+               at < index_buffer_size_el
+                  ? v7_index_at(index_buffer, index_size_B, at)
+                  : 0;
+         }
+      }
+      run_start = i + 1;
+   }
+
+   out_cmd[0] = prims * vpp;
+   out_cmd[1] = cmd[1];
+   out_cmd[2] = 0;
+   out_cmd[3] = cmd[3];
+   out_cmd[4] = cmd[4];
+}
+
+/* vertexPipelineStoresAndAtomics (jm-v7 046): the vertex job of an indexed
+ * draw shades the whole [min, max] index range. For a vertex shader that
+ * writes memory, these build the bitmap of the vertices the draw really
+ * references; panvk_v7_lower_vs_ref_guard() skips the stores and atomics of
+ * the others. Word 0 non-zero means every vertex is referenced (the range
+ * did not fit), bit i of word 1 + i / 32 is raw vertex id i (index - min).
+ */
+KERNEL(64)
+panlib_v7_vs_ref_clear(global uint32_t *bitmap, uint32_t words,
+                       global struct libpan_draw_helper_index_min_max_result *mm)
+{
+   const uint32_t i = cl_global_id.x;
+
+   if (i > words)
+      return;
+
+   /* jm-v7 080: runs after the min/max search, so only word 0 and the
+    * words of the [min, max] range the mark kernel and the VS can touch
+    * (the whole bitmap is 128 KB for 32-bit indices).
+    */
+   if (i > 0) {
+      const uint32_t lo = mm->min;
+      const uint32_t hi = mm->max;
+      if (hi < lo || (uint64_t)hi - lo >= (uint64_t)words * 32 ||
+          i - 1 > (hi - lo) / 32)
+         return;
+   }
+
+   bitmap[i] = 0;
+}
+
+KERNEL(64)
+panlib_v7_vs_ref_mark(global uint8_t *index_buffer_ptr,
+                      global VkDrawIndexedIndirectCommand *cmd,
+                      global struct libpan_draw_helper_index_min_max_result *mm,
+                      global atomic_uint *bitmap, uint32_t words,
+                      uint32_t index_bytes_log2__3,
+                      uint8_t primitive_restart__2)
+{
+   const uint32_t max_count_per_thread = 1024;
+   const uint32_t index_bit_size = (1 << index_bytes_log2__3) * 8;
+   const uint32_t start = cmd->firstIndex;
+   const uint32_t index_count = cmd->indexCount;
+   const uint32_t min_vertex = mm->min;
+   const uint32_t max_vertex = mm->max;
+
+   if (max_vertex < min_vertex ||
+       (uint64_t)max_vertex - min_vertex >= (uint64_t)words * 32) {
+      if (cl_global_id.x == 0)
+         atomic_fetch_or(&bitmap[0], 1u);
+      return;
+   }
+
+   const uint32_t base_idx = cl_global_id.x * max_count_per_thread;
+   if (base_idx >= index_count)
+      return;
+   const uint32_t count = MIN2(max_count_per_thread, index_count - base_idx);
+
+   switch (index_bit_size) {
+#define VS_REF_MARK_CASE(sz)                                                   \
+   case sz: {                                                                  \
+      global uint##sz##_t *indices = (global uint##sz##_t *)index_buffer_ptr;  \
+      /* jm-v7 080: one atomic per run of indices in the same word. */         \
+      uint32_t cur = UINT32_MAX, acc = 0;                                      \
+      for (uint32_t i = 0; i < count; i++) {                                   \
+         uint32_t val = (uint32_t)indices[start + base_idx + i];               \
+         if (primitive_restart__2 && val == UINT##sz##_MAX)                    \
+            continue;                                                          \
+         uint32_t rel = val - min_vertex;                                      \
+         if (rel / 32 != cur) {                                                \
+            if (acc)                                                           \
+               atomic_fetch_or(&bitmap[1 + cur], acc);                         \
+            cur = rel / 32;                                                    \
+            acc = 0;                                                           \
+         }                                                                     \
+         acc |= 1u << (rel % 32);                                              \
+      }                                                                        \
+      if (acc)                                                                 \
+         atomic_fetch_or(&bitmap[1 + cur], acc);                               \
+      break;                                                                   \
+   }
+      VS_REF_MARK_CASE(32)
+      VS_REF_MARK_CASE(16)
+      VS_REF_MARK_CASE(8)
+#undef VS_REF_MARK_CASE
+   default:
+      assert(0 && "Invalid index size");
+   }
+}
+
+#endif
+
+#if PAN_ARCH >= 6
+/* vkCmdDrawIndirectByteCountEXT: the VkDrawIndirectCommand. */
+KERNEL(1)
+panlib_xfb_byte_count_draw(constant uint32_t *counter, uint32_t counter_offset,
+                           uint32_t stride, uint32_t instance_count,
+                           uint32_t first_instance, global uint32_t *draw)
+{
+   uint32_t bytes = counter[0];
+
+   draw[0] = bytes > counter_offset && stride
+                ? (bytes - counter_offset) / stride
+                : 0;
+   draw[1] = instance_count;
+   draw[2] = 0;
+   draw[3] = first_instance;
+}
+#endif
+
+#if PAN_ARCH == 9
+KERNEL(1)
+panlib_v9_draw_indirect_patch(global uint32_t *cmd, global uint8_t *job,
+                              uint64_t index_base,
+                              global uint32_t *first_vertex_sysval,
+                              global uint32_t *base_instance_sysval,
+                              uint32_t index_size,
+                              global uint32_t *draw_count_buf,
+                              uint32_t draw_index, global uint8_t *vs_attribs,
+                              uint32_t inst_attr_mask,
+                              global uint32_t *inst_attr_info)
+{
+   const bool indexed = index_size != 0;
+   const uint32_t count = cmd[0];
+   const uint32_t instance_count = cmd[1];
+   const uint32_t first_index = indexed ? cmd[2] : 0;
+   const int32_t vertex_base = indexed ? (int32_t)cmd[3] : (int32_t)cmd[2];
+   const uint32_t first_instance = indexed ? cmd[4] : cmd[3];
+   /* vkCmdDraw*IndirectCount: draws at or past the GPU-side count become
+    * NULL jobs. draw_count_buf is NULL for vkCmdDraw*Indirect. */
+   const bool null_job = count == 0 || instance_count == 0 ||
+                         (draw_count_buf && draw_index >= *draw_count_buf);
+
+   global struct mali_job_header_packed *hdr =
+      (global struct mali_job_header_packed *)job;
+   pan_unpack(hdr, JOB_HEADER, unpacked_hdr)
+      ;
+   pan_pack(hdr, JOB_HEADER, cfg) {
+      memcpy(&cfg, &unpacked_hdr, sizeof(cfg));
+      cfg.type = null_job ? MALI_JOB_TYPE_NULL : MALI_JOB_TYPE_MALLOC_VERTEX;
+   }
+
+   if (null_job)
+      return;
+
+   global struct mali_primitive_packed *prim =
+      (global struct mali_primitive_packed *)(job +
+         pan_section_offset(MALLOC_VERTEX_JOB, PRIMITIVE));
+   pan_unpack(prim, PRIMITIVE, unpacked_prim)
+      ;
+   pan_pack(prim, PRIMITIVE, cfg) {
+      memcpy(&cfg, &unpacked_prim, sizeof(cfg));
+      cfg.index_count = count;
+      cfg.base_vertex_offset = vertex_base;
+   }
+
+   global struct mali_count_packed *ic =
+      (global struct mali_count_packed *)(job +
+         pan_section_offset(MALLOC_VERTEX_JOB, INSTANCE_COUNT));
+   pan_pack(ic, COUNT, cfg) {
+      cfg.count = instance_count;
+   }
+
+   if (indexed) {
+      global struct mali_indices_packed *ind =
+         (global struct mali_indices_packed *)(job +
+            pan_section_offset(MALLOC_VERTEX_JOB, INDICES));
+      pan_pack(ind, INDICES, cfg) {
+         cfg.address = index_base + (uint64_t)first_index * index_size;
+      }
+   }
+
+   if (first_vertex_sysval)
+      *first_vertex_sysval = vertex_base;
+   if (base_instance_sysval)
+      *base_instance_sysval = first_instance;
+
+   /* Valhall does not add firstInstance to instance-rate attribute fetches:
+    * the CPU folds it into the Attribute Offset (word 2) for direct draws.
+    * Here inst_attr_info holds {offset, stride, divisor} per attribute and
+    * the Offset is rewritten (not incremented) so a resubmitted command
+    * buffer gets the same value. The hardware divides only the 0-based
+    * instance, so firstInstance is added undivided (any divisor, even 0). */
+   for (uint32_t a = 0; a < 32; a++) {
+      if (!(inst_attr_mask & (1u << a)))
+         continue;
+      global uint32_t *ii = inst_attr_info + a * 3;
+      global int32_t *offset = (global int32_t *)(vs_attribs + a * 32 + 8);
+      *offset = (int32_t)(ii[0] + first_instance * ii[1]);
+   }
+}
+
+/* Transform feedback counters on JM, after Noysz/panvk-g99-jm 0060
+ * (xfb_helper.cl, MIT). CSF loads and stores them with command stream
+ * instructions. Bit i of mask selects buffer i, src/dst are u32[4] counter
+ * addresses (0 = not given). */
+KERNEL(1)
+panlib_v9_xfb_begin(global uint32_t *offsets, uint32_t mask,
+                    global uint32_t *src0, global uint32_t *src1,
+                    global uint32_t *src2, global uint32_t *src3)
+{
+   offsets[0] = (mask & 1) ? *src0 : 0;
+   offsets[1] = (mask & 2) ? *src1 : 0;
+   offsets[2] = (mask & 4) ? *src2 : 0;
+   offsets[3] = (mask & 8) ? *src3 : 0;
+}
+
+KERNEL(1)
+panlib_v9_xfb_end(global uint32_t *offsets, uint32_t mask,
+                  global uint32_t *dst0, global uint32_t *dst1,
+                  global uint32_t *dst2, global uint32_t *dst3)
+{
+   if (mask & 1)
+      *dst0 = offsets[0];
+   if (mask & 2)
+      *dst1 = offsets[1];
+   if (mask & 4)
+      *dst2 = offsets[2];
+   if (mask & 8)
+      *dst3 = offsets[3];
+}
+
+static void
+v9_patch_compute_job(global uint8_t *job, bool null_job, uint32_t x,
+                     uint32_t y, uint32_t z)
+{
+   global struct mali_job_header_packed *hdr =
+      (global struct mali_job_header_packed *)job;
+   pan_unpack(hdr, JOB_HEADER, unpacked_hdr)
+      ;
+   pan_pack(hdr, JOB_HEADER, cfg) {
+      memcpy(&cfg, &unpacked_hdr, sizeof(cfg));
+      cfg.type = null_job ? MALI_JOB_TYPE_NULL : MALI_JOB_TYPE_COMPUTE;
+   }
+
+   if (null_job)
+      return;
+
+   global struct mali_compute_payload_packed *payload =
+      (global struct mali_compute_payload_packed *)(job +
+         pan_section_offset(COMPUTE_JOB, PAYLOAD));
+   pan_unpack(payload, COMPUTE_PAYLOAD, unpacked_payload);
+   pan_pack(payload, COMPUTE_PAYLOAD, cfg) {
+      memcpy(&cfg, &unpacked_payload, sizeof(cfg));
+      cfg.workgroup_count_x = x;
+      cfg.workgroup_count_y = y;
+      cfg.workgroup_count_z = z;
+   }
+}
+
+/* Indirect draws through gpu_prerast on v9 JM: the cs loads and stores CSF
+ * gpu_prerast_vs()/gpu_prerast_gs_run() do before their dispatches. Reads
+ * one VkDraw(Indexed)IndirectCommand, fills the draw params, sizes the
+ * lowered VS (and GS kernel) COMPUTE jobs, sets the VS first vertex and base
+ * instance sysvals and writes the generated draw. A draw past the indirect
+ * count, empty, or over the record capacity becomes NULL jobs and an empty
+ * generated draw.
+ * Chunkable topologies come here one panlib_chunk_step() chunk at a time,
+ * see v9_prerast_chunked(); the others over the capacity are dropped. */
+KERNEL(1)
+panlib_v9_prerast_indirect(constant struct panlib_v9_prerast_patch *a)
+{
+   global uint32_t *cmd = (global uint32_t *)a->cmd;
+   global uint32_t *draw_count = (global uint32_t *)a->draw_count;
+   const uint32_t count = cmd[0];
+   const uint32_t instance_count = cmd[1];
+   const uint32_t first_index = a->indexed ? cmd[2] : 0;
+   const int32_t vertex_base = a->indexed ? (int32_t)cmd[3] : (int32_t)cmd[2];
+   const uint32_t first_instance = a->indexed ? cmd[4] : cmd[3];
+   const bool null_job =
+      count == 0 || instance_count == 0 ||
+      (draw_count && a->draw_index >= *draw_count) ||
+      (uint64_t)count * instance_count > a->capacity;
+   const uint32_t n = null_job ? 0 : count;
+   const uint32_t inst = null_job ? 0 : instance_count;
+
+   global uint32_t *counts = (global uint32_t *)a->counts;
+   counts[0] = n;
+   counts[1] = inst;
+   counts[2] = first_instance;
+   counts[5] = first_index;
+   if (a->chunk) {
+      global uint32_t *chunk = (global uint32_t *)a->chunk;
+      counts[8] = chunk[0];
+      counts[9] = chunk[1];
+   }
+   *(global uint32_t *)a->verts_per_instance = n;
+
+   v9_patch_compute_job((global uint8_t *)a->vs_job, null_job, n, inst, 1);
+   if (a->gs_job) {
+      global uint32_t *gs_counts = (global uint32_t *)a->gs_counts;
+      gs_counts[0] = n;
+      gs_counts[1] = inst;
+      v9_patch_compute_job((global uint8_t *)a->gs_job, null_job, n, inst,
+                           a->gs_invocations);
+   }
+
+   if (a->gen_draw) {
+      global uint32_t *gen = (global uint32_t *)a->gen_draw;
+      gen[0] = n;
+      gen[1] = inst;
+      gen[2] = 0;
+      gen[3] = 0;
+      gen[4] = first_instance;
+   }
+
+   if (null_job)
+      return;
+
+   if (a->first_vertex_sysval)
+      *(global int32_t *)a->first_vertex_sysval = vertex_base;
+   if (a->base_instance_sysval)
+      *(global uint32_t *)a->base_instance_sysval = first_instance;
+
+   /* Same Attribute Offset rewrite as panlib_v9_draw_indirect_patch(). */
+   global uint32_t *info = (global uint32_t *)a->inst_attr_info;
+   global uint8_t *attribs = (global uint8_t *)a->vs_attribs;
+   for (uint32_t i = 0; i < 32; i++) {
+      if (!(a->inst_attr_mask & (1u << i)))
+         continue;
+      global uint32_t *ii = info + i * 3;
+      global int32_t *offset = (global int32_t *)(attribs + i * 32 + 8);
+      *offset = (int32_t)(ii[0] + first_instance * ii[1]);
+   }
+}
+
+/* Sizes a COMPUTE job from the {x, y, z} workgroup counts an earlier job
+ * wrote, a NULL job when one is 0: the JM form of an indirect dispatch. */
+KERNEL(1)
+panlib_v9_compute_job_grid(global uint8_t *job, constant uint32_t *grid)
+{
+   v9_patch_compute_job(job, !grid[0] || !grid[1] || !grid[2], grid[0],
+                        grid[1], grid[2]);
+}
+
+KERNEL(1)
+panlib_v9_copy32(global uint32_t *dst, constant uint32_t *src)
+{
+   *dst = *src;
+}
+
+/* Multi-viewport draws on v9 JM. CSF draws the viewport runs of
+ * panlib_vp_runs() in a command stream loop, each with its viewport's depth
+ * clamp. JM has a fixed job chain: the runs of each viewport are packed
+ * together here and drawn with one indexed draw per viewport, draws[5 * v],
+ * a NULL job when empty. Primitive order holds within a viewport, not across
+ * viewports (ponytail: overlapping viewports with blending see viewport
+ * order). merged: all viewports share one depth range, a single draw over
+ * the run indices keeps the order.
+ */
+KERNEL(1)
+panlib_v9_vp_partition(global const struct panlib_vp_run_header *header,
+                       global const uint32_t *run_indices,
+                       global uint32_t *out_indices, global uint32_t *draws,
+                       uint32_t viewport_count, uint32_t merged)
+{
+   global const struct panlib_vp_run *runs =
+      (global const struct panlib_vp_run *)(header + 1);
+   const uint32_t n = header->overflow ? 0 : header->run_count;
+   const uint32_t count = merged ? 1 : clamp(viewport_count, 1u,
+                                             PANLIB_VP_MAX_VIEWPORTS);
+   uint32_t first = 0;
+
+   for (uint32_t v = 0; v < count; v++) {
+      uint32_t k = 0;
+
+      if (merged) {
+         k = header->overflow ? 0 : header->index_count;
+      } else {
+         for (uint32_t r = 0; r < n; r++) {
+            if (runs[r].viewport != v)
+               continue;
+            for (uint32_t i = 0; i < runs[r].index_count; i++)
+               out_indices[first + k + i] =
+                  run_indices[runs[r].first_index + i];
+            k += runs[r].index_count;
+         }
+      }
+
+      global uint32_t *d = draws + v * 5;
+      d[0] = k;
+      d[1] = 1;
+      d[2] = first;
+      d[3] = 0;
+      d[4] = 0;
+      first += k;
+   }
+}
+
+#endif /* PAN_ARCH == 9 */
+
+/* JM (v6/v7/v9) */
+#if PAN_ARCH <= 9
+/* VK_EXT_conditional_rendering on JM (v6/v7/v9): queued before the jobs of a draw or
+ * dispatch recorded inside a conditional rendering block. *list_ptr points
+ * to { count, (job header address, recorded job type) x count }. Each job
+ * gets its recorded type back when the predicate passes, so a resubmitted
+ * command buffer is right whatever the previous run did, and a NULL type
+ * when it fails. */
+KERNEL(1)
+panlib_v9_cond_render(global uint32_t *pred, uint32_t inverted,
+                      global uint64_t *list_ptr)
+{
+   const bool run = (*pred != 0) != (inverted != 0);
+   global uint64_t *list = (global uint64_t *)*list_ptr;
+   if (!list)
+      return;
+
+   const uint64_t count = list[0];
+
+   for (uint64_t i = 0; i < count; i++) {
+      global struct mali_job_header_packed *hdr =
+         (global struct mali_job_header_packed *)list[1 + 2 * i];
+      pan_unpack(hdr, JOB_HEADER, unpacked_hdr)
+         ;
+      pan_pack(hdr, JOB_HEADER, cfg) {
+         memcpy(&cfg, &unpacked_hdr, sizeof(cfg));
+         cfg.type = run ? (enum mali_job_type)list[2 + 2 * i]
+                        : MALI_JOB_TYPE_NULL;
+      }
+   }
 }
 #endif
