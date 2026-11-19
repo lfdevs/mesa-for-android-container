@@ -65,7 +65,7 @@ struct mesa_trace_flow {
  *
  *   https://github.com/android/ndk/issues/1178
  */
-#elif DETECT_OS_ANDROID && !defined(__cplusplus)
+#elif defined(HAVE_ANDROID_PLATFORM) && DETECT_OS_ANDROID && !defined(__cplusplus)
 
 #include <cutils/trace.h>
 
@@ -250,7 +250,7 @@ util_cpu_trace_init()
 {
 #if defined(HAVE_PERFETTO)
    util_perfetto_init();
-#elif DETECT_OS_ANDROID && !defined(__cplusplus)
+#elif defined(HAVE_ANDROID_PLATFORM) && DETECT_OS_ANDROID && !defined(__cplusplus)
    atrace_init();
 #endif /* HAVE_PERFETTO */
 
