@@ -55,7 +55,7 @@
 #endif
 
 
-#if DETECT_OS_ANDROID
+#if defined(HAVE_ANDROID_PLATFORM) && DETECT_OS_ANDROID
 #  define LOG_TAG "MESA"
 #  include <unistd.h>
 #  include <android/log.h>
@@ -135,13 +135,13 @@ os_log_message(const char *message)
    fflush(stdout);
    fputs(message, fout);
    fflush(fout);
-#  if DETECT_OS_ANDROID
+#  if defined(HAVE_ANDROID_PLATFORM) && DETECT_OS_ANDROID
    __android_log_write(ANDROID_LOG_ERROR, LOG_TAG, message);
 #  endif
 #endif
 }
 
-#if DETECT_OS_ANDROID
+#if defined(HAVE_ANDROID_PLATFORM) && DETECT_OS_ANDROID
 #  include <ctype.h>
 #  include "c11/threads.h"
 
@@ -245,7 +245,7 @@ os_get_option_internal(const char *name, bool use_secure_getenv)
    } else {
       opt = getenv(name);
    }
-#if DETECT_OS_ANDROID
+#if defined(HAVE_ANDROID_PLATFORM) && DETECT_OS_ANDROID
    if (!opt) {
       opt = os_get_android_option(name);
    }

@@ -200,6 +200,10 @@ os_read_file(const char *filename, size_t *size)
    return buf;
 }
 
+#if DETECT_OS_LINUX
+#include <sys/epoll.h>
+#endif
+
 #if (DETECT_OS_LINUX || DETECT_OS_FREEBSD) && ALLOW_KCMP
 
 #include <sys/syscall.h>
