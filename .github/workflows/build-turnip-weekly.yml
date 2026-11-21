@@ -1165,7 +1165,7 @@ jobs:
           }
           
           retry 5 30 xbps-install -Syu
-          retry 5 30 xbps-install -y bash base-devel git ccache meson ninja pkg-config python3 flex bison libdrm-devel libX11-devel libxcb-devel libxshmfence-devel wayland-devel wayland-protocols zlib-devel expat-devel llvm18-devel clang18 libxml2-devel libarchive-devel python3-Mako python3-packaging python3-yaml python3-ply libffi-devel libzstd-devel glslang
+          retry 5 30 xbps-install -y bash base-devel git ccache meson ninja pkg-config python3 flex bison libdrm-devel libX11-devel libxcb-devel libxshmfence-devel wayland-devel wayland-protocols zlib-devel expat-devel llvm22-devel SPIRV-LLVM-Translator22-devel SPIRV-Tools-devel libxml2-devel libarchive-devel python3-Mako python3-packaging python3-yaml python3-ply libffi-devel libzstd-devel glslang
 
       - name: Cache ccache
         uses: actions/cache@v6
@@ -1768,7 +1768,7 @@ jobs:
         run: |
           zypper modifyrepo -e repo-source
           zypper --non-interactive refresh
-          zypper --non-interactive install --auto-agree-with-licenses gcc gcc-c++ git ccache llvm-devel libarchive-devel python3 tar gzip findutils
+          zypper --non-interactive install --auto-agree-with-licenses gcc gcc-c++ git ccache llvm-devel clang-devel libLLVMSPIRVLib-devel libarchive-devel libxml2-devel python3 tar gzip findutils
           PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor}")')
           zypper --non-interactive install "python${PYTHON_VERSION}-packaging"
           zypper --non-interactive source-install --build-deps-only Mesa
