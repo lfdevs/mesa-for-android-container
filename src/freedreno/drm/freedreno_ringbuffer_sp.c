@@ -201,6 +201,9 @@ fd_submit_sp_flush_prep(struct fd_submit *submit, int in_fence_fd,
 {
    struct fd_submit_sp *fd_submit = to_fd_submit_sp(submit);
    bool has_shared = false;
+   unsigned shared_flags = FD_BO_SHARED;
+   if (submit->dev->features & FD_FEATURE_KGSL_SHARED_BO_SYNC)
+      shared_flags |= FD_BO_SCANOUT;
 
    finalize_current_cmd(submit->primary);
 
@@ -215,7 +218,7 @@ fd_submit_sp_flush_prep(struct fd_submit *submit, int in_fence_fd,
    simple_mtx_lock(&fence_lock);
    for (unsigned i = 0; i < fd_submit->nr_bos; i++) {
       fd_bo_add_fence(fd_submit->bos[i], out_fence);
-      has_shared |= fd_submit->bos[i]->alloc_flags & FD_BO_SHARED;
+      has_shared |= fd_submit->bos[i]->alloc_flags & shared_flags;
    }
    for (unsigned i = 0; i < fd_submit->nr_suballoc_bos; i++) {
       fd_bo_add_fence(fd_submit->suballoc_bos[i], out_fence);
@@ -328,8 +331,10 @@ should_defer(struct fd_submit *submit)
 static struct fd_fence *
 fd_submit_sp_flush(struct fd_submit *submit, int in_fence_fd, bool use_fence_fd)
 {
+   struct fd_submit_sp *fd_submit = to_fd_submit_sp(submit);
    struct fd_device *dev = submit->pipe->dev;
    struct fd_pipe *pipe = submit->pipe;
+   const bool sync_shared_bos = dev->features & FD_FEATURE_KGSL_SHARED_BO_SYNC;
 
    MESA_TRACE_FUNC();
 
@@ -360,7 +365,12 @@ fd_submit_sp_flush(struct fd_submit *submit, int in_fence_fd, bool use_fence_fd)
 
    bool has_shared = fd_submit_sp_flush_prep(submit, in_fence_fd, out_fence);
 
-   if (((in_fence_fd != -1) || out_fence->use_fence_fd) && !dev->disable_explicit_sync_heuristic)
+   /* A compositor can export an explicit fence for its output while still
+    * sampling Wayland client buffers that use implicit sync.
+    */
+   bool explicit_sync = in_fence_fd != -1 ||
+                        (out_fence->use_fence_fd && !sync_shared_bos);
+   if (explicit_sync && !dev->disable_explicit_sync_heuristic)
       pipe->no_implicit_sync = true;
 
    /* The rule about skipping submit merging with shared buffers is only
@@ -368,6 +378,8 @@ fd_submit_sp_flush(struct fd_submit *submit, int in_fence_fd, bool use_fence_fd)
     */
    if (pipe->no_implicit_sync)
       has_shared = false;
+
+   fd_submit->wait_shared_bos = has_shared && sync_shared_bos;
 
    assert(fd_fence_before(pipe->last_enqueue_fence, submit->fence));
    pipe->last_enqueue_fence = submit->fence;

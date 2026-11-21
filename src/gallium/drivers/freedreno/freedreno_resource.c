@@ -691,10 +691,13 @@ fd_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 
    flush_resource(ctx, rsc, PIPE_MAP_READ);
 
-   /* If we had to flush a batch, make sure it makes it's way all the
-    * way to the kernel:
+   /* KGSL does not publish a reservation fence. On A740 v2, wait at
+    * the implicit buffer handoff so rendering batches and explicit
+    * fence export can still proceed asynchronously.
     */
-   fd_resource_wait(ctx, rsc, FD_BO_PREP_FLUSH);
+   const bool sync_shared_bos =
+      fd_get_features(ctx->screen->dev) & FD_FEATURE_KGSL_SHARED_BO_SYNC;
+   fd_resource_wait(ctx, rsc, sync_shared_bos ? FD_BO_PREP_READ : FD_BO_PREP_FLUSH);
 }
 
 static void

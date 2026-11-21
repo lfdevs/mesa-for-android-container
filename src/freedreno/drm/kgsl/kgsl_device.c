@@ -29,6 +29,11 @@ kgsl_device_new(int fd)
     dev->fd = fd;
     dev->version = FD_VERSION_ROBUSTNESS;
     dev->features = FD_FEATURE_DIRECT_RESET | FD_FEATURE_IMPORT_DMABUF;
+    /* The A740 v2 Android container stack uses implicit dma-buf sync for
+     * window buffers, while KGSL only accepts explicit submit fences.
+     */
+    if (info.chip_id == 0x43050a01)
+        dev->features |= FD_FEATURE_KGSL_SHARED_BO_SYNC;
 
     /* async submit_queue used for softpin deffered submits */
     util_queue_init(&dev->submit_queue, "sq", 8, 1, 0, NULL);

@@ -82,6 +82,8 @@ fd_dev_info(const struct fd_dev_id *id)
    const struct fd_dev_info *orig = fd_dev_info_raw(id);
    if (orig) {
       modified = *orig;
+      if ((uint32_t)id->chip_id == 0x43050a01)
+         modified.props.enable_tp_ubwc_flag_hint = true;
       fd_dev_info_apply_dbg_options(&modified);
    }
 

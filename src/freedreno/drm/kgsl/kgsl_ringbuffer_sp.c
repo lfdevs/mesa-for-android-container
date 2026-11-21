@@ -27,8 +27,11 @@ flush_submit_list(struct list_head *submit_list)
     struct fd_submit_sp *fd_submit = to_fd_submit_sp(last_submit(submit_list));
     struct fd_pipe *pipe = fd_submit->base.pipe;
     struct kgsl_pipe *kgsl_pipe = to_kgsl_pipe(pipe);
+    const bool keep_deferred_submits =
+        pipe->dev->features & FD_FEATURE_KGSL_SHARED_BO_SYNC;
+    bool close_in_fence = keep_deferred_submits;
     unsigned nr_cmds = 0;
-
+    int ret;
 
     MESA_TRACE_FUNC();
 
@@ -55,13 +58,28 @@ flush_submit_list(struct list_head *submit_list)
             };
         }
 
-        if (submit == last_submit(submit_list)) {
-            DEBUG_MSG("merged %u submits", cmd_idx);
-            break;
+        if (!keep_deferred_submits && submit != &fd_submit->base) {
+            list_del(&submit->node);
+            fd_submit_del(submit);
         }
+    }
+    DEBUG_MSG("merged %u submits", cmd_idx);
 
-        list_del(&submit->node);
-        fd_submit_del(submit);
+    if (fd_submit->wait_shared_bos) {
+        for (unsigned i = 0; i < fd_submit->nr_bos; i++) {
+            struct fd_bo *bo = fd_submit->bos[i];
+            if (!(bo->alloc_flags & (FD_BO_SHARED | FD_BO_SCANOUT)))
+                continue;
+
+            /* The submit BO table does not track access per submit. Wait
+             * for both readers and writers before accessing a shared BO.
+             */
+            ret = kgsl_bo_wait_dmabuf(bo, FD_BO_PREP_WRITE);
+            if (ret) {
+                ERROR_MSG("dma-buf wait failed (%s)", strerror(-ret));
+                goto out;
+            }
+        }
     }
 
     struct kgsl_cmd_syncpoint_fence sync_fence = {
@@ -86,29 +104,45 @@ flush_submit_list(struct list_head *submit_list)
         .numsyncs = sync_fence.fd != -1 ? 1 : 0,
     };
 
-    int ret = kgsl_pipe_safe_ioctl(pipe->dev->fd, IOCTL_KGSL_GPU_COMMAND, &req);
+    ret = kgsl_pipe_safe_ioctl(pipe->dev->fd, IOCTL_KGSL_GPU_COMMAND, &req);
 
     if (ret) {
         ERROR_MSG("submit failed %d (%s)", ret, strerror(errno));
-        goto fail;
+        goto out;
     }
 
     fd_submit->out_fence->kfence = req.timestamp;
 
-    if  (fd_submit->out_fence->use_fence_fd) {
+    if (fd_submit->out_fence->use_fence_fd) {
         int fd = timestamp_to_fd(pipe, req.timestamp);
         if (fd < 0) {
+            if (keep_deferred_submits)
+                ret = -errno;
             ERROR_MSG("Failed to create sync file for timestamp (%s)", strerror(errno));
-            goto fail;
+            goto out;
         }
 
         fd_submit->out_fence->fence_fd = fd;
     }
+    close_in_fence = true;
 
-    if (fd_submit->in_fence_fd != -1)
+out:
+    if (close_in_fence && fd_submit->in_fence_fd != -1)
         close(fd_submit->in_fence_fd);
 
-fail:
+    if (keep_deferred_submits) {
+        /* Keep A740 v2 BO references until KGSL has the command list and
+         * their shared fence has a kernel timestamp to wait on.
+         */
+        foreach_submit_safe (submit, submit_list) {
+            if (submit == last_submit(submit_list))
+                break;
+
+            list_del(&submit->node);
+            fd_submit_del(submit);
+        }
+    }
+
     return ret;
 }
 
