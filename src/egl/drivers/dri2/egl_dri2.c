@@ -1331,12 +1331,18 @@ dri2_create_context(_EGLDisplay *disp, _EGLConfig *conf,
       goto cleanup;
 
    if (disp->Platform == _EGL_PLATFORM_WAYLAND) {
-      /* Native Wayland has no X11 Present wait-fence bridge. Keep its
-       * pre-bridge default, with the same environment override as DRI3.
-       * This is a context policy, so later attachment flushes agree too.
+      const char *renderer = NULL;
+      const bool is_kgsl_fd740 =
+         dri2_dpy->driver_name && strcmp(dri2_dpy->driver_name, "kgsl") == 0 &&
+         dri_query_renderer_string(dri2_dpy->dri_screen_render_gpu,
+                                   __DRI2_RENDERER_DEVICE_ID, &renderer) == 0 &&
+         renderer && strcmp(renderer, "FD740") == 0;
+
+      /* Wait for FD740 rendering before handing its dma-buf to an
+       * implicit-sync Wayland compositor.
        */
       dri_disable_present_wait_fence(dri2_ctx->dri_context,
-         debug_get_bool_option("MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE", true));
+         debug_get_bool_option("MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE", !is_kgsl_fd740));
    }
 
    mtx_unlock(&dri2_dpy->lock);
