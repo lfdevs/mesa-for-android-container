@@ -55,5 +55,6 @@ struct fd_bo *kgsl_bo_new(struct fd_device *dev, uint32_t size, uint32_t flags);
 struct fd_bo *kgsl_bo_from_dmabuf(struct fd_device *dev, int fd);
 struct fd_bo *kgsl_bo_from_handle(struct fd_device *dev, uint32_t size, uint32_t handle);
 void kgsl_bo_close_handle(struct fd_bo *bo);
+int kgsl_bo_wait_dmabuf(struct fd_bo *bo, uint32_t op);
 
 #endif

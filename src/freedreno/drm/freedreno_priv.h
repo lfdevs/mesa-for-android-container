@@ -455,6 +455,15 @@ struct fd_bo_funcs {
    int (*get_metadata)(struct fd_bo *bo, void *metadata, uint32_t metadata_size);
 };
 
+static inline bool
+fd_bo_may_be_shared(const struct fd_bo *bo)
+{
+   /* KGSL also allocates scanout-only BOs through dma-buf. */
+   return (bo->alloc_flags & FD_BO_SHARED) ||
+          ((bo->alloc_flags & FD_BO_SCANOUT) &&
+           (bo->dev->features & FD_FEATURE_KGSL));
+}
+
 void fd_bo_add_fence(struct fd_bo *bo, struct fd_fence *fence);
 void *fd_bo_map_os_mmap(struct fd_bo *bo);
 void *__fd_bo_map(struct fd_bo *bo);

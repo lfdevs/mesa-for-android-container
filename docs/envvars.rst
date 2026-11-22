@@ -1084,10 +1084,10 @@ DRI environment variables
 .. envvar:: MESA_DRI3_DISABLE_PRESENT_WAIT_FENCE
 
    Controls the X11 Present wait-fence bridge and the shared KGSL
-   presentation-completion wait. For native Wayland EGL contexts the
-   default is ``true``, restoring the earlier nonblocking presentation
-   behavior. For X11 contexts, including XWayland and Termux:X11, the
-   default is ``false``, preserving the Present wait-fence bridge.
+   presentation-completion wait. The default is ``false`` for native
+   Wayland EGL contexts using KGSL on Adreno 740 (Snapdragon 8 Gen 2)
+   and for X11 contexts, including Xwayland and Termux:X11. Other
+   native Wayland EGL contexts default to ``true``.
 
    Set ``1`` to disable both presentation mechanisms, or ``0`` to keep
    them enabled, including the conservative KGSL completion wait on

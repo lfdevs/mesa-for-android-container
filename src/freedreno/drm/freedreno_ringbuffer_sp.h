@@ -60,6 +60,7 @@ struct fd_submit_sp {
     */
    int in_fence_fd;
    struct fd_fence *out_fence;
+   bool wait_shared_bos;
 
    /* State for enqueued submits:
     */
