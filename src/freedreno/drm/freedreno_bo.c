@@ -702,8 +702,10 @@ int
 fd_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
 {
    enum fd_bo_state state = fd_bo_state(bo);
+   const bool may_be_shared = fd_bo_may_be_shared(bo);
 
-   if (state == FD_BO_STATE_IDLE)
+   /* Idle in Mesa does not rule out an external fence on a shared BO. */
+   if (state == FD_BO_STATE_IDLE && (!may_be_shared || op == FD_BO_PREP_FLUSH))
       return 0;
 
    MESA_TRACE_FUNC();
@@ -752,10 +754,8 @@ fd_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
    /* expire completed fences */
    fd_bo_state(bo);
 
-   /* None shared buffers will not have any external usage (ie. fences
-    * that we are not aware of) so nothing more to do.
-    */
-   if (!(bo->alloc_flags & FD_BO_SHARED))
+   /* Only shared BOs may have fences from other users of the buffer. */
+   if (!may_be_shared)
       return 0;
 
    /* If buffer is shared, but we are using explicit sync, no need to

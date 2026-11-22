@@ -28,7 +28,7 @@ flush_submit_list(struct list_head *submit_list)
     struct fd_pipe *pipe = fd_submit->base.pipe;
     struct kgsl_pipe *kgsl_pipe = to_kgsl_pipe(pipe);
     unsigned nr_cmds = 0;
-
+    int ret;
 
     MESA_TRACE_FUNC();
 
@@ -61,6 +61,23 @@ flush_submit_list(struct list_head *submit_list)
         }
     }
 
+    if (fd_submit->wait_shared_bos) {
+        for (unsigned i = 0; i < fd_submit->nr_bos; i++) {
+            struct fd_bo *bo = fd_submit->bos[i];
+            if (!fd_bo_may_be_shared(bo))
+                continue;
+
+            /* The BO table has no access flags. Wait for both readers and
+             * writers before submitting commands that use a shared BO.
+             */
+            ret = kgsl_bo_wait_dmabuf(bo, FD_BO_PREP_WRITE);
+            if (ret) {
+                ERROR_MSG("dma-buf wait failed (%s)", strerror(-ret));
+                goto out;
+            }
+        }
+    }
+
     struct kgsl_cmd_syncpoint_fence sync_fence = {
         .fd = fd_submit->in_fence_fd,
     };
@@ -83,29 +100,32 @@ flush_submit_list(struct list_head *submit_list)
         .numsyncs = sync_fence.fd != -1 ? 1 : 0,
     };
 
-    int ret = kgsl_pipe_safe_ioctl(pipe->dev->fd, IOCTL_KGSL_GPU_COMMAND, &req);
+    ret = kgsl_pipe_safe_ioctl(pipe->dev->fd, IOCTL_KGSL_GPU_COMMAND, &req);
 
     if (ret) {
         ERROR_MSG("submit failed %d (%s)", ret, strerror(errno));
-        goto fail;
+        goto out;
     }
 
     fd_submit->out_fence->kfence = req.timestamp;
 
-    if  (fd_submit->out_fence->use_fence_fd) {
+    if (fd_submit->out_fence->use_fence_fd) {
         int fd = timestamp_to_fd(pipe, req.timestamp);
         if (fd < 0) {
-            ERROR_MSG("Failed to create sync file for timestamp (%s)", strerror(errno));
-            goto fail;
+            ret = -errno;
+            ERROR_MSG("Failed to create sync file for timestamp (%s)", strerror(-ret));
+            goto out;
         }
 
         fd_submit->out_fence->fence_fd = fd;
     }
 
-    if (fd_submit->in_fence_fd != -1)
+out:
+    if (fd_submit->in_fence_fd != -1) {
         close(fd_submit->in_fence_fd);
+        fd_submit->in_fence_fd = -1;
+    }
 
-fail:
     /* Keep merged submits alive until KGSL has consumed the command list and,
      * on success, populated the shared kernel timestamp.  Dropping them before
      * IOCTL_KGSL_GPU_COMMAND can free BOs that the command stream still uses.

@@ -3,6 +3,7 @@
 #include "util/os_mman.h"
 
 #include <linux/dma-heap.h>
+#include <poll.h>
 
 static uint64_t
 kgsl_bo_iova(struct fd_bo *bo)
@@ -34,11 +35,38 @@ kgsl_bo_madvise(struct fd_bo *bo, int willneed)
     return willneed;
 }
 
+int
+kgsl_bo_wait_dmabuf(struct fd_bo *bo, uint32_t op)
+{
+    struct kgsl_bo *kgsl_bo = to_kgsl_bo(bo);
+    if (kgsl_bo->bo_type != KGSL_BO_IMPORT)
+        return 0;
+    if (kgsl_bo->import_fd < 0)
+        return -EBADF;
+
+    struct pollfd pfd = {
+        .fd = kgsl_bo->import_fd,
+        .events = (op & FD_BO_PREP_WRITE) ? POLLOUT : POLLIN,
+    };
+    int ret;
+    do {
+        ret = poll(&pfd, 1, (op & FD_BO_PREP_NOSYNC) ? 0 : -1);
+    } while (ret < 0 && errno == EINTR);
+
+    if (ret < 0)
+        return -errno;
+    if (!ret)
+        return -EBUSY;
+    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
+        return -EIO;
+
+    return (pfd.revents & pfd.events) ? 0 : -EIO;
+}
+
 static int
 kgsl_bo_cpu_prep(struct fd_bo *bo, struct fd_pipe *pipe, uint32_t op)
 {
-    /* only need to handle implicit sync here which is a NOP for KGSL */
-    return 0;
+    return kgsl_bo_wait_dmabuf(bo, op);
 }
 
 void
