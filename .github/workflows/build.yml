@@ -1113,7 +1113,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: lfdevs/archlinuxarm-PKGBUILDs
-          ref: ${{ (github.event.inputs.tag == 'dev/adreno-main' || github.event.inputs.tag == 'adreno-main') && 'freedreno' || github.event.inputs.tag }}
+          ref: ${{ (github.event.inputs.tag == 'dev/adreno-main' || github.event.inputs.tag == 'main') && 'freedreno' || github.event.inputs.tag }}
           path: archlinuxarm-PKGBUILDs
           fetch-depth: 0
 

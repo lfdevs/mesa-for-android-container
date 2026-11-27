@@ -2574,7 +2574,7 @@ jobs:
           cat <<'EOF' > release_body.md
           # Turnip Weekly Builds
           ## Important Notice
-          This release provides weekly automated builds of Turnip drivers. You can use them together with standard releases (whose title does not have the `turnip-` prefix), or you can use this release alone **(which usually has better compatibility)**. When used alone, you need to change the value of the environment variable `MESA_LOADER_DRIVER_OVERRIDE` from `kgsl` to `zink`. See [the README](https://github.com/lfdevs/mesa-for-android-container/blob/adreno-main/.github/README.md) for details.
+          This release provides weekly automated builds of Turnip drivers. You can use them together with standard releases (whose title does not have the `turnip-` prefix), or you can use this release alone **(which usually has better compatibility)**. When used alone, you need to change the value of the environment variable `MESA_LOADER_DRIVER_OVERRIDE` from `kgsl` to `zink`. See [the README](https://github.com/lfdevs/mesa-for-android-container/blob/main/.github/README.md) for details.
 
           ## Installation Instructions
 
