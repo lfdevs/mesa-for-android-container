@@ -20,7 +20,7 @@ This section only displays GPU models confirmed to be supported through actual t
 
 |              GPU               |    OpenGL    |  OpenGL ES   |    Vulkan    |
 | :----------------------------: | :----------: | :----------: | :----------: |
-|         **Adreno 660**         | ✔️ Supported | ✔️ Supported | ✔️ Supported |
+|         **Adreno 640/660**         | ✔️ Supported | ✔️ Supported | ✔️ Supported |
 | **Adreno 710/720/722/730/732/735/740/750** | ✔️ Supported | ✔️ Supported | ✔️ Supported |
 |       **Adreno 810/829/830/840**       | ✔️ Supported | ✔️ Supported | ✔️ Supported |
 
